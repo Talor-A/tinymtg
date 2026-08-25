@@ -9,6 +9,7 @@ import type {
 	ReplacementDef,
 } from "./index.ts";
 import { etbPreview, maybeObj, registerCard, view } from "./index.ts";
+import { assert, assertDefined } from "./lib/assert.ts";
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family
@@ -80,20 +81,46 @@ export const HARDENED_SCALES = registerCard({
 	mv: 1,
 	replacements: [
 		{
-			key: "scales",
+			key: "scales-counter-place",
 			layer: "other",
 			text: "If one or more +1/+1 counters would be put on a creature you control, that many plus one are put instead.",
 			applies(ev, ctx) {
 				if (!onBattlefield(ctx)) return false;
-				const bag = eventCounters(ev);
-				if (!bag) return false;
-				if (!(bag["+1/+1"] > 0)) return false;
+				if (ev.kind !== "addCounters") return false;
 				if (counterRecipientController(ctx.state, ev) !== ctx.controller)
 					return false;
 				return isCreatureRecipient(ctx.state, ev);
 			},
 			replace(ev) {
-				const bag = { ...eventCounters(ev)! };
+				assert(ev.kind === "addCounters", "Event should be addCounters");
+
+				const counters = eventCounters(ev);
+				assertDefined(counters);
+				const bag = { ...eventCounters(ev) };
+				bag["+1/+1"] = (bag["+1/+1"] ?? 0) + 1;
+				return withCounters(ev, bag);
+			},
+		},
+		{
+			key: "scales-counter-enter-with",
+			layer: "other",
+			text: "If one or more +1/+1 counters would be put on a creature you control, that many plus one are put instead.",
+			applies(ev, ctx) {
+				if (ev.kind !== "zoneChange") return false;
+				if (ev.to !== "battlefield") return false;
+
+				if (!onBattlefield(ctx)) return false;
+				if (!ev.entersWithCounters) return false;
+				if (!ev.entersWithCounters["+1/+1"]) return false;
+				if (ev.entersWithCounters["+1/+1"] === 0) return false;
+				if (ev.toController !== ctx.controller) return false;
+				return isCreatureRecipient(ctx.state, ev);
+			},
+			replace(ev) {
+				assert(ev.kind === "zoneChange", "Event should be zoneChange");
+				const counters = eventCounters(ev);
+				assertDefined(counters);
+				const bag = { ...eventCounters(ev) };
 				bag["+1/+1"] = (bag["+1/+1"] ?? 0) + 1;
 				return withCounters(ev, bag);
 			},

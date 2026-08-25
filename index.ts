@@ -187,6 +187,7 @@ interface GameObject {
 	id: ObjectId;
 	cardId: string;
 	owner: PlayerId;
+	visibility: [Player0: boolean, Player1: boolean];
 	controller: PlayerId;
 	zone: Zone;
 	tapped: boolean;
@@ -261,7 +262,7 @@ interface PermanentView {
 
 interface StaticMod {
 	text: string;
-	/** `source` is the permanent granting the effect; null when it's a rule/floating effect. */
+	/** `source` is the permanent granting the effect */
 	applies(view: PermanentView, state: GameState, source: GameObject): boolean;
 	modify(view: PermanentView, state: GameState, source: GameObject): void;
 }
@@ -403,6 +404,16 @@ export function addFloating(
 	});
 }
 
+function defaultVisibility(
+	zone: string,
+	to: PlayerId,
+	owner: PlayerId,
+): boolean {
+	if (zone === "battlefield") return true;
+	if (zone === "hand") return to === owner;
+	return false;
+}
+
 export function spawn(
 	state: GameState,
 	cardId: string,
@@ -412,6 +423,10 @@ export function spawn(
 ): GameObject {
 	const obj: GameObject = {
 		id: state.nextObjectId++,
+		visibility: [
+			defaultVisibility(zone, 0, owner),
+			defaultVisibility(zone, 1, owner),
+		],
 		cardId,
 		owner,
 		controller: owner,
@@ -951,6 +966,10 @@ function moveObject(
 		cardId: opts.copyOf ?? o.cardId,
 		owner: o.owner,
 		controller: to === "battlefield" ? opts.toController : o.owner,
+		visibility: [
+			defaultVisibility(to, 0, o.owner),
+			defaultVisibility(to, 1, o.owner),
+		],
 		zone: to,
 		tapped: to === "battlefield" ? (opts.tapped ?? false) : false,
 		counters: to === "battlefield" ? { ...(opts.counters ?? {}) } : {},
@@ -1333,6 +1352,7 @@ function execute(
 			for (let i = 0; i < ev.amount; i++) {
 				const t: GameObject = {
 					id: state.nextObjectId++ as ObjectId,
+					visibility: [true, true],
 					cardId: ev.cardId,
 					owner: ev.controller,
 					controller: ev.controller,

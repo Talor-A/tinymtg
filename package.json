@@ -4,7 +4,8 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"format": "biome format --write"
+		"format": "biome format --write",
+		"yawgatog": "bun ./yawgatog.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.10",
