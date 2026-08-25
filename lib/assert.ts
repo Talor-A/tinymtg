@@ -1,11 +1,10 @@
 export function assert(
-	condition: boolean,
+	condition: unknown,
 	message?: string,
-): condition is true {
+): asserts condition {
 	if (!condition) {
 		throw new Error(message ?? "Assertion failed");
 	}
-	return true;
 }
 
 export function assertDefined<T>(
