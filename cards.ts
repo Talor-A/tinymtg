@@ -81,7 +81,7 @@ export const HARDENED_SCALES = registerCard({
 	mv: 1,
 	replacements: [
 		{
-			key: "scales-counter-place",
+			label: "scales-counter-place",
 			layer: "other",
 			text: "If one or more +1/+1 counters would be put on a creature you control, that many plus one are put instead.",
 			applies(ev, ctx) {
@@ -102,7 +102,7 @@ export const HARDENED_SCALES = registerCard({
 			},
 		},
 		{
-			key: "scales-counter-enter-with",
+			label: "scales-counter-enter-with",
 			layer: "other",
 			text: "If one or more +1/+1 counters would be put on a creature you control, that many plus one are put instead.",
 			applies(ev, ctx) {
@@ -136,7 +136,7 @@ export const DOUBLING_SEASON = registerCard({
 	mv: 5,
 	replacements: [
 		{
-			key: "season:counters",
+			label: "season:counters",
 			layer: "other",
 			text: "If an effect would put counters on a permanent you control, twice that many are put instead.",
 			applies(ev, ctx) {
@@ -152,7 +152,7 @@ export const DOUBLING_SEASON = registerCard({
 			},
 		},
 		{
-			key: "season:tokens",
+			label: "season:tokens",
 			layer: "other",
 			text: "If an effect would create tokens under your control, it creates twice that many instead.",
 			applies: (ev, ctx) =>
@@ -240,7 +240,7 @@ export const REST_IN_PEACE = registerCard({
 	mv: 2,
 	replacements: [
 		{
-			key: "rip",
+			label: "rip",
 			layer: "other",
 			text: "If a card would be put into a graveyard from anywhere, exile it instead.",
 			applies: (ev, ctx) => onBattlefield(ctx) && goingToGraveyard(ev),
@@ -258,7 +258,7 @@ export const LEYLINE_OF_THE_VOID = registerCard({
 	mv: 4,
 	replacements: [
 		{
-			key: "leyline",
+			label: "leyline",
 			layer: "other",
 			text: "If a card would be put into an opponent's graveyard from anywhere, exile it instead.",
 			applies(ev, ctx) {
@@ -289,7 +289,7 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 	mv: 2,
 	replacements: [
 		{
-			key: "chains",
+			label: "chains",
 			layer: "other",
 			text:
 				"If a player would draw a card except the first one they draw in their draw step each turn, " +
@@ -324,7 +324,7 @@ export const NECROPOTENCE = registerCard({
 	mv: 3,
 	replacements: [
 		{
-			key: "necro:skipdraw",
+			label: "necro:skipdraw",
 			layer: "other",
 			text: "Skip your draw step.",
 			applies: (ev, ctx) =>
@@ -350,7 +350,7 @@ export const FURNACE_OF_RATH = registerCard({
 	mv: 4,
 	replacements: [
 		{
-			key: "furnace",
+			label: "furnace",
 			layer: "other",
 			text: "If a source would deal damage to a permanent or player, it deals double that damage instead.",
 			applies: (ev, ctx) =>
@@ -372,7 +372,7 @@ export const PALISADE_GIANT = registerCard({
 	toughness: 6,
 	replacements: [
 		{
-			key: "palisade",
+			label: "palisade",
 			layer: "other",
 			text: "All damage that would be dealt to you and other permanents you control is dealt to Palisade Giant instead.",
 			applies(ev, ctx) {
@@ -421,7 +421,7 @@ export const ROOT_MAZE = registerCard({
 	mv: 2,
 	replacements: [
 		{
-			key: "rootmaze",
+			label: "rootmaze",
 			layer: "other",
 			text: "Artifacts and lands enter tapped.",
 			applies(ev, ctx) {
@@ -457,7 +457,7 @@ export const CLONE = registerCard({
 	toughness: 0,
 	replacements: [
 		{
-			key: "clone",
+			label: "clone",
 			layer: "copy",
 			functionsIn: ["any"],
 			text: "You may have Clone enter as a copy of any creature on the battlefield.",
@@ -502,7 +502,7 @@ export function preventNextDamageShield(
 	n: number,
 ): ReplacementDef {
 	return {
-		key: `shield:${n}`,
+		label: `shield:${n}`,
 		layer: "other",
 		prevention: true,
 		text: `Prevent the next ${n} damage that would be dealt to ${
@@ -539,7 +539,7 @@ export function preventNextDamageShield(
 /** Prismatic Strands: prevent all damage sources of the chosen color would deal. */
 export function prismaticStrands(color: Color): ReplacementDef {
 	return {
-		key: `strands:${color}`,
+		label: `strands:${color}`,
 		layer: "other",
 		prevention: true,
 		functionsIn: ["any"],
@@ -552,7 +552,7 @@ export function prismaticStrands(color: Color): ReplacementDef {
 /** "The next time this creature would be destroyed this turn, regenerate it instead." */
 export function regenerationShield(target: ObjectId): ReplacementDef {
 	return {
-		key: `regen:${target}`,
+		label: `regen:${target}`,
 		layer: "other",
 		functionsIn: ["any"],
 		text: `Regeneration shield on #${target}.`,
@@ -574,7 +574,7 @@ export function regenerationShield(target: ObjectId): ReplacementDef {
 /** Gather Specimens — the control-changing tier (CR 616.1b). */
 export function gatherSpecimens(you: PlayerId): ReplacementDef {
 	return {
-		key: `gather:${you}`,
+		label: `gather:${you}`,
 		layer: "control",
 		functionsIn: ["any"],
 		text: "If a creature would enter the battlefield under an opponent's control this turn, it enters under your control instead.",
@@ -616,7 +616,7 @@ export const KALITAS = registerCard({
 	keywords: ["lifelink"],
 	replacements: [
 		{
-			key: "kalitas",
+			label: "kalitas",
 			layer: "other",
 			text: "If a nontoken creature an opponent controls would die, instead exile it and create a 2/2 black Zombie token.",
 			applies(ev, ctx) {

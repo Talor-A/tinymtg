@@ -292,7 +292,8 @@ export interface EffectCtx {
 }
 
 export interface ReplacementDef {
-	key: string;
+	/** label to  */
+	label: string;
 	text: string;
 	layer: ReplacementLayer;
 	/** CR 615 — prevention effects are replacements with an extra "can't be prevented" hook. */
@@ -672,7 +673,7 @@ function synthesizedSelfReplacements(o: GameObject): ReplacementDef[] {
 
 	return [
 		{
-			key: "printed:entersTapped",
+			label: "printed:entersTapped",
 			text: `${card(o.cardId).name}: printed "enters tapped"`,
 			layer: "self",
 			functionsIn: ["any"],
@@ -686,7 +687,7 @@ function synthesizedSelfReplacements(o: GameObject): ReplacementDef[] {
 				ev.kind === "zoneChange" ? [{ ...ev, entersTapped: true }] : [ev],
 		},
 		{
-			key: "printed:entersWith",
+			label: "printed:entersWith",
 			text: `${card(o.cardId).name}: printed "enters with counters"`,
 			layer: "self",
 			functionsIn: ["any"],
@@ -731,7 +732,7 @@ export function collectReplacements(state: GameState): BoundReplacement[] {
 			for (const def of defs) {
 				if (!functionsHere(def.functionsIn, zone)) continue;
 				out.push({
-					id: `${o.id}:${def.key}` as EffectId,
+					id: `${o.id}:${def.label}` as EffectId,
 					def,
 					source: o,
 					controller: o.controller,
@@ -1045,13 +1046,6 @@ export function describeEvent(state: GameState, ev: GameEvent): string {
 			return `token(${ev.amount}x ${ev.cardId} for P${ev.controller})`;
 	}
 }
-
-/* ------------------------------------------------------------------ *
- * State-based actions (CR 704) — the loop that turns marked damage
- * into destroy events. Note the split: lethal damage *destroys*
- * (regeneration can replace it), zero toughness does not.
- * ------------------------------------------------------------------ */
-
 export function checkStateBasedActions(
 	state: GameState,
 	agents: [Agent, Agent],
