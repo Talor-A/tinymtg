@@ -9,8 +9,12 @@ export function assert(
 
 export function assertDefined<T>(
 	value: T | undefined | null,
+	message?: string,
 ): asserts value is T {
-	assert(value !== undefined && value !== null, "Value should be defined");
+	assert(
+		value !== undefined && value !== null,
+		message ?? "Value should be defined",
+	);
 }
 
 export function assertNever(value: never): never {

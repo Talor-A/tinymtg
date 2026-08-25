@@ -9,6 +9,8 @@ import {
 import type { Agent, GameState, ObjectId, PlayerId } from "./index.ts";
 import {
 	addFloating,
+	checkStateBasedActions,
+	gameOver,
 	newGame,
 	obj,
 	perform,
@@ -16,6 +18,7 @@ import {
 	runTurn,
 	spawn,
 	view,
+	winner,
 } from "./index.ts";
 
 const P1 = 0 as PlayerId;
@@ -28,12 +31,16 @@ function dump(state: GameState): void {
 	state.log.length = 0;
 }
 
-function created(state: GameState): ObjectId {
-	if (state.lastCreated === null) throw new Error("nothing entered");
-	return state.lastCreated;
+function created(result: { created: ObjectId[] }): ObjectId {
+	if (result.created.length === 0) throw new Error("nothing created");
+	return result.created[0]!;
 }
 
-function ballista(prefs: string[]): { counters: number; state: GameState } {
+function ballista(prefs: string[]): {
+	counters: number;
+	state: GameState;
+	entered: ObjectId;
+} {
 	const state = newGame();
 	const agents: [Agent, Agent] = [
 		new ScriptedAgent(prefs),
@@ -42,7 +49,7 @@ function ballista(prefs: string[]): { counters: number; state: GameState } {
 	spawn(state, "hardened-scales", P1, "battlefield");
 	spawn(state, "doubling-season", P1, "battlefield");
 	const ballistaCard = spawn(state, "walking-ballista", P1, "hand");
-	perform(
+	const result = perform(
 		state,
 		{
 			kind: "zoneChange",
@@ -54,7 +61,11 @@ function ballista(prefs: string[]): { counters: number; state: GameState } {
 		},
 		agents,
 	);
-	return { counters: obj(state, created(state)).counters["+1/+1"] ?? 0, state };
+	return {
+		counters: obj(state, created(result)).counters["+1/+1"] ?? 0,
+		state,
+		entered: created(result),
+	};
 }
 
 function kalitasVsRip(p1Prefs: string[]): GameState {
@@ -77,7 +88,7 @@ function damageRace(p1Prefs: string[]): GameState {
 		new ScriptedAgent(p1Prefs),
 	];
 	spawn(state, "furnace-of-rath", P1, "battlefield");
-	const pyro = spawn(state, "prodigal-pyromancer", P1, "battlefield");
+	const pyro = spawn(state, "eager-cadet", P1, "battlefield");
 	addFloating(
 		state,
 		P2,
@@ -116,7 +127,7 @@ describe("self-replacement first, then the player's ordering choice", () => {
 		seasonFirst.state.log.length = 0;
 		expect(seasonFirst.counters, "Season then Scales").toBe(5);
 		expect(
-			view(scalesFirst.state, created(scalesFirst.state)).power,
+			view(scalesFirst.state, scalesFirst.entered).power,
 			"Ballista power with 6 counters",
 		).toBe(6);
 	});
@@ -203,7 +214,7 @@ describe("damage: prevention vs doubling", () => {
 			new ScriptedAgent(["prevent"]),
 		];
 		spawn(state, "furnace-of-rath", P1, "battlefield");
-		const pyro = spawn(state, "prodigal-pyromancer", 0, "battlefield");
+		const pyro = spawn(state, "eager-cadet", 0, "battlefield");
 		addFloating(
 			state,
 			P2,
@@ -236,7 +247,7 @@ describe("damage: prevention vs doubling", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		const giant = spawn(state, "palisade-giant", 1, "battlefield");
-		const pyro = spawn(state, "prodigal-pyromancer", 0, "battlefield");
+		const pyro = spawn(state, "eager-cadet", 0, "battlefield");
 		perform(
 			state,
 			{
@@ -283,7 +294,7 @@ describe("regeneration", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		const bears = spawn(state, "grizzly-bears", 0, "battlefield");
-		const pyro = spawn(state, "prodigal-pyromancer", 1, "battlefield");
+		const pyro = spawn(state, "eager-cadet", 1, "battlefield");
 		addFloating(state, 0, regenerationShield(bears.id), { data: { used: 0 } });
 
 		perform(
@@ -302,6 +313,7 @@ describe("regeneration", () => {
 			},
 			agents,
 		);
+		checkStateBasedActions(state, agents);
 		dump(state);
 		expect(state.battlefield.includes(bears.id), "bears survived").toBe(true);
 		expect(obj(state, bears.id).tapped, "bears tapped by regeneration").toBe(
@@ -320,6 +332,7 @@ describe("regeneration", () => {
 			},
 			agents,
 		);
+		checkStateBasedActions(state, agents);
 		dump(state);
 		expect(state.battlefield.includes(bears.id), "bears died to SBA").toBe(
 			false,
@@ -333,7 +346,7 @@ describe("CR 614.12 — ETB replacements see the would-be characteristics", () =
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		spawn(state, "root-maze", 0, "battlefield");
 		const bearsCard = spawn(state, "grizzly-bears", 0, "hand");
-		perform(
+		const r1 = perform(
 			state,
 			{
 				kind: "zoneChange",
@@ -346,13 +359,13 @@ describe("CR 614.12 — ETB replacements see the would-be characteristics", () =
 			agents,
 		);
 		expect(
-			obj(state, created(state)).tapped,
+			obj(state, created(r1)).tapped,
 			"no Lattice: bear enters untapped",
 		).toBe(false);
 
 		spawn(state, "mycosynth-lattice", 0, "battlefield");
 		const bears2 = spawn(state, "grizzly-bears", 0, "hand");
-		perform(
+		const r2 = perform(
 			state,
 			{
 				kind: "zoneChange",
@@ -366,7 +379,7 @@ describe("CR 614.12 — ETB replacements see the would-be characteristics", () =
 		);
 		dump(state);
 		expect(
-			obj(state, created(state)).tapped,
+			obj(state, created(r2)).tapped,
 			"with Lattice: bear enters tapped",
 		).toBe(true);
 	});
@@ -400,7 +413,7 @@ describe("tier ordering", () => {
 		addFloating(state, 0, gatherSpecimens(0));
 		const bears = spawn(state, "grizzly-bears", 1, "hand");
 
-		perform(
+		const r = perform(
 			state,
 			{
 				kind: "zoneChange",
@@ -413,7 +426,7 @@ describe("tier ordering", () => {
 			agents,
 		);
 		dump(state);
-		const entered = obj(state, created(state));
+		const entered = obj(state, created(r));
 		expect(entered.controller, "P0 stole it").toBe(0);
 		expect(entered.tapped, "and it still entered tapped").toBe(true);
 		expect(entered.owner, "P1 still owns it").toBe(1);
@@ -426,7 +439,7 @@ describe("tier ordering", () => {
 			counters: { "+1/+1": 2 },
 		});
 		const clone = spawn(state, "clone", 0, "hand");
-		perform(
+		const r = perform(
 			state,
 			{
 				kind: "zoneChange",
@@ -439,7 +452,7 @@ describe("tier ordering", () => {
 			agents,
 		);
 		dump(state);
-		const entered = created(state);
+		const entered = created(r);
 		expect(obj(state, entered).cardId, "entered as a copy of Ballista").toBe(
 			"walking-ballista",
 		);
@@ -452,6 +465,52 @@ describe("tier ordering", () => {
 			obj(state, entered).counters["+1/+1"] ?? 0,
 			"copy inherits the copied card's printed ETB modifier",
 		).toBe(2);
+	});
+});
+
+describe("can't lose / alternate win", () => {
+	test("Laboratory Maniac wins when drawing from an empty library", () => {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		spawn(state, "laboratory-maniac", P1, "battlefield");
+
+		perform(state, { kind: "draw", player: P1 }, agents);
+		checkStateBasedActions(state, agents);
+		dump(state);
+
+		expect(player(state, P1).won, "P1 wins via Laboratory Maniac").toBe(true);
+		expect(player(state, P1).lost, "P1 did not also lose").toBe(false);
+		expect(gameOver(state), "game is over").toBe(true);
+		expect(winner(state), "P1 is the winner").toBe(P1);
+	});
+
+	test("Platinum Angel prevents losing from drawing an empty library", () => {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		spawn(state, "platinum-angel", P1, "battlefield");
+
+		perform(state, { kind: "draw", player: P1 }, agents);
+		checkStateBasedActions(state, agents);
+		dump(state);
+
+		expect(player(state, P1).lost, "P1 did not lose").toBe(false);
+		expect(player(state, P1).won, "P1 did not win").toBe(false);
+		expect(gameOver(state), "game continues").toBe(false);
+		expect(winner(state), "no winner yet").toBe(null);
+	});
+
+	test("without Platinum Angel, drawing an empty library loses the game", () => {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+
+		perform(state, { kind: "draw", player: P1 }, agents);
+		checkStateBasedActions(state, agents);
+		dump(state);
+
+		expect(player(state, P1).lost, "P1 loses").toBe(true);
+		expect(player(state, P1).won, "P1 did not win").toBe(false);
+		expect(gameOver(state), "game is over").toBe(true);
+		expect(winner(state), "P2 wins by default").toBe(P2);
 	});
 });
 

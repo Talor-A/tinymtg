@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-import { join, dirname } from "node:path";
 import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname);
 const RULES_PATH = join(SCRIPT_DIR, "yawgatog-rules.md");
@@ -56,9 +56,12 @@ async function buildIndex(): Promise<Index> {
 	}> = [];
 
 	for (let i = 0; i < lines.length; i++) {
-		const match = HEADING_RE.exec(lines[i]);
+		const match = HEADING_RE.exec(lines[i]!);
 		if (!match) continue;
-		const [, hashes, number, anchor, title] = match;
+		const hashes = match[1] as string;
+		const number = match[2] as string;
+		const anchor = match[3] as string;
+		const title = match[4] as string;
 		headings.push({
 			level: hashes.length,
 			number,
@@ -70,7 +73,7 @@ async function buildIndex(): Promise<Index> {
 
 	const entries: RuleEntry[] = [];
 	for (let i = 0; i < headings.length; i++) {
-		const h = headings[i];
+		const h = headings[i]!;
 		const startLine = h.line;
 		const next = headings[i + 1];
 		const endLine = next ? next.line - 1 : lines.length;
@@ -140,7 +143,7 @@ function printEntry(e: RuleEntry): void {
 	console.log(`\nCR ${e.number}  (${e.anchor})`);
 	console.log(`${e.title}`);
 	if (e.body) {
-		console.log("\n" + e.body);
+		console.log(`\n${e.body}`);
 	}
 }
 
@@ -150,7 +153,7 @@ function snippet(text: string, query: string, context = 60): string {
 	const start = Math.max(0, idx - context);
 	const end = Math.min(text.length, idx + query.length + context);
 	let s = text.slice(start, end);
-	if (start > 0) s = "…" + s;
+	if (start > 0) s = `…${s}`;
 	if (end < text.length) s += "…";
 	return s.replace(/\s+/g, " ").trim();
 }
@@ -195,7 +198,7 @@ async function search(query: string, regex = false): Promise<void> {
 				entry: e,
 				text: snippet(
 					haystack,
-					regex ? query : (query.split(/\s+/)[0] ?? query),
+					regex ? query : ((query.split(/\s+/)[0] ?? query) as string),
 				),
 			});
 		}
@@ -272,7 +275,7 @@ async function main(): Promise<void> {
 			await search(arg, true);
 			return;
 		default:
-			await lookup(cmd);
+			await lookup(cmd!);
 	}
 }
 

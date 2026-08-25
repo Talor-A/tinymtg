@@ -164,6 +164,18 @@ interface CreateTokenEvent extends EventCommon {
 	amount: number;
 }
 
+interface LoseGameEvent extends EventCommon {
+	kind: "loseGame";
+	player: PlayerId;
+	reason: string;
+}
+
+interface WinGameEvent extends EventCommon {
+	kind: "winGame";
+	player: PlayerId;
+	reason: string;
+}
+
 export type GameEvent =
 	| DrawEvent
 	| DiscardEvent
@@ -175,9 +187,9 @@ export type GameEvent =
 	| LifeChangeEvent
 	| TapEvent
 	| BeginStepEvent
-	| CreateTokenEvent;
-
-type EventKind = GameEvent["kind"];
+	| CreateTokenEvent
+	| LoseGameEvent
+	| WinGameEvent;
 
 /* ------------------------------------------------------------------ *
  * Game state
@@ -192,13 +204,13 @@ interface GameObject {
 	zone: Zone;
 	tapped: boolean;
 	counters: CounterBag;
+	/** Mutable per-effect scratch space, keyed by effect label. Kept separate from counters. */
+	effectData: Record<string, Record<string, number>>;
 	/** Damage marked this turn (cleared in cleanup). */
 	damage: number;
 	attacking: boolean;
 	blocking: boolean;
 	token: boolean;
-	/** Set while a regeneration shield has been consumed this turn, purely cosmetic. */
-	regeneratedThisTurn: boolean;
 }
 
 interface PlayerState {
@@ -210,7 +222,10 @@ interface PlayerState {
 	exile: ObjectId[];
 	/** Turn-scoped counters, e.g. cards drawn in the draw step (Chains of Mephistopheles). */
 	drawnInDrawStep: number;
+	/** Set when the player has attempted to draw from an empty library since the last SBA check (CR 704.5b). */
+	drewFromEmptyLibrary: boolean;
 	lost: boolean;
+	won: boolean;
 }
 
 interface FloatingEffect {
@@ -234,8 +249,8 @@ export interface GameState {
 	activePlayer: PlayerId;
 	step: Step;
 	nextObjectId: number;
-	/** Set by the zone-change executor: entering a zone creates a *new* object (CR 400.7). */
-	lastCreated: ObjectId | null;
+	/** Monotonic tag source for guard facts (e.g. Chains of Mephistopheles). */
+	nextTag: number;
 	log: string[];
 	rngState: number;
 }
@@ -297,9 +312,13 @@ export interface ReplacementDef {
 	text: string;
 	layer: ReplacementLayer;
 	/** CR 615 — prevention effects are replacements with an extra "can't be prevented" hook. */
-	prevention?: boolean;
-	/** Defaults to ['battlefield']. */
+	isPreventionEffect?: boolean;
+	/**
+	 * pre-filter applies, based on where the source of the event is located.
+	 * most effects apply on the battlefield.
+	 * @default ['battlefield']. */
 	functionsIn?: ZoneScope[];
+	/** further scope the rule, after applying functionsIn above. */
 	applies(ev: GameEvent, ctx: EffectCtx): boolean;
 	replace(ev: GameEvent, ctx: EffectCtx): GameEvent[];
 	/** Consume shields / decrement counters here. */
@@ -369,7 +388,9 @@ const newPlayerState = (id: PlayerId): PlayerState => ({
 	graveyard: [],
 	exile: [],
 	drawnInDrawStep: 0,
+	drewFromEmptyLibrary: false,
 	lost: false,
+	won: false,
 });
 
 export function newGame(): GameState {
@@ -383,7 +404,7 @@ export function newGame(): GameState {
 		activePlayer: 0 as PlayerId,
 		step: "untap" as Step,
 		nextObjectId: 0,
-		lastCreated: null,
+		nextTag: 0,
 		log: [],
 		rngState: 0,
 	};
@@ -433,12 +454,12 @@ export function spawn(
 		controller: owner,
 		zone,
 		tapped: opts.tapped ?? false,
-		counters: { ...(opts.counters ?? {}) },
+		counters: { ...opts.counters },
+		effectData: {},
 		damage: 0,
 		attacking: false,
 		blocking: false,
 		token: opts.token ?? false,
-		regeneratedThisTurn: false,
 	};
 	state.objects.set(obj.id, obj);
 	zoneList(state, zone, owner).push(obj.id);
@@ -560,7 +581,7 @@ function baseView(
 		keywords: [...(def.keywords ?? [])],
 		controller,
 		owner,
-		counters: { ...(o?.counters ?? {}) },
+		counters: { ...o?.counters },
 		tapped: o?.tapped ?? false,
 	};
 }
@@ -592,7 +613,7 @@ export function view(state: GameState, id: ObjectId): PermanentView {
  * CR 614.12: replacement effects that modify how a permanent enters check the
  * characteristics it *would have* on the battlefield, with continuous effects
  * already applied. So Root Maze ("artifacts and lands enter tapped") has to see
- * a card that some other static has turned into an artifact. This is the hook.
+ * a card that Mycosynth Wellspring has turned into an artifact.
  */
 export function etbPreview(
 	state: GameState,
@@ -603,7 +624,7 @@ export function etbPreview(
 	const owner = o?.owner ?? ev.toController;
 	const v = baseView(state, cardId, ev.toController, owner, null);
 	v.id = ev.object;
-	v.counters = { ...(ev.entersWithCounters ?? {}) };
+	v.counters = { ...ev.entersWithCounters };
 	v.tapped = ev.entersTapped ?? false;
 	return applyStatics(state, v);
 }
@@ -731,12 +752,14 @@ export function collectReplacements(state: GameState): BoundReplacement[] {
 			];
 			for (const def of defs) {
 				if (!functionsHere(def.functionsIn, zone)) continue;
+				const key = def.label;
+				if (!o.effectData[key]) o.effectData[key] = {};
 				out.push({
-					id: `${o.id}:${def.label}` as EffectId,
+					id: `${o.id}:${key}` as EffectId,
 					def,
 					source: o,
 					controller: o.controller,
-					data: o.counters, // sources with per-object charges can read/write here
+					data: o.effectData[key],
 					label: `${card(o.cardId).name}#${o.id} — ${def.text}`,
 				});
 			}
@@ -793,6 +816,10 @@ export function affectedPlayer(state: GameState, ev: GameEvent): PlayerId {
 		case "createToken":
 			return ev.controller;
 
+		case "loseGame":
+		case "winGame":
+			return ev.player;
+
 		case "zoneChange": {
 			const o = maybeObj(state, ev.object);
 			if (!o) return ev.toController;
@@ -839,12 +866,8 @@ function applicable(
 		// CR 614.5 — a replacement effect applies at most once to a given event.
 		if (run.applied.has(r.id)) return false;
 		// CR 615.12 — "can't be prevented" locks out prevention effects only.
-		if (r.def.prevention && isUnpreventable(ev)) return false;
-		try {
-			return r.def.applies(ev, ctxFor(state, r, run));
-		} catch {
-			return false;
-		}
+		if (r.def.isPreventionEffect && isUnpreventable(ev)) return false;
+		return r.def.applies(ev, ctxFor(state, r, run));
 	});
 }
 
@@ -893,9 +916,10 @@ function resolveReplacements(
 
 		const chosen =
 			tiered.length === 1
-				? tiered[0]!
+				? tiered[0]
 				: agent.chooseReplacement(state, current, tiered);
 
+		assertDefined(chosen);
 		run.applied.add(chosen.id);
 		const ctx = ctxFor(state, chosen, run);
 		const produced = chosen.def.replace(current, ctx);
@@ -945,21 +969,20 @@ function moveObject(
 		copyOf?: string;
 		toBottom?: boolean;
 	},
-): boolean {
+): ObjectId | null {
 	const o = maybeObj(state, id);
-	if (!o || o.zone !== from) return false;
+	if (!o || o.zone !== from) return null;
 
 	const src = zoneList(state, from, o.owner);
 	const idx = src.indexOf(id);
-	if (idx === -1) return false;
+	if (idx === -1) return null;
 	src.splice(idx, 1);
 	state.objects.delete(id);
 
 	// Tokens cease to exist when they leave the battlefield (CR 111.7).
 	if (o.token && from === "battlefield") {
 		log(state, `  ${card(o.cardId).name}#${id} (token) ceases to exist`);
-		state.lastCreated = null;
-		return true;
+		return null;
 	}
 
 	const fresh: GameObject = {
@@ -973,12 +996,12 @@ function moveObject(
 		],
 		zone: to,
 		tapped: to === "battlefield" ? (opts.tapped ?? false) : false,
-		counters: to === "battlefield" ? { ...(opts.counters ?? {}) } : {},
+		counters: to === "battlefield" ? { ...opts.counters } : {},
+		effectData: {},
 		damage: 0,
 		attacking: false,
 		blocking: false,
 		token: false,
-		regeneratedThisTurn: false,
 	};
 	state.objects.set(fresh.id, fresh);
 
@@ -987,7 +1010,6 @@ function moveObject(
 	else if (to === "library") dst.unshift(fresh.id);
 	else dst.push(fresh.id);
 
-	state.lastCreated = fresh.id;
 	log(
 		state,
 		`  ${card(fresh.cardId).name}#${fresh.id} is now in ${to}` +
@@ -996,7 +1018,7 @@ function moveObject(
 				? ` with ${JSON.stringify(fresh.counters)}`
 				: ""),
 	);
-	return true;
+	return fresh.id;
 }
 
 /** Convenience for logs/tests. */
@@ -1044,8 +1066,13 @@ export function describeEvent(state: GameState, ev: GameEvent): string {
 			return `beginStep(P${ev.player}, ${ev.step})`;
 		case "createToken":
 			return `token(${ev.amount}x ${ev.cardId} for P${ev.controller})`;
+		case "loseGame":
+			return `loseGame(P${ev.player}: ${ev.reason})`;
+		case "winGame":
+			return `winGame(P${ev.player}: ${ev.reason})`;
 	}
 }
+
 export function checkStateBasedActions(
 	state: GameState,
 	agents: [Agent, Agent],
@@ -1054,14 +1081,30 @@ export function checkStateBasedActions(
 		let acted = false;
 
 		for (const p of state.players) {
-			if (!p.lost && p.life <= 0) {
-				p.lost = true;
-				log(state, `  SBA: P${p.id} loses the game`);
+			if (!p.lost && !p.won && p.life <= 0) {
+				perform(
+					state,
+					{ kind: "loseGame", player: p.id, reason: "life" },
+					agents,
+				);
+				acted = true;
+			}
+			if (!p.lost && !p.won && p.drewFromEmptyLibrary) {
+				perform(
+					state,
+					{
+						kind: "loseGame",
+						player: p.id,
+						reason: "drewFromEmptyLibrary",
+					},
+					agents,
+				);
+				p.drewFromEmptyLibrary = false;
 				acted = true;
 			}
 		}
 
-		for (const id of [...state.battlefield]) {
+		for (const id of state.battlefield) {
 			const o = maybeObj(state, id);
 			if (!o) continue;
 			const v = view(state, id);
@@ -1080,8 +1123,6 @@ export function checkStateBasedActions(
 						toController: o.controller,
 					},
 					agents,
-					newScope(),
-					true,
 				);
 				acted = true;
 				continue;
@@ -1096,8 +1137,6 @@ export function checkStateBasedActions(
 						noRegen: false,
 					},
 					agents,
-					newScope(),
-					true,
 				);
 				acted = true;
 			}
@@ -1107,64 +1146,94 @@ export function checkStateBasedActions(
 	}
 	throw new Error("SBA loop did not stabilize");
 }
-/** The single entry point. Replace, then execute, then check SBAs at the top level. */
+
+/** Result of running one event through replacements and execution. */
+export interface PerformResult {
+	executed: GameEvent[];
+	created: ObjectId[];
+}
+
+/** Public entry point. Replace, then execute. Callers must run SBAs separately. */
 export function perform(
 	state: GameState,
 	event: GameEvent,
 	agents: [Agent, Agent],
-	scope: Scope = newScope(),
-	nested = false,
-): void {
-	log(state, `${nested ? "  " : ""}> ${describeEvent(state, event)}`);
-	const finals = resolveReplacements(state, event, agents);
-	if (finals.length === 0) log(state, "  (replaced by nothing)");
-	for (const ev of finals) execute(state, ev, agents, scope);
-	if (!nested) checkStateBasedActions(state, agents);
+): PerformResult {
+	return performIn(state, event, agents, newScope(), 0);
 }
 
-function execute(
+function performIn(
+	state: GameState,
+	event: GameEvent,
+	agents: [Agent, Agent],
+	scope: Scope,
+	depth: number,
+): PerformResult {
+	log(state, `${"  ".repeat(depth)}> ${describeEvent(state, event)}`);
+	const finals = resolveReplacements(state, event, agents);
+	if (finals.length === 0)
+		log(state, `${"  ".repeat(depth + 1)}(replaced by nothing)`);
+	const executed: GameEvent[] = [];
+	const created: ObjectId[] = [];
+	for (const ev of finals) {
+		const result = executeIn(state, ev, agents, scope, depth + 1);
+		executed.push(...result.executed);
+		created.push(...result.created);
+	}
+	return { executed, created };
+}
+
+function executeIn(
 	state: GameState,
 	ev: GameEvent,
 	agents: [Agent, Agent],
 	scope: Scope,
-): void {
+	depth: number,
+): PerformResult {
 	if (ev.guard && !scope.facts.has(ev.guard)) {
 		log(
 			state,
-			`  (skipped ${describeEvent(state, ev)} — guard "${ev.guard}" unmet)`,
+			`${"  ".repeat(depth)}(skipped ${describeEvent(state, ev)} — guard "${ev.guard}" unmet)`,
 		);
-		return;
+		return { executed: [], created: [] };
 	}
 
 	let happened = true;
+	const created: ObjectId[] = [];
+	const childResults: PerformResult[] = [];
 
 	switch (ev.kind) {
 		case "draw": {
 			const p = player(state, ev.player);
 			const top = p.library[p.library.length - 1];
 			if (top === undefined) {
-				// CR 104.3c / 704.5b: the loss happens at the next SBA check, not here.
-				p.lost = true;
-				log(state, `  P${ev.player} tried to draw from an empty library`);
+				// CR 704.5b: queue a state-based loss, don't resolve it here.
+				p.drewFromEmptyLibrary = true;
+				log(
+					state,
+					`${"  ".repeat(depth)}P${ev.player} tried to draw from an empty library`,
+				);
 				happened = false;
 				break;
 			}
 			if (state.step === "draw" && state.activePlayer === ev.player)
 				p.drawnInDrawStep++;
 			// Drawing *is* a zone change, so zone-change replacements get a look too.
-			perform(
-				state,
-				{
-					kind: "zoneChange",
-					object: top,
-					from: "library",
-					to: "hand",
-					cause: "draw",
-					toController: ev.player,
-				},
-				agents,
-				scope,
-				true,
+			childResults.push(
+				performIn(
+					state,
+					{
+						kind: "zoneChange",
+						object: top,
+						from: "library",
+						to: "hand",
+						cause: "draw",
+						toController: ev.player,
+					},
+					agents,
+					scope,
+					depth + 1,
+				),
 			);
 			break;
 		}
@@ -1177,19 +1246,21 @@ function execute(
 			}
 			const chosen =
 				ev.object ?? agents[ev.player].chooseDiscard(state, ev.player, p.hand);
-			perform(
-				state,
-				{
-					kind: "zoneChange",
-					object: chosen,
-					from: "hand",
-					to: "graveyard",
-					cause: "discard",
-					toController: ev.player,
-				},
-				agents,
-				scope,
-				true,
+			childResults.push(
+				performIn(
+					state,
+					{
+						kind: "zoneChange",
+						object: chosen,
+						from: "hand",
+						to: "graveyard",
+						cause: "discard",
+						toController: ev.player,
+					},
+					agents,
+					scope,
+					depth + 1,
+				),
 			);
 			break;
 		}
@@ -1203,7 +1274,7 @@ function execute(
 				player(state, ev.target.player).life -= ev.amount;
 				log(
 					state,
-					`  P${ev.target.player} -> ${player(state, ev.target.player).life} life`,
+					`${"  ".repeat(depth)}P${ev.target.player} -> ${player(state, ev.target.player).life} life`,
 				);
 			} else {
 				const o = maybeObj(state, ev.target.id);
@@ -1213,20 +1284,25 @@ function execute(
 				}
 				o.damage += ev.amount;
 				if (ev.deathtouch) o.counters.__deathtouched = 1;
-				log(state, `  ${name(state, o.id)} has ${o.damage} damage marked`);
+				log(
+					state,
+					`${"  ".repeat(depth)}${name(state, o.id)} has ${o.damage} damage marked`,
+				);
 			}
 			if (ev.lifelink) {
-				perform(
-					state,
-					{
-						kind: "lifeChange",
-						player: ev.sourceController,
-						delta: ev.amount,
-						source: ev.source,
-					},
-					agents,
-					scope,
-					true,
+				childResults.push(
+					performIn(
+						state,
+						{
+							kind: "lifeChange",
+							player: ev.sourceController,
+							delta: ev.amount,
+							source: ev.source,
+						},
+						agents,
+						scope,
+						depth + 1,
+					),
 				);
 			}
 			break;
@@ -1238,19 +1314,21 @@ function execute(
 				happened = false;
 				break;
 			}
-			perform(
-				state,
-				{
-					kind: "zoneChange",
-					object: o.id,
-					from: "battlefield",
-					to: "graveyard",
-					cause: "destroy",
-					toController: o.controller,
-				},
-				agents,
-				scope,
-				true,
+			childResults.push(
+				performIn(
+					state,
+					{
+						kind: "zoneChange",
+						object: o.id,
+						from: "battlefield",
+						to: "graveyard",
+						cause: "destroy",
+						toController: o.controller,
+					},
+					agents,
+					scope,
+					depth + 1,
+				),
 			);
 			break;
 		}
@@ -1266,22 +1344,26 @@ function execute(
 			o.attacking = false;
 			o.blocking = false;
 			delete o.counters["__deathtouched"];
-			o.regeneratedThisTurn = true;
 			log(
 				state,
-				`  ${name(state, o.id)} regenerates (tapped, damage removed, out of combat)`,
+				`${"  ".repeat(depth)}${name(state, o.id)} regenerates (tapped, damage removed, out of combat)`,
 			);
 			break;
 		}
 
 		case "zoneChange": {
-			happened = moveObject(state, ev.object, ev.from, ev.to, {
+			const newId = moveObject(state, ev.object, ev.from, ev.to, {
 				toController: ev.toController,
 				tapped: ev.entersTapped,
 				counters: ev.entersWithCounters,
 				copyOf: ev.copyOf,
 				toBottom: ev.toBottom,
 			});
+			if (newId === null) {
+				happened = false;
+			} else {
+				created.push(newId);
+			}
 			break;
 		}
 
@@ -1299,7 +1381,7 @@ function execute(
 				o.counters[ev.counter] = (o.counters[ev.counter] ?? 0) + ev.amount;
 				log(
 					state,
-					`  ${name(state, o.id)} now has ${o.counters[ev.counter]} ${ev.counter}`,
+					`${"  ".repeat(depth)}${name(state, o.id)} now has ${o.counters[ev.counter]} ${ev.counter}`,
 				);
 			}
 			break;
@@ -1308,7 +1390,7 @@ function execute(
 		case "lifeChange": {
 			const p = player(state, ev.player);
 			p.life += ev.delta;
-			log(state, `  P${ev.player} -> ${p.life} life`);
+			log(state, `${"  ".repeat(depth)}P${ev.player} -> ${p.life} life`);
 			break;
 		}
 
@@ -1331,12 +1413,14 @@ function execute(
 				});
 			}
 			if (ev.step === "draw") {
-				perform(
-					state,
-					{ kind: "draw", player: ev.player },
-					agents,
-					scope,
-					true,
+				childResults.push(
+					performIn(
+						state,
+						{ kind: "draw", player: ev.player },
+						agents,
+						scope,
+						depth + 1,
+					),
 				);
 			}
 			break;
@@ -1353,21 +1437,56 @@ function execute(
 					zone: "battlefield",
 					tapped: false,
 					counters: {},
+					effectData: {},
 					damage: 0,
 					attacking: false,
 					blocking: false,
 					token: true,
-					regeneratedThisTurn: false,
 				};
 				state.objects.set(t.id, t);
 				state.battlefield.push(t.id);
-				log(state, `  created ${name(state, t.id)}`);
+				created.push(t.id);
+				log(state, `${"  ".repeat(depth)}created ${name(state, t.id)}`);
+			}
+			break;
+		}
+
+		case "loseGame": {
+			const p = player(state, ev.player);
+			if (!p.lost && !p.won) {
+				p.lost = true;
+				log(
+					state,
+					`${"  ".repeat(depth)}P${ev.player} loses the game (${ev.reason})`,
+				);
+			}
+			break;
+		}
+
+		case "winGame": {
+			const p = player(state, ev.player);
+			if (!p.lost && !p.won) {
+				p.won = true;
+				log(
+					state,
+					`${"  ".repeat(depth)}P${ev.player} wins the game (${ev.reason})`,
+				);
 			}
 			break;
 		}
 	}
 
-	if (happened && ev.fact) scope.facts.add(ev.fact);
+	const executed: GameEvent[] = [];
+	for (const r of childResults) {
+		executed.push(...r.executed);
+		created.push(...r.created);
+	}
+	if (happened) {
+		executed.push(ev);
+		if (ev.fact) scope.facts.add(ev.fact);
+	}
+
+	return { executed, created };
 }
 
 const TURN: Step[] = [
@@ -1388,7 +1507,8 @@ export function runTurn(state: GameState, agents: [Agent, Agent]): void {
 			{ kind: "beginStep", player: state.activePlayer, step },
 			agents,
 		);
-		if (state.players.some((p) => p.lost)) return;
+		checkStateBasedActions(state, agents);
+		if (gameOver(state)) return;
 	}
 	for (const id of state.battlefield) obj(state, id).damage = 0;
 	state.floating = state.floating.filter(
@@ -1399,20 +1519,35 @@ export function runTurn(state: GameState, agents: [Agent, Agent]): void {
 		state.players.length) as PlayerId;
 }
 
+export function gameOver(state: GameState): boolean {
+	return state.players.some((p) => p.lost || p.won);
+}
+
+export function winner(state: GameState): PlayerId | null {
+	const w = state.players.find((p) => p.won);
+	if (w) return w.id;
+	const losers = state.players.filter((p) => p.lost);
+	if (losers.length === 1) return state.players.find((p) => !p.lost)!.id;
+	return null;
+}
+
 if (import.meta.main) {
-	const state = newGame();
+	function run() {
+		const state = newGame();
 
-	const agents: [Agent, Agent] = [new RandomAgent(), new RandomAgent()];
+		const agents: [Agent, Agent] = [new RandomAgent(), new RandomAgent()];
 
-	for (let i = 0; i < 1000; i++) {
-		runTurn(state, agents);
-		if (state.players.some((p) => p.lost)) {
-			dump(state);
-			process.exit(0);
+		for (let i = 0; i < 1000; i++) {
+			runTurn(state, agents);
+			if (gameOver(state)) {
+				dump(state);
+				return;
+			}
 		}
-	}
 
-	throw new Error("max turn count reached");
+		throw new Error("max turn count reached");
+	}
+	run();
 }
 
 function dump(state: GameState): void {

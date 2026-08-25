@@ -193,13 +193,13 @@ export const GRIZZLY_BEARS = registerCard({
 	toughness: 2,
 });
 
-export const PRODIGAL_PYROMANCER = registerCard({
-	id: "prodigal-pyromancer",
-	name: "Prodigal Pyromancer",
+export const EAGER_CADET = registerCard({
+	id: "eager-cadet",
+	name: "Eager Cadet",
 	types: ["creature"],
-	subtypes: ["Human", "Wizard"],
-	colors: ["r"],
-	mv: 3,
+	subtypes: ["Human", "Soldier"],
+	colors: ["w"],
+	mv: 1,
 	power: 1,
 	toughness: 1,
 });
@@ -302,9 +302,9 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 					inOwnDrawStep && ctx.state.players[ev.player]!.drawnInDrawStep === 0;
 				return !isFirstDrawOfDrawStep;
 			},
-			replace(ev) {
+			replace(ev, ctx) {
 				if (ev.kind !== "draw") return [ev];
-				const tag = `chains:discarded:${ev.player}:${Math.random().toString(36).slice(2, 8)}`;
+				const tag = `chains:discarded:${ev.player}:${ctx.state.nextTag++}`;
 				return [
 					{ kind: "discard", player: ev.player, fact: tag },
 					// "If the player discards a card this way" — the guard makes the second
@@ -489,10 +489,75 @@ function pickCloneTarget(
 }
 
 /* ------------------------------------------------------------------ *
- * Floating effects — created by resolving spells. These use closures,
- * which is fine at runtime but means a serialized game has to store
- * (factoryKey, params) rather than the function itself.
+ * Can't lose / alternate win conditions
  * ------------------------------------------------------------------ */
+
+export const LABORATORY_MANIAC = registerCard({
+	id: "laboratory-maniac",
+	name: "Laboratory Maniac",
+	types: ["creature"],
+	subtypes: ["Human", "Wizard"],
+	colors: ["u"],
+	mv: 3,
+	power: 2,
+	toughness: 2,
+	replacements: [
+		{
+			label: "labman:win",
+			layer: "other",
+			text: "If you would draw a card while your library has no cards in it, you win the game instead of drawing the card.",
+			applies(ev, ctx) {
+				if (!onBattlefield(ctx) || ev.kind !== "draw") return false;
+				if (ev.player !== ctx.controller) return false;
+				return ctx.state.players[ev.player]!.library.length === 0;
+			},
+			replace(ev) {
+				if (ev.kind !== "draw") return [ev];
+				return [
+					{
+						kind: "winGame",
+						player: ev.player,
+						reason: "Laboratory Maniac",
+					},
+				];
+			},
+		},
+	],
+});
+
+export const PLATINUM_ANGEL = registerCard({
+	id: "platinum-angel",
+	name: "Platinum Angel",
+	types: ["artifact", "creature"],
+	subtypes: ["Angel"],
+	colors: [],
+	mv: 7,
+	power: 4,
+	toughness: 4,
+	keywords: ["flying"],
+	replacements: [
+		{
+			label: "platinum:lose",
+			layer: "other",
+			text: "You can't lose the game.",
+			applies(ev, ctx) {
+				if (!onBattlefield(ctx) || ev.kind !== "loseGame") return false;
+				return ev.player === ctx.controller;
+			},
+			replace: () => [],
+		},
+		{
+			label: "platinum:win",
+			layer: "other",
+			text: "Your opponents can't win the game.",
+			applies(ev, ctx) {
+				if (!onBattlefield(ctx) || ev.kind !== "winGame") return false;
+				return ev.player !== ctx.controller;
+			},
+			replace: () => [],
+		},
+	],
+});
 
 /** "Prevent the next N damage that would be dealt to <target> this turn." */
 export function preventNextDamageShield(
@@ -504,7 +569,7 @@ export function preventNextDamageShield(
 	return {
 		label: `shield:${n}`,
 		layer: "other",
-		prevention: true,
+		isPreventionEffect: true,
 		text: `Prevent the next ${n} damage that would be dealt to ${
 			target.type === "player" ? `P${target.player}` : `#${target.id}`
 		} this turn.`,
@@ -541,7 +606,7 @@ export function prismaticStrands(color: Color): ReplacementDef {
 	return {
 		label: `strands:${color}`,
 		layer: "other",
-		prevention: true,
+		isPreventionEffect: true,
 		functionsIn: ["any"],
 		text: `Prevent all damage that ${color} sources would deal this turn.`,
 		applies: (ev) => ev.kind === "damage" && ev.sourceColors.includes(color),
