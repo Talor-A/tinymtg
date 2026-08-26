@@ -1,6 +1,7 @@
 import type {
 	Color,
 	CounterBag,
+	CounterNames,
 	EffectCtx,
 	GameEvent,
 	GameState,
@@ -152,7 +153,8 @@ export const DOUBLING_SEASON = registerCard({
 			},
 			replace(ev) {
 				const bag = { ...eventCounters(ev)! };
-				for (const k of Object.keys(bag)) bag[k] = (bag[k] ?? 0) * 2;
+				for (const k of Object.keys(bag) as CounterNames[])
+					bag[k] = (bag[k] ?? 0) * 2;
 				return withCounters(ev, bag);
 			},
 		},
@@ -359,11 +361,16 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 					inOwnDrawStep && ctx.state.players[ev.player].drawnInDrawStep === 0;
 				return !isFirstDrawOfDrawStep;
 			},
-			replace(ev, ctx) {
+			replace(ev, ctx): GameEvent[] {
 				if (ev.kind !== "draw") return [ev];
 				const tag = `chains:discarded:${ev.player}:${ctx.state.nextTag++}`;
 				return [
-					{ kind: "discard", player: ev.player, fact: tag },
+					{
+						kind: "discard",
+						player: ev.player,
+						fact: tag,
+						cards: { kind: "any" },
+					},
 					// "If the player discards a card this way" — the guard makes the second
 					// half conditional without smuggling a closure into the event.
 					{ kind: "draw", player: ev.player, guard: tag },

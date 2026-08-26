@@ -83,7 +83,14 @@ type CardType =
 
 /** Compatibility mirror for code that has not yet moved from state.step to the scheduler. */
 type Step = StepKind | "main";
-export type CounterBag = Record<string, number>;
+
+export type CounterNames =
+	| "+1/+1"
+	| "-1/-1"
+	| "__deathtouched"
+	| "charge"
+	| "poison";
+export type CounterBag = Partial<Record<CounterNames, number>>;
 
 type EntityRef =
 	| { type: "player"; player: PlayerId }
@@ -104,6 +111,11 @@ interface EventCommon {
 	note?: string;
 }
 
+interface DeclareAttackersEvent extends EventCommon {
+	kind: "declare attackers";
+	player: PlayerId;
+}
+
 interface DrawEvent extends EventCommon {
 	kind: "draw";
 	player: PlayerId;
@@ -112,8 +124,17 @@ interface DrawEvent extends EventCommon {
 interface DiscardEvent extends EventCommon {
 	kind: "discard";
 	player: PlayerId;
-	/** undefined = the player chooses */
-	cardInPlay?: ObjectId;
+	cards:
+		| {
+				kind: "hand-size";
+		  }
+		| {
+				kind: "specific";
+				card: ObjectId;
+		  }
+		| {
+				kind: "any";
+		  };
 }
 
 interface DamageEvent extends EventCommon {
@@ -178,8 +199,15 @@ type MoveCause =
 interface AddCountersEvent extends EventCommon {
 	kind: "addCounters";
 	target: EntityRef;
-	counter: string;
+	counter: CounterNames;
 	amount: number;
+	source?: ObjectId;
+}
+
+interface RemoveCountersEvent extends EventCommon {
+	kind: "removeCounters";
+	target: EntityRef;
+	counters: "all" | Partial<Record<CounterNames, number | "all">>;
 	source?: ObjectId;
 }
 
@@ -249,6 +277,7 @@ interface BeginPhaseEvent extends EventCommon {
 }
 
 export type GameEvent =
+	| DeclareAttackersEvent
 	| DrawEvent
 	| DiscardEvent
 	| DamageEvent
@@ -256,6 +285,7 @@ export type GameEvent =
 	| RegenerateEvent
 	| ZoneChangeEvent
 	| AddCountersEvent
+	| RemoveCountersEvent
 	| LifeChangeEvent
 	| TapEvent
 	| BeginTurnEvent
@@ -349,6 +379,7 @@ interface PlayerState {
 	hand: ObjectId[];
 	graveyard: ObjectId[];
 	exile: ObjectId[];
+	counters: CounterBag;
 	/** Turn-scoped counters, e.g. cards drawn in the draw step (Chains of Mephistopheles). */
 	drawnInDrawStep: number;
 	/** Set when the player has attempted to draw from an empty library since the last SBA check (CR 704.5b). */
@@ -588,6 +619,7 @@ const newPlayerState = (id: PlayerId): PlayerState => ({
 	landsPlayed: 0,
 	lost: false,
 	won: false,
+	counters: {},
 });
 
 export function newGame(): GameState {
@@ -1111,6 +1143,8 @@ export function affectedPlayer(state: GameState, ev: GameEvent): PlayerId {
 		case "beginPhase":
 		case "lifeChange":
 			return ev.player;
+		case "declare attackers":
+			return ev.player;
 
 		case "damage":
 			return ev.target.type === "player"
@@ -1127,6 +1161,11 @@ export function affectedPlayer(state: GameState, ev: GameEvent): PlayerId {
 			return maybePermanent(state, ev.ref.object)?.controller ?? 0;
 
 		case "addCounters":
+			return ev.target.type === "player"
+				? ev.target.player
+				: (maybePermanent(state, ev.target.id)?.controller ?? 0);
+
+		case "removeCounters":
 			return ev.target.type === "player"
 				? ev.target.player
 				: (maybePermanent(state, ev.target.id)?.controller ?? 0);
@@ -1148,6 +1187,8 @@ export function affectedPlayer(state: GameState, ev: GameEvent): PlayerId {
 			if (ev.to === "battlefield") return ev.toController;
 			return o.owner;
 		}
+		default:
+			assertNever(ev);
 	}
 }
 
@@ -1365,6 +1406,9 @@ function moveObject(
 	state.objects.delete(id);
 
 	// Tokens cease to exist when they leave the battlefield (CR 111.7).
+	// TODO: this probably manifests as a bug. tokens can be put into zones, they
+	// disappear due to SBA.
+	// For example, a token is still put into graveyard
 	if (o.kind === "permanent" && o.token && from === "battlefield") {
 		log(state, `  ${card(o.cardId).name}#${id} (token) ceases to exist`);
 		return null;
@@ -1443,7 +1487,12 @@ export function describeEvent(state: GameState, ev: GameEvent): string {
 		case "draw":
 			return `draw(P${ev.player})`;
 		case "discard":
-			return `discard(P${ev.player}${ev.cardInPlay ? `, ${name(state, ev.cardInPlay)}` : ""})`;
+			if (ev.cards.kind === "hand-size")
+				return `discard(P${ev.player}, to hand size)`;
+			if (ev.cards.kind === "specific")
+				return `discard(P${ev.player}, ${name(state, ev.cards.card)})`;
+			assert(ev.cards.kind === "any");
+			return `discard(P${ev.player})`;
 		case "damage": {
 			const tgt =
 				ev.target.type === "player"
@@ -1472,6 +1521,16 @@ export function describeEvent(state: GameState, ev: GameEvent): string {
 					: name(state, ev.target.id);
 			return `counters(${ev.amount}x ${ev.counter} on ${tgt})`;
 		}
+		case "removeCounters": {
+			const tgt =
+				ev.target.type === "player"
+					? `P${ev.target.player}`
+					: name(state, ev.target.id);
+			if (ev.counters === "all") return `counters(rm all on ${tgt})`;
+			return `counters(rm ${Object.entries(ev.counters)
+				.map(([k, v]) => `${v}x ${k}`)
+				.join(",")} on ${tgt})`;
+		}
 		case "lifeChange":
 			return `life(P${ev.player} ${ev.delta >= 0 ? "+" : ""}${ev.delta})`;
 		case "tap":
@@ -1490,6 +1549,8 @@ export function describeEvent(state: GameState, ev: GameEvent): string {
 			return `token(${ev.amount}x ${ev.cardId} for P${ev.controller})`;
 		case "loseGame":
 			return `loseGame(P${ev.player}: ${ev.reason})`;
+		case "declare attackers":
+			return `declareAttackers(P${ev.player})`;
 		case "winGame":
 			return `winGame(P${ev.player}: ${ev.reason})`;
 	}
@@ -1532,19 +1593,23 @@ export function checkStateBasedActions(
 			}
 			// 704.5c. If a player has ten or more poison counters, that player loses
 			// the game.
+			if (p.counters["poison"] !== undefined && p.counters["poison"] >= 10) {
+				perform(
+					state,
+					{
+						kind: "loseGame",
+						player: p.id,
+						reason: "poison",
+					},
+					agents,
+				);
+				if (p.lost) acted = true;
+			}
 		}
 
 		// 704.5e. If a copy of a spell is in a zone other than the stack, it ceases
 		// to exist. If a copy of a card is in any zone other than the stack or the
 		// battlefield, it ceases to exist.
-
-		// 704.5f. If a creature has toughness 0 or less, it's put into its owner's
-		// graveyard. Regeneration can't replace this event.
-
-		// 704.5g. If a creature has toughness greater than 0, it has damage marked
-		// on it, and the total damage marked on it is greater than or equal to its
-		// toughness, that creature has been dealt lethal damage and is destroyed.
-		// Regeneration can replace this event.
 
 		// 704.5h. If a creature has toughness greater than 0, and it's been dealt
 		// damage by a source with deathtouch since the last time state-based
@@ -1574,9 +1639,6 @@ export function checkStateBasedActions(
 		// nonbattle, noncreature permanent that's neither an Aura, an Equipment,
 		// nor a Fortification is attached to an object or player, it becomes
 		// unattached and remains on the battlefield.
-
-		// 704.5q. If a permanent has both a +1/+1 counter and a -1/-1 counter on
-		// it, N +1/+1 and N -1/-1 counters are removed from it, where N is the smaller of the number of +1/+1 and -1/-1 counters on it.
 
 		// 704.5r. If a permanent with an ability that says it can't have more than
 		// N counters of a certain kind on it has more than N counters of that kind
@@ -1608,6 +1670,8 @@ export function checkStateBasedActions(
 			const v = view(state, id);
 			if (!v.types.includes("creature")) continue;
 
+			// 704.5f. If a creature has toughness 0 or less, it's put into its
+			// owner's graveyard. Regeneration can't replace this event.
 			if (v.toughness <= 0) {
 				log(state, `  SBA: ${name(state, id)} has toughness ${v.toughness}`);
 				perform(
@@ -1625,6 +1689,10 @@ export function checkStateBasedActions(
 				acted = true;
 				continue;
 			}
+			// 704.5g. If a creature has toughness greater than 0, it has damage marked
+			// on it, and the total damage marked on it is greater than or equal to its
+			// toughness, that creature has been dealt lethal damage and is destroyed.
+			// Regeneration can replace this event.
 			if (lethalDamage(state, id) || o.counters.__deathtouched) {
 				log(state, `  SBA: ${name(state, id)} has lethal damage`);
 				perform(
@@ -1633,6 +1701,23 @@ export function checkStateBasedActions(
 						kind: "destroy",
 						object: id,
 						noRegen: false,
+					},
+					agents,
+				);
+				acted = true;
+			}
+
+			// 704.5q. If a permanent has both a +1/+1 counter and a -1/-1 counter on
+			// it, N +1/+1 and N -1/-1 counters are removed from it, where N is the
+			// smaller of the number of +1/+1 and -1/-1 counters on it.
+			if (o.counters["+1/+1"] && o.counters["-1/-1"]) {
+				const n = Math.min(o.counters["+1/+1"], o.counters["-1/-1"]);
+				perform(
+					state,
+					{
+						kind: "removeCounters",
+						target: { type: "permanent", id: id },
+						counters: { "+1/+1": n, "-1/-1": n },
 					},
 					agents,
 				);
@@ -1810,9 +1895,50 @@ function executeIn(
 				happened = false;
 				break;
 			}
+			if (ev.cards.kind === "hand-size") {
+				const countToDiscard = p.hand.length - 7;
+				if (countToDiscard <= 0) {
+					happened = false;
+					break;
+				}
+				const toDiscard: ObjectId[] = [];
+
+				for (let i = 0; i < countToDiscard; i++) {
+					const selected: ObjectId = agents[ev.player].chooseDiscard(
+						state,
+						ev.player,
+						p.hand,
+					);
+
+					assertDefined(selected);
+					toDiscard.push(selected);
+				}
+				toDiscard.forEach((id) => {
+					childResults.push(
+						performIn(
+							state,
+							{
+								kind: "zoneChange",
+								object: id,
+								from: "hand",
+								to: "graveyard",
+								cause: "discard",
+								toController: ev.player,
+							},
+							agents,
+							scope,
+							depth + 1,
+						),
+					);
+				});
+				break;
+			}
+
 			const chosen =
-				ev.cardInPlay ??
-				agents[ev.player].chooseDiscard(state, ev.player, p.hand);
+				ev.cards.kind === "specific"
+					? ev.cards.card
+					: agents[ev.player].chooseDiscard(state, ev.player, p.hand);
+			assertDefined(chosen);
 			childResults.push(
 				performIn(
 					state,
@@ -1946,21 +2072,68 @@ function executeIn(
 
 		case "addCounters": {
 			if (ev.amount <= 0) {
-				happened = false;
-				break;
+				throw new Error(
+					"undefined behavior: tried to add non-natural quantity of counters.",
+				);
+				// happened = false;
+				// break;
 			}
 			if (ev.target.type === "permanent") {
 				const o = maybePermanent(state, ev.target.id);
 				if (!o) {
-					happened = false;
-					break;
+					throw new Error(
+						"undefined behavior: tried to add counters to a non-existent permanent.",
+					);
 				}
+				// if (!o) {
+				// 	happened = false;
+				// 	break;
+				// }
 				o.counters[ev.counter] = (o.counters[ev.counter] ?? 0) + ev.amount;
 				log(
 					state,
 					`${"  ".repeat(depth)}${name(state, o.id)} now has ${o.counters[ev.counter]} ${ev.counter}`,
 				);
+			} else {
+				state.players[ev.target.player].counters[ev.counter] =
+					(state.players[ev.target.player].counters[ev.counter] ?? 0) +
+					ev.amount;
+				log(
+					state,
+					`${"  ".repeat(depth)}${state.players[ev.target.player].id} now has ${state.players[ev.target.player].counters[ev.counter]} ${ev.counter}`,
+				);
 			}
+			break;
+		}
+		case "removeCounters": {
+			if (ev.target.type === "player") {
+				throw new Error("player counters not implemented");
+			}
+			const o = maybePermanent(state, ev.target.id);
+			if (!o) {
+				happened = false;
+				break;
+			}
+			if (ev.counters === "all") {
+				o.counters = {};
+				break;
+			}
+			Object.entries(ev.counters).forEach(([_counter, amount]) => {
+				const counter = _counter as CounterNames;
+				if (amount === "all") {
+					o.counters[counter] = 0;
+					return;
+				}
+				if (o.counters[counter] === undefined)
+					throw new Error(
+						"undefined behavior: tried to remove a counter that wasn't present.",
+					);
+				if (o.counters[counter] < amount)
+					throw new Error(
+						"undefined behavior: tried to remove more counters than were present.",
+					);
+				o.counters[counter] -= amount;
+			});
 			break;
 		}
 
@@ -2027,6 +2200,9 @@ function executeIn(
 			}
 			break;
 		}
+
+		case "declare attackers":
+			break;
 
 		case "loseGame": {
 			const p = state.players[ev.player];
@@ -2157,6 +2333,18 @@ export function settlePriority(state: GameState, agents: [Agent, Agent]): void {
 			state.step === "untap" || state.step === "cleanup";
 		if (isStepWithNoPriority && state.stack.length === 0) return;
 
+		if (state.step === "cleanup") {
+			assert(state.turnScheduler.remainingSteps.length === 0);
+			assert(state.turnScheduler.currentPhase !== null);
+			assert(state.turnScheduler.currentTurn !== null);
+
+			state.turnScheduler.remainingSteps.push({
+				id: nextScheduleId(state) as StepId,
+				phaseId: state.turnScheduler.currentPhase.id,
+				turnId: state.turnScheduler.currentTurn.id,
+				kind: "cleanup",
+			});
+		}
 		const action = agents[priority].choosePriorityAction(
 			state,
 			getObservableActions(state, priority),
@@ -2312,16 +2500,35 @@ function performTurnBasedActions(
 			perform(state, { kind: "draw", player: state.activePlayer }, agents);
 			break;
 		case "cleanup":
+			perform(
+				state,
+				{
+					kind: "discard",
+					player: state.activePlayer,
+					cards: { kind: "hand-size" },
+				},
+				agents,
+			);
 			// This is only the noninteractive part of CR 514. Repeated cleanup
 			// steps still need to be added when SBAs or triggers occur here.
 			for (const id of state.battlefield) permanent(state, id).damage = 0;
 			state.floating = state.floating.filter(
 				(f) => !f.expired && f.expires !== "endOfTurn",
 			);
+
 			break;
 		case "upkeep":
 		case "begin combat":
 		case "declare attackers":
+			perform(
+				state,
+				{
+					kind: "declare attackers",
+					player: state.activePlayer,
+				},
+				agents,
+			);
+			break;
 		case "declare blockers":
 		case "combat damage":
 		case "end combat":
@@ -2451,7 +2658,7 @@ export function runTurn(state: GameState, agents: [Agent, Agent]): void {
 				performTurnBasedActions(state, agents, step);
 				// Untap has no priority window. Cleanup normally has none, but the
 				// existing priority helper already opens one if something triggered.
-				if (step.kind !== "untap") priority(state, agents);
+				priority(state, agents);
 				command = { kind: "finishStep" };
 				break;
 			}

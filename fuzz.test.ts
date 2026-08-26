@@ -42,6 +42,26 @@ const ALL_CARDS = [
 	"platinum-angel",
 	"kalitas",
 ] as const;
+const ALL_EVENTS = {
+	addCounters: true,
+	removeCounters: true,
+	damage: true,
+	destroy: true,
+	regenerate: true,
+	zoneChange: true,
+
+	beginPhase: true,
+	beginStep: true,
+	loseGame: true,
+	winGame: true,
+	beginTurn: true,
+	draw: true,
+	discard: true,
+	lifeChange: true,
+	tap: true,
+	createToken: true,
+	untap: true,
+} satisfies Record<GameEvent["kind"], true>;
 
 const COLORS: Color[] = ["w", "u", "b", "r", "g"];
 
@@ -125,8 +145,8 @@ function randomZone(
 	return pick(rng, ["library", "hand", "graveyard", "exile", "battlefield"]);
 }
 
-function randomCounter(rng: () => number): string {
-	return pick(rng, ["+1/+1", "-1/-1", "charge", "poison"]);
+function randomCounter(rng: () => number) {
+	return pick(rng, ["+1/+1", "-1/-1", "charge", "poison"] as const);
 }
 
 function buildFuzzState(rng: () => number): GameState {
@@ -220,6 +240,18 @@ function randomEvent(state: GameState, rng: () => number): GameEvent | null {
 					}
 				: null,
 
+		() =>
+			targetPermanent !== null
+				? {
+						kind: "removeCounters",
+						target: { type: "permanent", id: targetPermanent },
+						counters:
+							rng() < 0.5
+								? "all"
+								: { [randomCounter(rng)]: 1 + Math.floor(rng() * 3) },
+					}
+				: null,
+
 		() => ({
 			kind: "lifeChange",
 			player: pickPlayer(rng),
@@ -248,8 +280,18 @@ function randomEvent(state: GameState, rng: () => number): GameEvent | null {
 				? {
 						kind: "discard",
 						player: state.players[0].hand.length > 0 ? 0 : 1,
+						cards: { kind: "specific", card: handTarget },
 					}
-				: null,
+				: {
+						kind: "discard",
+						player: state.players[0].hand.length > 0 ? 0 : 1,
+						cards: { kind: "any" },
+					},
+		() => ({
+			kind: "discard",
+			player: state.players[0].hand.length > 0 ? 0 : 1,
+			cards: { kind: "hand-size" },
+		}),
 	];
 
 	// Try a few times to produce a valid event.
@@ -266,19 +308,23 @@ interface FuzzResult {
 	error?: Error;
 	logTail?: string[];
 	eventsApplied: number;
+	eventKinds: Set<GameEvent["kind"]>;
 }
 
 function runFuzzCase(seed: number, eventsPerCase = 40): FuzzResult {
 	const rng = mulberry32(seed);
 	const state = buildFuzzState(rng);
 	const agents: [Agent, Agent] = [new FuzzAgent(seed), new FuzzAgent(seed + 1)];
+	const eventKinds = new Set<GameEvent["kind"]>();
 
 	try {
 		let applied = 0;
 		for (let i = 0; i < eventsPerCase; i++) {
 			if (gameOver(state)) break;
 			const ev = randomEvent(state, rng);
+
 			if (!ev) continue;
+			eventKinds.add(ev.kind);
 			perform(state, ev, agents);
 			checkStateBasedActions(state, agents);
 			applied++;
@@ -300,7 +346,7 @@ function runFuzzCase(seed: number, eventsPerCase = 40): FuzzResult {
 			}
 		}
 
-		return { seed, ok: true, eventsApplied: applied };
+		return { seed, ok: true, eventsApplied: applied, eventKinds };
 	} catch (error) {
 		const tail = state.log.slice(-50);
 		return {
@@ -309,6 +355,7 @@ function runFuzzCase(seed: number, eventsPerCase = 40): FuzzResult {
 			error: error instanceof Error ? error : new Error(String(error)),
 			logTail: tail,
 			eventsApplied: 0,
+			eventKinds: new Set(),
 		};
 	}
 }
@@ -328,10 +375,16 @@ function describeFailure(r: FuzzResult): string {
 describe("tiny fuzzer", () => {
 	test("random game states survive 200 fuzz cases", () => {
 		const failures: FuzzResult[] = [];
+		const eventKinds = new Set<GameEvent["kind"]>();
 		for (let seed = 0; seed < 200; seed++) {
 			const result = runFuzzCase(seed);
 			if (!result.ok) failures.push(result);
+			for (const kind of result.eventKinds) eventKinds.add(kind);
 		}
+
+		(Object.keys(ALL_EVENTS) as GameEvent["kind"][]).forEach((kind) => {
+			expect(eventKinds).toContain(kind);
+		});
 
 		if (failures.length > 0) {
 			console.error(failures.map(describeFailure).join("\n\n"));
