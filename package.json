@@ -4,7 +4,7 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"format": "biome format --write",
+		"format": "biome check --fix --unsafe",
 		"yawgatog": "bun ./yawgatog.ts"
 	},
 	"devDependencies": {

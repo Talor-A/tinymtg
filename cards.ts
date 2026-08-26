@@ -6,9 +6,14 @@ import type {
 	GameState,
 	ObjectId,
 	PlayerId,
-	ReplacementDef,
 } from "./index.ts";
-import { etbPreview, maybeObj, registerCard, view } from "./index.ts";
+import {
+	etbPreview,
+	maybeObject,
+	maybePermanent,
+	registerCard,
+	view,
+} from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
 
 /* ------------------------------------------------------------------ *
@@ -48,7 +53,7 @@ function counterRecipientController(
 ): PlayerId | null {
 	if (ev.kind === "addCounters") {
 		if (ev.target.type !== "permanent") return null;
-		return maybeObj(state, ev.target.id)?.controller ?? null;
+		return maybePermanent(state, ev.target.id)?.controller ?? null;
 	}
 	if (ev.kind === "zoneChange" && ev.to === "battlefield")
 		return ev.toController;
@@ -57,7 +62,7 @@ function counterRecipientController(
 
 function isCreatureRecipient(state: GameState, ev: GameEvent): boolean {
 	if (ev.kind === "addCounters" && ev.target.type === "permanent") {
-		const o = maybeObj(state, ev.target.id);
+		const o = maybePermanent(state, ev.target.id);
 		return !!o && view(state, o.id).types.includes("creature");
 	}
 	if (ev.kind === "zoneChange")
@@ -204,6 +209,58 @@ export const EAGER_CADET = registerCard({
 	toughness: 1,
 });
 
+export const AJANIS_MANTRA = registerCard({
+	id: "ajanis-mantra",
+	name: "Ajani's Mantra",
+	types: ["enchantment"],
+	colors: ["w"],
+	mv: 2,
+	triggers: [
+		{
+			id: "upkeep-life",
+			text: "At the beginning of your upkeep, you may gain 1 life.",
+			condition: { kind: "beginStep", step: "upkeep", player: "controller" },
+			optional: true,
+			effects: [{ kind: "gainLife", player: "controller", amount: 1 }],
+		},
+	],
+});
+
+export const ARASHIN_CLERIC = registerCard({
+	id: "arashin-cleric",
+	name: "Arashin Cleric",
+	types: ["creature"],
+	subtypes: ["Human", "Cleric"],
+	colors: ["w"],
+	mv: 2,
+	power: 1,
+	toughness: 3,
+	triggers: [
+		{
+			id: "etb-life",
+			text: "When this creature enters, you gain 3 life.",
+			condition: { kind: "entersBattlefield", object: "self" },
+			effects: [{ kind: "gainLife", player: "controller", amount: 3 }],
+		},
+	],
+});
+
+/** STUB: dies triggers are not yet supported. */
+export const OUTLAW_MEDIC = registerCard({
+	id: "outlaw-medic",
+	name: "Outlaw Medic",
+	types: ["creature"],
+	subtypes: ["Human", "Rogue"],
+	colors: ["w"],
+	mv: 2,
+	power: 1,
+	toughness: 3,
+	keywords: ["lifelink"],
+	triggers: [
+		// "When this creature dies, draw a card."
+	],
+});
+
 export const FOREST = registerCard({
 	id: "forest",
 	name: "Forest",
@@ -268,7 +325,7 @@ export const LEYLINE_OF_THE_VOID = registerCard({
 					ev.to !== "graveyard"
 				)
 					return false;
-				const o = maybeObj(ctx.state, ev.object);
+				const o = maybeObject(ctx.state, ev.object);
 				return !!o && o.owner !== ctx.controller;
 			},
 			replace: (ev) =>
@@ -299,7 +356,7 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 				const inOwnDrawStep =
 					ctx.state.step === "draw" && ctx.state.activePlayer === ev.player;
 				const isFirstDrawOfDrawStep =
-					inOwnDrawStep && ctx.state.players[ev.player]!.drawnInDrawStep === 0;
+					inOwnDrawStep && ctx.state.players[ev.player].drawnInDrawStep === 0;
 				return !isFirstDrawOfDrawStep;
 			},
 			replace(ev, ctx) {
@@ -379,12 +436,15 @@ export const PALISADE_GIANT = registerCard({
 				if (!onBattlefield(ctx) || ev.kind !== "damage") return false;
 				if (ev.target.type === "player")
 					return ev.target.player === ctx.controller;
-				if (ev.target.id === ctx.self!.id) return false;
-				return maybeObj(ctx.state, ev.target.id)?.controller === ctx.controller;
+				assert(ctx.self);
+				return (
+					maybePermanent(ctx.state, ev.target.id)?.controller === ctx.controller
+				);
 			},
-			replace(ev, ctx) {
+			replace(ev, ctx): GameEvent[] {
 				if (ev.kind !== "damage") return [ev];
-				return [{ ...ev, target: { type: "permanent", id: ctx.self!.id } }];
+				assert(ctx.self);
+				return [{ ...ev, target: { type: "permanent", id: ctx.self.id } }];
 			},
 		},
 	],
@@ -403,6 +463,7 @@ export const MYCOSYNTH_LATTICE = registerCard({
 	mv: 6,
 	statics: [
 		{
+			layer: "4-type-changing",
 			text: "All permanents are artifacts in addition to their other types.",
 			applies: (v, _s, src) =>
 				src.zone === "battlefield" && !v.types.includes("artifact"),
@@ -509,7 +570,7 @@ export const LABORATORY_MANIAC = registerCard({
 			applies(ev, ctx) {
 				if (!onBattlefield(ctx) || ev.kind !== "draw") return false;
 				if (ev.player !== ctx.controller) return false;
-				return ctx.state.players[ev.player]!.library.length === 0;
+				return ctx.state.players[ev.player]?.library.length === 0;
 			},
 			replace(ev) {
 				if (ev.kind !== "draw") return [ev];
@@ -565,92 +626,38 @@ export function preventNextDamageShield(
 		| { type: "player"; player: PlayerId }
 		| { type: "permanent"; id: ObjectId },
 	n: number,
-): ReplacementDef {
+): { factory: string; params: Record<string, number | string> } {
 	return {
-		label: `shield:${n}`,
-		layer: "other",
-		isPreventionEffect: true,
-		text: `Prevent the next ${n} damage that would be dealt to ${
-			target.type === "player" ? `P${target.player}` : `#${target.id}`
-		} this turn.`,
-		functionsIn: ["any"],
-		applies(ev, ctx) {
-			if (ev.kind !== "damage" || ev.amount <= 0) return false;
-			if ((ctx.data["remaining"] ?? 0) <= 0) return false;
-			return (
-				ev.target.type === target.type &&
-				(target.type === "player"
-					? ev.target.type === "player" && ev.target.player === target.player
-					: ev.target.type === "permanent" && ev.target.id === target.id)
-			);
-		},
-		replace(ev, ctx) {
-			if (ev.kind !== "damage") return [ev];
-			const prevented = Math.min(ev.amount, ctx.data["remaining"] ?? 0);
-			const remaining = ev.amount - prevented;
-			// Fully prevented damage is replaced by *nothing* — not by 0 damage.
-			return remaining > 0 ? [{ ...ev, amount: remaining }] : [];
-		},
-		onApplied(ev, ctx) {
-			if (ev.kind !== "damage") return;
-			ctx.data["remaining"] = Math.max(
-				0,
-				(ctx.data["remaining"] ?? 0) - ev.amount,
-			);
-		},
+		factory: "preventNextDamage",
+		params:
+			target.type === "player"
+				? { targetType: "player", targetPlayer: target.player, amount: n }
+				: { targetType: "permanent", targetId: target.id, amount: n },
 	};
 }
 
 /** Prismatic Strands: prevent all damage sources of the chosen color would deal. */
-export function prismaticStrands(color: Color): ReplacementDef {
-	return {
-		label: `strands:${color}`,
-		layer: "other",
-		isPreventionEffect: true,
-		functionsIn: ["any"],
-		text: `Prevent all damage that ${color} sources would deal this turn.`,
-		applies: (ev) => ev.kind === "damage" && ev.sourceColors.includes(color),
-		replace: () => [],
-	};
+export function prismaticStrands(color: Color): {
+	factory: string;
+	params: Record<string, number | string>;
+} {
+	return { factory: "prismaticStrands", params: { color } };
 }
 
 /** "The next time this creature would be destroyed this turn, regenerate it instead." */
-export function regenerationShield(target: ObjectId): ReplacementDef {
-	return {
-		label: `regen:${target}`,
-		layer: "other",
-		functionsIn: ["any"],
-		text: `Regeneration shield on #${target}.`,
-		applies: (ev, ctx) =>
-			ev.kind === "destroy" &&
-			ev.object === target &&
-			!ev.noRegen &&
-			(ctx.data["used"] ?? 0) === 0,
-		replace: (ev) =>
-			ev.kind === "destroy"
-				? [{ kind: "regenerate", object: ev.object }]
-				: [ev],
-		onApplied: (_ev, ctx) => {
-			ctx.data["used"] = 1;
-		},
-	};
+export function regenerationShield(target: ObjectId): {
+	factory: string;
+	params: Record<string, number | string>;
+} {
+	return { factory: "regenerationShield", params: { target } };
 }
 
 /** Gather Specimens — the control-changing tier (CR 616.1b). */
-export function gatherSpecimens(you: PlayerId): ReplacementDef {
-	return {
-		label: `gather:${you}`,
-		layer: "control",
-		functionsIn: ["any"],
-		text: "If a creature would enter the battlefield under an opponent's control this turn, it enters under your control instead.",
-		applies(ev, ctx) {
-			if (ev.kind !== "zoneChange" || ev.to !== "battlefield") return false;
-			if (ev.toController === you) return false;
-			return etbPreview(ctx.state, ev).types.includes("creature");
-		},
-		replace: (ev) =>
-			ev.kind === "zoneChange" ? [{ ...ev, toController: you }] : [ev],
-	};
+export function gatherSpecimens(you: PlayerId): {
+	factory: string;
+	params: Record<string, number | string>;
+} {
+	return { factory: "gatherSpecimens", params: { you } };
 }
 
 /* ------------------------------------------------------------------ *
@@ -687,7 +694,7 @@ export const KALITAS = registerCard({
 			applies(ev, ctx) {
 				if (!onBattlefield(ctx) || ev.kind !== "zoneChange") return false;
 				if (ev.from !== "battlefield" || ev.to !== "graveyard") return false;
-				const o = maybeObj(ctx.state, ev.object);
+				const o = maybePermanent(ctx.state, ev.object);
 				if (!o || o.token || o.controller === ctx.controller) return false;
 				return view(ctx.state, o.id).types.includes("creature");
 			},

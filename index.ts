@@ -1,14 +1,11 @@
-import { RandomAgent } from "./agents";
+import { KeyboardAgent, RandomAgent } from "./agents";
+import * as EFFECTS from "./effects";
 import { assert, assertDefined, assertNever } from "./lib/assert";
 
+type Brand<T, K extends string> = T & { readonly __brand: K };
+
 export type PlayerId = 0 | 1;
-export type ObjectId = number;
-
-type EffectId = string & { readonly __effect: unique symbol };
-
-function eid(id: string): EffectId {
-	return id as EffectId;
-}
+export type ObjectId = Brand<number, "ObjectId">;
 
 type Zone =
 	| "library"
@@ -17,10 +14,63 @@ type Zone =
 	| "graveyard"
 	| "exile"
 	| "stack";
+export type Color = "w" | "u" | "b" | "r" | "g";
+export type Supertype = "legendary" | "basic" | "snow";
+
+type TurnId = Brand<number, "TurnId">;
+type PhaseId = Brand<number, "PhaseId">;
+type StepId = Brand<number, "StepId">;
+
+type PhaseKind = "beginning" | "main" | "combat" | "ending";
+type MainPhaseRole = "precombat" | "postcombat";
+type StepKind =
+	| "untap"
+	| "upkeep"
+	| "draw"
+	| "begin combat"
+	| "declare attackers"
+	| "declare blockers"
+	| "combat damage"
+	| "end combat"
+	| "end"
+	| "cleanup";
+
+interface PhaseOccurrence {
+	id: PhaseId;
+	turnId: TurnId;
+	kind: PhaseKind;
+	source: "normal" | "additional";
+}
+
+interface StepOccurrence {
+	id: StepId;
+	turnId: TurnId;
+	phaseId: PhaseId;
+	kind: StepKind;
+}
+
+interface TurnOccurrence {
+	id: TurnId;
+	player: PlayerId;
+	isExtra: boolean;
+	mainPhasesBegun: number;
+	remainingPhases: PhaseOccurrence[];
+}
+
+interface TurnScheduler {
+	/** Only exceptional turns are queued. The front is taken next. */
+	pendingTurns: TurnOccurrence[];
+	/** Used to lazily create the next ordinary turn when the queue is empty. */
+	nextRegularPlayer: PlayerId;
+	currentTurn: TurnOccurrence | null;
+	currentPhase: PhaseOccurrence | null;
+	currentStep: StepOccurrence | null;
+	remainingSteps: StepOccurrence[];
+	nextId: number;
+}
+
 /** Zones an ability functions in. 'any' == functions from anywhere (CR 113.6). */
 type ZoneScope = Zone | "any";
-
-export type Color = "w" | "u" | "b" | "r" | "g";
 
 type CardType =
 	| "creature"
@@ -31,33 +81,13 @@ type CardType =
 	| "sorcery"
 	| "planeswalker";
 
-type Step =
-	| "untap"
-	| "upkeep"
-	| "draw"
-	| "main1"
-	| "combat"
-	| "main2"
-	| "end"
-	| "cleanup";
+/** Compatibility mirror for code that has not yet moved from state.step to the scheduler. */
+type Step = StepKind | "main";
 export type CounterBag = Record<string, number>;
 
 type EntityRef =
 	| { type: "player"; player: PlayerId }
 	| { type: "permanent"; id: ObjectId };
-
-type MoveCause =
-	| "draw"
-	| "discard"
-	| "mill"
-	| "destroy"
-	| "sacrifice"
-	| "sba"
-	| "cast"
-	| "resolve"
-	| "effect"
-	| "return"
-	| "put";
 
 /* ------------------------------------------------------------------ *
  * Events
@@ -83,7 +113,7 @@ interface DiscardEvent extends EventCommon {
 	kind: "discard";
 	player: PlayerId;
 	/** undefined = the player chooses */
-	object?: ObjectId;
+	cardInPlay?: ObjectId;
 }
 
 interface DamageEvent extends EventCommon {
@@ -96,7 +126,9 @@ interface DamageEvent extends EventCommon {
 	combat: boolean;
 	deathtouch: boolean;
 	lifelink: boolean;
-	/** CR 615.12 — "can't be prevented" skips prevention effects but not other replacements. */
+	/** CR 615.12
+	 * "can't be prevented" skips prevention effects but not other replacements.
+	 */
 	unpreventable: boolean;
 }
 
@@ -130,6 +162,19 @@ interface ZoneChangeEvent extends EventCommon {
 	toBottom?: boolean;
 }
 
+type MoveCause =
+	| "draw"
+	| "discard"
+	| "mill"
+	| "destroy"
+	| "sacrifice"
+	| "sba"
+	| "cast"
+	| "resolve"
+	| "effect"
+	| "return"
+	| "put";
+
 interface AddCountersEvent extends EventCommon {
 	kind: "addCounters";
 	target: EntityRef;
@@ -147,14 +192,32 @@ interface LifeChangeEvent extends EventCommon {
 
 interface TapEvent extends EventCommon {
 	kind: "tap" | "untap";
-	object: ObjectId;
+	ref:
+		| {
+				kind: "object";
+				object: ObjectId;
+		  }
+		| {
+				kind: "all";
+				player: PlayerId;
+		  };
 }
 
 /** Lets "skip your draw step" be a replacement effect that returns [] (CR 614.10). */
+interface BeginTurnEvent extends EventCommon {
+	kind: "beginTurn";
+	turnId: TurnId;
+	player: PlayerId;
+	isExtra: boolean;
+}
+
 interface BeginStepEvent extends EventCommon {
 	kind: "beginStep";
+	turnId?: TurnId;
+	phaseId?: PhaseId;
+	stepId?: StepId;
 	player: PlayerId;
-	step: Step;
+	step: StepKind;
 }
 
 interface CreateTokenEvent extends EventCommon {
@@ -176,6 +239,15 @@ interface WinGameEvent extends EventCommon {
 	reason: string;
 }
 
+interface BeginPhaseEvent extends EventCommon {
+	kind: "beginPhase";
+	turnId: TurnId;
+	phaseId: PhaseId;
+	player: PlayerId;
+	phase: PhaseKind;
+	mainRole?: MainPhaseRole;
+}
+
 export type GameEvent =
 	| DrawEvent
 	| DiscardEvent
@@ -186,31 +258,88 @@ export type GameEvent =
 	| AddCountersEvent
 	| LifeChangeEvent
 	| TapEvent
+	| BeginTurnEvent
 	| BeginStepEvent
 	| CreateTokenEvent
 	| LoseGameEvent
-	| WinGameEvent;
+	| WinGameEvent
+	| BeginPhaseEvent;
 
 /* ------------------------------------------------------------------ *
  * Game state
  * ------------------------------------------------------------------ */
 
-interface GameObject {
+/** cards and tokens in the battlefield and other public zones are permanents. */
+interface Permanent {
+	kind: "permanent";
 	id: ObjectId;
 	cardId: string;
 	owner: PlayerId;
 	visibility: [Player0: boolean, Player1: boolean];
 	controller: PlayerId;
-	zone: Zone;
+	zone: "battlefield" | "graveyard" | "exile";
 	tapped: boolean;
 	counters: CounterBag;
-	/** Mutable per-effect scratch space, keyed by effect label. Kept separate from counters. */
+	/** Mutable per-effect scratch space, keyed by effect label. */
 	effectData: Record<string, Record<string, number>>;
 	/** Damage marked this turn (cleared in cleanup). */
 	damage: number;
 	attacking: boolean;
 	blocking: boolean;
 	token: boolean;
+}
+
+/** cards that are not in public zones are not permanents. */
+interface CardInPlay {
+	kind: "card";
+	zone: "library" | "hand" | "stack";
+	id: ObjectId;
+	cardId: string;
+	controller: PlayerId;
+	owner: PlayerId;
+	visibility: [Player0: boolean, Player1: boolean];
+
+	/** Mutable per-effect scratch space, keyed by effect label. */
+	effectData: Record<string, Record<string, number>>;
+}
+
+type GameObject = Permanent | CardInPlay;
+
+type EffectId = string & { readonly __effect: unique symbol };
+
+function eid(id: string): EffectId {
+	return id as EffectId;
+}
+
+interface SpellStackItem {
+	id: ObjectId;
+	kind: "spell";
+	card: ObjectId;
+	controller: PlayerId;
+	effect: EffectId;
+}
+export interface AbilityStackItem {
+	id: ObjectId;
+	kind: "ability";
+	/** The source may have left the battlefield by the time this resolves. */
+	source: ObjectId;
+	sourceCardId: string;
+	controller: PlayerId;
+	triggerId: string;
+	text: string;
+	optional: boolean;
+	effects: AbilityEffect[];
+}
+type StackItem = SpellStackItem | AbilityStackItem;
+
+export interface PendingTrigger {
+	source: ObjectId;
+	sourceCardId: string;
+	controller: PlayerId;
+	triggerId: string;
+	text: string;
+	optional: boolean;
+	effects: AbilityEffect[];
 }
 
 interface PlayerState {
@@ -224,6 +353,8 @@ interface PlayerState {
 	drawnInDrawStep: number;
 	/** Set when the player has attempted to draw from an empty library since the last SBA check (CR 704.5b). */
 	drewFromEmptyLibrary: boolean;
+
+	landsPlayed: number;
 	lost: boolean;
 	won: boolean;
 }
@@ -234,20 +365,43 @@ interface FloatingEffect {
 	expires: "endOfTurn" | "never";
 	/** Consumed shields set this; expired effects are swept out of the registry. */
 	expired: boolean;
-	def: ReplacementDef;
+	factory: keyof typeof EFFECTS;
+	params: Record<string, number | string>;
 	/** Mutable scratch space for shields ("prevent the next N damage"). */
 	data: Record<string, number>;
 }
 
+export interface PassAction {
+	kind: "pass";
+}
+export interface CastAction {
+	kind: "cast";
+}
+export interface ActivateAbilityAction {
+	kind: "activate ability";
+}
+export interface PlayLandAction {
+	kind: "play land";
+}
+export type PriorityAction =
+	| PassAction
+	| CastAction
+	| ActivateAbilityAction
+	| PlayLandAction;
+
 export interface GameState {
 	objects: Map<ObjectId, GameObject>;
+	stackItems: Map<ObjectId, StackItem>;
 	players: [PlayerState, PlayerState];
 	battlefield: ObjectId[];
 	stack: ObjectId[];
+	/** Trigger occurrences waiting for the next time a player would receive priority. */
+	pendingTriggers: PendingTrigger[];
 	floating: FloatingEffect[];
 	turn: number;
 	activePlayer: PlayerId;
 	step: Step;
+	turnScheduler: TurnScheduler;
 	nextObjectId: number;
 	/** Monotonic tag source for guard facts (e.g. Chains of Mephistopheles). */
 	nextTag: number;
@@ -268,15 +422,16 @@ interface PermanentView {
 	colors: Color[];
 	power: number;
 	toughness: number;
-	keywords: string[];
+	keywords: Keyword[];
 	controller: PlayerId;
 	owner: PlayerId;
 	counters: CounterBag;
 	tapped: boolean;
 }
 
-interface StaticMod {
+interface ContinuousEffect {
 	text: string;
+	layer: ContinuousEffectLayer;
 	/** `source` is the permanent granting the effect */
 	applies(view: PermanentView, state: GameState, source: GameObject): boolean;
 	modify(view: PermanentView, state: GameState, source: GameObject): void;
@@ -311,7 +466,7 @@ export interface ReplacementDef {
 	label: string;
 	text: string;
 	layer: ReplacementLayer;
-	/** CR 615 — prevention effects are replacements with an extra "can't be prevented" hook. */
+	/** is this an effect that prevents something from happening? */
 	isPreventionEffect?: boolean;
 	/**
 	 * pre-filter applies, based on where the source of the event is located.
@@ -335,9 +490,24 @@ export interface BoundReplacement {
 	label: string;
 }
 
-/** Per-original-event bookkeeping. `applied` enforces CR 614.5. */
+/**
+ *
+ * CR 614.5:
+ * A replacement effect doesn't invoke itself repeatedly; it gets only one
+ * opportunity to affect an event or any modified events that may replace
+ * that event.
+ *
+ * Example: A player controls two permanents, each with an ability that reads
+ * "If a creature you control would deal damage to a permanent or player, it
+ * deals double that damage to that permanent or player instead." A creature
+ * that normally deals 2 damage will deal 8 damage--not just 4, and not an
+ * infinite amount.
+ *
+ * ReplacementRun records that a replacement effect has been applied.
+ */
 export interface ReplacementRun {
 	applied: Set<EffectId>;
+	/** implementation detail. we use this to keep track of recursion depth. */
 	depth: number;
 }
 
@@ -345,22 +515,48 @@ export interface ReplacementRun {
  * Cards
  * ------------------------------------------------------------------ */
 
+export type TriggerCondition =
+	| { kind: "beginStep"; step: "upkeep"; player: "controller" }
+	| { kind: "entersBattlefield"; object: "self" };
+
+export type AbilityEffect = {
+	kind: "gainLife";
+	player: "controller";
+	amount: number;
+};
+
+export interface TriggerDef {
+	id: string;
+	text: string;
+	condition: TriggerCondition;
+	optional?: boolean;
+	effects: AbilityEffect[];
+}
+
+export type Keyword = "indestructible" | "lifelink" | "flying";
+
 export interface CardDef {
 	id: string;
 	name: string;
+	supertypes?: Supertype[];
 	types: CardType[];
 	subtypes?: string[];
 	colors: Color[];
 	mv: number;
 	power?: number;
 	toughness?: number;
-	keywords?: string[];
+	keywords?: Keyword[];
 	/** Printed "enters tapped" — compiled into a self-replacement (CR 614.1d). */
 	entersTapped?: boolean;
 	/** Printed "enters with N counters" — also a self-replacement. */
 	entersWith?: CounterBag;
 	replacements?: ReplacementDef[];
-	statics?: StaticMod[];
+	statics?: ContinuousEffect[];
+	triggers?: TriggerDef[];
+	/** STUB: activated abilities and alternate casting costs are not yet processed. */
+	activated?: unknown[];
+	/** STUB: alternate casting costs such as Plot are not yet processed. */
+	plot?: { cost?: string };
 }
 /**
  * Registry indirection so `state.ts` can read card definitions without importing
@@ -389,6 +585,7 @@ const newPlayerState = (id: PlayerId): PlayerState => ({
 	exile: [],
 	drawnInDrawStep: 0,
 	drewFromEmptyLibrary: false,
+	landsPlayed: 0,
 	lost: false,
 	won: false,
 });
@@ -396,13 +593,24 @@ const newPlayerState = (id: PlayerId): PlayerState => ({
 export function newGame(): GameState {
 	return {
 		objects: new Map(),
+		stackItems: new Map(),
 		players: [newPlayerState(0), newPlayerState(1)],
 		battlefield: [],
 		stack: [],
+		pendingTriggers: [],
 		floating: [],
 		turn: 0,
 		activePlayer: 0 as PlayerId,
 		step: "untap" as Step,
+		turnScheduler: {
+			pendingTurns: [],
+			nextRegularPlayer: 0 as PlayerId,
+			currentTurn: null,
+			currentPhase: null,
+			currentStep: null,
+			remainingSteps: [],
+			nextId: 0,
+		},
 		nextObjectId: 0,
 		nextTag: 0,
 		log: [],
@@ -413,7 +621,8 @@ export function newGame(): GameState {
 export function addFloating(
 	state: GameState,
 	controller: PlayerId,
-	def: ReplacementDef,
+	factory: keyof typeof EFFECTS,
+	params: Record<string, number | string> = {},
 	opts: { expires?: "endOfTurn" | "never"; data?: Record<string, number> } = {},
 ): void {
 	state.floating.push({
@@ -421,7 +630,8 @@ export function addFloating(
 		controller,
 		expires: opts.expires ?? "endOfTurn",
 		expired: false,
-		def,
+		factory,
+		params,
 		data: opts.data ?? {},
 	});
 }
@@ -436,15 +646,40 @@ function defaultVisibility(
 	return false;
 }
 
-export function spawn(
+export function spawnCard(
 	state: GameState,
 	cardId: string,
 	owner: PlayerId,
-	zone: Zone,
+	zone: "library" | "hand" | "stack",
+): CardInPlay {
+	const obj: CardInPlay = {
+		kind: "card",
+		id: state.nextObjectId++ as ObjectId,
+		cardId,
+		owner,
+		controller: owner,
+		visibility: [
+			defaultVisibility(zone, 0, owner),
+			defaultVisibility(zone, 1, owner),
+		],
+		zone,
+		effectData: {},
+	};
+	state.objects.set(obj.id, obj);
+	zoneList(state, zone, owner).push(obj.id);
+	return obj;
+}
+
+export function spawnPermanent(
+	state: GameState,
+	cardId: string,
+	owner: PlayerId,
+	zone: "battlefield" | "graveyard" | "exile",
 	opts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
-): GameObject {
-	const obj: GameObject = {
-		id: state.nextObjectId++,
+): Permanent {
+	const obj: Permanent = {
+		kind: "permanent",
+		id: state.nextObjectId++ as ObjectId,
 		visibility: [
 			defaultVisibility(zone, 0, owner),
 			defaultVisibility(zone, 1, owner),
@@ -470,43 +705,45 @@ export function spawn(
  * Agents
  * ------------------------------------------------------------------ */
 
-/**
- * Every genuine player choice funnels through here. Note that CR 616.1 ordering
- * is a *real* decision point with real EV consequences (Hardened Scales vs
- * Doubling Season; prevention vs damage doubling), so it belongs in the action
- * space of a learned policy, not buried in engine defaults.
- */
 export interface Agent {
+	/** choose a single replacement effect to apply from a list before applying others. */
 	chooseReplacement(
 		state: GameState,
 		ev: GameEvent,
 		options: BoundReplacement[],
 	): BoundReplacement;
 	chooseDiscard(state: GameState, player: PlayerId, hand: ObjectId[]): ObjectId;
+	/** Choose whether to perform an optional triggered ability as it resolves. */
+	chooseOptional(state: GameState, ability: AbilityStackItem): boolean;
+	choosePriorityAction(
+		state: GameState,
+		actions: PriorityAction[],
+	): PriorityAction;
 }
 
 /* ------------------------------------------------------------------ *
  * Lookups
  * ------------------------------------------------------------------ */
 
-export function obj(state: GameState, id: ObjectId): GameObject {
-	const o = state.objects.get(id);
+export function permanent(state: GameState, id: ObjectId): Permanent {
+	const o = maybeObject(state, id);
 	if (!o) throw new Error(`no object ${id}`);
+	assert(o.kind === "permanent");
 	return o;
 }
 
-export function maybeObj(state: GameState, id: ObjectId): GameObject | null {
+export function maybePermanent(
+	state: GameState,
+	id: ObjectId,
+): Permanent | null {
+	const o = maybeObject(state, id);
+	if (!o) return null;
+	assert(o.kind === "permanent");
+	return o;
+}
+
+export function maybeObject(state: GameState, id: ObjectId): GameObject | null {
 	return state.objects.get(id) ?? null;
-}
-
-export function player(state: GameState, id: PlayerId): PlayerState {
-	const p = state.players[id];
-	if (!p) throw new Error(`no player ${id}`);
-	return p;
-}
-
-export function opponentsOf(state: GameState, id: PlayerId): PlayerId[] {
-	return state.players.filter((p) => p.id !== id).map((p) => p.id);
 }
 
 export function zoneList(
@@ -520,25 +757,29 @@ export function zoneList(
 		case "stack":
 			return state.stack;
 		case "library":
-			return player(state, owner).library;
+			return state.players[owner].library;
 		case "hand":
-			return player(state, owner).hand;
+			return state.players[owner].hand;
 		case "graveyard":
-			return player(state, owner).graveyard;
+			return state.players[owner].graveyard;
 		case "exile":
-			return player(state, owner).exile;
+			return state.players[owner].exile;
 	}
 }
 
-export function battlefieldObjects(state: GameState): GameObject[] {
-	return state.battlefield.map((id) => obj(state, id));
+export function permanentsInPlay(state: GameState): Permanent[] {
+	return state.battlefield.map((id) => {
+		const object = permanent(state, id);
+		assert(object.kind === "permanent");
+		return object;
+	});
 }
 
 export function creaturesControlledBy(
 	state: GameState,
 	p: PlayerId,
 ): GameObject[] {
-	return battlefieldObjects(state).filter(
+	return permanentsInPlay(state).filter(
 		(o) => o.controller === p && view(state, o.id).types.includes("creature"),
 	);
 }
@@ -548,9 +789,67 @@ export function log(state: GameState, line: string): void {
 }
 
 export function name(state: GameState, id: ObjectId): string {
-	const o = maybeObj(state, id);
+	const o = maybeObject(state, id);
 	return o ? `${card(o.cardId).name}#${o.id}` : `<gone#${id}>`;
 }
+/**
+ * 613. Interaction of Continuous Effects
+ *  613.1. The values of an object's characteristics are determined by starting
+ *  with the actual object. For a card, that means the values of the
+ * characteristics printed on that card. For a token or a copy of a spell or
+ * card, that means the values of the characteristics defined by the effect
+ *  that created it. Then all applicable continuous effects are applied in a
+ * series of layers in the following order:
+ */
+export const CONTINUOUS_EFFECT_LAYERS = [
+	/**
+	 * 613.1a.
+	 * Layer 1: Rules and effects that modify copiable values are applied.
+	 * after applying layer 1, the object's "copyable characteristics" are
+	 * finalized.
+	 *
+	 */
+	"1a-copiable-values",
+	// "1b-facedown-characteristics",
+	//
+	/**
+	 * 613.1b.
+	 * Layer 2: Control-changing effects are applied.
+	 */
+	"2-control-changing",
+	/**
+	 * 613.1c.
+	 * Layer 3: Text-changing effects are applied.
+	 * See rule 612, "Text-Changing Effects."
+	 */
+	"3-text-changing",
+	/**
+	 * 613.1d.
+	 * Layer 4: Type-changing effects are applied.
+	 * These include effects that change an object's card type, subtype,
+	 * and/or supertype.
+	 */
+	"4-type-changing",
+	/**
+	 * 613.1e.
+	 * Layer 5: Color-changing effects are applied.
+	 */
+	"5-color-changing",
+	/**
+	 * 613.1f.
+	 * Layer 6: Ability-adding effects, keyword counters, ability-removing
+	 * effects, and effects that say an object can't have an ability are applied.
+	 */
+	"6-ability-changing",
+
+	/**  613.1g. Layer 7: Power- and/or toughness-changing effects are applied. */
+
+	"7a-power-toughness-defining",
+	"7b-set-specific-power-toughness",
+	"7c-modify-power-toughness",
+	"7d-swap-power-toughness",
+] as const;
+export type ContinuousEffectLayer = (typeof CONTINUOUS_EFFECT_LAYERS)[number];
 
 /* ------------------------------------------------------------------ *
  * Layers-lite
@@ -566,7 +865,7 @@ function baseView(
 	cardId: string,
 	controller: PlayerId,
 	owner: PlayerId,
-	o: GameObject | null,
+	o: Permanent | null,
 ): PermanentView {
 	const def = card(cardId);
 	return {
@@ -587,12 +886,29 @@ function baseView(
 }
 
 function applyStatics(state: GameState, v: PermanentView): PermanentView {
+	const effects: Partial<
+		Record<
+			ContinuousEffectLayer,
+			[source: Permanent, effect: ContinuousEffect][]
+		>
+	> = {};
 	// Layer 4-7ish: continuous effects from permanents already on the battlefield.
-	for (const src of battlefieldObjects(state)) {
-		for (const mod of card(src.cardId).statics ?? []) {
-			if (mod.applies(v, state, src)) mod.modify(v, state, src);
+	for (const source of permanentsInPlay(state)) {
+		for (const staticModifier of card(source.cardId).statics ?? []) {
+			const arr = effects[staticModifier.layer] ?? [];
+			effects[staticModifier.layer] = arr;
+			arr.push([source, staticModifier]);
 		}
 	}
+
+	for (const layer of CONTINUOUS_EFFECT_LAYERS) {
+		if (!effects[layer]) continue;
+		for (const [source, effect] of effects[layer]) {
+			if (!effect.applies(v, state, source)) continue;
+			effect.modify(v, state, source);
+		}
+	}
+
 	// Layer 7d: counters.
 	const plus = v.counters["+1/+1"] ?? 0;
 	const minus = v.counters["-1/-1"] ?? 0;
@@ -603,7 +919,7 @@ function applyStatics(state: GameState, v: PermanentView): PermanentView {
 
 /** Current characteristics of an object that exists. */
 export function view(state: GameState, id: ObjectId): PermanentView {
-	const o = obj(state, id);
+	const o = permanent(state, id);
 	return applyStatics(
 		state,
 		baseView(state, o.cardId, o.controller, o.owner, o),
@@ -619,7 +935,7 @@ export function etbPreview(
 	state: GameState,
 	ev: ZoneChangeEvent,
 ): PermanentView {
-	const o = maybeObj(state, ev.object);
+	const o = maybeObject(state, ev.object);
 	const cardId = ev.copyOf ?? o?.cardId ?? "";
 	const owner = o?.owner ?? ev.toController;
 	const v = baseView(state, cardId, ev.toController, owner, null);
@@ -630,7 +946,7 @@ export function etbPreview(
 }
 
 export function lethalDamage(state: GameState, id: ObjectId): boolean {
-	const o = obj(state, id);
+	const o = permanent(state, id);
 	const v = view(state, id);
 	return (
 		v.types.includes("creature") && v.toughness > 0 && o.damage >= v.toughness
@@ -649,13 +965,6 @@ export interface Scope {
 export function newScope(): Scope {
 	return { facts: new Set() };
 }
-
-/* ------------------------------------------------------------------ *
- * Replacements
- * ------------------------------------------------------------------ */
-
-const MAX_DEPTH = 64;
-const MAX_ITERATIONS = 64;
 
 /* ------------------------------------------------------------------ *
  * 1. Which effects exist right now?
@@ -744,7 +1053,7 @@ export function collectReplacements(state: GameState): BoundReplacement[] {
 					: state.players.flatMap((p) => zoneList(state, zone, p.id));
 
 		for (const id of ids) {
-			const o = maybeObj(state, id);
+			const o = maybeObject(state, id);
 			if (!o) continue;
 			const defs = [
 				...synthesizedSelfReplacements(o),
@@ -768,13 +1077,17 @@ export function collectReplacements(state: GameState): BoundReplacement[] {
 
 	for (const fx of state.floating) {
 		if (fx.expired) continue;
+		const factory = EFFECTS[fx.factory];
+		if (!factory)
+			throw new Error(`unknown floating effect factory: ${fx.factory}`);
+		const def = factory(fx.params);
 		out.push({
 			id: fx.id,
-			def: fx.def,
+			def,
 			source: null,
 			controller: fx.controller,
 			data: fx.data,
-			label: `(floating) ${fx.def.text}`,
+			label: `(floating) ${def.text}`,
 		});
 	}
 
@@ -793,25 +1106,30 @@ export function affectedPlayer(state: GameState, ev: GameEvent): PlayerId {
 	switch (ev.kind) {
 		case "draw":
 		case "discard":
+		case "beginTurn":
 		case "beginStep":
+		case "beginPhase":
 		case "lifeChange":
 			return ev.player;
 
 		case "damage":
 			return ev.target.type === "player"
 				? ev.target.player
-				: (maybeObj(state, ev.target.id)?.controller ?? ev.sourceController);
+				: (maybePermanent(state, ev.target.id)?.controller ??
+						ev.sourceController);
 
 		case "destroy":
 		case "regenerate":
+			return maybePermanent(state, ev.object)?.controller ?? 0;
 		case "tap":
 		case "untap":
-			return maybeObj(state, ev.object)?.controller ?? 0;
+			if (ev.ref.kind === "all") return state.activePlayer;
+			return maybePermanent(state, ev.ref.object)?.controller ?? 0;
 
 		case "addCounters":
 			return ev.target.type === "player"
 				? ev.target.player
-				: (maybeObj(state, ev.target.id)?.controller ?? 0);
+				: (maybePermanent(state, ev.target.id)?.controller ?? 0);
 
 		case "createToken":
 			return ev.controller;
@@ -821,7 +1139,7 @@ export function affectedPlayer(state: GameState, ev: GameEvent): PlayerId {
 			return ev.player;
 
 		case "zoneChange": {
-			const o = maybeObj(state, ev.object);
+			const o = maybeObject(state, ev.object);
 			if (!o) return ev.toController;
 			// Objects on the battlefield / stack have a controller; cards elsewhere
 			// don't, so their owner chooses. For a card entering the battlefield we
@@ -837,11 +1155,50 @@ export function affectedPlayer(state: GameState, ev: GameEvent): PlayerId {
  * 3. The loop
  * ------------------------------------------------------------------ */
 
-const LAYER_ORDER: ReplacementLayer[] = ["self", "control", "copy", "other"];
-
-function isUnpreventable(ev: GameEvent): boolean {
-	return ev.kind === "damage" && ev.unpreventable;
-}
+const LAYER_ORDER: ReplacementLayer[] = [
+	/**
+	 * 616.1a. If any of the replacement and/or prevention effects are
+	 * self-replacement effects (see rule 614.15), one of them must be chosen.
+	 * If not, proceed to rule 616.1b.
+	 *
+	 * 614.15. Some replacement effects are not continuous effects. Rather, they
+	 * are an effect of a resolving spell or ability that replace part or all of
+	 * that spell or ability's own effect(s). Such effects are called
+	 * self-replacement effects. The text creating a self-replacement effect is
+	 * usually part of the ability whose effect is being replaced, but the text
+	 * can be a separate ability, particularly when preceded by an ability word.
+	 *
+	 * When applying replacement effects to an event, self-replacement effects
+	 * are applied before other replacement effects.
+	 */
+	"self",
+	/**
+	 * 616.1b. If any of the replacement and/or prevention effects would modify
+	 * under whose control an object would enter the battlefield, one of them must
+	 * be chosen. If not, proceed to rule 616.1c.
+	 */
+	"control",
+	/**
+	 * 616.1c. If any of the replacement and/or prevention effects would cause an
+	 * object to become a copy of another object as it enters the battlefield, one
+	 * of them must be chosen. If not, proceed to rule 616.1d.
+	 */
+	"copy",
+	/**
+	 * 616.1d. If any of the replacement and/or prevention effects would cause a
+	 * card to enter the battlefield with its back face up, one of them must be
+	 * chosen (See rule 701.27, "Transform," and rule 701.28, "Convert."). If not,
+	 * proceed to 616.1e.
+	 *
+	 * we don't support tranformed cards yet.
+	 */
+	// "transform-face",
+	/**
+	 * 616.1e. Any of the applicable replacement and/or prevention effects may be
+	 * chosen.
+	 */
+	"other",
+];
 
 function ctxFor(
 	state: GameState,
@@ -865,8 +1222,16 @@ function applicable(
 	return collectReplacements(state).filter((r) => {
 		// CR 614.5 — a replacement effect applies at most once to a given event.
 		if (run.applied.has(r.id)) return false;
-		// CR 615.12 — "can't be prevented" locks out prevention effects only.
-		if (r.def.isPreventionEffect && isUnpreventable(ev)) return false;
+		/**
+		 * 615.12
+		 * Some effects state that damage "can't be prevented." If unpreventable
+		 * damage would be dealt, any applicable prevention effects are still
+		 * applied to it. Those effects won't prevent any damage, but any
+		 * additional effects they have will take place. Existing damage prevention
+		 *  shields won't be reduced by damage that can't be prevented.
+		 */
+		if (r.def.isPreventionEffect && ev.kind === "damage" && ev.unpreventable)
+			return false;
 		return r.def.applies(ev, ctxFor(state, r, run));
 	});
 }
@@ -875,14 +1240,17 @@ export function newRun(): ReplacementRun {
 	return { applied: new Set(), depth: 0 };
 }
 
+/* ------------------------------------------------------------------ *
+ * Replacements
+ * ------------------------------------------------------------------ */
+
+const MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH = 64;
+const MAX_REPLACEMENT_EFFECT_CHOICES = 64;
+
 /**
  * Runs an event through the replacement pipeline and returns the event(s) that
  * actually happen. May return [] (fully replaced by nothing, e.g. "skip your
  * draw step" or full damage prevention).
- *
- * Note the applied-set is *inherited* by events produced from a replacement.
- * That's what makes Chains of Mephistopheles terminate: the draw that Chains
- * hands back can't be replaced by Chains again.
  */
 function resolveReplacements(
 	state: GameState,
@@ -890,19 +1258,22 @@ function resolveReplacements(
 	agents: Agent[],
 	run: ReplacementRun = newRun(),
 ): GameEvent[] {
-	if (run.depth > MAX_DEPTH) {
+	if (run.depth > MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH) {
 		throw new Error(
-			`replacement recursion exceeded ${MAX_DEPTH} — probable rules loop`,
+			`replacement recursion exceeded ${MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH} — probable rules loop`,
 		);
 	}
 
 	let current = event;
 
-	for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+	for (let iter = 0; iter < MAX_REPLACEMENT_EFFECT_CHOICES; iter++) {
+		/**
+		 * find all replacement events that could be applied to this event.
+		 */
 		const candidates = applicable(state, current, run);
 		if (candidates.length === 0) return [current];
 
-		// CR 616.1a-c and 616.1e: take the earliest non-empty tier, only then let a player choose.
+		/** find the highest priority tier that has at least one candidate. */
 		const tier = LAYER_ORDER.find((l) =>
 			candidates.some((c) => c.def.layer === l),
 		);
@@ -917,7 +1288,15 @@ function resolveReplacements(
 		const chosen =
 			tiered.length === 1
 				? tiered[0]
-				: agent.chooseReplacement(state, current, tiered);
+				: /**
+					 * 616.1. If two or more replacement and/or prevention effects are attempting
+					 * to modify the way an event affects an object or player, the affected
+					 * object's controller (or its owner if it has no controller) or the affected
+					 * player chooses one to apply, following the steps listed below. If two or
+					 * more players have to make these choices at the same time, choices are made
+					 * in APNAP order.
+					 */
+					agent.chooseReplacement(state, current, tiered);
 
 		assertDefined(chosen);
 		run.applied.add(chosen.id);
@@ -933,7 +1312,7 @@ function resolveReplacements(
 
 		// A single same-kind result is a *modification*: keep iterating on it so
 		// further effects (and the once-only rule) see one continuous event.
-		if (produced.length === 1 && produced[0]!.kind === current.kind) {
+		if (produced.length === 1 && produced[0]?.kind === current.kind) {
 			current = produced[0]!;
 			continue;
 		}
@@ -942,6 +1321,13 @@ function resolveReplacements(
 		// pipeline, inheriting the applied-set (CR 614.5 across the chain).
 		return produced.flatMap((e) =>
 			resolveReplacements(state, e, agents, {
+				/**
+				 * the applied-set is *inherited* by events produced from a
+				 * replacement. That's what makes Chains of Mephistopheles terminate:
+				 * the draw that Chains hands back can't be replaced by Chains again.
+				 *
+				 * TODO: is there a more clear example to use than chains?
+				 */
 				applied: new Set(run.applied),
 				depth: run.depth + 1,
 			}),
@@ -953,8 +1339,7 @@ function resolveReplacements(
 
 /* ------------------------------------------------------------------ *
  * Zone movement — CR 400.7: an object that moves zones becomes a *new*
- * object. Getting this right is what makes "exile it instead" and
- * flicker effects behave, and what stops stale ids from leaking.
+ * object.
  * ------------------------------------------------------------------ */
 
 function moveObject(
@@ -970,7 +1355,7 @@ function moveObject(
 		toBottom?: boolean;
 	},
 ): ObjectId | null {
-	const o = maybeObj(state, id);
+	const o = maybeObject(state, id);
 	if (!o || o.zone !== from) return null;
 
 	const src = zoneList(state, from, o.owner);
@@ -980,44 +1365,75 @@ function moveObject(
 	state.objects.delete(id);
 
 	// Tokens cease to exist when they leave the battlefield (CR 111.7).
-	if (o.token && from === "battlefield") {
+	if (o.kind === "permanent" && o.token && from === "battlefield") {
 		log(state, `  ${card(o.cardId).name}#${id} (token) ceases to exist`);
 		return null;
 	}
+	let fresh: GameObject;
 
-	const fresh: GameObject = {
-		id: state.nextObjectId++ as ObjectId,
-		cardId: opts.copyOf ?? o.cardId,
-		owner: o.owner,
-		controller: to === "battlefield" ? opts.toController : o.owner,
-		visibility: [
-			defaultVisibility(to, 0, o.owner),
-			defaultVisibility(to, 1, o.owner),
-		],
-		zone: to,
-		tapped: to === "battlefield" ? (opts.tapped ?? false) : false,
-		counters: to === "battlefield" ? { ...opts.counters } : {},
-		effectData: {},
-		damage: 0,
-		attacking: false,
-		blocking: false,
-		token: false,
-	};
-	state.objects.set(fresh.id, fresh);
+	switch (to) {
+		case "library":
+		case "hand":
+		case "stack":
+			{
+				fresh = {
+					kind: "card",
+					zone: to,
+					id: state.nextObjectId++ as ObjectId,
+					cardId: opts.copyOf ?? o.cardId,
+					owner: o.owner,
+					controller: o.owner,
+					visibility: [
+						defaultVisibility(to, 0, o.owner),
+						defaultVisibility(to, 1, o.owner),
+					],
+					effectData: {},
+				} satisfies CardInPlay;
+				state.objects.set(fresh.id, fresh);
+			}
+
+			break;
+		case "battlefield":
+		case "graveyard":
+		case "exile": {
+			fresh = {
+				kind: "permanent",
+				id: state.nextObjectId++ as ObjectId,
+				cardId: opts.copyOf ?? o.cardId,
+				owner: o.owner,
+				controller: to === "battlefield" ? opts.toController : o.owner,
+				visibility: [
+					defaultVisibility(to, 0, o.owner),
+					defaultVisibility(to, 1, o.owner),
+				],
+				zone: to,
+				tapped: to === "battlefield" ? (opts.tapped ?? false) : false,
+				counters: to === "battlefield" ? { ...opts.counters } : {},
+				effectData: {},
+				damage: 0,
+				attacking: false,
+				blocking: false,
+				token: false,
+			} satisfies Permanent;
+			state.objects.set(fresh.id, fresh);
+		}
+	}
 
 	const dst = zoneList(state, to, fresh.owner);
 	if (to === "library" && !opts.toBottom) dst.push(fresh.id);
 	else if (to === "library") dst.unshift(fresh.id);
 	else dst.push(fresh.id);
 
-	log(
-		state,
-		`  ${card(fresh.cardId).name}#${fresh.id} is now in ${to}` +
-			(fresh.tapped ? " (tapped)" : "") +
-			(Object.keys(fresh.counters).length
-				? ` with ${JSON.stringify(fresh.counters)}`
-				: ""),
-	);
+	if (fresh.kind === "permanent") {
+		log(
+			state,
+			`  ${card(fresh.cardId).name}#${fresh.id} is now in ${to}` +
+				(fresh.tapped ? " (tapped)" : "") +
+				(Object.keys(fresh.counters).length
+					? ` with ${JSON.stringify(fresh.counters)}`
+					: ""),
+		);
+	}
 	return fresh.id;
 }
 
@@ -1027,7 +1443,7 @@ export function describeEvent(state: GameState, ev: GameEvent): string {
 		case "draw":
 			return `draw(P${ev.player})`;
 		case "discard":
-			return `discard(P${ev.player}${ev.object ? `, ${name(state, ev.object)}` : ""})`;
+			return `discard(P${ev.player}${ev.cardInPlay ? `, ${name(state, ev.cardInPlay)}` : ""})`;
 		case "damage": {
 			const tgt =
 				ev.target.type === "player"
@@ -1059,11 +1475,17 @@ export function describeEvent(state: GameState, ev: GameEvent): string {
 		case "lifeChange":
 			return `life(P${ev.player} ${ev.delta >= 0 ? "+" : ""}${ev.delta})`;
 		case "tap":
-			return `tap(${name(state, ev.object)})`;
+			if (ev.ref.kind === "all") return `tap(all P${ev.ref.player})`;
+			return `tap(${name(state, ev.ref.object)})`;
 		case "untap":
-			return `untap(${name(state, ev.object)})`;
+			if (ev.ref.kind === "all") return `untap(all P${ev.ref.player})`;
+			return `untap(${name(state, ev.ref.object)})`;
+		case "beginTurn":
+			return `beginTurn(P${ev.player}, #${ev.turnId}${ev.isExtra ? ", extra" : ""})`;
 		case "beginStep":
 			return `beginStep(P${ev.player}, ${ev.step})`;
+		case "beginPhase":
+			return `beginPhase(P${ev.player}, ${ev.phase})`;
 		case "createToken":
 			return `token(${ev.amount}x ${ev.cardId} for P${ev.controller})`;
 		case "loseGame":
@@ -1081,14 +1503,20 @@ export function checkStateBasedActions(
 		let acted = false;
 
 		for (const p of state.players) {
+			//   704.5a. If a player has 0 or less life, that player loses the game.
 			if (!p.lost && !p.won && p.life <= 0) {
 				perform(
 					state,
 					{ kind: "loseGame", player: p.id, reason: "life" },
 					agents,
 				);
-				acted = true;
+				// A replacement effect such as Platinum Angel may prevent the loss.
+				// Only signal that an SBA happened if the player actually lost.
+				if (p.lost) acted = true;
 			}
+			//  704.5b. If a player attempted to draw a card from a library with no
+			// cards in it since the last time state-based actions were checked, that
+			// player loses the game.
 			if (!p.lost && !p.won && p.drewFromEmptyLibrary) {
 				perform(
 					state,
@@ -1100,13 +1528,83 @@ export function checkStateBasedActions(
 					agents,
 				);
 				p.drewFromEmptyLibrary = false;
-				acted = true;
+				if (p.lost) acted = true;
 			}
+			// 704.5c. If a player has ten or more poison counters, that player loses
+			// the game.
 		}
 
+		// 704.5e. If a copy of a spell is in a zone other than the stack, it ceases
+		// to exist. If a copy of a card is in any zone other than the stack or the
+		// battlefield, it ceases to exist.
+
+		// 704.5f. If a creature has toughness 0 or less, it's put into its owner's
+		// graveyard. Regeneration can't replace this event.
+
+		// 704.5g. If a creature has toughness greater than 0, it has damage marked
+		// on it, and the total damage marked on it is greater than or equal to its
+		// toughness, that creature has been dealt lethal damage and is destroyed.
+		// Regeneration can replace this event.
+
+		// 704.5h. If a creature has toughness greater than 0, and it's been dealt
+		// damage by a source with deathtouch since the last time state-based
+		// actions were checked, that creature is destroyed. Regeneration can
+		// replace this event.
+
+		// 704.5i. If a planeswalker has loyalty 0, it's put into its owner's
+		// graveyard.
+
+		// 704.5j. If two or more legendary permanents with the same name are
+		// controlled by the same player, that player chooses one of them, and the
+		// rest are put into their owners' graveyards. This is called the
+		// "legend rule."
+
+		// 704.5k. world permanents: don't support these.
+
+		// 704.5m. If an Aura is attached to an illegal object or player, or is not
+		// attached to an object or player, that Aura is put into its owner's
+		// graveyard.
+
+		// 704.5n. If an Equipment or Fortification is attached to an illegal
+		// permanent or to a player, it becomes unattached from that permanent
+		// or player. It remains on the battlefield.
+
+		// 704.5p. If a battle or creature is attached to an object or player, it
+		// becomes unattached and remains on the battlefield. Similarly, if any
+		// nonbattle, noncreature permanent that's neither an Aura, an Equipment,
+		// nor a Fortification is attached to an object or player, it becomes
+		// unattached and remains on the battlefield.
+
+		// 704.5q. If a permanent has both a +1/+1 counter and a -1/-1 counter on
+		// it, N +1/+1 and N -1/-1 counters are removed from it, where N is the smaller of the number of +1/+1 and -1/-1 counters on it.
+
+		// 704.5r. If a permanent with an ability that says it can't have more than
+		// N counters of a certain kind on it has more than N counters of that kind
+		// on it, all but N of those counters are removed from it.
+
+		// 704.5s. If the number of lore counters on a Saga permanent with one or
+		// more chapter abilities is greater than or equal to its final chapter
+		// number and it isn't the source of a chapter ability that has triggered
+		// but not yet left the stack, that Saga's controller sacrifices it. See
+		// rule 714, "Saga Cards."
+
+		// 704.5t. If a player's venture marker is on the bottommost room of a
+		// dungeon card, and that dungeon card isn't the source of a room ability
+		// that has triggered but not yet left the stack, the dungeon card's owner
+		// removes it from the game. See rule 309, "Dungeons."
+
+		// 704.5u. Space beleren: we don't support this.
+
+		// 704.5v-y. Battles: we don't support this.
+
+		// 704.5z. If a permanent has more than one Role controlled by the same
+		// player attached to it, each of those Roles except the one with the most
+		// recent timestamp is put into its owner's graveyard.
+
+		// 704.5aa. Speed: we don't support this.
+
 		for (const id of state.battlefield) {
-			const o = maybeObj(state, id);
-			if (!o) continue;
+			const o = permanent(state, id);
 			const v = view(state, id);
 			if (!v.types.includes("creature")) continue;
 
@@ -1162,6 +1660,7 @@ export function perform(
 	return performIn(state, event, agents, newScope(), 0);
 }
 
+/** Applies event replacements and delegates to `executeIn` to apply changes. */
 function performIn(
 	state: GameState,
 	event: GameEvent,
@@ -1183,6 +1682,73 @@ function performIn(
 	return { executed, created };
 }
 
+/**
+ * adds a trigger to state.pendingTriggers
+ */
+function enqueueTrigger(
+	state: GameState,
+	source: GameObject,
+	trigger: TriggerDef,
+): void {
+	state.pendingTriggers.push({
+		source: source.id,
+		sourceCardId: source.cardId,
+		controller: source.controller,
+		triggerId: trigger.id,
+		text: trigger.text,
+		optional: trigger.optional ?? false,
+		effects: trigger.effects.map((effect) => ({ ...effect })),
+	});
+	log(
+		state,
+		`  [trigger] ${card(source.cardId).name}#${source.id} — ${trigger.text}`,
+	);
+}
+
+/** Observe events only after they successfully execute and all replacements are final. */
+function detectTriggers(
+	state: GameState,
+	ev: GameEvent,
+	created: ObjectId[],
+): void {
+	if (ev.kind === "beginStep") {
+		// Snapshot the battlefield: trigger detection itself must not be affected by
+		// later stack resolution or zone changes.
+		for (const source of permanentsInPlay(state)) {
+			for (const trigger of card(source.cardId).triggers ?? []) {
+				const condition = trigger.condition;
+				if (
+					condition.kind === "beginStep" &&
+					condition.step === ev.step &&
+					ev.player === source.controller
+				) {
+					enqueueTrigger(state, source, trigger);
+				}
+			}
+		}
+		return;
+	}
+
+	if (ev.kind === "zoneChange" && ev.to === "battlefield") {
+		// Zone changes create a new object (CR 400.7), so inspect the resulting ID,
+		// not ev.object, which identifies the object in its previous zone.
+		for (const id of created) {
+			const source = maybePermanent(state, id);
+			if (source?.zone !== "battlefield") continue;
+			for (const trigger of card(source.cardId).triggers ?? []) {
+				if (trigger.condition.kind === "entersBattlefield") {
+					enqueueTrigger(state, source, trigger);
+				}
+			}
+		}
+	}
+}
+
+/**
+ * after applying effects, executes the event.
+ * When new states result, feed them back to `perform`
+ * (so that new effects get applied.)
+ */
 function executeIn(
 	state: GameState,
 	ev: GameEvent,
@@ -1204,7 +1770,7 @@ function executeIn(
 
 	switch (ev.kind) {
 		case "draw": {
-			const p = player(state, ev.player);
+			const p = state.players[ev.player];
 			const top = p.library[p.library.length - 1];
 			if (top === undefined) {
 				// CR 704.5b: queue a state-based loss, don't resolve it here.
@@ -1239,13 +1805,14 @@ function executeIn(
 		}
 
 		case "discard": {
-			const p = player(state, ev.player);
+			const p = state.players[ev.player];
 			if (p.hand.length === 0) {
 				happened = false;
 				break;
 			}
 			const chosen =
-				ev.object ?? agents[ev.player].chooseDiscard(state, ev.player, p.hand);
+				ev.cardInPlay ??
+				agents[ev.player].chooseDiscard(state, ev.player, p.hand);
 			childResults.push(
 				performIn(
 					state,
@@ -1271,13 +1838,13 @@ function executeIn(
 				break;
 			}
 			if (ev.target.type === "player") {
-				player(state, ev.target.player).life -= ev.amount;
+				state.players[ev.target.player].life -= ev.amount;
 				log(
 					state,
-					`${"  ".repeat(depth)}P${ev.target.player} -> ${player(state, ev.target.player).life} life`,
+					`${"  ".repeat(depth)}P${ev.target.player} -> ${state.players[ev.target.player].life} life`,
 				);
 			} else {
-				const o = maybeObj(state, ev.target.id);
+				const o = maybePermanent(state, ev.target.id);
 				if (o?.zone !== "battlefield") {
 					happened = false;
 					break;
@@ -1309,8 +1876,18 @@ function executeIn(
 		}
 
 		case "destroy": {
-			const o = maybeObj(state, ev.object);
+			const o = maybePermanent(state, ev.object);
 			if (o?.zone !== "battlefield") {
+				happened = false;
+				break;
+			}
+			const pv = view(state, o.id);
+			/**
+			 * 702.12b. A permanent with indestructible can't be destroyed. Such
+			 * permanents aren't destroyed by lethal damage, and they ignore the
+			 * state-based action that checks for lethal damage.
+			 */
+			if (pv.keywords.includes("indestructible")) {
 				happened = false;
 				break;
 			}
@@ -1323,7 +1900,7 @@ function executeIn(
 						from: "battlefield",
 						to: "graveyard",
 						cause: "destroy",
-						toController: o.controller,
+						toController: pv.controller,
 					},
 					agents,
 					scope,
@@ -1334,7 +1911,7 @@ function executeIn(
 		}
 
 		case "regenerate": {
-			const o = maybeObj(state, ev.object);
+			const o = maybePermanent(state, ev.object);
 			if (!o) {
 				happened = false;
 				break;
@@ -1343,7 +1920,7 @@ function executeIn(
 			o.damage = 0;
 			o.attacking = false;
 			o.blocking = false;
-			delete o.counters["__deathtouched"];
+			delete o.counters.__deathtouched;
 			log(
 				state,
 				`${"  ".repeat(depth)}${name(state, o.id)} regenerates (tapped, damage removed, out of combat)`,
@@ -1373,7 +1950,7 @@ function executeIn(
 				break;
 			}
 			if (ev.target.type === "permanent") {
-				const o = maybeObj(state, ev.target.id);
+				const o = maybePermanent(state, ev.target.id);
 				if (!o) {
 					happened = false;
 					break;
@@ -1388,7 +1965,7 @@ function executeIn(
 		}
 
 		case "lifeChange": {
-			const p = player(state, ev.player);
+			const p = state.players[ev.player];
 			p.life += ev.delta;
 			log(state, `${"  ".repeat(depth)}P${ev.player} -> ${p.life} life`);
 			break;
@@ -1396,39 +1973,39 @@ function executeIn(
 
 		case "tap":
 		case "untap": {
-			const o = maybeObj(state, ev.object);
-			if (!o) {
-				happened = false;
-				break;
+			if (ev.ref.kind === "all") {
+				const p = state.players[ev.ref.player];
+				for (const o of permanentsInPlay(state).filter(
+					(o) => o.controller === p.id,
+				)) {
+					o.tapped = ev.kind === "tap";
+				}
+			} else {
+				const o = maybePermanent(state, ev.ref.object);
+				if (!o) {
+					happened = false;
+					break;
+				}
+				o.tapped = ev.kind === "tap";
 			}
-			o.tapped = ev.kind === "tap";
 			break;
 		}
+		case "beginTurn":
+		case "beginPhase":
+			// Structural continuation belongs to the turn scheduler. These events only
+			// record that the replaceable boundary successfully happened.
+			break;
 
-		case "beginStep": {
+		case "beginStep":
+			// Turn-based actions (untap, normal draw, combat declarations, etc.)
+			// run only after the scheduler confirms this exact boundary executed.
 			state.step = ev.step;
-			if (ev.step === "untap") {
-				state.players.forEach((p) => {
-					p.drawnInDrawStep = 0;
-				});
-			}
-			if (ev.step === "draw") {
-				childResults.push(
-					performIn(
-						state,
-						{ kind: "draw", player: ev.player },
-						agents,
-						scope,
-						depth + 1,
-					),
-				);
-			}
 			break;
-		}
 
 		case "createToken": {
 			for (let i = 0; i < ev.amount; i++) {
 				const t: GameObject = {
+					kind: "permanent",
 					id: state.nextObjectId++ as ObjectId,
 					visibility: [true, true],
 					cardId: ev.cardId,
@@ -1452,7 +2029,7 @@ function executeIn(
 		}
 
 		case "loseGame": {
-			const p = player(state, ev.player);
+			const p = state.players[ev.player];
 			if (!p.lost && !p.won) {
 				p.lost = true;
 				log(
@@ -1464,7 +2041,7 @@ function executeIn(
 		}
 
 		case "winGame": {
-			const p = player(state, ev.player);
+			const p = state.players[ev.player];
 			if (!p.lost && !p.won) {
 				p.won = true;
 				log(
@@ -1474,6 +2051,8 @@ function executeIn(
 			}
 			break;
 		}
+		default:
+			assertNever(ev);
 	}
 
 	const executed: GameEvent[] = [];
@@ -1483,40 +2062,429 @@ function executeIn(
 	}
 	if (happened) {
 		executed.push(ev);
+		detectTriggers(state, ev, created);
 		if (ev.fact) scope.facts.add(ev.fact);
 	}
 
 	return { executed, created };
 }
 
-const TURN: Step[] = [
-	"untap",
-	"upkeep",
-	"draw",
-	"main1",
-	"combat",
-	"main2",
-	"end",
-	"cleanup",
-];
+function putPendingTriggersOnStack(state: GameState): void {
+	for (const pending of state.pendingTriggers) {
+		const item: AbilityStackItem = {
+			id: state.nextObjectId++ as ObjectId,
+			kind: "ability",
+			...pending,
+		};
+		state.stackItems.set(item.id, item);
+		state.stack.push(item.id);
+		log(state, `  [stack] ${item.text}`);
+	}
+	state.pendingTriggers.length = 0;
+}
 
-export function runTurn(state: GameState, agents: [Agent, Agent]): void {
-	for (const step of TURN) {
-		perform(
-			state,
-			{ kind: "beginStep", player: state.activePlayer, step },
-			agents,
-		);
+function resolveTopOfStack(state: GameState, agents: [Agent, Agent]): void {
+	const id = state.stack.pop();
+	if (id === undefined) return;
+	const item = state.stackItems.get(id);
+	state.stackItems.delete(id);
+	if (!item) throw new Error(`no stack item ${id}`);
+	if (item.kind !== "ability") {
+		throw new Error("spell resolution is not implemented");
+	}
+
+	log(state, `  [resolve] ${item.text}`);
+	if (item.optional && !agents[item.controller].chooseOptional(state, item)) {
+		log(state, `    P${item.controller} declined`);
+		return;
+	}
+
+	for (const effect of item.effects) {
+		switch (effect.kind) {
+			case "gainLife":
+				perform(
+					state,
+					{
+						kind: "lifeChange",
+						player: item.controller,
+						delta: effect.amount,
+						source: item.source,
+					},
+					agents,
+				);
+				break;
+
+			default:
+				throw new Error(`unsupported effect kind ${effect.kind}`);
+		}
+	}
+}
+
+function _canPlayLand(state: GameState, player: PlayerId): boolean {
+	return false;
+}
+
+function getObservableActions(
+	state: GameState,
+	player: PlayerId,
+): PriorityAction[] {
+	return [{ kind: "pass" }];
+}
+
+/**
+ * Settle the engine's current priority window. Players currently auto-pass, so
+ * every queued trigger is put on the stack and the stack resolves completely.
+ *
+ * priorityRound(state, agents):
+   1. checkStateBasedActions        // ← moved out of perform()
+   2. put pending triggers on the stack, APNAP, controller orders their own
+   3. active player gets priority, then each in turn order
+   4. all pass + stack non-empty  -> resolve top, goto 1
+   5. all pass + stack empty      -> step ends
+ */
+export function settlePriority(state: GameState, agents: [Agent, Agent]): void {
+	let lastWasPass = false;
+	let priority: 0 | 1 = state.activePlayer;
+
+	for (let pass = 0; pass < 64; pass++) {
 		checkStateBasedActions(state, agents);
 		if (gameOver(state)) return;
+
+		putPendingTriggersOnStack(state);
+		// players only get priority in the untap & cleanup steps
+		// if something goes on the stack.
+		const isStepWithNoPriority =
+			state.step === "untap" || state.step === "cleanup";
+		if (isStepWithNoPriority && state.stack.length === 0) return;
+
+		const action = agents[priority].choosePriorityAction(
+			state,
+			getObservableActions(state, priority),
+		);
+
+		if (action.kind === "pass") {
+			if (lastWasPass) {
+				if (state.stack.length === 0) return;
+				resolveTopOfStack(state, agents);
+			} else {
+				lastWasPass = true;
+				priority = priority === 0 ? 1 : 0;
+			}
+		}
 	}
-	for (const id of state.battlefield) obj(state, id).damage = 0;
-	state.floating = state.floating.filter(
-		(f) => !f.expired && f.expires !== "endOfTurn",
+	throw new Error("priority loop did not settle");
+}
+
+function priority(state: GameState, agents: [Agent, Agent]) {
+	settlePriority(state, agents);
+}
+
+type SchedulerCommand =
+	| { kind: "advanceTurn" }
+	| { kind: "advancePhase" }
+	| { kind: "advanceStep" }
+	| { kind: "finishStep" }
+	| { kind: "finishPhase" }
+	| { kind: "finishTurn" };
+
+function nextScheduleId(state: GameState): number {
+	return state.turnScheduler.nextId++;
+}
+
+function makePhase(
+	state: GameState,
+	turnId: TurnId,
+	kind: PhaseKind,
+	source: PhaseOccurrence["source"] = "normal",
+): PhaseOccurrence {
+	return { id: nextScheduleId(state) as PhaseId, turnId, kind, source };
+}
+
+function makeTurn(
+	state: GameState,
+	player: PlayerId,
+	isExtra: boolean,
+): TurnOccurrence {
+	const id = nextScheduleId(state) as TurnId;
+	return {
+		id,
+		player,
+		isExtra,
+		mainPhasesBegun: 0,
+		remainingPhases: [
+			makePhase(state, id, "beginning"),
+			makePhase(state, id, "main"),
+			makePhase(state, id, "combat"),
+			makePhase(state, id, "main"),
+			makePhase(state, id, "ending"),
+		],
+	};
+}
+
+/** Exceptional turns are queued; ordinary turn order is generated lazily. */
+function takeNextTurn(state: GameState): TurnOccurrence {
+	const queued = state.turnScheduler.pendingTurns.shift();
+	if (queued) return queued;
+
+	const player = state.turnScheduler.nextRegularPlayer;
+	state.turnScheduler.nextRegularPlayer = (1 - player) as PlayerId;
+	return makeTurn(state, player, false);
+}
+
+function makeSteps(state: GameState, phase: PhaseOccurrence): StepOccurrence[] {
+	let kinds: StepKind[];
+	switch (phase.kind) {
+		case "beginning":
+			kinds = ["untap", "upkeep", "draw"];
+			break;
+		case "main":
+			kinds = [];
+			break;
+		case "combat":
+			kinds = [
+				"begin combat",
+				"declare attackers",
+				"declare blockers",
+				"combat damage",
+				"end combat",
+			];
+			break;
+		case "ending":
+			kinds = ["end", "cleanup"];
+			break;
+		default:
+			assertNever(phase.kind);
+	}
+	return kinds.map((kind) => ({
+		id: nextScheduleId(state) as StepId,
+		turnId: phase.turnId,
+		phaseId: phase.id,
+		kind,
+	}));
+}
+
+function turnBoundaryHappened(
+	result: PerformResult,
+	turn: TurnOccurrence,
+): boolean {
+	return result.executed.some(
+		(ev) => ev.kind === "beginTurn" && ev.turnId === turn.id,
 	);
-	state.turn++;
-	state.activePlayer = ((state.activePlayer + 1) %
-		state.players.length) as PlayerId;
+}
+
+function phaseBoundaryHappened(
+	result: PerformResult,
+	phase: PhaseOccurrence,
+): boolean {
+	return result.executed.some(
+		(ev) => ev.kind === "beginPhase" && ev.phaseId === phase.id,
+	);
+}
+
+function stepBoundaryHappened(
+	result: PerformResult,
+	step: StepOccurrence,
+): boolean {
+	return result.executed.some(
+		(ev) => ev.kind === "beginStep" && ev.stepId === step.id,
+	);
+}
+
+/** CR 703 actions, dispatched only after the corresponding step began. */
+function performTurnBasedActions(
+	state: GameState,
+	agents: [Agent, Agent],
+	step: StepOccurrence,
+): void {
+	switch (step.kind) {
+		case "untap":
+			perform(
+				state,
+				{
+					kind: "untap",
+					ref: { kind: "all", player: state.activePlayer },
+				},
+				agents,
+			);
+			break;
+		case "draw":
+			state.players[state.activePlayer].drawnInDrawStep = 0;
+			perform(state, { kind: "draw", player: state.activePlayer }, agents);
+			break;
+		case "cleanup":
+			// This is only the noninteractive part of CR 514. Repeated cleanup
+			// steps still need to be added when SBAs or triggers occur here.
+			for (const id of state.battlefield) permanent(state, id).damage = 0;
+			state.floating = state.floating.filter(
+				(f) => !f.expired && f.expires !== "endOfTurn",
+			);
+			break;
+		case "upkeep":
+		case "begin combat":
+		case "declare attackers":
+		case "declare blockers":
+		case "combat damage":
+		case "end combat":
+		case "end":
+			// Their turn-based actions are not implemented yet.
+			break;
+		default:
+			assertNever(step.kind);
+	}
+}
+
+/**
+ * Runs one scheduled turn occurrence. Scheduler commands are engine control
+ * flow, not CR 703 turn-based actions and not replaceable GameEvents.
+ */
+export function runTurn(state: GameState, agents: [Agent, Agent]): void {
+	const scheduler = state.turnScheduler;
+	let command: SchedulerCommand = { kind: "advanceTurn" };
+
+	for (let transitions = 0; transitions < 256; transitions++) {
+		switch (command.kind) {
+			case "advanceTurn": {
+				const turn = takeNextTurn(state);
+				const result = perform(
+					state,
+					{
+						kind: "beginTurn",
+						turnId: turn.id,
+						player: turn.player,
+						isExtra: turn.isExtra,
+					},
+					agents,
+				);
+
+				// Selection consumes the occurrence (and advances ordinary turn order),
+				// but a skipped turn never becomes the current turn.
+				if (!turnBoundaryHappened(result, turn)) {
+					command = { kind: "advanceTurn" };
+					break;
+				}
+
+				scheduler.currentTurn = turn;
+				scheduler.currentPhase = null;
+				scheduler.currentStep = null;
+				scheduler.remainingSteps = [];
+				state.activePlayer = turn.player;
+				state.players[turn.player].landsPlayed = 0;
+				command = { kind: "advancePhase" };
+				break;
+			}
+
+			case "advancePhase": {
+				const turn = scheduler.currentTurn;
+				assertDefined(turn, "cannot advance a phase without a current turn");
+				const phase = turn.remainingPhases.shift();
+				if (!phase) {
+					command = { kind: "finishTurn" };
+					break;
+				}
+
+				const mainRole =
+					phase.kind === "main"
+						? turn.mainPhasesBegun === 0
+							? "precombat"
+							: "postcombat"
+						: undefined;
+				const result = perform(
+					state,
+					{
+						kind: "beginPhase",
+						turnId: turn.id,
+						phaseId: phase.id,
+						player: turn.player,
+						phase: phase.kind,
+						mainRole,
+					},
+					agents,
+				);
+
+				// The occurrence was consumed even if its boundary was replaced with
+				// nothing. Structural progress itself is never replaceable.
+				if (!phaseBoundaryHappened(result, phase)) {
+					command = { kind: "advancePhase" };
+					break;
+				}
+
+				scheduler.currentPhase = phase;
+				if (phase.kind === "main") {
+					turn.mainPhasesBegun++;
+					state.step = "main";
+					priority(state, agents);
+					command = { kind: "finishPhase" };
+				} else {
+					scheduler.remainingSteps = makeSteps(state, phase);
+					command = { kind: "advanceStep" };
+				}
+				break;
+			}
+
+			case "advanceStep": {
+				const turn = scheduler.currentTurn;
+				assertDefined(turn, "cannot advance a step without a current turn");
+				const step = scheduler.remainingSteps.shift();
+				if (!step) {
+					command = { kind: "finishPhase" };
+					break;
+				}
+
+				const result = perform(
+					state,
+					{
+						kind: "beginStep",
+						turnId: step.turnId,
+						phaseId: step.phaseId,
+						stepId: step.id,
+						player: turn.player,
+						step: step.kind,
+					},
+					agents,
+				);
+				if (!stepBoundaryHappened(result, step)) {
+					command = { kind: "advanceStep" };
+					break;
+				}
+
+				scheduler.currentStep = step;
+				performTurnBasedActions(state, agents, step);
+				// Untap has no priority window. Cleanup normally has none, but the
+				// existing priority helper already opens one if something triggered.
+				if (step.kind !== "untap") priority(state, agents);
+				command = { kind: "finishStep" };
+				break;
+			}
+
+			case "finishStep":
+				// CR 703.4q mana emptying belongs here once mana pools exist.
+				scheduler.currentStep = null;
+				command = { kind: "advanceStep" };
+				break;
+
+			case "finishPhase":
+				// CR 703.4q also empties mana at this boundary.
+				scheduler.currentStep = null;
+				scheduler.currentPhase = null;
+				scheduler.remainingSteps = [];
+				command = { kind: "advancePhase" };
+				break;
+
+			case "finishTurn":
+				scheduler.currentStep = null;
+				scheduler.currentPhase = null;
+				scheduler.currentTurn = null;
+				scheduler.remainingSteps = [];
+				state.turn++;
+				return;
+
+			default:
+				assertNever(command);
+		}
+
+		if (gameOver(state)) return;
+	}
+	throw new Error("turn scheduler failed to converge");
 }
 
 export function gameOver(state: GameState): boolean {
@@ -1527,25 +2495,47 @@ export function winner(state: GameState): PlayerId | null {
 	const w = state.players.find((p) => p.won);
 	if (w) return w.id;
 	const losers = state.players.filter((p) => p.lost);
-	if (losers.length === 1) return state.players.find((p) => !p.lost)!.id;
+	if (losers.length === 1)
+		return state.players.find((p) => !p.lost)?.id ?? null;
 	return null;
 }
 
 if (import.meta.main) {
-	function run() {
+	async function run() {
+		// Import the card database here so index.ts finishes initializing first;
+		// a top-level import would create a circular TDZ because cards.ts calls
+		// registerCard during its own initialization.
+		await import("./cards.ts");
+
 		const state = newGame();
 
-		const agents: [Agent, Agent] = [new RandomAgent(), new RandomAgent()];
+		// Human plays P0, a random CPU plays P1.
+		const agents: [Agent, Agent] = [new KeyboardAgent(), new RandomAgent()];
 
-		for (let i = 0; i < 1000; i++) {
+		// Set up a small demo board: each player has Ajani's Mantra so there is an
+		// optional upkeep choice every turn, plus libraries so the draw step works.
+		spawnPermanent(state, "ajanis-mantra", 0, "battlefield");
+		spawnPermanent(state, "ajanis-mantra", 1, "battlefield");
+		for (let i = 0; i < 10; i++) spawnCard(state, "forest", 0, "library");
+		for (let i = 0; i < 10; i++) spawnCard(state, "forest", 1, "library");
+		spawnCard(state, "grizzly-bears", 0, "hand");
+
+		console.log("Welcome to tinymtg! You are Player 0.\n");
+		printBoard(state);
+
+		for (let i = 0; i < 10; i++) {
+			console.log(
+				`\n=== Turn ${state.turn + 1}, Player ${state.activePlayer} (${state.activePlayer === 0 ? "You" : "CPU"}) ===`,
+			);
 			runTurn(state, agents);
+			printBoard(state);
 			if (gameOver(state)) {
-				dump(state);
+				console.log(`\nGame over! Winner: Player ${winner(state)}`);
 				return;
 			}
 		}
 
-		throw new Error("max turn count reached");
+		console.log("Max turn count reached.");
 	}
 	run();
 }
@@ -1553,4 +2543,30 @@ if (import.meta.main) {
 function dump(state: GameState): void {
 	console.log(state.log.map((l) => `    ${l}`).join("\n"));
 	state.log.length = 0;
+}
+
+function printBoard(state: GameState): void {
+	dump(state);
+	console.log("Battlefield:");
+	if (state.battlefield.length === 0) {
+		console.log("  (empty)");
+	}
+	for (const id of state.battlefield) {
+		const o = permanent(state, id);
+		const v = view(state, id);
+		const info = [
+			`P${o.controller}`,
+			`${v.name}#${o.id}`,
+			v.tapped ? "tapped" : "",
+			Object.keys(o.counters).length ? JSON.stringify(o.counters) : "",
+		]
+			.filter(Boolean)
+			.join(" ");
+		console.log(`  ${info}`);
+	}
+	for (const p of state.players) {
+		console.log(
+			`P${p.id}: life=${p.life} hand=${p.hand.length} library=${p.library.length} graveyard=${p.graveyard.length}`,
+		);
+	}
 }

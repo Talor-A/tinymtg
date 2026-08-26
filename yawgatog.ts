@@ -140,7 +140,7 @@ async function loadIndex(forceRebuild = false): Promise<Index> {
 }
 
 function printEntry(e: RuleEntry): void {
-	console.log(`\nCR ${e.number}  (${e.anchor})`);
+	console.log(`\nCR ${e.number}`);
 	console.log(`${e.title}`);
 	if (e.body) {
 		console.log(`\n${e.body}`);
