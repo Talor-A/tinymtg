@@ -1,16 +1,21 @@
 import { KeyboardAgent, RandomAgent } from "./agents";
 import {
 	type Agent,
+	type AgentPair,
 	asChoiceController,
-	type ChoiceController,
+	ChoiceController,
+	ChoicePendingError,
 	type ChoiceSource,
+	type ChoiceTranscript,
 } from "./choices.ts";
 import * as EFFECTS from "./effects";
 
 export {
 	type Agent,
+	type AgentPair,
 	type ChoiceAnswer,
 	ChoiceController,
+	ChoicePendingError,
 	ChoiceReplayMismatchError,
 	type ChoiceRequest,
 	type ChoiceSource,
@@ -2560,6 +2565,40 @@ function performTurnBasedActions(
  * Keeping this boundary smaller than a turn gives async callers a cheap,
  * serializable checkpoint to replay when a choice is not immediately available.
  */
+export interface AdvanceWithReplayResult {
+	state: GameState;
+	transcript: ChoiceTranscript;
+	attempts: number;
+}
+
+/**
+ * Runs one advance() against a disposable clone of the checkpoint. Pending
+ * async choices unwind the synchronous engine; their answers are recorded and
+ * the same advancement is replayed from the untouched checkpoint.
+ */
+export async function advanceWithReplay(
+	checkpoint: GameState,
+	agents: AgentPair,
+	transcript: ChoiceTranscript = { version: 1, choices: [] },
+): Promise<AdvanceWithReplayResult> {
+	const baseline = structuredClone(checkpoint);
+	const choices = new ChoiceController(agents, transcript);
+
+	for (let attempts = 1; ; attempts++) {
+		const attempt = structuredClone(baseline);
+		choices.rewind();
+
+		try {
+			advance(attempt, choices);
+			choices.assertComplete();
+			return { state: attempt, transcript: choices.transcript(), attempts };
+		} catch (error) {
+			if (!(error instanceof ChoicePendingError)) throw error;
+			choices.recordAnswer(error.request, await error.answer);
+		}
+	}
+}
+
 export function advance(state: GameState, source: ChoiceSource): void {
 	if (gameOver(state)) return;
 

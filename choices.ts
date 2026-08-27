@@ -57,9 +57,12 @@ export interface ChoiceAnswer {
 	optionId: string;
 }
 
-/** The one engine-facing interface implemented by every synchronous agent. */
+/** The one engine-facing interface implemented by local and remote agents. */
 export interface Agent {
-	choose(state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer;
+	choose(
+		state: Readonly<GameState>,
+		request: ChoiceRequest,
+	): ChoiceAnswer | PromiseLike<ChoiceAnswer>;
 }
 
 export type AgentPair = [Agent, Agent];
@@ -85,6 +88,24 @@ export class InvalidChoiceAnswerError extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = "InvalidChoiceAnswerError";
+	}
+}
+
+/**
+ * Normal control flow when an agent cannot answer synchronously. The engine
+ * unwinds without awaiting; its caller owns discarding the speculative state,
+ * awaiting the answer, recording it, and replaying from a checkpoint.
+ */
+export class ChoicePendingError extends Error {
+	readonly answer: Promise<ChoiceAnswer>;
+
+	constructor(
+		readonly request: ChoiceRequest,
+		answer: PromiseLike<ChoiceAnswer>,
+	) {
+		super(`choice ${request.id} is pending`);
+		this.name = "ChoicePendingError";
+		this.answer = Promise.resolve(answer);
 	}
 }
 
@@ -140,6 +161,27 @@ function clone<T>(value: T): T {
 	return structuredClone(value);
 }
 
+function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
+	return (
+		(typeof value === "object" || typeof value === "function") &&
+		value !== null &&
+		typeof (value as PromiseLike<T>).then === "function"
+	);
+}
+
+function assertValidAnswer(request: ChoiceRequest, answer: ChoiceAnswer): void {
+	if (!answer || typeof answer.optionId !== "string") {
+		throw new InvalidChoiceAnswerError(
+			`agent returned an invalid answer for choice ${request.id}`,
+		);
+	}
+	if (!request.options.some((option) => option.id === answer.optionId)) {
+		throw new InvalidChoiceAnswerError(
+			`agent selected ${answer.optionId} for choice ${request.id}; legal options: ${request.options.map((option) => option.id).join(", ")}`,
+		);
+	}
+}
+
 function priorityOptionId(action: PriorityAction): string {
 	return `priority:${createHash("sha256")
 		.update(canonicalize(action))
@@ -180,6 +222,17 @@ export class ChoiceController {
 
 	transcript(): ChoiceTranscript {
 		return { version: 1, choices: clone(this.decisions) };
+	}
+
+	/** Append an answer obtained after ChoicePendingError unwound the engine. */
+	recordAnswer(request: ChoiceRequest, answer: ChoiceAnswer): void {
+		if (request.ordinal !== this.decisions.length) {
+			throw new ChoiceReplayMismatchError(
+				`cannot record choice ${request.ordinal}; transcript has ${this.decisions.length} choices`,
+			);
+		}
+		assertValidAnswer(request, answer);
+		this.decisions.push({ request: clone(request), answer: clone(answer) });
 	}
 
 	assertComplete(): void {
@@ -244,17 +297,16 @@ export class ChoiceController {
 			);
 		}
 		const answer = agent.choose(state, request);
-		if (!answer || typeof answer.optionId !== "string") {
-			throw new InvalidChoiceAnswerError(
-				`agent returned an invalid answer for choice ${request.id}`,
-			);
+		if (isPromiseLike(answer)) {
+			throw new ChoicePendingError(clone(request), answer);
 		}
+		assertValidAnswer(request, answer);
 		const candidate = candidates.find(
 			(option) => option.id === answer.optionId,
 		);
 		if (!candidate) {
 			throw new InvalidChoiceAnswerError(
-				`agent selected ${answer.optionId} for choice ${request.id}; legal options: ${candidates.map((option) => option.id).join(", ")}`,
+				`choice ${request.id} has no live candidate for ${answer.optionId}`,
 			);
 		}
 		this.decisions.push({
