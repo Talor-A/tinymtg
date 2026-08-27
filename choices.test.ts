@@ -5,6 +5,7 @@ import {
 	type Agent,
 	ChoiceController,
 	ChoiceReplayMismatchError,
+	type ChoiceRequest,
 	newGame,
 	type ObjectId,
 	perform,
@@ -16,6 +17,36 @@ function agents(first = new ScriptedAgent()): [Agent, Agent] {
 }
 
 describe("choice transcripts", () => {
+	test("agents receive one unified serializable request", () => {
+		const seen: { request?: ChoiceRequest } = {};
+		const agent: Agent = {
+			choose(_state, request) {
+				seen.request = request;
+				const option = request.options[0];
+				if (!option) throw new Error("expected an option");
+				return { optionId: option.id };
+			},
+		};
+		const state = newGame();
+		spawnPermanent(state, "hardened-scales", 0, "battlefield");
+		spawnPermanent(state, "doubling-season", 0, "battlefield");
+		const creature = spawnPermanent(state, "grizzly-bears", 0, "battlefield");
+
+		perform(
+			state,
+			{
+				kind: "addCounters",
+				target: { type: "permanent", id: creature.id },
+				counter: "+1/+1",
+				amount: 1,
+			},
+			[agent, agent],
+		);
+
+		expect(seen.request?.kind).toBe("replacement");
+		expect(() => JSON.stringify(seen.request)).not.toThrow();
+	});
+
 	test("records synchronous choices and replays without agents", () => {
 		const checkpoint = newGame();
 		spawnPermanent(checkpoint, "hardened-scales", 0, "battlefield");

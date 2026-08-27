@@ -1,16 +1,13 @@
 import { readSync } from "node:fs";
 import type {
-	AbilityStackItem,
 	Agent,
-	BoundReplacement,
-	GameEvent,
+	ChoiceAnswer,
+	ChoiceRequest,
 	GameState,
-	ObjectId,
-	PlayerId,
 	PriorityAction,
 } from "./index.ts";
 import { randomElement } from "./lib/array.ts";
-import { assert, assertDefined } from "./lib/assert.ts";
+import { assertDefined, assertNever } from "./lib/assert.ts";
 
 function readLineSync(): string {
 	const buffer = Buffer.alloc(1);
@@ -30,9 +27,10 @@ function prompt(question: string): string {
 	return readLineSync().trim();
 }
 
-function objectName(state: GameState, id: ObjectId): string {
-	const o = state.objects.get(id);
-	return o ? `${o.cardId}#${o.id}` : `<gone#${id}>`;
+function firstOption(request: ChoiceRequest): ChoiceAnswer {
+	const option = request.options[0];
+	assertDefined(option);
+	return { optionId: option.id };
 }
 
 export class ScriptedAgent implements Agent {
@@ -42,142 +40,74 @@ export class ScriptedAgent implements Agent {
 		public priorityActions: PriorityAction[] = [],
 	) {}
 
-	chooseReplacement(
-		_state: GameState,
-		_ev: GameEvent,
-		options: BoundReplacement[],
-	): BoundReplacement {
-		assertDefined(options[0]);
+	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
+		switch (request.kind) {
+			case "replacement":
+				for (const preference of this.preferences) {
+					const option = request.options.find((candidate) =>
+						candidate.label.toLowerCase().includes(preference.toLowerCase()),
+					);
+					if (option) return { optionId: option.id };
+				}
+				return firstOption(request);
 
-		for (const pref of this.preferences) {
-			const hit = options.find((o) =>
-				o.label.toLowerCase().includes(pref.toLowerCase()),
-			);
-			if (hit) return hit;
+			case "ownHand":
+				return firstOption(request);
+
+			case "optional":
+				return {
+					optionId: (this.optionalChoices.shift() ?? true) ? "yes" : "no",
+				};
+
+			case "priorityAction": {
+				const preferred = this.priorityActions.shift();
+				const option = preferred
+					? request.options.find((candidate) =>
+							candidate.label.includes(preferred.kind),
+						)
+					: undefined;
+				return option ? { optionId: option.id } : firstOption(request);
+			}
+
+			default:
+				return assertNever(request);
 		}
-		return options[0];
-	}
-
-	chooseFromOwnHand(
-		_state: GameState,
-		_player: PlayerId,
-		hand: ObjectId[],
-	): ObjectId {
-		assertDefined(hand[0]);
-		return hand[0];
-	}
-
-	chooseOptional(_state: GameState, _ability: AbilityStackItem): boolean {
-		return this.optionalChoices.shift() ?? true;
-	}
-
-	choosePriorityAction(
-		state: GameState,
-		actions: PriorityAction[],
-	): PriorityAction {
-		assertDefined(actions[0]);
-		return actions[0];
 	}
 }
 
 export class RandomAgent implements Agent {
-	chooseReplacement(
-		_state: GameState,
-		_ev: GameEvent,
-		options: BoundReplacement[],
-	): BoundReplacement {
-		assertDefined(options[0]);
-		return randomElement(options);
-	}
-
-	chooseFromOwnHand(
-		_state: GameState,
-		_player: PlayerId,
-		hand: ObjectId[],
-	): ObjectId {
-		assertDefined(hand[0]);
-		return randomElement(hand);
-	}
-
-	chooseOptional(_state: GameState, _ability: AbilityStackItem): boolean {
-		return randomElement([true, false]);
-	}
-
-	choosePriorityAction(
-		_state: GameState,
-		_actions: PriorityAction[],
-	): PriorityAction {
-		return randomElement(_actions);
+	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
+		return { optionId: randomElement(request.options).id };
 	}
 }
 
 export class KeyboardAgent implements Agent {
-	chooseReplacement(
-		_state: GameState,
-		ev: GameEvent,
-		options: BoundReplacement[],
-	): BoundReplacement {
-		assertDefined(options[0]);
-		console.log(`\n[Replacement choice for ${ev.kind}]`);
-		for (let i = 0; i < options.length; i++) {
-			console.log(`  ${i + 1}. ${options[i]?.label}`);
+	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
+		switch (request.kind) {
+			case "replacement":
+				console.log(`\n[Replacement choice for ${request.context.event.kind}]`);
+				break;
+			case "ownHand":
+				console.log(`\n[Player ${request.player}: choose a card to discard]`);
+				break;
+			case "optional":
+				console.log(`\n[Optional ability: ${request.context.ability.text}]`);
+				break;
+			case "priorityAction":
+				console.log("\n[Priority action choice]");
+				break;
+			default:
+				return assertNever(request);
 		}
-		while (true) {
-			const input = prompt(`Pick 1-${options.length}: `);
-			const n = Number.parseInt(input, 10);
-			if (!Number.isNaN(n) && n >= 1 && n <= options.length) {
-				return options[n - 1]!;
-			}
-			console.log("Invalid input, try again.");
-		}
-	}
 
-	chooseFromOwnHand(
-		state: GameState,
-		player: PlayerId,
-		hand: ObjectId[],
-	): ObjectId {
-		assertDefined(hand[0]);
-		console.log(`\n[Player ${player}: choose a card to discard]`);
-		for (let i = 0; i < hand.length; i++) {
-			console.log(`  ${i + 1}. ${objectName(state, hand[i]!)}`);
+		for (let i = 0; i < request.options.length; i++) {
+			console.log(`  ${i + 1}. ${request.options[i]?.label}`);
 		}
 		while (true) {
-			const input = prompt(`Pick 1-${hand.length}: `);
-			const n = Number.parseInt(input, 10);
-			if (!Number.isNaN(n) && n >= 1 && n <= hand.length) {
-				return hand[n - 1]!;
-			}
-			console.log("Invalid input, try again.");
-		}
-	}
-
-	chooseOptional(_state: GameState, ability: AbilityStackItem): boolean {
-		console.log(`\n[Optional ability: ${ability.text}]`);
-		while (true) {
-			const input = prompt("Use it? (y/n): ").toLowerCase();
-			if (input === "y" || input === "yes") return true;
-			if (input === "n" || input === "no") return false;
-			console.log("Invalid input, try again.");
-		}
-	}
-
-	choosePriorityAction(
-		state: GameState,
-		actions: PriorityAction[],
-	): PriorityAction {
-		console.log(`\n[Priority action choice]`);
-		for (let i = 0; i < actions.length; i++) {
-			console.log(`  ${i + 1}. ${actions[i]?.kind}`);
-		}
-		while (true) {
-			const input = prompt(`Pick 1-${actions.length}: `);
-			const n = Number.parseInt(input, 10);
-			if (!Number.isNaN(n) && n >= 1 && n <= actions.length) {
-				const action = actions[n - 1];
-				assert(action);
-				return action;
-			}
+			const input = prompt(`Pick 1-${request.options.length}: `);
+			const index = Number.parseInt(input, 10) - 1;
+			const option = request.options[index];
+			if (option) return { optionId: option.id };
 			console.log("Invalid input, try again.");
 		}
 	}

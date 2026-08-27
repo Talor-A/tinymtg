@@ -1,12 +1,8 @@
 import type {
-	AbilityStackItem,
 	Agent,
-	BoundReplacement,
-	GameEvent,
+	ChoiceAnswer,
+	ChoiceRequest,
 	GameState,
-	ObjectId,
-	PlayerId,
-	PriorityAction,
 } from "../index.ts";
 
 /** Deterministic PRNG so fuzz choices and failures are reproducible. */
@@ -21,12 +17,6 @@ function mulberry32(seed: number): () => number {
 	};
 }
 
-function pick<T>(rng: () => number, values: readonly T[]): T {
-	const value = values[Math.floor(rng() * values.length)];
-	if (value === undefined) throw new Error("pick from empty array");
-	return value;
-}
-
 export class FuzzAgent implements Agent {
 	private readonly rng: () => number;
 
@@ -34,30 +24,10 @@ export class FuzzAgent implements Agent {
 		this.rng = mulberry32(seed);
 	}
 
-	chooseReplacement(
-		_state: GameState,
-		_event: GameEvent,
-		options: BoundReplacement[],
-	): BoundReplacement {
-		return pick(this.rng, options);
-	}
-
-	chooseFromOwnHand(
-		_state: GameState,
-		_player: PlayerId,
-		hand: ObjectId[],
-	): ObjectId {
-		return pick(this.rng, hand);
-	}
-
-	chooseOptional(_state: GameState, _ability: AbilityStackItem): boolean {
-		return this.rng() < 0.5;
-	}
-
-	choosePriorityAction(
-		_state: GameState,
-		actions: PriorityAction[],
-	): PriorityAction {
-		return pick(this.rng, actions);
+	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
+		const option =
+			request.options[Math.floor(this.rng() * request.options.length)];
+		if (!option) throw new Error("fuzz agent received no options");
+		return { optionId: option.id };
 	}
 }

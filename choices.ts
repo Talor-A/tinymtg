@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
 	AbilityStackItem,
-	Agent,
 	BoundReplacement,
 	GameEvent,
 	GameState,
@@ -9,8 +8,6 @@ import type {
 	PlayerId,
 	PriorityAction,
 } from "./index.ts";
-
-export type AgentPair = [Agent, Agent];
 
 export interface ChoiceOption {
 	id: string;
@@ -59,6 +56,13 @@ export type ChoiceRequest =
 export interface ChoiceAnswer {
 	optionId: string;
 }
+
+/** The one engine-facing interface implemented by every synchronous agent. */
+export interface Agent {
+	choose(state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer;
+}
+
+export type AgentPair = [Agent, Agent];
 
 export interface RecordedChoice {
 	request: ChoiceRequest;
@@ -207,10 +211,9 @@ export class ChoiceController {
 	}
 
 	private choose<T>(
+		state: GameState,
 		request: ChoiceRequest,
 		candidates: readonly { id: string; value: T }[],
-		chooseLive: (agent: Agent) => T,
-		answerId: (answer: T) => string,
 	): T {
 		const recorded = this.decisions[this.cursor];
 		if (recorded) {
@@ -240,17 +243,23 @@ export class ChoiceController {
 				`transcript ended before choice ${request.id}`,
 			);
 		}
-		const answer = chooseLive(agent);
-		const optionId = answerId(answer);
-		const candidate = candidates.find((option) => option.id === optionId);
+		const answer = agent.choose(state, request);
+		if (!answer || typeof answer.optionId !== "string") {
+			throw new InvalidChoiceAnswerError(
+				`agent returned an invalid answer for choice ${request.id}`,
+			);
+		}
+		const candidate = candidates.find(
+			(option) => option.id === answer.optionId,
+		);
 		if (!candidate) {
 			throw new InvalidChoiceAnswerError(
-				`agent selected ${optionId} for choice ${request.id}; legal options: ${candidates.map((option) => option.id).join(", ")}`,
+				`agent selected ${answer.optionId} for choice ${request.id}; legal options: ${candidates.map((option) => option.id).join(", ")}`,
 			);
 		}
 		this.decisions.push({
 			request: clone(request),
-			answer: { optionId },
+			answer: clone(answer),
 		});
 		this.cursor++;
 		return candidate.value;
@@ -275,12 +284,7 @@ export class ChoiceController {
 				label: option.label,
 			})),
 		});
-		return this.choose(
-			request,
-			candidates,
-			(agent) => agent.chooseReplacement(state, event, options),
-			(answer) => String(answer.id),
-		);
+		return this.choose(state, request, candidates);
 	}
 
 	chooseFromOwnHand(
@@ -298,12 +302,7 @@ export class ChoiceController {
 				label: `${state.objects.get(id)?.cardId ?? "unknown"}#${id}`,
 			})),
 		});
-		return this.choose(
-			request,
-			candidates,
-			(agent) => agent.chooseFromOwnHand(state, player, hand),
-			String,
-		);
+		return this.choose(state, request, candidates);
 	}
 
 	chooseOptional(state: GameState, ability: AbilityStackItem): boolean {
@@ -321,12 +320,7 @@ export class ChoiceController {
 				{ id: "no", label: "No" },
 			],
 		});
-		return this.choose(
-			request,
-			candidates,
-			(agent) => agent.chooseOptional(state, ability),
-			(answer) => (answer ? "yes" : "no"),
-		);
+		return this.choose(state, request, candidates);
 	}
 
 	choosePriorityAction(
@@ -351,12 +345,7 @@ export class ChoiceController {
 				label: action.kind,
 			})),
 		});
-		return this.choose(
-			request,
-			candidates,
-			(agent) => agent.choosePriorityAction(state, actions),
-			priorityOptionId,
-		);
+		return this.choose(state, request, candidates);
 	}
 }
 

@@ -1,5 +1,6 @@
 import { KeyboardAgent, RandomAgent } from "./agents";
 import {
+	type Agent,
 	asChoiceController,
 	type ChoiceController,
 	type ChoiceSource,
@@ -7,6 +8,7 @@ import {
 import * as EFFECTS from "./effects";
 
 export {
+	type Agent,
 	type ChoiceAnswer,
 	ChoiceController,
 	ChoiceReplayMismatchError,
@@ -759,30 +761,6 @@ export function spawnPermanent(
 	state.objects.set(obj.id, obj);
 	zoneList(state, zone, owner).push(obj.id);
 	return obj;
-}
-
-/* ------------------------------------------------------------------ *
- * Agents
- * ------------------------------------------------------------------ */
-
-export interface Agent {
-	/** choose a single replacement effect to apply from a list before applying others. */
-	chooseReplacement(
-		state: GameState,
-		ev: GameEvent,
-		options: BoundReplacement[],
-	): BoundReplacement;
-	chooseFromOwnHand(
-		state: GameState,
-		player: PlayerId,
-		hand: ObjectId[],
-	): ObjectId;
-	/** Choose whether to perform an optional triggered ability as it resolves. */
-	chooseOptional(state: GameState, ability: AbilityStackItem): boolean;
-	choosePriorityAction(
-		state: GameState,
-		actions: PriorityAction[],
-	): PriorityAction;
 }
 
 /* ------------------------------------------------------------------ *
