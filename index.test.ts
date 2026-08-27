@@ -4,12 +4,12 @@ import "./cards.ts"; // side effect: registers the card database
 import type { Agent, GameState, ObjectId, PlayerId } from "./index.ts";
 import {
 	addFloating,
+	advance,
 	checkStateBasedActions,
 	gameOver,
 	newGame,
 	perform,
 	permanent,
-	runTurn,
 	settlePriority,
 	spawnCard,
 	spawnPermanent,
@@ -39,6 +39,13 @@ function newTestAgent(): Agent {
 function created(result: { created: ObjectId[] }): ObjectId {
 	if (result.created.length === 0) throw new Error("nothing created");
 	return result.created[0]!;
+}
+
+function advanceToNextTurn(state: GameState, agents: [Agent, Agent]): void {
+	const currentTurn = state.turn;
+	while (state.turn === currentTurn && !gameOver(state)) {
+		advance(state, agents);
+	}
 }
 
 function ballista(prefs: string[]): {
@@ -415,12 +422,12 @@ describe('"Skip your draw step" is a replacement that returns nothing', () => {
 		for (let i = 0; i < 5; i++) spawnCard(state, "forest", 0, "library");
 		for (let i = 0; i < 5; i++) spawnCard(state, "forest", 1, "library");
 
-		runTurn(state, agents); // P0's turn
+		advanceToNextTurn(state, agents); // P0's turn
 		dump(state);
 		expect(state.players[0].hand.length, "P0 drew nothing").toBe(0);
 		expect(state.players[0].library.length, "P0 library intact").toBe(5);
 
-		runTurn(state, agents); // P1's turn
+		advanceToNextTurn(state, agents); // P1's turn
 		state.log.length = 0;
 		expect(state.players[1].hand.length, "P1 still draws normally").toBe(1);
 	});
@@ -619,22 +626,34 @@ describe("triggered abilities", () => {
 	});
 });
 
-describe("game", () => {
-	test("it terminates", () => {
+describe("advance", () => {
+	test("executes one scheduler transition", () => {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+
+		advance(state, agents);
+
+		expect(state.turn).toBe(0);
+		expect(state.turnScheduler.currentTurn?.player).toBe(P1);
+		expect(state.turnScheduler.currentPhase).toBe(null);
+		expect(state.turnScheduler.command.kind).toBe("advancePhase");
+	});
+
+	test("eventually terminates", () => {
 		function run() {
 			const state = newGame();
 
 			const agents: [Agent, Agent] = [new RandomAgent(), new RandomAgent()];
 
-			for (let i = 0; i < 1000; i++) {
-				runTurn(state, agents);
+			for (let i = 0; i < 10_000; i++) {
+				advance(state, agents);
 				if (state.players.some((p) => p.lost)) {
 					dump(state);
 					return;
 				}
 			}
 
-			throw new Error("max turn count reached");
+			throw new Error("max advancement count reached");
 		}
 
 		expect(run).not.toThrowError();

@@ -57,7 +57,17 @@ interface TurnOccurrence {
 	remainingPhases: PhaseOccurrence[];
 }
 
+type SchedulerCommand =
+	| { kind: "advanceTurn" }
+	| { kind: "advancePhase" }
+	| { kind: "advanceStep" }
+	| { kind: "finishStep" }
+	| { kind: "finishPhase" }
+	| { kind: "finishTurn" };
+
 interface TurnScheduler {
+	/** The next serializable unit of scheduler control flow. */
+	command: SchedulerCommand;
 	/** Only exceptional turns are queued. The front is taken next. */
 	pendingTurns: TurnOccurrence[];
 	/** Used to lazily create the next ordinary turn when the queue is empty. */
@@ -635,6 +645,7 @@ export function newGame(): GameState {
 		activePlayer: 0 as PlayerId,
 		step: "untap" as Step,
 		turnScheduler: {
+			command: { kind: "advanceTurn" },
 			pendingTurns: [],
 			nextRegularPlayer: 0 as PlayerId,
 			currentTurn: null,
@@ -2371,14 +2382,6 @@ function priority(state: GameState, agents: [Agent, Agent]) {
 	settlePriority(state, agents);
 }
 
-type SchedulerCommand =
-	| { kind: "advanceTurn" }
-	| { kind: "advancePhase" }
-	| { kind: "advanceStep" }
-	| { kind: "finishStep" }
-	| { kind: "finishPhase" }
-	| { kind: "finishTurn" };
-
 function nextScheduleId(state: GameState): number {
 	return state.turnScheduler.nextId++;
 }
@@ -2545,157 +2548,160 @@ function performTurnBasedActions(
 }
 
 /**
- * Runs one scheduled turn occurrence. Scheduler commands are engine control
+ * Executes one scheduler transition. Scheduler commands are engine control
  * flow, not CR 703 turn-based actions and not replaceable GameEvents.
+ *
+ * Keeping this boundary smaller than a turn gives async callers a cheap,
+ * serializable checkpoint to replay when a choice is not immediately available.
  */
-export function runTurn(state: GameState, agents: [Agent, Agent]): void {
+export function advance(state: GameState, agents: [Agent, Agent]): void {
+	if (gameOver(state)) return;
+
 	const scheduler = state.turnScheduler;
-	let command: SchedulerCommand = { kind: "advanceTurn" };
+	let command = scheduler.command;
 
-	for (let transitions = 0; transitions < 256; transitions++) {
-		switch (command.kind) {
-			case "advanceTurn": {
-				const turn = takeNextTurn(state);
-				const result = perform(
-					state,
-					{
-						kind: "beginTurn",
-						turnId: turn.id,
-						player: turn.player,
-						isExtra: turn.isExtra,
-					},
-					agents,
-				);
+	switch (command.kind) {
+		case "advanceTurn": {
+			const turn = takeNextTurn(state);
+			const result = perform(
+				state,
+				{
+					kind: "beginTurn",
+					turnId: turn.id,
+					player: turn.player,
+					isExtra: turn.isExtra,
+				},
+				agents,
+			);
 
-				// Selection consumes the occurrence (and advances ordinary turn order),
-				// but a skipped turn never becomes the current turn.
-				if (!turnBoundaryHappened(result, turn)) {
-					command = { kind: "advanceTurn" };
-					break;
-				}
-
-				scheduler.currentTurn = turn;
-				scheduler.currentPhase = null;
-				scheduler.currentStep = null;
-				scheduler.remainingSteps = [];
-				state.activePlayer = turn.player;
-				state.players[turn.player].landsPlayed = 0;
-				command = { kind: "advancePhase" };
+			// Selection consumes the occurrence (and advances ordinary turn order),
+			// but a skipped turn never becomes the current turn.
+			if (!turnBoundaryHappened(result, turn)) {
+				command = { kind: "advanceTurn" };
 				break;
 			}
 
-			case "advancePhase": {
-				const turn = scheduler.currentTurn;
-				assertDefined(turn, "cannot advance a phase without a current turn");
-				const phase = turn.remainingPhases.shift();
-				if (!phase) {
-					command = { kind: "finishTurn" };
-					break;
-				}
-
-				const mainRole =
-					phase.kind === "main"
-						? turn.mainPhasesBegun === 0
-							? "precombat"
-							: "postcombat"
-						: undefined;
-				const result = perform(
-					state,
-					{
-						kind: "beginPhase",
-						turnId: turn.id,
-						phaseId: phase.id,
-						player: turn.player,
-						phase: phase.kind,
-						mainRole,
-					},
-					agents,
-				);
-
-				// The occurrence was consumed even if its boundary was replaced with
-				// nothing. Structural progress itself is never replaceable.
-				if (!phaseBoundaryHappened(result, phase)) {
-					command = { kind: "advancePhase" };
-					break;
-				}
-
-				scheduler.currentPhase = phase;
-				if (phase.kind === "main") {
-					turn.mainPhasesBegun++;
-					state.step = "main";
-					priority(state, agents);
-					command = { kind: "finishPhase" };
-				} else {
-					scheduler.remainingSteps = makeSteps(state, phase);
-					command = { kind: "advanceStep" };
-				}
-				break;
-			}
-
-			case "advanceStep": {
-				const turn = scheduler.currentTurn;
-				assertDefined(turn, "cannot advance a step without a current turn");
-				const step = scheduler.remainingSteps.shift();
-				if (!step) {
-					command = { kind: "finishPhase" };
-					break;
-				}
-
-				const result = perform(
-					state,
-					{
-						kind: "beginStep",
-						turnId: step.turnId,
-						phaseId: step.phaseId,
-						stepId: step.id,
-						player: turn.player,
-						step: step.kind,
-					},
-					agents,
-				);
-				if (!stepBoundaryHappened(result, step)) {
-					command = { kind: "advanceStep" };
-					break;
-				}
-
-				scheduler.currentStep = step;
-				performTurnBasedActions(state, agents, step);
-				// Untap has no priority window. Cleanup normally has none, but the
-				// existing priority helper already opens one if something triggered.
-				priority(state, agents);
-				command = { kind: "finishStep" };
-				break;
-			}
-
-			case "finishStep":
-				// CR 703.4q mana emptying belongs here once mana pools exist.
-				scheduler.currentStep = null;
-				command = { kind: "advanceStep" };
-				break;
-
-			case "finishPhase":
-				// CR 703.4q also empties mana at this boundary.
-				scheduler.currentStep = null;
-				scheduler.currentPhase = null;
-				scheduler.remainingSteps = [];
-				command = { kind: "advancePhase" };
-				break;
-
-			case "finishTurn":
-				scheduler.currentStep = null;
-				scheduler.currentPhase = null;
-				scheduler.currentTurn = null;
-				scheduler.remainingSteps = [];
-				state.turn++;
-				return;
-
-			default:
-				assertNever(command);
+			scheduler.currentTurn = turn;
+			scheduler.currentPhase = null;
+			scheduler.currentStep = null;
+			scheduler.remainingSteps = [];
+			state.activePlayer = turn.player;
+			state.players[turn.player].landsPlayed = 0;
+			command = { kind: "advancePhase" };
+			break;
 		}
 
-		if (gameOver(state)) return;
+		case "advancePhase": {
+			const turn = scheduler.currentTurn;
+			assertDefined(turn, "cannot advance a phase without a current turn");
+			const phase = turn.remainingPhases.shift();
+			if (!phase) {
+				command = { kind: "finishTurn" };
+				break;
+			}
+
+			const mainRole =
+				phase.kind === "main"
+					? turn.mainPhasesBegun === 0
+						? "precombat"
+						: "postcombat"
+					: undefined;
+			const result = perform(
+				state,
+				{
+					kind: "beginPhase",
+					turnId: turn.id,
+					phaseId: phase.id,
+					player: turn.player,
+					phase: phase.kind,
+					mainRole,
+				},
+				agents,
+			);
+
+			// The occurrence was consumed even if its boundary was replaced with
+			// nothing. Structural progress itself is never replaceable.
+			if (!phaseBoundaryHappened(result, phase)) {
+				command = { kind: "advancePhase" };
+				break;
+			}
+
+			scheduler.currentPhase = phase;
+			if (phase.kind === "main") {
+				turn.mainPhasesBegun++;
+				state.step = "main";
+				priority(state, agents);
+				command = { kind: "finishPhase" };
+			} else {
+				scheduler.remainingSteps = makeSteps(state, phase);
+				command = { kind: "advanceStep" };
+			}
+			break;
+		}
+
+		case "advanceStep": {
+			const turn = scheduler.currentTurn;
+			assertDefined(turn, "cannot advance a step without a current turn");
+			const step = scheduler.remainingSteps.shift();
+			if (!step) {
+				command = { kind: "finishPhase" };
+				break;
+			}
+
+			const result = perform(
+				state,
+				{
+					kind: "beginStep",
+					turnId: step.turnId,
+					phaseId: step.phaseId,
+					stepId: step.id,
+					player: turn.player,
+					step: step.kind,
+				},
+				agents,
+			);
+			if (!stepBoundaryHappened(result, step)) {
+				command = { kind: "advanceStep" };
+				break;
+			}
+
+			scheduler.currentStep = step;
+			performTurnBasedActions(state, agents, step);
+			// Untap has no priority window. Cleanup normally has none, but the
+			// existing priority helper already opens one if something triggered.
+			priority(state, agents);
+			command = { kind: "finishStep" };
+			break;
+		}
+
+		case "finishStep":
+			// CR 703.4q mana emptying belongs here once mana pools exist.
+			scheduler.currentStep = null;
+			command = { kind: "advanceStep" };
+			break;
+
+		case "finishPhase":
+			// CR 703.4q also empties mana at this boundary.
+			scheduler.currentStep = null;
+			scheduler.currentPhase = null;
+			scheduler.remainingSteps = [];
+			command = { kind: "advancePhase" };
+			break;
+
+		case "finishTurn":
+			scheduler.currentStep = null;
+			scheduler.currentPhase = null;
+			scheduler.currentTurn = null;
+			scheduler.remainingSteps = [];
+			state.turn++;
+			command = { kind: "advanceTurn" };
+			break;
+
+		default:
+			assertNever(command);
 	}
-	throw new Error("turn scheduler failed to converge");
+
+	scheduler.command = command;
 }
 
 export function gameOver(state: GameState): boolean {
@@ -2734,19 +2740,26 @@ if (import.meta.main) {
 		console.log("Welcome to tinymtg! You are Player 0.\n");
 		printBoard(state);
 
-		for (let i = 0; i < 10; i++) {
+		let advanceCount = 0;
+		while (true) {
+			const startingTurn = state.turn;
 			console.log(
-				`\n=== Turn ${state.turn + 1}, Player ${state.activePlayer} (${state.activePlayer === 0 ? "You" : "CPU"}) ===`,
+				`\n=== Turn ${startingTurn + 1}, Player ${state.activePlayer} (${state.activePlayer === 0 ? "You" : "CPU"}) ===`,
 			);
-			runTurn(state, agents);
+			while (state.turn === startingTurn && !gameOver(state)) {
+				advance(state, agents);
+			}
 			printBoard(state);
 			if (gameOver(state)) {
 				console.log(`\nGame over! Winner: Player ${winner(state)}`);
 				return;
 			}
+			advanceCount++;
+			if (advanceCount >= 10_000) {
+				console.log("Max advancement count reached.");
+				return;
+			}
 		}
-
-		console.log("Max turn count reached.");
 	}
 	run();
 }
