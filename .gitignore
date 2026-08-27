@@ -39,3 +39,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 !.pi/agent/
 !.pi/agent/skills/
 !.pi/agent/skills/**
+
+# large downloaded rules file
+yawgatog-rules.md
