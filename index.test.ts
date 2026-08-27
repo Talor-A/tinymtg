@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { RandomAgent, ScriptedAgent } from "./agents.ts";
 import "./cards.ts"; // side effect: registers the card database
 import type { Agent, GameState, ObjectId, PlayerId } from "./index.ts";
@@ -25,15 +25,6 @@ function dump(state: GameState): void {
 	if (state.log.length === 0) return;
 	console.log(state.log.map((l) => `    ${l}`).join("\n"));
 	state.log.length = 0;
-}
-
-function newTestAgent(): Agent {
-	return {
-		chooseFromOwnHand: vi.fn(),
-		chooseOptional: vi.fn(),
-		choosePriorityAction: vi.fn(),
-		chooseReplacement: vi.fn(),
-	};
 }
 
 function created(result: { created: ObjectId[] }): ObjectId {
