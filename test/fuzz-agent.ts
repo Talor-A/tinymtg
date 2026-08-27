@@ -1,8 +1,8 @@
 import type {
-	Agent,
 	ChoiceAnswer,
 	ChoiceRequest,
 	GameState,
+	SyncAgent,
 } from "../index.ts";
 
 /** Deterministic PRNG so fuzz choices and failures are reproducible. */
@@ -17,7 +17,7 @@ function mulberry32(seed: number): () => number {
 	};
 }
 
-export class FuzzAgent implements Agent {
+export class FuzzAgent implements SyncAgent {
 	private readonly rng: () => number;
 
 	constructor(seed: number) {

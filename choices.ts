@@ -57,6 +57,10 @@ export interface ChoiceAnswer {
 	optionId: string;
 }
 
+export interface SyncAgent {
+	choose(state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer;
+}
+
 /** The one engine-facing interface implemented by local and remote agents. */
 export interface Agent {
 	choose(
@@ -65,6 +69,7 @@ export interface Agent {
 	): ChoiceAnswer | PromiseLike<ChoiceAnswer>;
 }
 
+export type SyncAgentPair = [SyncAgent, SyncAgent];
 export type AgentPair = [Agent, Agent];
 
 export interface RecordedChoice {
@@ -193,12 +198,18 @@ function priorityOptionId(action: PriorityAction): string {
  * Existing transcript entries are consumed first; otherwise the live agent is
  * called and its answer is appended to the transcript.
  */
-export class ChoiceController {
+export class ChoiceController<CanSuspend extends boolean = false> {
+	private declare readonly canSuspend: CanSuspend;
 	private readonly agents: AgentPair | null;
 	private readonly decisions: RecordedChoice[];
 	private cursor = 0;
+	private pendingRequest: ChoiceRequest | null = null;
 
-	constructor(agents: AgentPair | null, transcript?: ChoiceTranscript) {
+	private constructor(
+		agents: AgentPair | null,
+		private readonly allowSuspension: CanSuspend,
+		transcript?: ChoiceTranscript,
+	) {
 		if (transcript && transcript.version !== 1) {
 			throw new Error(
 				`unsupported choice transcript version ${transcript.version}`,
@@ -208,12 +219,19 @@ export class ChoiceController {
 		this.decisions = clone(transcript?.choices ?? []);
 	}
 
-	static record(agents: AgentPair): ChoiceController {
-		return new ChoiceController(agents);
+	static record(agents: SyncAgentPair): ChoiceController<false> {
+		return new ChoiceController(agents, false);
 	}
 
-	static replay(transcript: ChoiceTranscript): ChoiceController {
-		return new ChoiceController(null, transcript);
+	static replay(transcript: ChoiceTranscript): ChoiceController<false> {
+		return new ChoiceController(null, false, transcript);
+	}
+
+	static suspending(
+		agents: AgentPair,
+		transcript?: ChoiceTranscript,
+	): ChoiceController<true> {
+		return new ChoiceController(agents, true, transcript);
 	}
 
 	rewind(): void {
@@ -226,13 +244,24 @@ export class ChoiceController {
 
 	/** Append an answer obtained after ChoicePendingError unwound the engine. */
 	recordAnswer(request: ChoiceRequest, answer: ChoiceAnswer): void {
+		const pending = this.pendingRequest;
+		if (
+			!pending ||
+			request.id !== pending.id ||
+			request.fingerprint !== pending.fingerprint
+		) {
+			throw new ChoiceReplayMismatchError(
+				`choice ${request.id} does not match the controller's pending request`,
+			);
+		}
 		if (request.ordinal !== this.decisions.length) {
 			throw new ChoiceReplayMismatchError(
 				`cannot record choice ${request.ordinal}; transcript has ${this.decisions.length} choices`,
 			);
 		}
-		assertValidAnswer(request, answer);
-		this.decisions.push({ request: clone(request), answer: clone(answer) });
+		assertValidAnswer(pending, answer);
+		this.decisions.push({ request: clone(pending), answer: clone(answer) });
+		this.pendingRequest = null;
 	}
 
 	assertComplete(): void {
@@ -298,6 +327,10 @@ export class ChoiceController {
 		}
 		const answer = agent.choose(state, request);
 		if (isPromiseLike(answer)) {
+			if (!this.allowSuspension) {
+				throw new Error("an async agent was used outside advanceWithReplay()");
+			}
+			this.pendingRequest = clone(request);
 			throw new ChoicePendingError(clone(request), answer);
 		}
 		assertValidAnswer(request, answer);
@@ -401,9 +434,12 @@ export class ChoiceController {
 	}
 }
 
-export type ChoiceSource = AgentPair | ChoiceController;
+export type AnyChoiceController = ChoiceController<boolean>;
+export type ChoiceSource = SyncAgentPair | ChoiceController<false>;
 
-export function asChoiceController(source: ChoiceSource): ChoiceController {
+export function asChoiceController(
+	source: ChoiceSource,
+): ChoiceController<false> {
 	return source instanceof ChoiceController
 		? source
 		: ChoiceController.record(source);
