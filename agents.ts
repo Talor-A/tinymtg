@@ -58,7 +58,7 @@ export class ScriptedAgent implements Agent {
 		return options[0];
 	}
 
-	chooseDiscard(
+	chooseFromOwnHand(
 		_state: GameState,
 		_player: PlayerId,
 		hand: ObjectId[],
@@ -90,7 +90,7 @@ export class RandomAgent implements Agent {
 		return randomElement(options);
 	}
 
-	chooseDiscard(
+	chooseFromOwnHand(
 		_state: GameState,
 		_player: PlayerId,
 		hand: ObjectId[],
@@ -132,7 +132,7 @@ export class KeyboardAgent implements Agent {
 		}
 	}
 
-	chooseDiscard(
+	chooseFromOwnHand(
 		state: GameState,
 		player: PlayerId,
 		hand: ObjectId[],

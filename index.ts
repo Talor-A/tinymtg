@@ -744,7 +744,11 @@ export interface Agent {
 		ev: GameEvent,
 		options: BoundReplacement[],
 	): BoundReplacement;
-	chooseDiscard(state: GameState, player: PlayerId, hand: ObjectId[]): ObjectId;
+	chooseFromOwnHand(
+		state: GameState,
+		player: PlayerId,
+		hand: ObjectId[],
+	): ObjectId;
 	/** Choose whether to perform an optional triggered ability as it resolves. */
 	chooseOptional(state: GameState, ability: AbilityStackItem): boolean;
 	choosePriorityAction(
@@ -1904,7 +1908,7 @@ function executeIn(
 				const toDiscard: ObjectId[] = [];
 
 				for (let i = 0; i < countToDiscard; i++) {
-					const selected: ObjectId = agents[ev.player].chooseDiscard(
+					const selected: ObjectId = agents[ev.player].chooseFromOwnHand(
 						state,
 						ev.player,
 						p.hand,
@@ -1937,7 +1941,7 @@ function executeIn(
 			const chosen =
 				ev.cards.kind === "specific"
 					? ev.cards.card
-					: agents[ev.player].chooseDiscard(state, ev.player, p.hand);
+					: agents[ev.player].chooseFromOwnHand(state, ev.player, p.hand);
 			assertDefined(chosen);
 			childResults.push(
 				performIn(

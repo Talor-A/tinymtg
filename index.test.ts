@@ -29,7 +29,7 @@ function dump(state: GameState): void {
 
 function newTestAgent(): Agent {
 	return {
-		chooseDiscard: vi.fn(),
+		chooseFromOwnHand: vi.fn(),
 		chooseOptional: vi.fn(),
 		choosePriorityAction: vi.fn(),
 		chooseReplacement: vi.fn(),

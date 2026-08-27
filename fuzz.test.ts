@@ -102,7 +102,7 @@ export class FuzzAgent implements Agent {
 		return pick(this.rng, options);
 	}
 
-	chooseDiscard(
+	chooseFromOwnHand(
 		_state: GameState,
 		_player: PlayerId,
 		hand: ObjectId[],
