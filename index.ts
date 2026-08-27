@@ -1,12 +1,13 @@
 import { KeyboardAgent, RandomAgent } from "./agents";
 import {
-	type Agent,
 	type AgentPair,
+	type AnyChoiceController,
 	asChoiceController,
 	ChoiceController,
 	ChoicePendingError,
 	type ChoiceSource,
 	type ChoiceTranscript,
+	type SyncAgentPair,
 } from "./choices.ts";
 import * as EFFECTS from "./effects";
 
@@ -22,6 +23,8 @@ export {
 	type ChoiceTranscript,
 	InvalidChoiceAnswerError,
 	type RecordedChoice,
+	type SyncAgent,
+	type SyncAgentPair,
 } from "./choices.ts";
 
 import { assert, assertDefined, assertNever } from "./lib/assert";
@@ -1311,7 +1314,7 @@ const MAX_REPLACEMENT_EFFECT_CHOICES = 64;
 function resolveReplacements(
 	state: GameState,
 	event: GameEvent,
-	choices: ChoiceController,
+	choices: AnyChoiceController,
 	run: ReplacementRun = newRun(),
 ): GameEvent[] {
 	if (run.depth > MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH) {
@@ -1578,7 +1581,7 @@ export function checkStateBasedActions(
 
 function checkStateBasedActionsIn(
 	state: GameState,
-	choices: ChoiceController,
+	choices: AnyChoiceController,
 ): void {
 	for (let pass = 0; pass < 32; pass++) {
 		let acted = false;
@@ -1586,10 +1589,12 @@ function checkStateBasedActionsIn(
 		for (const p of state.players) {
 			//   704.5a. If a player has 0 or less life, that player loses the game.
 			if (!p.lost && !p.won && p.life <= 0) {
-				perform(
+				performIn(
 					state,
 					{ kind: "loseGame", player: p.id, reason: "life" },
 					choices,
+					newScope(),
+					0,
 				);
 				// A replacement effect such as Platinum Angel may prevent the loss.
 				// Only signal that an SBA happened if the player actually lost.
@@ -1599,7 +1604,7 @@ function checkStateBasedActionsIn(
 			// cards in it since the last time state-based actions were checked, that
 			// player loses the game.
 			if (!p.lost && !p.won && p.drewFromEmptyLibrary) {
-				perform(
+				performIn(
 					state,
 					{
 						kind: "loseGame",
@@ -1607,6 +1612,8 @@ function checkStateBasedActionsIn(
 						reason: "drewFromEmptyLibrary",
 					},
 					choices,
+					newScope(),
+					0,
 				);
 				p.drewFromEmptyLibrary = false;
 				if (p.lost) acted = true;
@@ -1614,7 +1621,7 @@ function checkStateBasedActionsIn(
 			// 704.5c. If a player has ten or more poison counters, that player loses
 			// the game.
 			if (p.counters["poison"] !== undefined && p.counters["poison"] >= 10) {
-				perform(
+				performIn(
 					state,
 					{
 						kind: "loseGame",
@@ -1622,6 +1629,8 @@ function checkStateBasedActionsIn(
 						reason: "poison",
 					},
 					choices,
+					newScope(),
+					0,
 				);
 				if (p.lost) acted = true;
 			}
@@ -1694,7 +1703,7 @@ function checkStateBasedActionsIn(
 			// owner's graveyard. Regeneration can't replace this event.
 			if (v.toughness <= 0) {
 				log(state, `  SBA: ${name(state, id)} has toughness ${v.toughness}`);
-				perform(
+				performIn(
 					state,
 					{
 						kind: "zoneChange",
@@ -1705,6 +1714,8 @@ function checkStateBasedActionsIn(
 						toController: o.controller,
 					},
 					choices,
+					newScope(),
+					0,
 				);
 				acted = true;
 				continue;
@@ -1715,7 +1726,7 @@ function checkStateBasedActionsIn(
 			// Regeneration can replace this event.
 			if (lethalDamage(state, id) || o.counters.__deathtouched) {
 				log(state, `  SBA: ${name(state, id)} has lethal damage`);
-				perform(
+				performIn(
 					state,
 					{
 						kind: "destroy",
@@ -1723,6 +1734,8 @@ function checkStateBasedActionsIn(
 						noRegen: false,
 					},
 					choices,
+					newScope(),
+					0,
 				);
 				acted = true;
 			}
@@ -1732,7 +1745,7 @@ function checkStateBasedActionsIn(
 			// smaller of the number of +1/+1 and -1/-1 counters on it.
 			if (o.counters["+1/+1"] && o.counters["-1/-1"]) {
 				const n = Math.min(o.counters["+1/+1"], o.counters["-1/-1"]);
-				perform(
+				performIn(
 					state,
 					{
 						kind: "removeCounters",
@@ -1740,6 +1753,8 @@ function checkStateBasedActionsIn(
 						counters: { "+1/+1": n, "-1/-1": n },
 					},
 					choices,
+					newScope(),
+					0,
 				);
 				acted = true;
 			}
@@ -1769,7 +1784,7 @@ export function perform(
 function performIn(
 	state: GameState,
 	event: GameEvent,
-	choices: ChoiceController,
+	choices: AnyChoiceController,
 	scope: Scope,
 	depth: number,
 ): PerformResult {
@@ -1857,7 +1872,7 @@ function detectTriggers(
 function executeIn(
 	state: GameState,
 	ev: GameEvent,
-	choices: ChoiceController,
+	choices: AnyChoiceController,
 	scope: Scope,
 	depth: number,
 ): PerformResult {
@@ -2280,7 +2295,10 @@ function putPendingTriggersOnStack(state: GameState): void {
 	state.pendingTriggers.length = 0;
 }
 
-function resolveTopOfStack(state: GameState, choices: ChoiceController): void {
+function resolveTopOfStack(
+	state: GameState,
+	choices: AnyChoiceController,
+): void {
 	const id = state.stack.pop();
 	if (id === undefined) return;
 	const item = state.stackItems.get(id);
@@ -2299,7 +2317,7 @@ function resolveTopOfStack(state: GameState, choices: ChoiceController): void {
 	for (const effect of item.effects) {
 		switch (effect.kind) {
 			case "gainLife":
-				perform(
+				performIn(
 					state,
 					{
 						kind: "lifeChange",
@@ -2308,6 +2326,8 @@ function resolveTopOfStack(state: GameState, choices: ChoiceController): void {
 						source: item.source,
 					},
 					choices,
+					newScope(),
+					0,
 				);
 				break;
 
@@ -2343,7 +2363,10 @@ export function settlePriority(state: GameState, source: ChoiceSource): void {
 	settlePriorityIn(state, asChoiceController(source));
 }
 
-function settlePriorityIn(state: GameState, choices: ChoiceController): void {
+function settlePriorityIn(
+	state: GameState,
+	choices: AnyChoiceController,
+): void {
 	let lastWasPass = false;
 	let priority: 0 | 1 = state.activePlayer;
 
@@ -2389,7 +2412,7 @@ function settlePriorityIn(state: GameState, choices: ChoiceController): void {
 	throw new Error("priority loop did not settle");
 }
 
-function priority(state: GameState, choices: ChoiceController) {
+function priority(state: GameState, choices: AnyChoiceController) {
 	settlePriorityIn(state, choices);
 }
 
@@ -2499,26 +2522,34 @@ function stepBoundaryHappened(
 /** CR 703 actions, dispatched only after the corresponding step began. */
 function performTurnBasedActions(
 	state: GameState,
-	choices: ChoiceController,
+	choices: AnyChoiceController,
 	step: StepOccurrence,
 ): void {
 	switch (step.kind) {
 		case "untap":
-			perform(
+			performIn(
 				state,
 				{
 					kind: "untap",
 					ref: { kind: "all", player: state.activePlayer },
 				},
 				choices,
+				newScope(),
+				0,
 			);
 			break;
 		case "draw":
 			state.players[state.activePlayer].drawnInDrawStep = 0;
-			perform(state, { kind: "draw", player: state.activePlayer }, choices);
+			performIn(
+				state,
+				{ kind: "draw", player: state.activePlayer },
+				choices,
+				newScope(),
+				0,
+			);
 			break;
 		case "cleanup":
-			perform(
+			performIn(
 				state,
 				{
 					kind: "discard",
@@ -2526,6 +2557,8 @@ function performTurnBasedActions(
 					cards: { kind: "hand-size" },
 				},
 				choices,
+				newScope(),
+				0,
 			);
 			// This is only the noninteractive part of CR 514. Repeated cleanup
 			// steps still need to be added when SBAs or triggers occur here.
@@ -2538,13 +2571,15 @@ function performTurnBasedActions(
 		case "upkeep":
 		case "begin combat":
 		case "declare attackers":
-			perform(
+			performIn(
 				state,
 				{
 					kind: "declare attackers",
 					player: state.activePlayer,
 				},
 				choices,
+				newScope(),
+				0,
 			);
 			break;
 		case "declare blockers":
@@ -2582,14 +2617,14 @@ export async function advanceWithReplay(
 	transcript: ChoiceTranscript = { version: 1, choices: [] },
 ): Promise<AdvanceWithReplayResult> {
 	const baseline = structuredClone(checkpoint);
-	const choices = new ChoiceController(agents, transcript);
+	const choices = ChoiceController.suspending(agents, transcript);
 
 	for (let attempts = 1; ; attempts++) {
 		const attempt = structuredClone(baseline);
 		choices.rewind();
 
 		try {
-			advance(attempt, choices);
+			advanceIn(attempt, choices);
 			choices.assertComplete();
 			return { state: attempt, transcript: choices.transcript(), attempts };
 		} catch (error) {
@@ -2600,16 +2635,19 @@ export async function advanceWithReplay(
 }
 
 export function advance(state: GameState, source: ChoiceSource): void {
+	advanceIn(state, asChoiceController(source));
+}
+
+function advanceIn(state: GameState, choices: AnyChoiceController): void {
 	if (gameOver(state)) return;
 
-	const choices = asChoiceController(source);
 	const scheduler = state.turnScheduler;
 	let command = scheduler.command;
 
 	switch (command.kind) {
 		case "advanceTurn": {
 			const turn = takeNextTurn(state);
-			const result = perform(
+			const result = performIn(
 				state,
 				{
 					kind: "beginTurn",
@@ -2618,6 +2656,8 @@ export function advance(state: GameState, source: ChoiceSource): void {
 					isExtra: turn.isExtra,
 				},
 				choices,
+				newScope(),
+				0,
 			);
 
 			// Selection consumes the occurrence (and advances ordinary turn order),
@@ -2652,7 +2692,7 @@ export function advance(state: GameState, source: ChoiceSource): void {
 						? "precombat"
 						: "postcombat"
 					: undefined;
-			const result = perform(
+			const result = performIn(
 				state,
 				{
 					kind: "beginPhase",
@@ -2663,6 +2703,8 @@ export function advance(state: GameState, source: ChoiceSource): void {
 					mainRole,
 				},
 				choices,
+				newScope(),
+				0,
 			);
 
 			// The occurrence was consumed even if its boundary was replaced with
@@ -2694,7 +2736,7 @@ export function advance(state: GameState, source: ChoiceSource): void {
 				break;
 			}
 
-			const result = perform(
+			const result = performIn(
 				state,
 				{
 					kind: "beginStep",
@@ -2705,6 +2747,8 @@ export function advance(state: GameState, source: ChoiceSource): void {
 					step: step.kind,
 				},
 				choices,
+				newScope(),
+				0,
 			);
 			if (!stepBoundaryHappened(result, step)) {
 				command = { kind: "advanceStep" };
@@ -2773,7 +2817,7 @@ if (import.meta.main) {
 		const state = newGame();
 
 		// Human plays P0, a random CPU plays P1.
-		const agents: [Agent, Agent] = [new KeyboardAgent(), new RandomAgent()];
+		const agents: SyncAgentPair = [new KeyboardAgent(), new RandomAgent()];
 
 		// Set up a small demo board: each player has Ajani's Mantra so there is an
 		// optional upkeep choice every turn, plus libraries so the draw step works.

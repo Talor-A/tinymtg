@@ -1,10 +1,10 @@
 import { readSync } from "node:fs";
 import type {
-	Agent,
 	ChoiceAnswer,
 	ChoiceRequest,
 	GameState,
 	PriorityAction,
+	SyncAgent,
 } from "./index.ts";
 import { randomElement } from "./lib/array.ts";
 import { assertDefined, assertNever } from "./lib/assert.ts";
@@ -33,7 +33,7 @@ function firstOption(request: ChoiceRequest): ChoiceAnswer {
 	return { optionId: option.id };
 }
 
-export class ScriptedAgent implements Agent {
+export class ScriptedAgent implements SyncAgent {
 	constructor(
 		public preferences: string[] = [],
 		public optionalChoices: boolean[] = [],
@@ -75,13 +75,13 @@ export class ScriptedAgent implements Agent {
 	}
 }
 
-export class RandomAgent implements Agent {
+export class RandomAgent implements SyncAgent {
 	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
 		return { optionId: randomElement(request.options).id };
 	}
 }
 
-export class KeyboardAgent implements Agent {
+export class KeyboardAgent implements SyncAgent {
 	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
 		switch (request.kind) {
 			case "replacement":

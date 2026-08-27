@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { RandomAgent, ScriptedAgent } from "./agents.ts";
 import "./cards.ts"; // side effect: registers the card database
-import type { Agent, GameState, ObjectId, PlayerId } from "./index.ts";
+import type {
+	SyncAgent as Agent,
+	GameState,
+	ObjectId,
+	PlayerId,
+} from "./index.ts";
 import {
 	addFloating,
 	advance,

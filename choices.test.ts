@@ -10,20 +10,23 @@ import {
 	ChoicePendingError,
 	ChoiceReplayMismatchError,
 	type ChoiceRequest,
+	InvalidChoiceAnswerError,
 	newGame,
 	type ObjectId,
 	perform,
+	type SyncAgent,
+	spawnCard,
 	spawnPermanent,
 } from "./index.ts";
 
-function agents(first = new ScriptedAgent()): [Agent, Agent] {
+function agents(first = new ScriptedAgent()): [SyncAgent, SyncAgent] {
 	return [first, new ScriptedAgent()];
 }
 
 describe("choice transcripts", () => {
 	test("agents receive one unified serializable request", () => {
 		const seen: { request?: ChoiceRequest } = {};
-		const agent: Agent = {
+		const agent: SyncAgent = {
 			choose(_state, request) {
 				seen.request = request;
 				const option = request.options[0];
@@ -61,19 +64,35 @@ describe("choice transcripts", () => {
 		spawnPermanent(state, "hardened-scales", 0, "battlefield");
 		spawnPermanent(state, "doubling-season", 0, "battlefield");
 		const creature = spawnPermanent(state, "grizzly-bears", 0, "battlefield");
-		const choices = ChoiceController.record([agent, agent]);
+		const choices = ChoiceController.suspending([agent, agent]);
 
 		let suspension: ChoicePendingError | undefined;
 		try {
-			perform(
+			choices.chooseReplacement(
 				state,
+				0,
 				{
 					kind: "addCounters",
 					target: { type: "permanent", id: creature.id },
 					counter: "+1/+1",
 					amount: 1,
 				},
-				choices,
+				[
+					{
+						id: "test:one" as never,
+						def: {
+							label: "one",
+							text: "one",
+							layer: "other",
+							applies: () => true,
+							replace: (event) => [event],
+						},
+						source: null,
+						controller: 0,
+						data: {},
+						label: "one",
+					},
+				],
 			);
 		} catch (error) {
 			if (!(error instanceof ChoicePendingError)) throw error;
@@ -94,13 +113,20 @@ describe("choice transcripts", () => {
 
 	test("advanceWithReplay completes synchronous agents in one attempt", async () => {
 		const checkpoint = newGame();
+		spawnPermanent(checkpoint, "ajanis-mantra", 0, "battlefield");
+		for (let i = 0; i < 4; i++) advance(checkpoint, agents());
 		const snapshot = structuredClone(checkpoint);
 
 		const result = await advanceWithReplay(checkpoint, agents());
 
 		expect(result.attempts).toBe(1);
-		expect(result.state.turnScheduler.command.kind).toBe("advancePhase");
-		expect(result.transcript.choices).toHaveLength(0);
+		expect(result.transcript.choices.length).toBeGreaterThan(0);
+		expect(
+			result.transcript.choices.some(
+				(choice) => choice.request.kind === "optional",
+			),
+		).toBe(true);
+		expect(result.state.players[0].life).toBe(21);
 		expect(checkpoint).toEqual(snapshot);
 	});
 
@@ -172,6 +198,92 @@ describe("choice transcripts", () => {
 			advanceWithReplay(checkpoint, [rejecting, rejecting]),
 		).rejects.toBe(failure);
 		expect(checkpoint).toEqual(snapshot);
+	});
+
+	test("replays multiple pending cleanup choices", async () => {
+		const checkpoint = newGame();
+		for (let i = 0; i < 10; i++) {
+			spawnCard(checkpoint, "forest", 0, "hand");
+			spawnCard(checkpoint, "forest", 0, "library");
+			spawnCard(checkpoint, "forest", 1, "library");
+		}
+		while (
+			checkpoint.turnScheduler.command.kind !== "advanceStep" ||
+			checkpoint.turnScheduler.remainingSteps[0]?.kind !== "cleanup"
+		) {
+			advance(checkpoint, agents());
+		}
+		const snapshot = structuredClone(checkpoint);
+		let calls = 0;
+		const asyncLast: Agent = {
+			choose(_state, request) {
+				const option = request.options.at(-1);
+				if (!option) throw new Error("expected an option");
+				if (request.kind === "ownHand") calls++;
+				return request.kind === "ownHand"
+					? Promise.resolve({ optionId: option.id })
+					: { optionId: request.options[0]?.id ?? "" };
+			},
+		};
+
+		const result = await advanceWithReplay(checkpoint, [asyncLast, asyncLast]);
+
+		expect(result.attempts).toBe(5);
+		expect(calls).toBe(4);
+		expect(
+			result.transcript.choices.filter(
+				(choice) => choice.request.kind === "ownHand",
+			),
+		).toHaveLength(4);
+		expect(result.state.players[0].hand).toHaveLength(7);
+		expect(result.state.players[0].graveyard).toHaveLength(4);
+		expect(checkpoint).toEqual(snapshot);
+	});
+
+	test("rejects an invalid fulfilled answer without mutating the checkpoint", async () => {
+		const checkpoint = newGame();
+		spawnPermanent(checkpoint, "ajanis-mantra", 0, "battlefield");
+		for (let i = 0; i < 4; i++) advance(checkpoint, agents());
+		const snapshot = structuredClone(checkpoint);
+		const invalid: Agent = {
+			choose: () => Promise.resolve({ optionId: "not-an-option" }),
+		};
+
+		await expect(
+			advanceWithReplay(checkpoint, [invalid, invalid]),
+		).rejects.toBeInstanceOf(InvalidChoiceAnswerError);
+		expect(checkpoint).toEqual(snapshot);
+	});
+
+	test("rejects answers that do not match the pending request", async () => {
+		const agent: Agent = {
+			choose: () => Promise.resolve({ optionId: "yes" }),
+		};
+		const choices = ChoiceController.suspending([agent, agent]);
+		const state = newGame();
+		let pending: ChoicePendingError | undefined;
+		try {
+			choices.chooseOptional(state, {
+				id: 1 as ObjectId,
+				kind: "ability",
+				source: 1 as ObjectId,
+				sourceCardId: "ajanis-mantra",
+				controller: 0,
+				triggerId: "upkeep-life",
+				text: "gain 1 life",
+				optional: true,
+				effects: [{ kind: "gainLife", player: "controller", amount: 1 }],
+			});
+		} catch (error) {
+			if (!(error instanceof ChoicePendingError)) throw error;
+			pending = error;
+		}
+		if (!pending) throw new Error("expected pending choice");
+		const forged = { ...pending.request, id: `forged:${pending.request.id}` };
+
+		expect(() => choices.recordAnswer(forged, { optionId: "yes" })).toThrow(
+			ChoiceReplayMismatchError,
+		);
 	});
 
 	test("records synchronous choices and replays without agents", () => {

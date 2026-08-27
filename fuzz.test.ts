@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { FuzzAgent } from "./test/fuzz-agent.ts";
 import "./cards.ts";
 import {
-	type Agent,
 	advance,
 	ChoiceController,
 	type GameState,
 	gameOver,
 	newGame,
+	type SyncAgent,
 	spawnCard,
 	spawnPermanent,
 } from "./index.ts";
@@ -92,7 +92,7 @@ function runAdvances(
 	return advances;
 }
 
-function agents(seed: number): [Agent, Agent] {
+function agents(seed: number): [SyncAgent, SyncAgent] {
 	return [new FuzzAgent(seed * 2 + 1), new FuzzAgent(seed * 2 + 2)];
 }
 
