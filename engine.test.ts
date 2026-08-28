@@ -154,17 +154,17 @@ describe("abilities encountered during normal progression", () => {
 });
 
 describe("draw steps and game endings", () => {
-	function setupDrawStep(cardId?: string): {
+	function setupDrawStep(): {
 		state: GameState;
 		agents: Agents;
 	} {
 		const state = newGame();
-		if (cardId) spawnPermanent(state, cardId, ALICE, "battlefield");
 		return { state, agents: passingAgents() };
 	}
 
 	test("Necropotence skips only its controller's normal draw", () => {
-		const { state, agents } = setupDrawStep("necropotence");
+		const { state, agents } = setupDrawStep();
+		spawnPermanent(state, "necropotence", ALICE, "battlefield");
 		for (let i = 0; i < 2; i++) {
 			spawnCard(state, "forest", ALICE, "library");
 			spawnCard(state, "forest", BOB, "library");
@@ -186,20 +186,27 @@ describe("draw steps and game endings", () => {
 
 		expect(state.players[ALICE].lost).toBe(true);
 		expect(winner(state)).toBe(BOB);
+		expect(state.turn).toBe(0);
+		expect(state.step).toBe("draw");
 	});
 
 	test("Laboratory Maniac wins when its controller would draw from an empty library", () => {
-		const { state, agents } = setupDrawStep("laboratory-maniac");
+		const { state, agents } = setupDrawStep();
+		spawnPermanent(state, "laboratory-maniac", ALICE, "battlefield");
 
 		advanceUntil(state, agents, gameOver);
 
 		expect(state.players[ALICE].won).toBe(true);
 		expect(state.players[ALICE].lost).toBe(false);
 		expect(winner(state)).toBe(ALICE);
+
+		expect(state.turn).toBe(0);
+		expect(state.step).toBe("draw");
 	});
 
 	test("Platinum Angel lets the game continue after an empty-library draw", () => {
-		const { state, agents } = setupDrawStep("platinum-angel");
+		const { state, agents } = setupDrawStep();
+		spawnPermanent(state, "platinum-angel", ALICE, "battlefield");
 
 		advanceUntil(state, agents, (next) => next.step === "main");
 
@@ -207,5 +214,9 @@ describe("draw steps and game endings", () => {
 		expect(state.players[ALICE].won).toBe(false);
 		expect(gameOver(state)).toBe(false);
 		expect(winner(state)).toBe(null);
+
+		advanceUntil(state, agents, gameOver);
+		expect(state.turn).toBe(1);
+		expect(state.step).toBe("draw");
 	});
 });

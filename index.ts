@@ -121,13 +121,9 @@ type CardType =
 /** Compatibility mirror for code that has not yet moved from state.step to the scheduler. */
 type Step = StepKind | "main";
 
-export type CounterNames =
-	| "+1/+1"
-	| "-1/-1"
-	| "__deathtouched"
-	| "charge"
-	| "poison";
-export type CounterBag = Partial<Record<CounterNames, number>>;
+type PseudoCounters = "__deathtouched";
+export type CounterNames = "+1/+1" | "-1/-1" | "charge" | "poison";
+export type CounterBag = Partial<Record<CounterNames | PseudoCounters, number>>;
 
 type EntityRef =
 	| { type: "player"; player: PlayerId }
@@ -2603,33 +2599,6 @@ function makeSteps(state: GameState, phase: PhaseOccurrence): StepOccurrence[] {
 	}));
 }
 
-function turnBoundaryHappened(
-	result: PerformResult,
-	turn: TurnOccurrence,
-): boolean {
-	return result.executed.some(
-		(ev) => ev.kind === "beginTurn" && ev.turnId === turn.id,
-	);
-}
-
-function phaseBoundaryHappened(
-	result: PerformResult,
-	phase: PhaseOccurrence,
-): boolean {
-	return result.executed.some(
-		(ev) => ev.kind === "beginPhase" && ev.phaseId === phase.id,
-	);
-}
-
-function stepBoundaryHappened(
-	result: PerformResult,
-	step: StepOccurrence,
-): boolean {
-	return result.executed.some(
-		(ev) => ev.kind === "beginStep" && ev.stepId === step.id,
-	);
-}
-
 /** CR 703 actions, dispatched only after the corresponding step began. */
 function performTurnBasedActions(
 	state: GameState,
@@ -2773,7 +2742,11 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 
 			// Selection consumes the occurrence (and advances ordinary turn order),
 			// but a skipped turn never becomes the current turn.
-			if (!turnBoundaryHappened(result, turn)) {
+			if (
+				!result.executed.some(
+					(ev) => ev.kind === "beginTurn" && ev.turnId === turn.id,
+				)
+			) {
 				command = { kind: "advanceTurn" };
 				break;
 			}
@@ -2820,7 +2793,11 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 
 			// The occurrence was consumed even if its boundary was replaced with
 			// nothing. Structural progress itself is never replaceable.
-			if (!phaseBoundaryHappened(result, phase)) {
+			if (
+				!result.executed.some(
+					(ev) => ev.kind === "beginPhase" && ev.phaseId === phase.id,
+				)
+			) {
 				command = { kind: "advancePhase" };
 				break;
 			}
@@ -2861,7 +2838,11 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				newScope(),
 				0,
 			);
-			if (!stepBoundaryHappened(result, step)) {
+			if (
+				!result.executed.some(
+					(ev) => ev.kind === "beginStep" && ev.stepId === step.id,
+				)
+			) {
 				command = { kind: "advanceStep" };
 				break;
 			}
