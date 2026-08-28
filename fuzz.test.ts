@@ -23,7 +23,9 @@ const PERMANENTS = [
 	"ajanis-mantra",
 	"chains-of-mephistopheles",
 	"doubling-season",
+	"eager-cadet",
 	"furnace-of-rath",
+	"grizzly-bears",
 	"hardened-scales",
 	"leyline-of-the-void",
 	"necropotence",
@@ -123,7 +125,13 @@ describe("choice transcript fuzz", () => {
 		}
 
 		expect(choiceKinds).toEqual(
-			new Set(["replacement", "ownHand", "optional", "priorityAction"]),
+			new Set([
+				"replacement",
+				"ownHand",
+				"optional",
+				"priorityAction",
+				"declareAttackers",
+			]),
 		);
 	});
 });

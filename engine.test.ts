@@ -117,6 +117,110 @@ describe("playing a normal turn", () => {
 	});
 });
 
+describe("declaring attackers during normal progression", () => {
+	function setupAttackTurn(cardId: string): {
+		state: GameState;
+		attacker: ReturnType<typeof spawnPermanent>;
+	} {
+		const state = newGame();
+		const attacker = spawnPermanent(state, cardId, ALICE, "battlefield");
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", BOB, "library");
+		return { state, attacker };
+	}
+
+	test("a creature can attack on the same turn it enters (all creatures are treated as having haste)", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const agents: Agents = [
+			new ScriptedAgent([], [], [], [[attacker.id]]),
+			new ScriptedAgent(),
+		];
+
+		// The attacker choice is requested and committed inside the single advance()
+		// call that begins the declare-attackers step, so by the time state.step
+		// reflects it, the declaration has already happened.
+		advanceUntil(state, agents, (next) => next.step === "declare attackers");
+		expect(
+			permanent(state, attacker.id).attacking,
+			"declared as an attacker",
+		).toBe(true);
+		expect(permanent(state, attacker.id).tapped, "tapped by attacking").toBe(
+			true,
+		);
+
+		playOneTurn(state, agents);
+		expect(gameOver(state)).toBe(false);
+	});
+
+	test("attacking clears at end combat but tapped persists until the next untap", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const agents: Agents = [
+			new ScriptedAgent([], [], [], [[attacker.id]]),
+			new ScriptedAgent(),
+		];
+
+		advanceUntil(state, agents, (next) => next.step === "end combat");
+		expect(
+			permanent(state, attacker.id).attacking,
+			"end combat clears attacking",
+		).toBe(false);
+		expect(
+			permanent(state, attacker.id).tapped,
+			"tapped is untouched by end combat",
+		).toBe(true);
+	});
+
+	test("a creature not selected to attack stays untapped and unattacking", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const agents: Agents = [
+			new ScriptedAgent([], [], [], [[]]),
+			new ScriptedAgent(),
+		];
+
+		playOneTurn(state, agents);
+
+		expect(permanent(state, attacker.id).attacking).toBe(false);
+		expect(permanent(state, attacker.id).tapped).toBe(false);
+	});
+
+	test("the attacker-selection request happens only during the declare-attackers step", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const agents: Agents = [
+			new ScriptedAgent([], [], [], [[attacker.id]]),
+			new ScriptedAgent(),
+		];
+
+		playOneTurn(state, agents);
+
+		const declarations = state.log.filter((line) =>
+			line.startsWith("> declareAttackers("),
+		);
+		expect(declarations).toHaveLength(1);
+		expect(declarations[0]).toContain("Grizzly Bears");
+	});
+
+	test("a parsed Herald of Faith attacks, taps, and its trigger gains exactly 2 life via priority", () => {
+		const { state, attacker: herald } = setupAttackTurn("herald-of-faith");
+		const agents: Agents = [
+			new ScriptedAgent([], [], [], [[herald.id]]),
+			new ScriptedAgent(),
+		];
+
+		playOneTurn(state, agents);
+
+		expect(state.players[ALICE].life, "gained exactly 2 life").toBe(22);
+		expect(permanent(state, herald.id).tapped, "attacked, so tapped").toBe(
+			true,
+		);
+		expect(
+			permanent(state, herald.id).attacking,
+			"attacking cleared by end combat",
+		).toBe(false);
+		expect(state.pendingTriggers).toHaveLength(0);
+		expect(state.stack).toHaveLength(0);
+	});
+});
+
 describe("abilities encountered during normal progression", () => {
 	function setupMantraTurn(acceptLifeGain: boolean): {
 		state: GameState;

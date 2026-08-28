@@ -11,6 +11,7 @@ import {
 	addFloating,
 	checkStateBasedActions,
 	gameOver,
+	IllegalAttackDeclarationError,
 	newGame,
 	perform,
 	permanent,
@@ -654,5 +655,199 @@ describe("triggered abilities", () => {
 		);
 		settlePriority(state, agents);
 		expect(state.players[P1].life).toBe(23);
+	});
+});
+
+describe("declaring attackers", () => {
+	function declareAttackersSetup(): {
+		state: GameState;
+		agents: [Agent, Agent];
+	} {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		// The direct-event boundary this validation actually checks: the current
+		// step and the active player (default P1), mirroring how other rules tests
+		// set state.step directly (e.g. the Chains of Mephistopheles tests above).
+		state.step = "declare attackers";
+		return { state, agents };
+	}
+
+	test("an empty declaration is legal and changes nothing", () => {
+		const { state, agents } = declareAttackersSetup();
+		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+
+		const result = perform(
+			state,
+			{ kind: "declare attackers", player: P1, attackers: [] },
+			agents,
+		);
+
+		expect(result.executed).toHaveLength(1);
+		expect(permanent(state, bears.id).attacking).toBe(false);
+		expect(permanent(state, bears.id).tapped).toBe(false);
+	});
+
+	test("a partial subset of eligible creatures taps and marks only those selected", () => {
+		const { state, agents } = declareAttackersSetup();
+		const attacker = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const stayHome = spawnPermanent(state, "eager-cadet", P1, "battlefield");
+
+		perform(
+			state,
+			{ kind: "declare attackers", player: P1, attackers: [attacker.id] },
+			agents,
+		);
+
+		expect(permanent(state, attacker.id).attacking, "declared: attacking").toBe(
+			true,
+		);
+		expect(permanent(state, attacker.id).tapped, "declared: tapped").toBe(true);
+		expect(
+			permanent(state, stayHome.id).attacking,
+			"not declared: untouched",
+		).toBe(false);
+		expect(
+			permanent(state, stayHome.id).tapped,
+			"not declared: untouched",
+		).toBe(false);
+	});
+
+	test("rejects a tapped creature", () => {
+		const { state, agents } = declareAttackersSetup();
+		const tapped = spawnPermanent(state, "grizzly-bears", P1, "battlefield", {
+			tapped: true,
+		});
+
+		expect(() =>
+			perform(
+				state,
+				{ kind: "declare attackers", player: P1, attackers: [tapped.id] },
+				agents,
+			),
+		).toThrow(IllegalAttackDeclarationError);
+		expect(permanent(state, tapped.id).attacking).toBe(false);
+	});
+
+	test("rejects a creature controlled by the opponent", () => {
+		const { state, agents } = declareAttackersSetup();
+		const opposing = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+
+		expect(() =>
+			perform(
+				state,
+				{ kind: "declare attackers", player: P1, attackers: [opposing.id] },
+				agents,
+			),
+		).toThrow(IllegalAttackDeclarationError);
+		expect(permanent(state, opposing.id).attacking).toBe(false);
+	});
+
+	test("rejects a noncreature permanent", () => {
+		const { state, agents } = declareAttackersSetup();
+		const mantra = spawnPermanent(state, "ajanis-mantra", P1, "battlefield");
+
+		expect(() =>
+			perform(
+				state,
+				{ kind: "declare attackers", player: P1, attackers: [mantra.id] },
+				agents,
+			),
+		).toThrow(IllegalAttackDeclarationError);
+	});
+
+	test("rejects duplicate IDs atomically, even with only one eligible creature", () => {
+		const { state, agents } = declareAttackersSetup();
+		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+
+		expect(() =>
+			perform(
+				state,
+				{
+					kind: "declare attackers",
+					player: P1,
+					attackers: [bears.id, bears.id],
+				},
+				agents,
+			),
+		).toThrow(IllegalAttackDeclarationError);
+		expect(permanent(state, bears.id).attacking, "no partial commit").toBe(
+			false,
+		);
+		expect(permanent(state, bears.id).tapped, "no partial commit").toBe(false);
+	});
+
+	test("rejects the whole declaration atomically when a valid ID precedes an ineligible one", () => {
+		const { state, agents } = declareAttackersSetup();
+		const eligible = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const tapped = spawnPermanent(state, "eager-cadet", P1, "battlefield", {
+			tapped: true,
+		});
+
+		expect(() =>
+			perform(
+				state,
+				{
+					kind: "declare attackers",
+					player: P1,
+					attackers: [eligible.id, tapped.id],
+				},
+				agents,
+			),
+		).toThrow(IllegalAttackDeclarationError);
+		expect(
+			permanent(state, eligible.id).attacking,
+			"the eligible creature ahead of the bad ID stayed unaffected",
+		).toBe(false);
+		expect(permanent(state, eligible.id).tapped).toBe(false);
+	});
+
+	test("rejects declaring attackers outside the declare attackers step", () => {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		state.step = "main";
+		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+
+		expect(() =>
+			perform(
+				state,
+				{ kind: "declare attackers", player: P1, attackers: [bears.id] },
+				agents,
+			),
+		).toThrow(IllegalAttackDeclarationError);
+	});
+
+	test("rejects a declaration from a player who isn't the active player", () => {
+		const { state, agents } = declareAttackersSetup();
+		const bears = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		// default activePlayer is P1; P2 tries to declare attackers.
+		expect(() =>
+			perform(
+				state,
+				{ kind: "declare attackers", player: P2, attackers: [bears.id] },
+				agents,
+			),
+		).toThrow(IllegalAttackDeclarationError);
+	});
+
+	test("regeneration still clears attacking (and blocking), not just damage and tapped state", () => {
+		const { state, agents } = declareAttackersSetup();
+		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		perform(
+			state,
+			{ kind: "declare attackers", player: P1, attackers: [bears.id] },
+			agents,
+		);
+		expect(permanent(state, bears.id).attacking).toBe(true);
+
+		perform(state, { kind: "regenerate", object: bears.id }, agents);
+
+		expect(
+			permanent(state, bears.id).attacking,
+			"regeneration clears attacking too",
+		).toBe(false);
+		expect(
+			permanent(state, bears.id).tapped,
+			"regeneration re-taps as part of the cost",
+		).toBe(true);
 	});
 });

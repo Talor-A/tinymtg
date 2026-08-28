@@ -147,6 +147,8 @@ interface EventCommon {
 interface DeclareAttackersEvent extends EventCommon {
 	kind: "declare attackers";
 	player: PlayerId;
+	/** The opponent is implicit: this is deliberately a two-player-only engine. */
+	attackers: ObjectId[];
 }
 
 interface DrawEvent extends EventCommon {
@@ -615,7 +617,8 @@ export interface ReplacementRun {
 
 export type TriggerCondition =
 	| { kind: "beginStep"; step: "upkeep"; player: "controller" }
-	| { kind: "entersBattlefield"; object: "self" };
+	| { kind: "entersBattlefield"; object: "self" }
+	| { kind: "declaredAttacker"; object: "self" };
 
 export type AbilityEffect = {
 	kind: "gainLife";
@@ -863,6 +866,31 @@ export function creaturesControlledBy(
 	return permanentsInPlay(state).filter(
 		(o) => o.controller === p && view(state, o.id).types.includes("creature"),
 	);
+}
+
+/**
+ * The single source of truth for who may be declared as an attacker (CR 508.1a,
+ * deliberately simplified): a creature controlled by the declaring player,
+ * untapped, currently on the battlefield. All creatures are treated as if they
+ * have haste, so control duration and summoning sickness are not checked.
+ * Battlefield order is preserved.
+ */
+export function eligibleAttackers(
+	state: GameState,
+	player: PlayerId,
+): ObjectId[] {
+	return creaturesControlledBy(state, player)
+		.filter((o) => o.kind === "permanent" && !o.tapped)
+		.map((o) => o.id);
+}
+
+/** Thrown when a "declare attackers" event fails validation. Nothing is
+ * mutated: the whole event is rejected atomically. */
+export class IllegalAttackDeclarationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalAttackDeclarationError";
+	}
 }
 
 export function log(state: GameState, line: string): void {
@@ -1682,7 +1710,9 @@ export function describeEvent(state: GameState, ev: GameEvent): string {
 		case "loseGame":
 			return `loseGame(P${ev.player}: ${ev.reason})`;
 		case "declare attackers":
-			return `declareAttackers(P${ev.player})`;
+			return ev.attackers.length === 0
+				? `declareAttackers(P${ev.player}, none)`
+				: `declareAttackers(P${ev.player}, ${ev.attackers.map((id) => name(state, id)).join(", ")})`;
 		case "winGame":
 			return `winGame(P${ev.player}: ${ev.reason})`;
 	}
@@ -1972,6 +2002,21 @@ function detectTriggers(
 			if (source?.zone !== "battlefield") continue;
 			for (const trigger of card(source.cardId).triggers ?? []) {
 				if (trigger.condition.kind === "entersBattlefield") {
+					enqueueTrigger(state, source, trigger);
+				}
+			}
+		}
+		return;
+	}
+
+	if (ev.kind === "declare attackers") {
+		// Only the IDs that were actually declared (and are still around) trigger.
+		// A rejected or empty declaration never reaches this point with attackers.
+		for (const id of ev.attackers) {
+			const source = maybePermanent(state, id);
+			if (source?.zone !== "battlefield") continue;
+			for (const trigger of card(source.cardId).triggers ?? []) {
+				if (trigger.condition.kind === "declaredAttacker") {
 					enqueueTrigger(state, source, trigger);
 				}
 			}
@@ -2343,8 +2388,43 @@ function executeIn(
 			break;
 		}
 
-		case "declare attackers":
+		case "declare attackers": {
+			if (state.step !== "declare attackers") {
+				throw new IllegalAttackDeclarationError(
+					`cannot declare attackers outside the declare attackers step (current step: "${state.step}")`,
+				);
+			}
+			if (ev.player !== state.activePlayer) {
+				throw new IllegalAttackDeclarationError(
+					`P${ev.player} declared attackers, but P${state.activePlayer} is the active player`,
+				);
+			}
+			if (new Set(ev.attackers).size !== ev.attackers.length) {
+				throw new IllegalAttackDeclarationError(
+					"declared attackers must be unique",
+				);
+			}
+			const eligible = new Set(eligibleAttackers(state, ev.player));
+			for (const id of ev.attackers) {
+				if (!eligible.has(id)) {
+					throw new IllegalAttackDeclarationError(
+						`${name(state, id)} is not an eligible attacker for P${ev.player}`,
+					);
+				}
+			}
+			// Validation above is exhaustive before any mutation, so this commits
+			// atomically: either every selected attacker taps and attacks, or none do.
+			for (const id of ev.attackers) {
+				const o = permanent(state, id);
+				o.attacking = true;
+				o.tapped = true;
+			}
+			log(
+				state,
+				`${"  ".repeat(depth)}P${ev.player} declares ${ev.attackers.length} attacker(s)`,
+			);
 			break;
+		}
 
 		case "loseGame": {
 			const p = state.players[ev.player];
@@ -2648,23 +2728,41 @@ function performTurnBasedActions(
 			);
 
 			break;
-		case "declare attackers":
+		case "declare attackers": {
+			// Ask once for a replayable subset, then commit it as one event. Battlefield
+			// order is preserved so the offered options are stable and deterministic.
+			const eligible = eligibleAttackers(state, state.activePlayer);
+			const attackers = choices.chooseAttackers(
+				state,
+				state.activePlayer,
+				eligible,
+			);
 			performIn(
 				state,
 				{
 					kind: "declare attackers",
 					player: state.activePlayer,
+					attackers,
 				},
 				choices,
 				newScope(),
 				0,
 			);
 			break;
+		}
+		case "end combat":
+			// CR 506.4: attacking/blocking status doesn't persist past combat. Direct
+			// mutation, not a replaceable event, matching the cleanup damage wipe below.
+			for (const id of state.battlefield) {
+				const o = permanent(state, id);
+				o.attacking = false;
+				o.blocking = false;
+			}
+			break;
 		case "upkeep":
 		case "begin combat":
 		case "declare blockers":
 		case "combat damage":
-		case "end combat":
 		case "end":
 			// Their turn-based actions are not implemented yet.
 			break;

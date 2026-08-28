@@ -16,6 +16,7 @@ import {
 	view,
 } from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
+import { loadCard } from "./parser.ts";
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family
@@ -686,6 +687,10 @@ export const ZOMBIE_TOKEN = registerCard({
 	power: 2,
 	toughness: 2,
 });
+
+// Parsed straight from cards/cardsfolder/h/herald_of_faith.txt, validating
+// that the parser handles the real Forge "Attacks" self-trigger shape.
+export const HERALD_OF_FAITH = registerCard(loadCard("herald_of_faith"));
 
 export const KALITAS = registerCard({
 	id: "kalitas",

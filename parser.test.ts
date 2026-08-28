@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseCard } from "./parser.ts";
+import { loadCard, parseCard } from "./parser.ts";
 
 function* walkCards(dir: string): Generator<string> {
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -160,6 +160,67 @@ Oracle:When Arashin Cleric enters, you gain 3 life.
 		]);
 	});
 
+	test("parses the real Herald of Faith fixture, including its attack trigger", () => {
+		// Validates the parser against the real Forge fixture, not a hand-written
+		// stand-in. Do not edit cards/cardsfolder/h/herald_of_faith.txt for this.
+		const herald = loadCard("herald_of_faith");
+		expect(herald.id).toBe("herald-of-faith");
+		expect(herald.name).toBe("Herald of Faith");
+		expect(herald.types).toEqual(["creature"]);
+		expect(herald.subtypes).toEqual(["Angel"]);
+		expect(herald.colors).toEqual(["w"]);
+		expect(herald.mv).toBe(5);
+		expect(herald.power).toBe(4);
+		expect(herald.toughness).toBe(3);
+		expect(herald.keywords).toEqual(["flying"]);
+		expect(herald.triggers).toEqual([
+			{
+				id: "TrigGainLife",
+				text: "Whenever CARDNAME attacks, you gain 2 life.",
+				condition: { kind: "declaredAttacker", object: "self" },
+				effects: [{ kind: "gainLife", player: "controller", amount: 2 }],
+			},
+		]);
+	});
+
+	test("rejects an Attacks trigger that isn't Card.Self or has unknown fields", () => {
+		const herald = `
+Name:Test Herald
+ManaCost:3 W W
+Types:Creature Angel
+PT:4/3
+K:Flying
+T:Mode$ Attacks | ValidCard$ Card.Self | Execute$ TrigGainLife | TriggerDescription$ Whenever CARDNAME attacks, you gain 2 life.
+SVar:TrigGainLife:DB$ GainLife | Defined$ You | LifeAmount$ 2
+Oracle:Flying\\nWhenever Test Herald attacks, you gain 2 life.
+`;
+		expect(parseCard(herald)?.triggers).toEqual([
+			{
+				id: "TrigGainLife",
+				text: "Whenever CARDNAME attacks, you gain 2 life.",
+				condition: { kind: "declaredAttacker", object: "self" },
+				effects: [{ kind: "gainLife", player: "controller", amount: 2 }],
+			},
+		]);
+
+		expect(
+			parseCard(
+				herald.replace("ValidCard$ Card.Self", "ValidCard$ Creature.Other"),
+			),
+			"non-self ValidCard is out of scope (no attacker/defender tracking)",
+		).toBeNull();
+
+		expect(
+			parseCard(
+				herald.replace(
+					"TriggerDescription$",
+					"TriggerZones$ Battlefield | TriggerDescription$",
+				),
+			),
+			"unknown fields on an Attacks trigger are rejected, not ignored",
+		).toBeNull();
+	});
+
 	test("rejects unsupported rules instead of partially parsing the card", () => {
 		const unsupported = [
 			"K:Vigilance",
@@ -190,7 +251,11 @@ Oracle:When Arashin Cleric enters, you gain 3 life.
 
 test("checks every card and accepts only the engine-supported subset", () => {
 	const accepted: string[] = [];
-	const EXPECTED_LEN = 574;
+	// 574 (baseline) + Herald of Faith (the parsed Attacks/gainLife fixture this
+	// slice targets) + Moonrise Cleric (an unrelated card the same narrow shape
+	// happens to fully cover: Creature, Flying, one self-attack gain-life
+	// trigger with no other rules text).
+	const EXPECTED_LEN = 576;
 
 	for (const path of walkCards("./cards")) {
 		const text = readFileSync(path, "utf-8");

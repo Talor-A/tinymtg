@@ -306,6 +306,26 @@ function parseTrigger(
 		};
 	}
 
+	if (f.get("Mode") === "Attacks") {
+		const allowed = new Set([
+			"Mode",
+			"ValidCard",
+			"Execute",
+			"TriggerDescription",
+		]);
+		if ([...f.keys()].some((key) => !allowed.has(key))) return null;
+		if (f.get("ValidCard") !== "Card.Self") return null;
+		return {
+			reference,
+			trigger: {
+				id: reference,
+				text,
+				condition: { kind: "declaredAttacker", object: "self" },
+				effects: [effect],
+			},
+		};
+	}
+
 	return null;
 }
 
@@ -387,6 +407,13 @@ export function parseCard(text: string): CardDef | null {
 	}
 
 	const usedSvars = new Set<string>();
+	// Forge writes this exact SVar alongside "Attacks" triggers as UI metadata
+	// (whether the card has an attack-trigger effect for AI/UI purposes). It
+	// carries no rules meaning and is never itself referenced, so it is the one
+	// narrowly known SVar allowed to go unused rather than rejecting the card.
+	for (const [key, value] of svars) {
+		if (key === "HasAttackEffect" && value === "TRUE") usedSvars.add(key);
+	}
 	for (const line of lines.filter((entry) => entry.key === "R")) {
 		const reference = tappedReplacementReferences(line.value);
 		if (!reference || usedSvars.has(reference)) return null;
@@ -429,7 +456,11 @@ export function parseCard(text: string): CardDef | null {
 	return card;
 }
 
-function fromFs(
+/**
+ * Loads and parses one card straight from the Forge cardsfolder fixture, so
+ * callers never hand-transcribe card data that the parser can produce itself.
+ */
+export function loadCard(
 	/** like darksteel_myr */
 	name: string,
 ): CardDef {

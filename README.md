@@ -45,9 +45,30 @@ Normal progression through `advance()` currently supports:
 - turn, phase, and step scheduling;
 - untapping, the normal draw, and cleanup discarding;
 - pass-only priority;
-- the supported gain-life triggers; and
+- the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith); and
 - replacement, prohibition, and state-based effects encountered by those events.
 
-Deck construction, opening hands, mulligans, land play, mana, casting, activated abilities, attacker/blocker selection, combat damage, and spell resolution are not implemented yet.
+### Declaring attackers
+
+The declare-attackers step asks the active player once for a replayable subset
+of eligible creatures and commits it atomically:
+
+- this is deliberately a two-player-only engine, so the defending player is
+  always the other player — there is no `AttackTarget` or defending-player
+  state;
+- every creature the active player controls is treated as if it had haste, so
+  any untapped controlled creature is eligible regardless of how long it has
+  been under that control (no summoning-sickness or continuous-control
+  tracking);
+- selected attackers become tapped and `attacking` until end of combat, when
+  `attacking` (and `blocking`) is cleared on every permanent;
+- an illegal declaration (wrong step, wrong player, duplicate IDs, or an
+  ineligible ID) throws `IllegalAttackDeclarationError` and changes nothing.
+
+Attack restrictions, requirements, and costs, vigilance and other keyword
+interactions, blockers, combat damage, and non-player defenders (e.g.
+planeswalkers, battles) are not implemented.
+
+Deck construction, opening hands, mulligans, land play, mana, casting, activated abilities, blocker selection, combat damage, and spell resolution are not implemented yet.
 
 `perform()` injects a rules event directly, and `settlePriority()` resolves the current priority window directly. They are useful for focused rules tests and integrations, but do not represent player actions supported by the normal gameplay loop.
