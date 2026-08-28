@@ -2775,10 +2775,41 @@ function performTurnBasedActions(
 				o.blocking = false;
 			}
 			break;
+		case "combat damage": {
+			// CR 510.2: all combat damage is assigned, then dealt, simultaneously.
+			// Blockers are unsupported, so every still-attacking permanent is
+			// unblocked and hits the opposing player directly. Snapshot every
+			// event's data up front (in battlefield order) before performing any
+			// of them, so that one creature's damage — e.g. Furnace of Rath
+			// doubling it into a lethal blow — can't change another's amount.
+			const defender = (1 - state.activePlayer) as PlayerId;
+			const events: DamageEvent[] = [];
+			for (const id of state.battlefield) {
+				const o = maybePermanent(state, id);
+				if (!o?.attacking) continue;
+				const v = view(state, id);
+				if (v.power <= 0) continue;
+				events.push({
+					kind: "damage",
+					source: id,
+					sourceController: v.controller,
+					sourceColors: v.colors,
+					target: { type: "player", player: defender },
+					amount: v.power,
+					combat: true,
+					// The engine has no deathtouch keyword yet; false is correct
+					// until one is added.
+					deathtouch: false,
+					lifelink: v.keywords.includes("lifelink"),
+					unpreventable: false,
+				});
+			}
+			for (const ev of events) performIn(state, ev, choices, newScope(), 0);
+			break;
+		}
 		case "upkeep":
 		case "begin combat":
 		case "declare blockers":
-		case "combat damage":
 		case "end":
 			// Their turn-based actions are not implemented yet.
 			break;

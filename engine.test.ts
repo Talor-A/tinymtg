@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts";
-import type { GameState, PlayerId, SyncAgent } from "./index.ts";
+import type { GameState, ObjectId, PlayerId, SyncAgent } from "./index.ts";
 import {
 	advance,
 	gameOver,
 	newGame,
+	perform,
 	permanent,
 	registerCard,
 	spawnCard,
@@ -64,6 +65,23 @@ function passingAgents(): Agents {
 	return [new ScriptedAgent(), new ScriptedAgent()];
 }
 
+/** One attacker-eligible creature plus enough library to survive a full turn. */
+function setupAttackTurn(cardId: string): {
+	state: GameState;
+	attacker: ReturnType<typeof spawnPermanent>;
+} {
+	const state = newGame();
+	const attacker = spawnPermanent(state, cardId, ALICE, "battlefield");
+	spawnCard(state, "forest", ALICE, "library");
+	spawnCard(state, "forest", BOB, "library");
+	return { state, attacker };
+}
+
+/** Scripts ALICE to declare exactly `ids` as attackers; BOB always passes. */
+function attackWith(ids: ObjectId[]): Agents {
+	return [new ScriptedAgent([], [], [], [ids]), new ScriptedAgent()];
+}
+
 describe("playing a normal turn", () => {
 	function addCards(
 		state: GameState,
@@ -113,8 +131,9 @@ describe("playing a normal turn", () => {
 
 		playOneTurn(state, agents);
 
-		// Attacker selection and combat damage are not implemented yet. This checks
-		// that the scheduler dispatches the one turn-based action it does model.
+		// This setup declares no attacker, so combat damage never fires. This
+		// checks that the scheduler dispatches the declare-attackers action
+		// exactly once regardless.
 		const declarations = state.log.filter((line) =>
 			line.startsWith("> declareAttackers("),
 		);
@@ -138,17 +157,6 @@ describe("playing a normal turn", () => {
 });
 
 describe("declaring attackers during normal progression", () => {
-	function setupAttackTurn(cardId: string): {
-		state: GameState;
-		attacker: ReturnType<typeof spawnPermanent>;
-	} {
-		const state = newGame();
-		const attacker = spawnPermanent(state, cardId, ALICE, "battlefield");
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
-		return { state, attacker };
-	}
-
 	test("a creature can attack on the same turn it enters (all creatures are treated as having haste)", () => {
 		// Spawning the creature before combat begins (rather than before the turn
 		// starts, as setupAttackTurn does) is what actually proves the title: the
@@ -244,6 +252,10 @@ describe("declaring attackers during normal progression", () => {
 		playOneTurn(state, agents);
 
 		expect(state.players[ALICE].life, "gained exactly 2 life").toBe(22);
+		expect(
+			state.players[BOB].life,
+			"took 4 combat damage from the 4/3 Herald",
+		).toBe(16);
 		expect(permanent(state, herald.id).tapped, "attacked, so tapped").toBe(
 			true,
 		);
@@ -253,6 +265,151 @@ describe("declaring attackers during normal progression", () => {
 		).toBe(false);
 		expect(state.pendingTriggers).toHaveLength(0);
 		expect(state.stack).toHaveLength(0);
+	});
+});
+
+describe("dealing combat damage", () => {
+	test("a Grizzly Bears deals its power to the opponent at combat damage, not at declaration", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const agents = attackWith([attacker.id]);
+
+		advanceUntil(state, agents, (next) => next.step === "declare attackers");
+		expect(state.players[BOB].life, "no damage dealt merely by declaring").toBe(
+			20,
+		);
+
+		advanceUntil(state, agents, (next) => next.step === "combat damage");
+		expect(
+			state.players[BOB].life,
+			"Grizzly Bears' 2 power hit the opponent",
+		).toBe(18);
+	});
+
+	test("multiple selected attackers deal the sum of their current powers while an unselected creature deals none", () => {
+		const state = newGame();
+		const bears = spawnPermanent(state, "grizzly-bears", ALICE, "battlefield");
+		const attackingCadet = spawnPermanent(
+			state,
+			"eager-cadet",
+			ALICE,
+			"battlefield",
+		);
+		const benchedCadet = spawnPermanent(
+			state,
+			"eager-cadet",
+			ALICE,
+			"battlefield",
+		);
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", BOB, "library");
+		const agents = attackWith([bears.id, attackingCadet.id]);
+
+		playOneTurn(state, agents);
+
+		// 2 (Bears) + 1 (attacking Cadet) = 3; the benched Cadet contributes 0.
+		expect(state.players[BOB].life).toBe(17);
+		expect(permanent(state, benchedCadet.id).attacking).toBe(false);
+	});
+
+	test("current modified power is used: a +1/+1 counter makes Bears deal 3", () => {
+		const state = newGame();
+		const bears = spawnPermanent(state, "grizzly-bears", ALICE, "battlefield", {
+			counters: { "+1/+1": 1 },
+		});
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", BOB, "library");
+		const agents = attackWith([bears.id]);
+
+		playOneTurn(state, agents);
+
+		expect(state.players[BOB].life, "3/3 Bears dealt 3").toBe(17);
+	});
+
+	test("Outlaw Medic's lifelink makes its controller gain life while the opponent loses it", () => {
+		const { state, attacker } = setupAttackTurn("outlaw-medic");
+		const agents = attackWith([attacker.id]);
+
+		playOneTurn(state, agents);
+
+		expect(state.players[ALICE].life, "gained 1 life via lifelink").toBe(21);
+		expect(state.players[BOB].life, "lost 1 life to the same hit").toBe(19);
+	});
+
+	test("Furnace of Rath doubles combat damage through the normal replacement pipeline", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		spawnPermanent(state, "furnace-of-rath", ALICE, "battlefield");
+		const agents = attackWith([attacker.id]);
+
+		playOneTurn(state, agents);
+
+		expect(
+			state.players[BOB].life,
+			"2 power doubled to 4 by Furnace of Rath",
+		).toBe(16);
+	});
+
+	test("destroying an attacker after declaration but before combat damage means it deals none", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const agents = attackWith([attacker.id]);
+
+		advanceUntil(state, agents, (next) => next.step === "declare attackers");
+		expect(permanent(state, attacker.id).attacking).toBe(true);
+		perform(
+			state,
+			{ kind: "destroy", object: attacker.id, noRegen: true },
+			agents,
+		);
+
+		advanceUntil(state, agents, (next) => next.step === "combat damage");
+		expect(state.players[BOB].life, "the destroyed attacker dealt none").toBe(
+			20,
+		);
+	});
+
+	test("regenerating an attacker after declaration but before combat damage means it deals none", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const agents = attackWith([attacker.id]);
+
+		advanceUntil(state, agents, (next) => next.step === "declare attackers");
+		perform(state, { kind: "regenerate", object: attacker.id }, agents);
+		expect(
+			permanent(state, attacker.id).attacking,
+			"regeneration clears attacking",
+		).toBe(false);
+
+		advanceUntil(state, agents, (next) => next.step === "combat damage");
+		expect(state.players[BOB].life, "the regenerated creature dealt none").toBe(
+			20,
+		);
+	});
+
+	test("combat damage can cause the defending player to lose via normal state-based actions", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		state.players[BOB].life = 1;
+		const agents = attackWith([attacker.id]);
+
+		advanceUntil(state, agents, gameOver);
+
+		expect(state.players[BOB].lost, "BOB died to combat damage").toBe(true);
+		expect(winner(state)).toBe(ALICE);
+		expect(state.players[BOB].life).toBe(-1);
+	});
+
+	test("attacking remains true through the damage step and clears only at end combat", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const agents = attackWith([attacker.id]);
+
+		advanceUntil(state, agents, (next) => next.step === "combat damage");
+		expect(
+			permanent(state, attacker.id).attacking,
+			"still attacking during the damage step",
+		).toBe(true);
+
+		advanceUntil(state, agents, (next) => next.step === "end combat");
+		expect(
+			permanent(state, attacker.id).attacking,
+			"end combat clears attacking",
+		).toBe(false);
 	});
 });
 

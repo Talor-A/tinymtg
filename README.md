@@ -45,7 +45,8 @@ Normal progression through `advance()` currently supports:
 - turn, phase, and step scheduling;
 - untapping, the normal draw, and cleanup discarding;
 - pass-only priority;
-- the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith); and
+- the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith);
+- declaring attackers, and unblocked two-player combat damage; and
 - replacement, prohibition, and state-based effects encountered by those events.
 
 ### Declaring attackers
@@ -66,9 +67,31 @@ of eligible creatures and commits it atomically:
   ineligible ID) throws `IllegalAttackDeclarationError` and changes nothing.
 
 Attack restrictions, requirements, and costs, vigilance and other keyword
-interactions, blockers, combat damage, and non-player defenders (e.g.
-planeswalkers, battles) are not implemented.
+interactions, blockers, and non-player defenders (e.g. planeswalkers,
+battles) are not implemented.
 
-Deck construction, opening hands, mulligans, land play, mana, casting, activated abilities, blocker selection, combat damage, and spell resolution are not implemented yet.
+### Combat damage
+
+At the combat damage turn-based action, every permanent still on the
+battlefield with `attacking === true` deals damage equal to its current
+`view()` power to the opposing player — this is a two-player-only engine, so
+the attacker's controller's opponent is always the recipient. Damage is
+snapshotted for all still-attacking permanents in battlefield order before
+any of it is dealt (approximating CR 510.2's simultaneous assignment) and
+then each instance flows through the normal per-source event pipeline, so
+replacement effects (e.g. Furnace of Rath doubling it), prevention,
+redirection, and lifelink all apply exactly as they do for any other damage
+event. A permanent that stops attacking or leaves the battlefield before this
+turn-based action (destroyed, regenerated, etc.) deals no damage; tapped
+status at damage time does not prevent it. Zero or negative power deals no
+damage.
+
+Blockers, damage assignment order and choices, first/double strike, trample,
+infect, deathtouch, attacking a specific target (planeswalkers, battles, or
+any non-player defender), and multiple combat damage steps are not
+implemented — every still-attacking creature is unconditionally treated as
+unblocked and hits the defending player once.
+
+Deck construction, opening hands, mulligans, land play, mana, casting, activated abilities, blocker selection, and spell resolution are not implemented yet.
 
 `perform()` injects a rules event directly, and `settlePriority()` resolves the current priority window directly. They are useful for focused rules tests and integrations, but do not represent player actions supported by the normal gameplay loop.
