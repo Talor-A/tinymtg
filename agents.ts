@@ -1,5 +1,7 @@
 import { readSync } from "node:fs";
+import { blockAssignmentOptionId } from "./choices.ts";
 import type {
+	BlockAssignment,
 	ChoiceAnswer,
 	ChoiceRequest,
 	GameState,
@@ -40,6 +42,7 @@ export class ScriptedAgent implements SyncAgent {
 		public optionalChoices: boolean[] = [],
 		public priorityActions: PriorityAction[] = [],
 		public attackerChoices: ObjectId[][] = [],
+		public blockerChoices: BlockAssignment[][] = [],
 	) {}
 
 	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
@@ -76,6 +79,15 @@ export class ScriptedAgent implements SyncAgent {
 				return { optionIds: attackers.map((id) => String(id)) };
 			}
 
+			case "declareBlockers": {
+				const blockers = this.blockerChoices.shift() ?? [];
+				return {
+					optionIds: blockers.map(({ blocker, attacker }) =>
+						blockAssignmentOptionId(blocker, attacker),
+					),
+				};
+			}
+
 			default:
 				return assertNever(request);
 		}
@@ -86,6 +98,7 @@ export class RandomAgent implements SyncAgent {
 	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
 		switch (request.kind) {
 			case "declareAttackers":
+			case "declareBlockers":
 				return {
 					optionIds: request.options
 						.filter(() => Math.random() < 0.5)
@@ -119,6 +132,8 @@ export class KeyboardAgent implements SyncAgent {
 				break;
 			case "declareAttackers":
 				return this.chooseAttackers(request);
+			case "declareBlockers":
+				return this.chooseBlockers(request);
 			default:
 				return assertNever(request);
 		}
@@ -145,6 +160,44 @@ export class KeyboardAgent implements SyncAgent {
 		while (true) {
 			const input = prompt(
 				"Attackers (comma-separated numbers, blank for none): ",
+			);
+			const trimmed = input.trim();
+			if (trimmed === "") return { optionIds: [] };
+
+			const parts = trimmed.split(",").map((part) => part.trim());
+			if (parts.some((part) => !/^\d+$/.test(part))) {
+				console.log("Invalid input, try again.");
+				continue;
+			}
+			const indices = parts.map((part) => Number.parseInt(part, 10) - 1);
+			if (new Set(indices).size !== indices.length) {
+				console.log("Duplicate selection, try again.");
+				continue;
+			}
+			const options = indices.map((index) => request.options[index]);
+			if (options.some((option) => !option)) {
+				console.log("Invalid input, try again.");
+				continue;
+			}
+			return {
+				optionIds: options.map((option) => {
+					assertDefined(option);
+					return option.id;
+				}),
+			};
+		}
+	}
+
+	private chooseBlockers(
+		request: Extract<ChoiceRequest, { kind: "declareBlockers" }>,
+	): ChoiceAnswer {
+		console.log(`\n[Player ${request.player}: declare blockers]`);
+		for (let i = 0; i < request.options.length; i++) {
+			console.log(`  ${i + 1}. ${request.options[i]?.label}`);
+		}
+		while (true) {
+			const input = prompt(
+				"Blockers (comma-separated numbers, blank for none): ",
 			);
 			const trimmed = input.trim();
 			if (trimmed === "") return { optionIds: [] };

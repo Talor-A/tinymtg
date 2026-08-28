@@ -1,13 +1,21 @@
 import { createHash } from "node:crypto";
 import type {
 	AbilityStackItem,
+	BlockAssignment,
 	BoundReplacement,
 	GameEvent,
 	GameState,
 	ObjectId,
 	PlayerId,
 	PriorityAction,
+	TurnLocation,
 } from "./index.ts";
+import { cardIdOf, turnLocation } from "./index.ts";
+
+function objectLabel(state: GameState, id: ObjectId): string {
+	const object = state.objects.get(id);
+	return object ? (cardIdOf(object) ?? object.kind) : "unknown";
+}
 
 export interface ChoiceOption {
 	id: string;
@@ -42,7 +50,7 @@ export interface PriorityActionChoiceRequest extends ChoiceRequestBase {
 	kind: "priorityAction";
 	context: {
 		activePlayer: PlayerId;
-		step: GameState["step"];
+		location: TurnLocation | null;
 		stack: ObjectId[];
 	};
 }
@@ -60,12 +68,27 @@ export interface DeclareAttackersChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
+/**
+ * The defending player is intentionally omitted: this project supports
+ * exactly two players and all blockers currently block specific attackers.
+ * Each assignment pairs one eligible blocker with one attacking creature.
+ */
+export interface DeclareBlockersChoiceRequest extends ChoiceRequestBase {
+	kind: "declareBlockers";
+	player: PlayerId;
+	context: {
+		attackers: ObjectId[];
+		eligibleBlockers: ObjectId[];
+	};
+}
+
 export type ChoiceRequest =
 	| ReplacementChoiceRequest
 	| OwnHandChoiceRequest
 	| OptionalChoiceRequest
 	| PriorityActionChoiceRequest
-	| DeclareAttackersChoiceRequest;
+	| DeclareAttackersChoiceRequest
+	| DeclareBlockersChoiceRequest;
 
 export type ChoiceAnswer = { optionId: string } | { optionIds: string[] };
 
@@ -137,10 +160,13 @@ type RequestInput =
 	| Omit<
 			DeclareAttackersChoiceRequest,
 			"version" | "id" | "ordinal" | "fingerprint"
+	  >
+	| Omit<
+			DeclareBlockersChoiceRequest,
+			"version" | "id" | "ordinal" | "fingerprint"
 	  >;
 
 function canonicalize(value: unknown, seen = new Set<object>()): string {
-	if (value === null) return "null";
 	if (typeof value === "string" || typeof value === "boolean") {
 		return JSON.stringify(value);
 	}
@@ -152,6 +178,7 @@ function canonicalize(value: unknown, seen = new Set<object>()): string {
 	if (typeof value !== "object") {
 		throw new Error(`choice data cannot contain ${typeof value}`);
 	}
+	if (value === null) return "null";
 	if (seen.has(value)) throw new Error("choice data cannot contain cycles");
 	seen.add(value);
 	try {
@@ -199,7 +226,10 @@ function normalizeAnswer(
 	request: ChoiceRequest,
 	answer: ChoiceAnswer,
 ): ChoiceAnswer {
-	if (request.kind === "declareAttackers") {
+	if (
+		request.kind === "declareAttackers" ||
+		request.kind === "declareBlockers"
+	) {
 		return normalizeMultiAnswer(request, answer);
 	}
 	return normalizeSingleAnswer(request, answer);
@@ -551,14 +581,17 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			context: { hand: [...hand] },
 			options: hand.map((id) => ({
 				id: String(id),
-				label: `${state.objects.get(id)?.cardId ?? "unknown"}#${id}`,
+				label: `${objectLabel(state, id)}#${id}`,
 			})),
 		});
 		return this.choose(state, request, candidates);
 	}
 
-	chooseOptional(state: GameState, ability: AbilityStackItem): boolean {
-		const player = ability.controller;
+	chooseOptional(
+		state: GameState,
+		ability: AbilityStackItem,
+		player: PlayerId = ability.controller,
+	): boolean {
 		const candidates = [
 			{ id: "yes", value: true },
 			{ id: "no", value: false },
@@ -589,7 +622,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			player,
 			context: {
 				activePlayer: state.activePlayer,
-				step: state.step,
+				location: turnLocation(state),
 				stack: [...state.stack],
 			},
 			options: actions.map((action) => ({
@@ -621,13 +654,54 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			context: { eligibleAttackers: [...eligibleAttackers] },
 			options: eligibleAttackers.map((id) => ({
 				id: String(id),
-				label: `${state.objects.get(id)?.cardId ?? "unknown"}#${id}`,
+				label: `${objectLabel(state, id)}#${id}`,
+			})),
+		});
+		return this.chooseMulti(state, request, candidates);
+	}
+	/**
+	 * One replayable multi-select decision over blocker-to-attacker
+	 * assignments. Empty lists short-circuit without a request: no attackers
+	 * means nothing can block, and no eligible blockers means nothing will.
+	 */
+	chooseBlockers(
+		state: GameState,
+		player: PlayerId,
+		attackers: ObjectId[],
+		eligibleBlockers: ObjectId[],
+	): BlockAssignment[] {
+		if (attackers.length === 0 || eligibleBlockers.length === 0) return [];
+		const candidates: { id: string; value: BlockAssignment }[] = [];
+		for (const blocker of eligibleBlockers) {
+			for (const attacker of attackers) {
+				candidates.push({
+					id: blockAssignmentOptionId(blocker, attacker),
+					value: { blocker, attacker },
+				});
+			}
+		}
+		const request = this.request({
+			kind: "declareBlockers",
+			player,
+			context: {
+				attackers: [...attackers],
+				eligibleBlockers: [...eligibleBlockers],
+			},
+			options: candidates.map((candidate) => ({
+				id: candidate.id,
+				label: `${objectLabel(state, candidate.value.blocker)}#${candidate.value.blocker} blocks ${objectLabel(state, candidate.value.attacker)}#${candidate.value.attacker}`,
 			})),
 		});
 		return this.chooseMulti(state, request, candidates);
 	}
 }
 
+export function blockAssignmentOptionId(
+	blocker: ObjectId,
+	attacker: ObjectId,
+): string {
+	return `${blocker}:${attacker}`;
+}
 export type AnyChoiceController = ChoiceController<boolean>;
 export type ChoiceSource = SyncAgentPair | ChoiceController<false>;
 

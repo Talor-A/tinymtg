@@ -13,8 +13,7 @@ bun run index.ts
 
 ```bash
 bun run check       # typecheck and test
-bun run lint        # non-mutating Biome check for engine/replay files
-bun run format      # apply Biome fixes
+bun run fix         # autofix all files
 ```
 
 ## Advancing a game
@@ -37,6 +36,38 @@ If an answer is not immediately available, the engine unwinds, awaits it outside
 A `ChoiceTranscript` belongs to one checkpoint and one call to `advanceWithReplay()`. It is JSON-serializable, but replay verifies fingerprints and may reject transcripts after engine or request-schema changes. `attempts` is diagnostic: it is one plus the number of suspended choices encountered while completing the transition.
 
 Low-level callers handling `ChoicePendingError` themselves must discard the speculative state before replay. Prefer `advanceWithReplay()` unless implementing durable scheduling or persistence.
+
+## Forge card import
+
+Card import is deliberately split into two boundaries:
+
+```text
+raw Forge .txt -> ForgeCardIR v1 (static JSON) -> OracleCardDef / CardDef
+```
+
+- `parseForgeCard(text)` parses and normalizes Forge syntax into a versioned,
+  callback-free representation with rigid discriminated unions.
+- `validateForgeCardIR(value)` strictly validates data read back from JSON,
+  including unknown properties.
+- `compileForgeCard(ir)` lowers validated data into engine definitions and
+  creates callbacks for supported continuous and replacement effects.
+- `parseCardDetailed(text)` returns both representations and structured
+  diagnostics; `parseCard(text)` remains the compatibility API and returns
+  `null` for unsupported input.
+
+The initial subset covers characteristics, the existing keywords and triggers,
+fixed enters-tapped/counter rules, fixed P/T continuous effects, simple
+life/draw effects, single-target damage/destroy/P/T effects, tap abilities, and
+fixed colored tap-for-mana abilities. Card definitions, imported IR, stack
+items, and resolution share one canonical serializable effect model; optional
+simple sequences are represented by one `may` effect containing its children. Basic-land mana abilities are synthesized
+from their subtype because Forge omits explicit `A:` lines for them.
+
+Targeted spells, activated abilities, and mana production are retained as
+strongly typed declarative definitions on `CardDef`. The normal gameplay loop
+does not yet cast spells, select targets, activate abilities, or maintain mana
+pools; importing those definitions does not pretend that runtime support exists.
+Unsupported or dynamic Forge syntax is rejected rather than partially parsed.
 
 ## Current gameplay boundary
 

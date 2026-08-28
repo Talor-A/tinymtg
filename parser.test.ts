@@ -1,7 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseCard } from "./parser.ts";
+import {
+	createReadContext,
+	newGame,
+	readObject,
+	registerCard,
+	resolveStaticAbility,
+	spawnPermanent,
+	staticAbilityId,
+	view,
+} from "./index.ts";
+import {
+	compileForgeCard,
+	parseCard,
+	parseCardDetailed,
+	parseForgeCard,
+	validateForgeCardIR,
+} from "./parser.ts";
 
 function* walkCards(dir: string): Generator<string> {
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -30,27 +46,65 @@ describe("parseCard", () => {
 			types: ["creature"],
 			subtypes: ["Bear"],
 			colors: ["g"],
-			mv: 2,
+			manaCost: {
+				g: 1,
+				c: 1,
+			},
 			power: 2,
 			toughness: 2,
 		});
 
-		expect(
-			parseCard(`
+		const forest = parseCard(`
 Name:Forest
 ManaCost:no cost
 Types:Basic Land Forest
 Oracle:({T}: Add {G}.)
-`),
-		).toEqual({
+`);
+		expect(forest).toMatchObject({
 			id: "forest",
 			name: "Forest",
 			supertypes: ["basic"],
 			types: ["land"],
 			subtypes: ["Forest"],
 			colors: [],
-			mv: 0,
+			manaCost: "none",
 		});
+		expect(forest?.activatedAbilities).toEqual([
+			{
+				id: "intrinsic-mana-g",
+				text: "Add {G}.",
+				manaAbility: true,
+				costs: [{ kind: "tap-self" }],
+				targets: [],
+				effects: [
+					{
+						kind: "add-mana",
+						player: "you",
+						mana: { w: 0, u: 0, b: 0, r: 0, g: 1 },
+					},
+				],
+			},
+		]);
+	});
+
+	test("parses colored, generic, zero, and absent mana costs", () => {
+		const cardWithCost = (manaCost: string) =>
+			parseCard(vanilla.replace("ManaCost:1 G", `ManaCost:${manaCost}`));
+
+		expect(cardWithCost("2 W W")?.manaCost).toEqual({ c: 2, w: 2 });
+		expect(cardWithCost("W U")?.manaCost).toEqual({ w: 1, u: 1 });
+		expect(cardWithCost("3")?.manaCost).toEqual({ c: 3 });
+		expect(cardWithCost("0")?.manaCost).toBe("zero");
+		expect(cardWithCost("no cost")?.manaCost).toBe("none");
+	});
+
+	test("rejects mana symbols the engine cannot represent faithfully", () => {
+		for (const manaCost of ["X G", "WU", "2/W", "WP", "C", "S"]) {
+			expect(
+				parseCard(vanilla.replace("ManaCost:1 G", `ManaCost:${manaCost}`)),
+				manaCost,
+			).toBeNull();
+		}
 	});
 
 	test("parses the supported printed keywords", () => {
@@ -131,12 +185,17 @@ Oracle:At the beginning of your upkeep, you may gain 1 life.
 				id: "TrigGainLife",
 				text: "At the beginning of your upkeep, you may gain 1 life.",
 				condition: {
-					kind: "beginStep",
+					kind: "begin step",
 					step: "upkeep",
-					player: "controller",
+					player: "you",
 				},
-				optional: true,
-				effects: [{ kind: "gainLife", player: "controller", amount: 1 }],
+				effects: [
+					{
+						kind: "may",
+						decider: "you",
+						effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+					},
+				],
 			},
 		]);
 
@@ -154,8 +213,35 @@ Oracle:When Arashin Cleric enters, you gain 3 life.
 			{
 				id: "TrigGainLife",
 				text: "When CARDNAME enters, you gain 3 life.",
-				condition: { kind: "entersBattlefield", object: "self" },
-				effects: [{ kind: "gainLife", player: "controller", amount: 3 }],
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: "self",
+				},
+				effects: [{ kind: "gain-life", player: "you", amount: 3 }],
+			},
+		]);
+	});
+
+	test("models one optional choice around a simple effect sequence", () => {
+		const parsed = parseCard(`
+Name:Optional Sequence
+ManaCost:1 W
+Types:Enchantment
+T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigLife | OptionalDecider$ You | TriggerDescription$ At the beginning of your upkeep, you may gain 2 life and draw a card.
+SVar:TrigLife:DB$ GainLife | Defined$ You | LifeAmount$ 2 | SubAbility$ DBDraw
+SVar:DBDraw:DB$ Draw | Defined$ You | NumCards$ 1
+Oracle:At the beginning of your upkeep, you may gain 2 life and draw a card.
+`);
+		expect(parsed?.triggers?.[0]?.effects).toEqual([
+			{
+				kind: "may",
+				decider: "you",
+				effects: [
+					{ kind: "gain-life", player: "you", amount: 2 },
+					{ kind: "draw", player: "you", amount: 1 },
+				],
 			},
 		]);
 	});
@@ -176,7 +262,7 @@ Oracle:When Arashin Cleric enters, you gain 3 life.
 		expect(herald.types).toEqual(["creature"]);
 		expect(herald.subtypes).toEqual(["Angel"]);
 		expect(herald.colors).toEqual(["w"]);
-		expect(herald.mv).toBe(5);
+		expect(herald.manaCost).toEqual({ w: 2, c: 3 });
 		expect(herald.power).toBe(4);
 		expect(herald.toughness).toBe(3);
 		expect(herald.keywords).toEqual(["flying"]);
@@ -184,8 +270,8 @@ Oracle:When Arashin Cleric enters, you gain 3 life.
 			{
 				id: "TrigGainLife",
 				text: "Whenever CARDNAME attacks, you gain 2 life.",
-				condition: { kind: "declaredAttacker", object: "self" },
-				effects: [{ kind: "gainLife", player: "controller", amount: 2 }],
+				condition: { kind: "declare attackers", selector: "self" },
+				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
 			},
 		]);
 	});
@@ -205,8 +291,8 @@ Oracle:Flying\\nWhenever Test Herald attacks, you gain 2 life.
 			{
 				id: "TrigGainLife",
 				text: "Whenever CARDNAME attacks, you gain 2 life.",
-				condition: { kind: "declaredAttacker", object: "self" },
-				effects: [{ kind: "gainLife", player: "controller", amount: 2 }],
+				condition: { kind: "declare attackers", selector: "self" },
+				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
 			},
 		]);
 
@@ -272,13 +358,213 @@ Oracle:Flying
 	});
 });
 
+describe("structured Forge pipeline", () => {
+	const fixture = (name: string) =>
+		readFileSync(`./cards/cardsfolder/${name[0]}/${name}.txt`, "utf-8");
+
+	test("emits a rigid JSON-round-trippable representation", () => {
+		const parsed = parseForgeCard(vanilla);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) return;
+		expect(parsed.value).toEqual({
+			schemaVersion: 1,
+			id: "grizzly-bears",
+			name: "Grizzly Bears",
+			supertypes: [],
+			types: ["creature"],
+			subtypes: ["Bear"],
+			colors: ["g"],
+			manaCost: {
+				kind: "symbols",
+				generic: 1,
+				w: 0,
+				u: 0,
+				b: 0,
+				r: 0,
+				g: 1,
+			},
+			power: 2,
+			toughness: 2,
+			keywords: [],
+			rules: [],
+		});
+		const json = JSON.parse(JSON.stringify(parsed.value));
+		expect(validateForgeCardIR(json)).toEqual({
+			ok: true,
+			value: parsed.value,
+			diagnostics: [],
+		});
+	});
+
+	test("separates normalized target definitions from compiled cards", () => {
+		const cases = [
+			["murder", "destroy", "permanent"],
+			["giant_growth", "modify-pt", "permanent"],
+			["lightning_bolt", "damage", "any-target"],
+		] as const;
+		for (const [name, effectKind, targetKind] of cases) {
+			const detailed = parseCardDetailed(fixture(name));
+			expect(detailed.ok, name).toBe(true);
+			if (!detailed.ok) continue;
+			const spell = detailed.value.ir.rules.find(
+				(rule) => rule.kind === "spell",
+			);
+			expect(spell?.targets[0]?.legal.kind).toBe(targetKind);
+			expect(spell?.effects[0]?.kind).toBe(effectKind);
+			expect(detailed.value.card.spell).toEqual(
+				spell && {
+					id: spell.id,
+					text: spell.text,
+					targets: spell.targets,
+					effects: spell.effects,
+				},
+			);
+		}
+	});
+
+	test("parses targeted tap abilities and explicit mana abilities", () => {
+		const prodigal = parseCard(fixture("prodigal_sorcerer"));
+		expect(prodigal?.activatedAbilities?.[0]).toMatchObject({
+			manaAbility: false,
+			costs: [{ kind: "tap-self" }],
+			targets: [{ id: "target-1", legal: { kind: "any-target" } }],
+			effects: [{ kind: "damage", target: "target-1", amount: 1 }],
+		});
+		const elves = parseCard(fixture("llanowar_elves"));
+		expect(elves?.activatedAbilities?.[0]).toMatchObject({
+			manaAbility: true,
+			costs: [{ kind: "tap-self" }],
+			effects: [
+				{
+					kind: "add-mana",
+					mana: { w: 0, u: 0, b: 0, r: 0, g: 1 },
+				},
+			],
+		});
+	});
+
+	test("compiles simple permanent statics into callbacks", () => {
+		const parsed = parseForgeCard(fixture("glorious_anthem"));
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) return;
+		const compiled = compileForgeCard(parsed.value);
+		expect(compiled.ok).toBe(true);
+		if (!compiled.ok) return;
+		expect(compiled.value.statics).toHaveLength(1);
+		registerCard(compiled.value);
+		expect(String(staticAbilityId("glorious-anthem", 0))).toBe(
+			"glorious-anthem:0",
+		);
+		const compiledStatic = compiled.value.statics?.[0];
+		expect(compiledStatic).toBeDefined();
+		if (!compiledStatic) return;
+		expect(resolveStaticAbility(staticAbilityId("glorious-anthem", 0))).toBe(
+			compiledStatic,
+		);
+		const game = newGame();
+		spawnPermanent(game, "glorious-anthem", 0, "battlefield");
+		const yourCreature = spawnPermanent(
+			game,
+			"grizzly-bears",
+			0,
+			"battlefield",
+		);
+		const opposingCreature = spawnPermanent(
+			game,
+			"grizzly-bears",
+			1,
+			"battlefield",
+		);
+		const creatureSnapshot = readObject(
+			createReadContext(game),
+			yourCreature.id,
+		);
+		expect(creatureSnapshot.kind).toBe("permanent");
+		expect(view(game, yourCreature.id).power).toBe(3);
+		expect(view(game, yourCreature.id).toughness).toBe(3);
+		expect(view(game, opposingCreature.id).power).toBe(2);
+		expect(view(game, opposingCreature.id).toughness).toBe(2);
+		expect(parsed.value.rules[0]).toEqual({
+			kind: "static",
+			id: "static-1",
+			text: "Creatures you control get +1/+1.",
+			selector: {
+				kind: "all",
+				selectors: [
+					{ kind: "type", type: "creature" },
+					{ kind: "controller", player: "you" },
+				],
+			},
+			modification: { kind: "modify-pt", power: 1, toughness: 1 },
+		});
+	});
+
+	test("uses the canonical effect model for targetless spells", () => {
+		const revitalize = parseCard(fixture("revitalize"));
+		expect(revitalize?.spell).toMatchObject({
+			targets: [],
+			effects: [
+				{ kind: "gain-life", player: "you", amount: 3 },
+				{ kind: "draw", player: "you", amount: 1 },
+			],
+		});
+		expect("effects" in (revitalize ?? {})).toBe(false);
+	});
+
+	test("grants intrinsic mana abilities for nonbasic lands with basic land types", () => {
+		const dryadArbor = parseCard(
+			readFileSync("./cards/cardsfolder/d/dryad_arbor.txt", "utf-8"),
+		);
+		expect(dryadArbor?.activatedAbilities).toContainEqual({
+			id: "intrinsic-mana-g",
+			text: "Add {G}.",
+			manaAbility: true,
+			costs: [{ kind: "tap-self" }],
+			targets: [],
+			effects: [
+				{
+					kind: "add-mana",
+					player: "you",
+					mana: { w: 0, u: 0, b: 0, r: 0, g: 1 },
+				},
+			],
+		});
+	});
+
+	test("rejects syntax that would otherwise lose costs or independent targets", () => {
+		for (const path of [
+			"./cards/cardsfolder/i/into_the_maw_of_hell.txt",
+			"./cards/cardsfolder/e/eye_of_vecna.txt",
+			"./cards/cardsfolder/r/reckless_abandon.txt",
+		]) {
+			expect(parseCard(readFileSync(path, "utf-8")), path).toBeNull();
+		}
+	});
+
+	test("rejects target unions that cannot be represented faithfully", () => {
+		expect(
+			parseCard(`
+Name:Bad Target
+ManaCost:R
+Types:Instant
+A:SP$ DealDamage | ValidTgts$ Player,Planeswalker | NumDmg$ 1 | SpellDescription$ Deal 1 damage to target player or planeswalker.
+Oracle:Deal 1 damage to target player or planeswalker.
+`),
+		).toBeNull();
+	});
+
+	test("strict validation rejects unknown JSON properties", () => {
+		const parsed = parseForgeCard(vanilla);
+		if (!parsed.ok) throw new Error("fixture did not parse");
+		const invalid = { ...parsed.value, extra: true };
+		const validated = validateForgeCardIR(invalid);
+		expect(validated.ok).toBe(false);
+		if (!validated.ok) expect(validated.diagnostics[0]?.path).toBe("$.extra");
+	});
+});
+
 test("checks every card and accepts only the engine-supported subset", () => {
 	const accepted: string[] = [];
-	// 574 (baseline) + Herald of Faith (the parsed Attacks/gainLife fixture this
-	// slice targets) + Moonrise Cleric (an unrelated card the same narrow shape
-	// happens to fully cover: Creature, Flying, one self-attack gain-life
-	// trigger with no other rules text).
-	const EXPECTED_LEN = 576;
 
 	for (const path of walkCards("./cards")) {
 		const text = readFileSync(path, "utf-8");
@@ -290,8 +576,5 @@ test("checks every card and accepts only the engine-supported subset", () => {
 		expect(card.name).not.toBe("");
 		expect(card.types.length).toBeGreaterThan(0);
 	}
-	if (accepted.length !== EXPECTED_LEN) console.log(accepted.join("\n"));
-	// Locks the parser to the deliberately minimal subset. Increasing this count
-	// requires adding engine support and a focused parser test first.
-	expect(accepted).toHaveLength(EXPECTED_LEN);
+	expect(accepted.sort((a, b) => a.localeCompare(b))).toMatchSnapshot();
 });

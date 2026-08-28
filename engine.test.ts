@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts";
-import type { GameState, ObjectId, PlayerId, SyncAgent } from "./index.ts";
+import type {
+	GameState,
+	ObjectId,
+	PlayerId,
+	StepKind,
+	SyncAgent,
+} from "./index.ts";
 import {
 	advance,
 	gameOver,
@@ -12,14 +18,13 @@ import {
 	registerCard,
 	spawnCard,
 	spawnPermanent,
+	turnLocation,
 	winner,
 } from "./index.ts";
 import { parseCard } from "./parser.ts";
 
-// Registered here (not in cards.ts) so normal runtime card registration never
-// depends on reading the untracked/gitignored Forge cardsfolder fixtures. This
-// test alone consumes the real parsed CardDef, exercising the parser's
-// "Attacks" self-trigger support end-to-end rather than a hand-written stand-in.
+// TODO: this adds a dependency on card parser,
+// remove it
 function loadHeraldOfFaith() {
 	const text = readFileSync(
 		"./cards/cardsfolder/h/herald_of_faith.txt",
@@ -36,6 +41,13 @@ registerCard(loadHeraldOfFaith());
 const ALICE = 0 as PlayerId;
 const BOB = 1 as PlayerId;
 type Agents = [SyncAgent, SyncAgent];
+
+function isAt(state: GameState, expected: StepKind | "main"): boolean {
+	const location = turnLocation(state);
+	return expected === "main"
+		? location?.kind === "mainPhase"
+		: location?.kind === "step" && location.step.kind === expected;
+}
 
 function advanceUntil(
 	state: GameState,
@@ -81,6 +93,39 @@ function setupAttackTurn(cardId: string): {
 function attackWith(ids: ObjectId[]): Agents {
 	return [new ScriptedAgent([], [], [], [ids]), new ScriptedAgent()];
 }
+
+describe("turn progress", () => {
+	test("notStarted is visible only before the first advance", () => {
+		const state = newGame();
+		const agents = passingAgents();
+		for (let i = 0; i < 3; i++) {
+			spawnCard(state, "forest", ALICE, "library");
+			spawnCard(state, "forest", BOB, "library");
+		}
+
+		expect(state.turnScheduler.progress).toEqual({ kind: "notStarted" });
+
+		for (let i = 0; i < 30; i++) {
+			advance(state, agents);
+			expect(state.turnScheduler.progress.kind).toBe("inTurn");
+		}
+	});
+
+	test("represents a main phase as a phase with its combat role", () => {
+		const state = newGame();
+		const agents = passingAgents();
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", BOB, "library");
+
+		advanceUntil(state, agents, (next) => isAt(next, "main"));
+
+		expect(turnLocation(state)).toMatchObject({
+			kind: "mainPhase",
+			role: "precombat",
+			phase: { kind: "main" },
+		});
+	});
+});
 
 describe("playing a normal turn", () => {
 	function addCards(
@@ -167,7 +212,7 @@ describe("declaring attackers during normal progression", () => {
 		spawnCard(state, "forest", ALICE, "library");
 		spawnCard(state, "forest", BOB, "library");
 
-		advanceUntil(state, agents, (next) => next.step === "main");
+		advanceUntil(state, agents, (next) => isAt(next, "main"));
 
 		const attacker = spawnPermanent(
 			state,
@@ -180,9 +225,9 @@ describe("declaring attackers during normal progression", () => {
 		attackerAgent.attackerChoices.push([attacker.id]);
 
 		// The attacker choice is requested and committed inside the single advance()
-		// call that begins the declare-attackers step, so by the time state.step
-		// reflects it, the declaration has already happened.
-		advanceUntil(state, agents, (next) => next.step === "declare attackers");
+		// call that begins the declare-attackers step, so by the time the scheduler
+		// records it, the declaration has already happened.
+		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
 		expect(
 			permanent(state, attacker.id).attacking,
 			"declared as an attacker",
@@ -202,7 +247,7 @@ describe("declaring attackers during normal progression", () => {
 			new ScriptedAgent(),
 		];
 
-		advanceUntil(state, agents, (next) => next.step === "end combat");
+		advanceUntil(state, agents, (next) => isAt(next, "end combat"));
 		expect(
 			permanent(state, attacker.id).attacking,
 			"end combat clears attacking",
@@ -273,12 +318,12 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
 		const agents = attackWith([attacker.id]);
 
-		advanceUntil(state, agents, (next) => next.step === "declare attackers");
+		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
 		expect(state.players[BOB].life, "no damage dealt merely by declaring").toBe(
 			20,
 		);
 
-		advanceUntil(state, agents, (next) => next.step === "combat damage");
+		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
 		expect(
 			state.players[BOB].life,
 			"Grizzly Bears' 2 power hit the opponent",
@@ -325,14 +370,14 @@ describe("dealing combat damage", () => {
 		expect(state.players[BOB].life, "3/3 Bears dealt 3").toBe(17);
 	});
 
-	test("Outlaw Medic's lifelink makes its controller gain life while the opponent loses it", () => {
-		const { state, attacker } = setupAttackTurn("outlaw-medic");
+	test("Rhox War Monk's lifelink makes its controller gain life while the opponent loses it", () => {
+		const { state, attacker } = setupAttackTurn("rhox-war-monk");
 		const agents = attackWith([attacker.id]);
 
 		playOneTurn(state, agents);
 
-		expect(state.players[ALICE].life, "gained 1 life via lifelink").toBe(21);
-		expect(state.players[BOB].life, "lost 1 life to the same hit").toBe(19);
+		expect(state.players[ALICE].life, "gained 3 life via lifelink").toBe(23);
+		expect(state.players[BOB].life, "lost 3 life to the same hit").toBe(17);
 	});
 
 	test("Furnace of Rath doubles combat damage through the normal replacement pipeline", () => {
@@ -352,7 +397,7 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
 		const agents = attackWith([attacker.id]);
 
-		advanceUntil(state, agents, (next) => next.step === "declare attackers");
+		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
 		expect(permanent(state, attacker.id).attacking).toBe(true);
 		perform(
 			state,
@@ -360,7 +405,7 @@ describe("dealing combat damage", () => {
 			agents,
 		);
 
-		advanceUntil(state, agents, (next) => next.step === "combat damage");
+		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
 		expect(state.players[BOB].life, "the destroyed attacker dealt none").toBe(
 			20,
 		);
@@ -370,14 +415,14 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
 		const agents = attackWith([attacker.id]);
 
-		advanceUntil(state, agents, (next) => next.step === "declare attackers");
+		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
 		perform(state, { kind: "regenerate", object: attacker.id }, agents);
 		expect(
 			permanent(state, attacker.id).attacking,
 			"regeneration clears attacking",
 		).toBe(false);
 
-		advanceUntil(state, agents, (next) => next.step === "combat damage");
+		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
 		expect(state.players[BOB].life, "the regenerated creature dealt none").toBe(
 			20,
 		);
@@ -399,13 +444,13 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
 		const agents = attackWith([attacker.id]);
 
-		advanceUntil(state, agents, (next) => next.step === "combat damage");
+		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
 		expect(
 			permanent(state, attacker.id).attacking,
 			"still attacking during the damage step",
 		).toBe(true);
 
-		advanceUntil(state, agents, (next) => next.step === "end combat");
+		advanceUntil(state, agents, (next) => isAt(next, "end combat"));
 		expect(
 			permanent(state, attacker.id).attacking,
 			"end combat clears attacking",
@@ -483,7 +528,7 @@ describe("draw steps and game endings", () => {
 		expect(state.players[ALICE].lost).toBe(true);
 		expect(winner(state)).toBe(BOB);
 		expect(state.turn).toBe(0);
-		expect(state.step).toBe("draw");
+		expect(isAt(state, "draw")).toBe(true);
 	});
 
 	test("Laboratory Maniac wins when its controller would draw from an empty library", () => {
@@ -497,14 +542,14 @@ describe("draw steps and game endings", () => {
 		expect(winner(state)).toBe(ALICE);
 
 		expect(state.turn).toBe(0);
-		expect(state.step).toBe("draw");
+		expect(isAt(state, "draw")).toBe(true);
 	});
 
 	test("Platinum Angel lets the game continue after an empty-library draw", () => {
 		const { state, agents } = setupDrawStep();
 		spawnPermanent(state, "platinum-angel", ALICE, "battlefield");
 
-		advanceUntil(state, agents, (next) => next.step === "main");
+		advanceUntil(state, agents, (next) => isAt(next, "main"));
 
 		expect(state.players[ALICE].lost).toBe(false);
 		expect(state.players[ALICE].won).toBe(false);
@@ -513,6 +558,6 @@ describe("draw steps and game endings", () => {
 
 		advanceUntil(state, agents, gameOver);
 		expect(state.turn).toBe(1);
-		expect(state.step).toBe("draw");
+		expect(isAt(state, "draw")).toBe(true);
 	});
 });

@@ -14,15 +14,15 @@ const gatherSpecimens: EffectFactory = (params) => {
 	return {
 		label: `gather:${you}`,
 		layer: "control",
-		functionsIn: ["any"],
+		functionsIn: "any",
 		text: "If a creature would enter the battlefield under an opponent's control this turn, it enters under your control instead.",
 		applies(ev, ctx) {
-			if (ev.kind !== "zoneChange" || ev.to !== "battlefield") return false;
+			if (ev.kind !== "change zone" || ev.to !== "battlefield") return false;
 			if (ev.toController === you) return false;
 			return etbPreview(ctx.state, ev).types.includes("creature");
 		},
 		replace: (ev) =>
-			ev.kind === "zoneChange" ? [{ ...ev, toController: you }] : [ev],
+			ev.kind === "change zone" ? [{ ...ev, toController: you }] : [ev],
 	};
 };
 const preventNextDamage: EffectFactory = (params) => {
@@ -39,7 +39,7 @@ const preventNextDamage: EffectFactory = (params) => {
 		text: `Prevent the next ${n} damage that would be dealt to ${
 			target.type === "player" ? `P${target.player}` : `#${target.id}`
 		} this turn.`,
-		functionsIn: ["any"],
+		functionsIn: "any",
 		applies(ev, ctx) {
 			if (ev.kind !== "damage" || ev.amount <= 0) return false;
 			if ((ctx.data.remaining ?? 0) <= 0) return false;
@@ -63,25 +63,25 @@ const preventNextDamage: EffectFactory = (params) => {
 		},
 	};
 };
-const prismaticStrands: EffectFactory = (params) => {
+const prismaticStrands: EffectFactory = (params): ReplacementDef => {
 	const color = params.color as Color;
 	return {
 		label: `strands:${color}`,
 		layer: "other",
 		isPreventionEffect: true,
-		functionsIn: ["any"],
+		functionsIn: "any",
 		text: `Prevent all damage that ${color} sources would deal this turn.`,
 		applies: (ev) => ev.kind === "damage" && ev.sourceColors.includes(color),
 		replace: () => [],
 	};
 };
 
-const regenerationShield: EffectFactory = (params) => {
+const regenerationShield: EffectFactory = (params): ReplacementDef => {
 	const target = params.target as ObjectId;
 	return {
 		label: `regen:${target}`,
 		layer: "other",
-		functionsIn: ["any"],
+		functionsIn: "any",
 		text: `Regeneration shield on #${target}.`,
 		applies: (ev, ctx) =>
 			ev.kind === "destroy" &&

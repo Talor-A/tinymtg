@@ -5,8 +5,7 @@
 	"private": true,
 	"scripts": {
 		"check": "bun run typecheck && bun test",
-		"format": "biome check --fix --unsafe",
-		"lint": "biome check agents.ts choices.ts choices.test.ts engine.test.ts fuzz.test.ts index.ts rules.test.ts test/fuzz-agent.ts",
+		"fix": "biome check --fix --unsafe",
 		"test": "bun test",
 		"typecheck": "tsc --noEmit",
 		"yawgatog": "bun ./yawgatog.ts"

@@ -131,6 +131,7 @@ describe("choice transcript fuzz", () => {
 				"optional",
 				"priorityAction",
 				"declareAttackers",
+				"declareBlockers",
 			]),
 		);
 	});

@@ -32,6 +32,22 @@ export class FuzzAgent implements SyncAgent {
 					.map((option) => option.id),
 			};
 		}
+		if (request.kind === "declareBlockers") {
+			// A single blocker cannot be assigned to multiple attackers, so pick a
+			// random subset and then keep only the first assignment for each blocker.
+			const selected = request.options.filter(() => this.rng() < 0.5);
+			const used = new Set<string>();
+			return {
+				optionIds: selected
+					.filter((option) => {
+						const blocker = option.id.split(":")[0]!;
+						if (used.has(blocker)) return false;
+						used.add(blocker);
+						return true;
+					})
+					.map((option) => option.id),
+			};
+		}
 		const option =
 			request.options[Math.floor(this.rng() * request.options.length)];
 		if (!option) throw new Error("fuzz agent received no options");

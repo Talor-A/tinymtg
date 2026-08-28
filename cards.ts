@@ -1,4 +1,5 @@
 import type {
+	CharacteristicsSnapshot,
 	Color,
 	CounterBag,
 	CounterNames,
@@ -7,13 +8,16 @@ import type {
 	GameState,
 	ObjectId,
 	PlayerId,
+	ReadContext,
+	ReadonlyGameState,
 } from "./index.ts";
 import {
 	etbPreview,
 	maybeObject,
 	maybePermanent,
+	readObject,
 	registerCard,
-	view,
+	turnLocation,
 } from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
 
@@ -27,11 +31,11 @@ import { assert, assertDefined } from "./lib/assert.ts";
  * ------------------------------------------------------------------ */
 
 function eventCounters(ev: GameEvent): CounterBag | null {
-	if (ev.kind === "addCounters" && ev.target.type === "permanent") {
+	if (ev.kind === "add counters" && ev.target.type === "permanent") {
 		return { [ev.counter]: ev.amount };
 	}
 	if (
-		ev.kind === "zoneChange" &&
+		ev.kind === "change zone" &&
 		ev.to === "battlefield" &&
 		ev.entersWithCounters
 	) {
@@ -41,33 +45,36 @@ function eventCounters(ev: GameEvent): CounterBag | null {
 }
 
 function withCounters(ev: GameEvent, bag: CounterBag): GameEvent[] {
-	if (ev.kind === "addCounters")
+	if (ev.kind === "add counters")
 		return [{ ...ev, amount: bag[ev.counter] ?? 0 }];
-	if (ev.kind === "zoneChange") return [{ ...ev, entersWithCounters: bag }];
+	if (ev.kind === "change zone") return [{ ...ev, entersWithCounters: bag }];
 	return [ev];
 }
 
 /** Who will control the object receiving the counters. */
 function counterRecipientController(
-	state: GameState,
+	state: ReadonlyGameState,
 	ev: GameEvent,
 ): PlayerId | null {
-	if (ev.kind === "addCounters") {
+	if (ev.kind === "add counters") {
 		if (ev.target.type !== "permanent") return null;
 		return maybePermanent(state, ev.target.id)?.controller ?? null;
 	}
-	if (ev.kind === "zoneChange" && ev.to === "battlefield")
+	if (ev.kind === "change zone" && ev.to === "battlefield")
 		return ev.toController;
 	return null;
 }
 
-function isCreatureRecipient(state: GameState, ev: GameEvent): boolean {
-	if (ev.kind === "addCounters" && ev.target.type === "permanent") {
-		const o = maybePermanent(state, ev.target.id);
-		return !!o && view(state, o.id).types.includes("creature");
+function isCreatureRecipient(ctx: EffectCtx, ev: GameEvent): boolean {
+	if (ev.kind === "add counters" && ev.target.type === "permanent") {
+		const snapshot = readObject(ctx.read, ev.target.id);
+		return (
+			snapshot.kind === "permanent" &&
+			snapshot.currentCharacteristics.types.includes("creature")
+		);
 	}
-	if (ev.kind === "zoneChange")
-		return etbPreview(state, ev).types.includes("creature");
+	if (ev.kind === "change zone")
+		return etbPreview(ctx.state, ev).types.includes("creature");
 	return false;
 }
 
@@ -84,7 +91,9 @@ export const HARDENED_SCALES = registerCard({
 	name: "Hardened Scales",
 	types: ["enchantment"],
 	colors: ["g"],
-	mv: 1,
+	manaCost: {
+		g: 1,
+	},
 	replacements: [
 		{
 			label: "scales-counter-place",
@@ -92,13 +101,13 @@ export const HARDENED_SCALES = registerCard({
 			text: "If one or more +1/+1 counters would be put on a creature you control, that many plus one are put instead.",
 			applies(ev, ctx) {
 				if (!onBattlefield(ctx)) return false;
-				if (ev.kind !== "addCounters") return false;
+				if (ev.kind !== "add counters") return false;
 				if (counterRecipientController(ctx.state, ev) !== ctx.controller)
 					return false;
-				return isCreatureRecipient(ctx.state, ev);
+				return isCreatureRecipient(ctx, ev);
 			},
 			replace(ev) {
-				assert(ev.kind === "addCounters", "Event should be addCounters");
+				assert(ev.kind === "add counters", "Event should be addCounters");
 
 				const counters = eventCounters(ev);
 				assertDefined(counters);
@@ -112,7 +121,7 @@ export const HARDENED_SCALES = registerCard({
 			layer: "other",
 			text: "If one or more +1/+1 counters would be put on a creature you control, that many plus one are put instead.",
 			applies(ev, ctx) {
-				if (ev.kind !== "zoneChange") return false;
+				if (ev.kind !== "change zone") return false;
 				if (ev.to !== "battlefield") return false;
 
 				if (!onBattlefield(ctx)) return false;
@@ -120,10 +129,10 @@ export const HARDENED_SCALES = registerCard({
 				if (!ev.entersWithCounters["+1/+1"]) return false;
 				if (ev.entersWithCounters["+1/+1"] === 0) return false;
 				if (ev.toController !== ctx.controller) return false;
-				return isCreatureRecipient(ctx.state, ev);
+				return isCreatureRecipient(ctx, ev);
 			},
 			replace(ev) {
-				assert(ev.kind === "zoneChange", "Event should be zoneChange");
+				assert(ev.kind === "change zone", "Event should be zoneChange");
 				const counters = eventCounters(ev);
 				assertDefined(counters);
 				const bag = { ...eventCounters(ev) };
@@ -139,7 +148,10 @@ export const DOUBLING_SEASON = registerCard({
 	name: "Doubling Season",
 	types: ["enchantment"],
 	colors: ["g"],
-	mv: 5,
+	manaCost: {
+		g: 1,
+		c: 4,
+	},
 	replacements: [
 		{
 			label: "season:counters",
@@ -164,10 +176,10 @@ export const DOUBLING_SEASON = registerCard({
 			text: "If an effect would create tokens under your control, it creates twice that many instead.",
 			applies: (ev, ctx) =>
 				onBattlefield(ctx) &&
-				ev.kind === "createToken" &&
+				ev.kind === "create token" &&
 				ev.controller === ctx.controller,
 			replace: (ev) =>
-				ev.kind === "createToken" ? [{ ...ev, amount: ev.amount * 2 }] : [ev],
+				ev.kind === "create token" ? [{ ...ev, amount: ev.amount * 2 }] : [ev],
 		},
 	],
 });
@@ -182,7 +194,7 @@ export const WALKING_BALLISTA = registerCard({
 	types: ["artifact", "creature"],
 	subtypes: ["Construct"],
 	colors: [],
-	mv: 0,
+	manaCost: "zero",
 	power: 0,
 	toughness: 0,
 	// X=2 baked in for the sketch; in a real engine this reads the cost paid.
@@ -195,7 +207,10 @@ export const GRIZZLY_BEARS = registerCard({
 	types: ["creature"],
 	subtypes: ["Bear"],
 	colors: ["g"],
-	mv: 2,
+	manaCost: {
+		g: 1,
+		c: 1,
+	},
 	power: 2,
 	toughness: 2,
 });
@@ -206,7 +221,9 @@ export const EAGER_CADET = registerCard({
 	types: ["creature"],
 	subtypes: ["Human", "Soldier"],
 	colors: ["w"],
-	mv: 1,
+	manaCost: {
+		w: 1,
+	},
 	power: 1,
 	toughness: 1,
 });
@@ -217,7 +234,9 @@ export const DARKSTEEL_MYR = registerCard({
 	types: ["artifact", "creature"],
 	subtypes: ["Myr"],
 	colors: [],
-	mv: 3,
+	manaCost: {
+		c: 3,
+	},
 	power: 0,
 	toughness: 1,
 	keywords: ["indestructible"],
@@ -228,14 +247,22 @@ export const AJANIS_MANTRA = registerCard({
 	name: "Ajani's Mantra",
 	types: ["enchantment"],
 	colors: ["w"],
-	mv: 2,
+	manaCost: {
+		w: 1,
+		c: 1,
+	},
 	triggers: [
 		{
 			id: "upkeep-life",
 			text: "At the beginning of your upkeep, you may gain 1 life.",
-			condition: { kind: "beginStep", step: "upkeep", player: "controller" },
-			optional: true,
-			effects: [{ kind: "gainLife", player: "controller", amount: 1 }],
+			condition: { kind: "begin step", player: "you", step: "upkeep" },
+			effects: [
+				{
+					kind: "may",
+					decider: "you",
+					effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+				},
+			],
 		},
 	],
 });
@@ -246,33 +273,42 @@ export const ARASHIN_CLERIC = registerCard({
 	types: ["creature"],
 	subtypes: ["Human", "Cleric"],
 	colors: ["w"],
-	mv: 2,
+	manaCost: {
+		w: 1,
+		c: 1,
+	},
 	power: 1,
 	toughness: 3,
 	triggers: [
 		{
 			id: "etb-life",
 			text: "When this creature enters, you gain 3 life.",
-			condition: { kind: "entersBattlefield", object: "self" },
-			effects: [{ kind: "gainLife", player: "controller", amount: 3 }],
+			condition: {
+				kind: "change zone",
+				from: "any",
+				to: "battlefield",
+				selector: "self",
+			},
+			effects: [{ kind: "gain-life", player: "you", amount: 3 }],
 		},
 	],
 });
 
-/** STUB: dies triggers are not yet supported. */
-export const OUTLAW_MEDIC = registerCard({
-	id: "outlaw-medic",
-	name: "Outlaw Medic",
+/** Vanilla lifelink — no other abilities, so it exercises lifelink alone. */
+export const RHOX_WAR_MONK = registerCard({
+	id: "rhox-war-monk",
+	name: "Rhox War Monk",
 	types: ["creature"],
-	subtypes: ["Human", "Rogue"],
-	colors: ["w"],
-	mv: 2,
-	power: 1,
-	toughness: 3,
+	subtypes: ["Rhino", "Monk"],
+	colors: ["g", "w", "u"],
+	manaCost: {
+		g: 1,
+		w: 1,
+		u: 1,
+	},
+	power: 3,
+	toughness: 4,
 	keywords: ["lifelink"],
-	triggers: [
-		// "When this creature dies, draw a card."
-	],
 });
 
 export const FOREST = registerCard({
@@ -281,7 +317,7 @@ export const FOREST = registerCard({
 	types: ["land"],
 	subtypes: ["Forest"],
 	colors: [],
-	mv: 0,
+	manaCost: "none",
 });
 
 export const SAPROLING_TOKEN = registerCard({
@@ -290,7 +326,7 @@ export const SAPROLING_TOKEN = registerCard({
 	types: ["creature"],
 	subtypes: ["Saproling"],
 	colors: ["g"],
-	mv: 0,
+	manaCost: "none",
 	power: 1,
 	toughness: 1,
 });
@@ -300,7 +336,7 @@ export const SAPROLING_TOKEN = registerCard({
  * ------------------------------------------------------------------ */
 
 function goingToGraveyard(ev: GameEvent): boolean {
-	return ev.kind === "zoneChange" && ev.to === "graveyard";
+	return ev.kind === "change zone" && ev.to === "graveyard";
 }
 
 export const REST_IN_PEACE = registerCard({
@@ -308,7 +344,10 @@ export const REST_IN_PEACE = registerCard({
 	name: "Rest in Peace",
 	types: ["enchantment"],
 	colors: ["w"],
-	mv: 2,
+	manaCost: {
+		w: 1,
+		c: 1,
+	},
 	replacements: [
 		{
 			label: "rip",
@@ -316,7 +355,7 @@ export const REST_IN_PEACE = registerCard({
 			text: "If a card would be put into a graveyard from anywhere, exile it instead.",
 			applies: (ev, ctx) => onBattlefield(ctx) && goingToGraveyard(ev),
 			replace: (ev) =>
-				ev.kind === "zoneChange" ? [{ ...ev, to: "exile" }] : [ev],
+				ev.kind === "change zone" ? [{ ...ev, to: "exile" }] : [ev],
 		},
 	],
 });
@@ -326,7 +365,10 @@ export const LEYLINE_OF_THE_VOID = registerCard({
 	name: "Leyline of the Void",
 	types: ["enchantment"],
 	colors: ["b"],
-	mv: 4,
+	manaCost: {
+		b: 2,
+		c: 2,
+	},
 	replacements: [
 		{
 			label: "leyline",
@@ -335,7 +377,7 @@ export const LEYLINE_OF_THE_VOID = registerCard({
 			applies(ev, ctx) {
 				if (
 					!onBattlefield(ctx) ||
-					ev.kind !== "zoneChange" ||
+					ev.kind !== "change zone" ||
 					ev.to !== "graveyard"
 				)
 					return false;
@@ -343,7 +385,7 @@ export const LEYLINE_OF_THE_VOID = registerCard({
 				return !!o && o.owner !== ctx.controller;
 			},
 			replace: (ev) =>
-				ev.kind === "zoneChange" ? [{ ...ev, to: "exile" }] : [ev],
+				ev.kind === "change zone" ? [{ ...ev, to: "exile" }] : [ev],
 		},
 	],
 });
@@ -357,25 +399,34 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 	name: "Chains of Mephistopheles",
 	types: ["enchantment"],
 	colors: ["b"],
-	mv: 2,
+	manaCost: {
+		b: 1,
+		c: 1,
+	},
 	replacements: [
 		{
 			label: "chains",
 			layer: "other",
 			text:
 				"If a player would draw a card except the first one they draw in their draw step each turn, " +
-				"that player discards a card instead. If the player discards a card this way, they draw a card.",
+				"that player discards a card instead. If the player discards a card this way, they draw a card. " +
+				"If the player doesn't discard a card this way, they mill a card.",
 			applies(ev, ctx) {
+				// If a player would draw a card...
 				if (!onBattlefield(ctx) || ev.kind !== "draw") return false;
+				const location = turnLocation(ctx.state);
 				const inOwnDrawStep =
-					ctx.state.step === "draw" && ctx.state.activePlayer === ev.player;
+					location?.kind === "step" &&
+					location.step.kind === "draw" &&
+					ctx.state.activePlayer === ev.player;
 				const isFirstDrawOfDrawStep =
 					inOwnDrawStep && ctx.state.players[ev.player].drawnInDrawStep === 0;
+				// except the first draw of the draw step...
 				return !isFirstDrawOfDrawStep;
 			},
 			replace(ev, ctx): GameEvent[] {
 				if (ev.kind !== "draw") return [ev];
-				const tag = `chains:discarded:${ev.player}:${ctx.state.nextTag++}`;
+				const tag = `chains:discarded:${ev.player}:${ctx.rc.depth}:${ctx.rc.applied.size}`;
 				return [
 					{
 						kind: "discard",
@@ -383,9 +434,9 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 						fact: tag,
 						cards: { kind: "any" },
 					},
-					// "If the player discards a card this way" — the guard makes the second
-					// half conditional without smuggling a closure into the event.
+
 					{ kind: "draw", player: ev.player, guard: tag },
+					{ kind: "mill", player: ev.player, amount: 1, unless: tag },
 				];
 			},
 		},
@@ -397,7 +448,9 @@ export const NECROPOTENCE = registerCard({
 	name: "Necropotence",
 	types: ["enchantment"],
 	colors: ["b"],
-	mv: 3,
+	manaCost: {
+		b: 3,
+	},
 	replacements: [
 		{
 			label: "necro:skipdraw",
@@ -405,7 +458,7 @@ export const NECROPOTENCE = registerCard({
 			text: "Skip your draw step.",
 			applies: (ev, ctx) =>
 				onBattlefield(ctx) &&
-				ev.kind === "beginStep" &&
+				ev.kind === "begin step" &&
 				ev.step === "draw" &&
 				ev.player === ctx.controller,
 			// CR 614.10: "skip" effects replace the event with nothing at all.
@@ -423,7 +476,10 @@ export const FURNACE_OF_RATH = registerCard({
 	name: "Furnace of Rath",
 	types: ["enchantment"],
 	colors: ["r"],
-	mv: 4,
+	manaCost: {
+		r: 3,
+		c: 1,
+	},
 	replacements: [
 		{
 			label: "furnace",
@@ -441,11 +497,14 @@ export const PALISADE_GIANT = registerCard({
 	id: "palisade-giant",
 	name: "Palisade Giant",
 	types: ["creature"],
-	subtypes: ["Giant", "Wall"],
+	subtypes: ["Giant", "Soldier"],
 	colors: ["w"],
-	mv: 6,
+	manaCost: {
+		w: 2,
+		c: 4,
+	},
 	power: 2,
-	toughness: 6,
+	toughness: 7,
 	replacements: [
 		{
 			label: "palisade",
@@ -474,12 +533,13 @@ export const PALISADE_GIANT = registerCard({
  * characteristics the permanent *would* have on the battlefield)
  * ------------------------------------------------------------------ */
 
-export const MYCOSYNTH_LATTICE = registerCard({
-	id: "mycosynth-lattice",
-	name: "Mycosynth Lattice",
+// this only implements the first half of mycosynth lattice card text.
+export const BABY_MYCOSYNTH = registerCard({
+	id: "baby-mycosynth-lattice",
+	name: "Baby Mycosynth Lattice",
 	types: ["artifact"],
 	colors: [],
-	mv: 6,
+	manaCost: "zero",
 	statics: [
 		{
 			layer: "4-type-changing",
@@ -498,7 +558,9 @@ export const ROOT_MAZE = registerCard({
 	name: "Root Maze",
 	types: ["enchantment"],
 	colors: ["g"],
-	mv: 2,
+	manaCost: {
+		g: 1,
+	},
 	replacements: [
 		{
 			label: "rootmaze",
@@ -507,7 +569,7 @@ export const ROOT_MAZE = registerCard({
 			applies(ev, ctx) {
 				if (
 					!onBattlefield(ctx) ||
-					ev.kind !== "zoneChange" ||
+					ev.kind !== "change zone" ||
 					ev.to !== "battlefield"
 				)
 					return false;
@@ -517,7 +579,7 @@ export const ROOT_MAZE = registerCard({
 				return v.types.includes("artifact") || v.types.includes("land");
 			},
 			replace: (ev) =>
-				ev.kind === "zoneChange" ? [{ ...ev, entersTapped: true }] : [ev],
+				ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
 		},
 	],
 });
@@ -532,38 +594,65 @@ export const CLONE = registerCard({
 	types: ["creature"],
 	subtypes: ["Shapeshifter"],
 	colors: ["u"],
-	mv: 4,
+	manaCost: {
+		u: 1,
+		c: 3,
+	},
 	power: 0,
 	toughness: 0,
 	replacements: [
 		{
 			label: "clone",
 			layer: "copy",
-			functionsIn: ["any"],
+			functionsIn: "any",
 			text: "You may have Clone enter as a copy of any creature on the battlefield.",
 			applies: (ev, ctx) =>
-				ev.kind === "zoneChange" &&
+				ev.kind === "change zone" &&
 				ev.to === "battlefield" &&
 				ev.object === ctx.self?.id &&
-				ev.copyOf === undefined &&
-				pickCloneTarget(ctx.state, ctx.controller) !== null,
+				ev.copyEffect === undefined &&
+				pickCloneTarget(ctx.read) !== null,
 			replace(ev, ctx) {
-				if (ev.kind !== "zoneChange") return [ev];
-				const target = pickCloneTarget(ctx.state, ctx.controller);
-				return [{ ...ev, copyOf: target ?? undefined }];
+				if (ev.kind !== "change zone") return [ev];
+				const target = pickCloneTarget(ctx.read);
+				return target
+					? [
+							{
+								...ev,
+								copyEffect: structuredClone(target.copiableValues),
+								copySourceCardId: target.sourceCardId ?? undefined,
+							},
+						]
+					: [ev];
 			},
 		},
 	],
 });
 
 /** Stand-in for a real choice — a policy would pick here. */
-function pickCloneTarget(
-	state: GameState,
-	_controller: PlayerId,
-): string | null {
-	for (const id of state.battlefield) {
-		const v = view(state, id);
-		if (v.types.includes("creature")) return v.cardId;
+function pickCloneTarget(read: ReadContext): {
+	copiableValues: CharacteristicsSnapshot;
+	sourceCardId: string | null;
+} | null {
+	for (const id of read.state.battlefield) {
+		const snapshot = readObject(read, id);
+		if (
+			snapshot.kind !== "permanent" ||
+			!snapshot.currentCharacteristics.types.includes("creature")
+		)
+			continue;
+		const object = read.state.objects.get(id);
+		assertDefined(object);
+		return {
+			copiableValues: snapshot.copiableValues,
+			sourceCardId:
+				object.kind === "permanent"
+					? (object.copySourceCardId ??
+						(object.representation.kind === "card"
+							? object.representation.cardId
+							: object.representation.createdValues.name))
+					: null,
+		};
 	}
 	return null;
 }
@@ -578,7 +667,10 @@ export const LABORATORY_MANIAC = registerCard({
 	types: ["creature"],
 	subtypes: ["Human", "Wizard"],
 	colors: ["u"],
-	mv: 3,
+	manaCost: {
+		u: 1,
+		c: 2,
+	},
 	power: 2,
 	toughness: 2,
 	replacements: [
@@ -595,7 +687,7 @@ export const LABORATORY_MANIAC = registerCard({
 				if (ev.kind !== "draw") return [ev];
 				return [
 					{
-						kind: "winGame",
+						kind: "win game",
 						player: ev.player,
 						reason: "Laboratory Maniac",
 					},
@@ -611,7 +703,9 @@ export const PLATINUM_ANGEL = registerCard({
 	types: ["artifact", "creature"],
 	subtypes: ["Angel"],
 	colors: [],
-	mv: 7,
+	manaCost: {
+		c: 7,
+	},
 	power: 4,
 	toughness: 4,
 	keywords: ["flying"],
@@ -620,17 +714,16 @@ export const PLATINUM_ANGEL = registerCard({
 			label: "platinum:lose",
 			text: "You can't lose the game.",
 			applies: (ev, ctx) =>
-				ev.kind === "loseGame" && ev.player === ctx.controller,
+				ev.kind === "lose game" && ev.player === ctx.controller,
 		},
 		{
 			label: "platinum:win",
 			text: "Your opponents can't win the game.",
 			applies: (ev, ctx) =>
-				ev.kind === "winGame" && ev.player !== ctx.controller,
+				ev.kind === "win game" && ev.player !== ctx.controller,
 		},
 	],
 });
-
 /** "Prevent the next N damage that would be dealt to <target> this turn." */
 export function preventNextDamageShield(
 	target:
@@ -682,7 +775,7 @@ export const ZOMBIE_TOKEN = registerCard({
 	types: ["creature"],
 	subtypes: ["Zombie"],
 	colors: ["b"],
-	mv: 0,
+	manaCost: "none",
 	power: 2,
 	toughness: 2,
 });
@@ -693,7 +786,10 @@ export const KALITAS = registerCard({
 	types: ["creature"],
 	subtypes: ["Vampire", "Warrior"],
 	colors: ["b"],
-	mv: 4,
+	manaCost: {
+		c: 2,
+		b: 2,
+	},
 	power: 3,
 	toughness: 4,
 	keywords: ["lifelink"],
@@ -703,18 +799,22 @@ export const KALITAS = registerCard({
 			layer: "other",
 			text: "If a nontoken creature an opponent controls would die, instead exile it and create a 2/2 black Zombie token.",
 			applies(ev, ctx) {
-				if (!onBattlefield(ctx) || ev.kind !== "zoneChange") return false;
+				if (!onBattlefield(ctx) || ev.kind !== "change zone") return false;
 				if (ev.from !== "battlefield" || ev.to !== "graveyard") return false;
 				const o = maybePermanent(ctx.state, ev.object);
 				if (!o || o.token || o.controller === ctx.controller) return false;
-				return view(ctx.state, o.id).types.includes("creature");
+				const snapshot = readObject(ctx.read, o.id);
+				return (
+					snapshot.kind === "permanent" &&
+					snapshot.currentCharacteristics.types.includes("creature")
+				);
 			},
 			replace(ev, ctx) {
-				if (ev.kind !== "zoneChange") return [ev];
+				if (ev.kind !== "change zone") return [ev];
 				return [
 					{ ...ev, to: "exile" },
 					{
-						kind: "createToken",
+						kind: "create token",
 						controller: ctx.controller,
 						cardId: "zombie-token",
 						amount: 1,
@@ -723,4 +823,24 @@ export const KALITAS = registerCard({
 			},
 		},
 	],
+});
+
+export const REVITALIZE = registerCard({
+	id: "revitalize",
+	name: "Revitalize",
+	types: ["instant"],
+	colors: [],
+	manaCost: {
+		c: 1,
+		w: 1,
+	},
+	spell: {
+		id: "spell-1",
+		text: "You gain 3 life. Draw a card.",
+		targets: [],
+		effects: [
+			{ kind: "gain-life", amount: 3, player: "you" },
+			{ kind: "draw", amount: 1, player: "you" },
+		],
+	},
 });
