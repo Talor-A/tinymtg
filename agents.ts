@@ -3,6 +3,7 @@ import type {
 	ChoiceAnswer,
 	ChoiceRequest,
 	GameState,
+	ObjectId,
 	PriorityAction,
 	SyncAgent,
 } from "./index.ts";
@@ -38,6 +39,7 @@ export class ScriptedAgent implements SyncAgent {
 		public preferences: string[] = [],
 		public optionalChoices: boolean[] = [],
 		public priorityActions: PriorityAction[] = [],
+		public attackerChoices: ObjectId[][] = [],
 	) {}
 
 	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
@@ -69,6 +71,11 @@ export class ScriptedAgent implements SyncAgent {
 				return option ? { optionId: option.id } : firstOption(request);
 			}
 
+			case "declareAttackers": {
+				const attackers = this.attackerChoices.shift() ?? [];
+				return { optionIds: attackers.map((id) => String(id)) };
+			}
+
 			default:
 				return assertNever(request);
 		}
@@ -77,7 +84,21 @@ export class ScriptedAgent implements SyncAgent {
 
 export class RandomAgent implements SyncAgent {
 	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
-		return { optionId: randomElement(request.options).id };
+		switch (request.kind) {
+			case "declareAttackers":
+				return {
+					optionIds: request.options
+						.filter(() => Math.random() < 0.5)
+						.map((option) => option.id),
+				};
+			case "replacement":
+			case "ownHand":
+			case "optional":
+			case "priorityAction":
+				return { optionId: randomElement(request.options).id };
+			default:
+				return assertNever(request);
+		}
 	}
 }
 
@@ -96,6 +117,8 @@ export class KeyboardAgent implements SyncAgent {
 			case "priorityAction":
 				console.log("\n[Priority action choice]");
 				break;
+			case "declareAttackers":
+				return this.chooseAttackers(request);
 			default:
 				return assertNever(request);
 		}
@@ -109,6 +132,44 @@ export class KeyboardAgent implements SyncAgent {
 			const option = request.options[index];
 			if (option) return { optionId: option.id };
 			console.log("Invalid input, try again.");
+		}
+	}
+
+	private chooseAttackers(
+		request: Extract<ChoiceRequest, { kind: "declareAttackers" }>,
+	): ChoiceAnswer {
+		console.log(`\n[Player ${request.player}: declare attackers]`);
+		for (let i = 0; i < request.options.length; i++) {
+			console.log(`  ${i + 1}. ${request.options[i]?.label}`);
+		}
+		while (true) {
+			const input = prompt(
+				"Attackers (comma-separated numbers, blank for none): ",
+			);
+			const trimmed = input.trim();
+			if (trimmed === "") return { optionIds: [] };
+
+			const parts = trimmed.split(",").map((part) => part.trim());
+			if (parts.some((part) => !/^\d+$/.test(part))) {
+				console.log("Invalid input, try again.");
+				continue;
+			}
+			const indices = parts.map((part) => Number.parseInt(part, 10) - 1);
+			if (new Set(indices).size !== indices.length) {
+				console.log("Duplicate selection, try again.");
+				continue;
+			}
+			const options = indices.map((index) => request.options[index]);
+			if (options.some((option) => !option)) {
+				console.log("Invalid input, try again.");
+				continue;
+			}
+			return {
+				optionIds: options.map((option) => {
+					assertDefined(option);
+					return option.id;
+				}),
+			};
 		}
 	}
 }

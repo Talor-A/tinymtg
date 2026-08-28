@@ -47,15 +47,27 @@ export interface PriorityActionChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
+/**
+ * The defending player is intentionally omitted: this project supports
+ * exactly two players and all attackers currently attack the opposing
+ * player implicitly.
+ */
+export interface DeclareAttackersChoiceRequest extends ChoiceRequestBase {
+	kind: "declareAttackers";
+	player: PlayerId;
+	context: {
+		eligibleAttackers: ObjectId[];
+	};
+}
+
 export type ChoiceRequest =
 	| ReplacementChoiceRequest
 	| OwnHandChoiceRequest
 	| OptionalChoiceRequest
-	| PriorityActionChoiceRequest;
+	| PriorityActionChoiceRequest
+	| DeclareAttackersChoiceRequest;
 
-export interface ChoiceAnswer {
-	optionId: string;
-}
+export type ChoiceAnswer = { optionId: string } | { optionIds: string[] };
 
 export interface SyncAgent {
 	choose(state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer;
@@ -121,6 +133,10 @@ type RequestInput =
 	| Omit<
 			PriorityActionChoiceRequest,
 			"version" | "id" | "ordinal" | "fingerprint"
+	  >
+	| Omit<
+			DeclareAttackersChoiceRequest,
+			"version" | "id" | "ordinal" | "fingerprint"
 	  >;
 
 function canonicalize(value: unknown, seen = new Set<object>()): string {
@@ -174,17 +190,81 @@ function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
 	);
 }
 
-function assertValidAnswer(request: ChoiceRequest, answer: ChoiceAnswer): void {
-	if (!answer || typeof answer.optionId !== "string") {
+/**
+ * Central validation and canonicalization boundary for every answer shape:
+ * synchronous live answers, recordAnswer async answers, and recorded replay
+ * answers all pass through here before being stored or consumed.
+ */
+function normalizeAnswer(
+	request: ChoiceRequest,
+	answer: ChoiceAnswer,
+): ChoiceAnswer {
+	if (request.kind === "declareAttackers") {
+		return normalizeMultiAnswer(request, answer);
+	}
+	return normalizeSingleAnswer(request, answer);
+}
+
+function normalizeSingleAnswer(
+	request: ChoiceRequest,
+	answer: ChoiceAnswer,
+): { optionId: string } {
+	if (
+		!answer ||
+		typeof (answer as { optionId?: unknown }).optionId !== "string"
+	) {
 		throw new InvalidChoiceAnswerError(
 			`agent returned an invalid answer for choice ${request.id}`,
 		);
 	}
-	if (!request.options.some((option) => option.id === answer.optionId)) {
+	const optionId = (answer as { optionId: string }).optionId;
+	if (!request.options.some((option) => option.id === optionId)) {
 		throw new InvalidChoiceAnswerError(
-			`agent selected ${answer.optionId} for choice ${request.id}; legal options: ${request.options.map((option) => option.id).join(", ")}`,
+			`agent selected ${optionId} for choice ${request.id}; legal options: ${request.options.map((option) => option.id).join(", ")}`,
 		);
 	}
+	return { optionId };
+}
+
+function normalizeMultiAnswer(
+	request: ChoiceRequest,
+	answer: ChoiceAnswer,
+): { optionIds: string[] } {
+	if (
+		!answer ||
+		!Array.isArray((answer as { optionIds?: unknown }).optionIds)
+	) {
+		throw new InvalidChoiceAnswerError(
+			`agent returned an invalid answer for choice ${request.id}`,
+		);
+	}
+	const optionIds = (answer as { optionIds: unknown[] }).optionIds;
+	const seen = new Set<string>();
+	for (const id of optionIds) {
+		if (typeof id !== "string") {
+			throw new InvalidChoiceAnswerError(
+				`agent returned an invalid answer for choice ${request.id}`,
+			);
+		}
+		if (seen.has(id)) {
+			throw new InvalidChoiceAnswerError(
+				`agent selected duplicate option ${id} for choice ${request.id}`,
+			);
+		}
+		seen.add(id);
+	}
+	const validIds = new Set(request.options.map((option) => option.id));
+	for (const id of seen) {
+		if (!validIds.has(id)) {
+			throw new InvalidChoiceAnswerError(
+				`agent selected ${id} for choice ${request.id}; legal options: ${request.options.map((option) => option.id).join(", ")}`,
+			);
+		}
+	}
+	const normalized = request.options
+		.map((option) => option.id)
+		.filter((id) => seen.has(id));
+	return { optionIds: normalized };
 }
 
 function priorityOptionId(action: PriorityAction): string {
@@ -259,8 +339,11 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				`cannot record choice ${request.ordinal}; transcript has ${this.decisions.length} choices`,
 			);
 		}
-		assertValidAnswer(pending, answer);
-		this.decisions.push({ request: clone(pending), answer: clone(answer) });
+		const normalized = normalizeAnswer(pending, answer);
+		this.decisions.push({
+			request: clone(pending),
+			answer: clone(normalized),
+		});
 		this.pendingRequest = null;
 	}
 
@@ -307,12 +390,18 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
 				);
 			}
+			const recordedAnswer = recorded.answer;
+			if (!("optionId" in recordedAnswer)) {
+				throw new ChoiceReplayMismatchError(
+					`recorded answer for choice ${request.id} is not a single-select answer`,
+				);
+			}
 			const candidate = candidates.find(
-				(option) => option.id === recorded.answer.optionId,
+				(option) => option.id === recordedAnswer.optionId,
 			);
 			if (!candidate) {
 				throw new ChoiceReplayMismatchError(
-					`recorded answer ${recorded.answer.optionId} is not legal for choice ${request.id}`,
+					`recorded answer ${recordedAnswer.optionId} is not legal for choice ${request.id}`,
 				);
 			}
 			this.cursor++;
@@ -333,21 +422,99 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			this.pendingRequest = clone(request);
 			throw new ChoicePendingError(clone(request), answer);
 		}
-		assertValidAnswer(request, answer);
+		const normalized = normalizeAnswer(request, answer);
+		if (!("optionId" in normalized)) {
+			throw new InvalidChoiceAnswerError(
+				`choice ${request.id} requires a single-select answer`,
+			);
+		}
 		const candidate = candidates.find(
-			(option) => option.id === answer.optionId,
+			(option) => option.id === normalized.optionId,
 		);
 		if (!candidate) {
 			throw new InvalidChoiceAnswerError(
-				`choice ${request.id} has no live candidate for ${answer.optionId}`,
+				`choice ${request.id} has no live candidate for ${normalized.optionId}`,
 			);
 		}
 		this.decisions.push({
 			request: clone(request),
-			answer: clone(answer),
+			answer: clone(normalized),
 		});
 		this.cursor++;
 		return candidate.value;
+	}
+
+	private chooseMulti<T>(
+		state: GameState,
+		request: ChoiceRequest,
+		candidates: readonly { id: string; value: T }[],
+	): T[] {
+		const recorded = this.decisions[this.cursor];
+		if (recorded) {
+			if (
+				recorded.request.id !== request.id ||
+				recorded.request.fingerprint !== request.fingerprint
+			) {
+				throw new ChoiceReplayMismatchError(
+					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
+				);
+			}
+			const normalized = normalizeAnswer(request, recorded.answer);
+			if (!("optionIds" in normalized)) {
+				throw new ChoiceReplayMismatchError(
+					`recorded answer for choice ${request.id} is not a multi-select answer`,
+				);
+			}
+			const values: T[] = [];
+			for (const id of normalized.optionIds) {
+				const candidate = candidates.find((option) => option.id === id);
+				if (!candidate) {
+					throw new ChoiceReplayMismatchError(
+						`recorded answer ${id} is not legal for choice ${request.id}`,
+					);
+				}
+				values.push(candidate.value);
+			}
+			this.cursor++;
+			return values;
+		}
+
+		const agent = this.agents?.[request.player];
+		if (!agent) {
+			throw new ChoiceReplayMismatchError(
+				`transcript ended before choice ${request.id}`,
+			);
+		}
+		const answer = agent.choose(state, request);
+		if (isPromiseLike(answer)) {
+			if (!this.allowSuspension) {
+				throw new Error("an async agent was used outside advanceWithReplay()");
+			}
+			this.pendingRequest = clone(request);
+			throw new ChoicePendingError(clone(request), answer);
+		}
+		const normalized = normalizeAnswer(request, answer);
+		if (!("optionIds" in normalized)) {
+			throw new InvalidChoiceAnswerError(
+				`choice ${request.id} requires a multi-select answer`,
+			);
+		}
+		const values: T[] = [];
+		for (const id of normalized.optionIds) {
+			const candidate = candidates.find((option) => option.id === id);
+			if (!candidate) {
+				throw new InvalidChoiceAnswerError(
+					`choice ${request.id} has no live candidate for ${id}`,
+				);
+			}
+			values.push(candidate.value);
+		}
+		this.decisions.push({
+			request: clone(request),
+			answer: clone(normalized),
+		});
+		this.cursor++;
+		return values;
 	}
 
 	chooseReplacement(
@@ -431,6 +598,33 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			})),
 		});
 		return this.choose(state, request, candidates);
+	}
+
+	/**
+	 * One replayable multi-select decision over a subset of eligible
+	 * attackers, including the empty subset. An empty eligible list is not a
+	 * real decision and is answered without issuing a request.
+	 */
+	chooseAttackers(
+		state: GameState,
+		player: PlayerId,
+		eligibleAttackers: ObjectId[],
+	): ObjectId[] {
+		if (eligibleAttackers.length === 0) return [];
+		const candidates = eligibleAttackers.map((id) => ({
+			id: String(id),
+			value: id,
+		}));
+		const request = this.request({
+			kind: "declareAttackers",
+			player,
+			context: { eligibleAttackers: [...eligibleAttackers] },
+			options: eligibleAttackers.map((id) => ({
+				id: String(id),
+				label: `${state.objects.get(id)?.cardId ?? "unknown"}#${id}`,
+			})),
+		});
+		return this.chooseMulti(state, request, candidates);
 	}
 }
 

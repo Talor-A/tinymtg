@@ -25,6 +25,13 @@ export class FuzzAgent implements SyncAgent {
 	}
 
 	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
+		if (request.kind === "declareAttackers") {
+			return {
+				optionIds: request.options
+					.filter(() => this.rng() < 0.5)
+					.map((option) => option.id),
+			};
+		}
 		const option =
 			request.options[Math.floor(this.rng() * request.options.length)];
 		if (!option) throw new Error("fuzz agent received no options");

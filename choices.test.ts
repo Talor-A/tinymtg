@@ -10,6 +10,7 @@ import {
 	ChoicePendingError,
 	ChoiceReplayMismatchError,
 	type ChoiceRequest,
+	type GameState,
 	InvalidChoiceAnswerError,
 	newGame,
 	type ObjectId,
@@ -375,5 +376,164 @@ describe("choice transcripts", () => {
 				replay,
 			),
 		).toThrow(ChoiceReplayMismatchError);
+	});
+});
+
+describe("chooseAttackers", () => {
+	function eligibleCreatures(state: GameState): [ObjectId, ObjectId, ObjectId] {
+		const a = spawnPermanent(state, "grizzly-bears", 0, "battlefield").id;
+		const b = spawnPermanent(state, "grizzly-bears", 0, "battlefield").id;
+		const c = spawnPermanent(state, "grizzly-bears", 0, "battlefield").id;
+		return [a, b, c];
+	}
+
+	test("empty eligible list returns [] with no request", () => {
+		const state = newGame();
+		const recorder = ChoiceController.record(agents());
+		const result = recorder.chooseAttackers(state, 0, []);
+		expect(result).toEqual([]);
+		expect(recorder.transcript().choices).toHaveLength(0);
+	});
+
+	test("selecting no attackers", () => {
+		const state = newGame();
+		const [a, b, c] = eligibleCreatures(state);
+		const agent: Agent = { choose: () => ({ optionIds: [] }) };
+		const recorder = ChoiceController.record([
+			agent as SyncAgent,
+			agent as SyncAgent,
+		]);
+		const result = recorder.chooseAttackers(state, 0, [a, b, c]);
+		expect(result).toEqual([]);
+		expect(recorder.transcript().choices).toHaveLength(1);
+		expect(recorder.transcript().choices[0]?.request.kind).toBe(
+			"declareAttackers",
+		);
+	});
+
+	test("selecting multiple attackers", () => {
+		const state = newGame();
+		const [a, b, c] = eligibleCreatures(state);
+		const agent: Agent = {
+			choose: (_state, request) => ({
+				optionIds: [String(a), String(c)].filter((id) =>
+					request.options.some((option) => option.id === id),
+				),
+			}),
+		};
+		const recorder = ChoiceController.record([
+			agent as SyncAgent,
+			agent as SyncAgent,
+		]);
+		const result = recorder.chooseAttackers(state, 0, [a, b, c]);
+		expect(result).toEqual([a, c]);
+	});
+
+	test("reverse-order answer normalizes result and transcript to request order", () => {
+		const state = newGame();
+		const [a, b, c] = eligibleCreatures(state);
+		const agent: Agent = {
+			choose: () => ({ optionIds: [String(c), String(a)] }),
+		};
+		const recorder = ChoiceController.record([
+			agent as SyncAgent,
+			agent as SyncAgent,
+		]);
+		const result = recorder.chooseAttackers(state, 0, [a, b, c]);
+		expect(result).toEqual([a, c]);
+		const recordedAnswer = recorder.transcript().choices[0]?.answer;
+		expect(recordedAnswer).toEqual({ optionIds: [String(a), String(c)] });
+	});
+
+	test("duplicate, unknown, and wrong-shape answers throw InvalidChoiceAnswerError", () => {
+		const state = newGame();
+		const [a, b, c] = eligibleCreatures(state);
+
+		const duplicate: Agent = {
+			choose: () => ({ optionIds: [String(a), String(a)] }),
+		};
+		expect(() =>
+			ChoiceController.record([
+				duplicate as SyncAgent,
+				duplicate as SyncAgent,
+			]).chooseAttackers(state, 0, [a, b, c]),
+		).toThrow(InvalidChoiceAnswerError);
+
+		const unknown: Agent = {
+			choose: () => ({ optionIds: ["999999"] }),
+		};
+		expect(() =>
+			ChoiceController.record([
+				unknown as SyncAgent,
+				unknown as SyncAgent,
+			]).chooseAttackers(state, 0, [a, b, c]),
+		).toThrow(InvalidChoiceAnswerError);
+
+		const wrongShape: Agent = {
+			choose: () => ({ optionId: String(a) }) as unknown as ChoiceAnswer,
+		};
+		expect(() =>
+			ChoiceController.record([
+				wrongShape as SyncAgent,
+				wrongShape as SyncAgent,
+			]).chooseAttackers(state, 0, [a, b, c]),
+		).toThrow(InvalidChoiceAnswerError);
+	});
+
+	test("JSON round trip and replay reproduce IDs", () => {
+		const state = newGame();
+		const [a, b, c] = eligibleCreatures(state);
+		const agent: Agent = {
+			choose: () => ({ optionIds: [String(b)] }),
+		};
+		const recorder = ChoiceController.record([
+			agent as SyncAgent,
+			agent as SyncAgent,
+		]);
+		const result = recorder.chooseAttackers(state, 0, [a, b, c]);
+		expect(result).toEqual([b]);
+
+		const transcript = JSON.parse(JSON.stringify(recorder.transcript()));
+		const replay = ChoiceController.replay(transcript);
+		const replayedResult = replay.chooseAttackers(state, 0, [a, b, c]);
+		replay.assertComplete();
+		expect(replayedResult).toEqual([b]);
+	});
+
+	test("promise answer throws ChoicePendingError; recordAnswer normalizes and replay consumes exactly once", async () => {
+		const state = newGame();
+		const [a, b, c] = eligibleCreatures(state);
+		let resolveAnswer: ((answer: ChoiceAnswer) => void) | undefined;
+		const pending = new Promise<ChoiceAnswer>((resolve) => {
+			resolveAnswer = resolve;
+		});
+		const agent: Agent = { choose: () => pending };
+		const choices = ChoiceController.suspending([agent, agent]);
+
+		let suspension: ChoicePendingError | undefined;
+		try {
+			choices.chooseAttackers(state, 0, [a, b, c]);
+		} catch (error) {
+			if (!(error instanceof ChoicePendingError)) throw error;
+			suspension = error;
+		}
+		if (!suspension || !resolveAnswer) {
+			throw new Error("expected a pending choice");
+		}
+		expect(suspension.request.kind).toBe("declareAttackers");
+		expect(choices.transcript().choices).toHaveLength(0);
+
+		resolveAnswer({ optionIds: [String(c), String(a)] });
+		const answer = await suspension.answer;
+		choices.recordAnswer(suspension.request, answer);
+		expect(choices.transcript().choices).toHaveLength(1);
+		expect(choices.transcript().choices[0]?.answer).toEqual({
+			optionIds: [String(a), String(c)],
+		});
+
+		choices.rewind();
+		const result = choices.chooseAttackers(state, 0, [a, b, c]);
+		expect(result).toEqual([a, c]);
+		choices.assertComplete();
 	});
 });
