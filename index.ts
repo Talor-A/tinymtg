@@ -2389,12 +2389,28 @@ function executeIn(
 		}
 
 		case "declare attackers": {
-			if (state.step !== "declare attackers") {
+			// The trustworthy boundary is the turn scheduler's own record of what step
+			// is genuinely in progress, not the mutable state.step mirror alone: a
+			// declare-attackers occurrence must exist, and it must belong to the
+			// scheduler's current turn. state.step is kept only as an additional
+			// mirror check, never the sole boundary.
+			const scheduler = state.turnScheduler;
+			const currentStep = scheduler.currentStep;
+			const currentTurn = scheduler.currentTurn;
+			if (
+				currentStep?.kind !== "declare attackers" ||
+				!currentTurn ||
+				currentStep.turnId !== currentTurn.id ||
+				state.step !== "declare attackers"
+			) {
 				throw new IllegalAttackDeclarationError(
 					`cannot declare attackers outside the declare attackers step (current step: "${state.step}")`,
 				);
 			}
-			if (ev.player !== state.activePlayer) {
+			if (
+				ev.player !== currentTurn.player ||
+				ev.player !== state.activePlayer
+			) {
 				throw new IllegalAttackDeclarationError(
 					`P${ev.player} declared attackers, but P${state.activePlayer} is the active player`,
 				);

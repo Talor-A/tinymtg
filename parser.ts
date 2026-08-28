@@ -407,13 +407,6 @@ export function parseCard(text: string): CardDef | null {
 	}
 
 	const usedSvars = new Set<string>();
-	// Forge writes this exact SVar alongside "Attacks" triggers as UI metadata
-	// (whether the card has an attack-trigger effect for AI/UI purposes). It
-	// carries no rules meaning and is never itself referenced, so it is the one
-	// narrowly known SVar allowed to go unused rather than rejecting the card.
-	for (const [key, value] of svars) {
-		if (key === "HasAttackEffect" && value === "TRUE") usedSvars.add(key);
-	}
 	for (const line of lines.filter((entry) => entry.key === "R")) {
 		const reference = tappedReplacementReferences(line.value);
 		if (!reference || usedSvars.has(reference)) return null;
@@ -433,6 +426,20 @@ export function parseCard(text: string): CardDef | null {
 		}
 		card.triggers.push(parsed.trigger);
 	}
+
+	// Forge writes this exact SVar alongside "Attacks" triggers as UI metadata
+	// (whether the card has an attack-trigger effect for AI/UI purposes). It
+	// carries no rules meaning and is never itself referenced. That metadata
+	// alone must never make an otherwise-unremarkable card parse: it is only
+	// narrowly accepted as pre-used UI noise when the card actually has a self
+	// declared-attacker trigger, matching what the SVar claims to describe.
+	const hasSelfAttackTrigger = (card.triggers ?? []).some(
+		(trigger) => trigger.condition.kind === "declaredAttacker",
+	);
+	if (hasSelfAttackTrigger && svars.get("HasAttackEffect") === "TRUE") {
+		usedSvars.add("HasAttackEffect");
+	}
+
 	if ([...svars.keys()].some((key) => !usedSvars.has(key))) return null;
 
 	const allowed = new Set([

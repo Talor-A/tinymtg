@@ -221,6 +221,22 @@ Oracle:Flying\\nWhenever Test Herald attacks, you gain 2 life.
 		).toBeNull();
 	});
 
+	test("SVar:HasAttackEffect:TRUE alone does not make a card parse", () => {
+		// This UI-only metadata is only ever accepted alongside a real self
+		// declared-attacker trigger it actually describes; on its own, an unused
+		// SVar still rejects the card like any other unexplained SVar.
+		const withoutAttackTrigger = `
+Name:Test Herald
+ManaCost:3 W W
+Types:Creature Angel
+PT:4/3
+K:Flying
+SVar:HasAttackEffect:TRUE
+Oracle:Flying
+`;
+		expect(parseCard(withoutAttackTrigger)).toBeNull();
+	});
+
 	test("rejects unsupported rules instead of partially parsing the card", () => {
 		const unsupported = [
 			"K:Vigilance",

@@ -7,10 +7,18 @@ import {
 	gameOver,
 	newGame,
 	permanent,
+	registerCard,
 	spawnCard,
 	spawnPermanent,
 	winner,
 } from "./index.ts";
+import { loadCard } from "./parser.ts";
+
+// Registered here (not in cards.ts) so normal runtime card registration never
+// depends on reading the untracked/gitignored Forge cardsfolder fixtures. This
+// test alone consumes the real parsed CardDef, exercising the parser's
+// "Attacks" self-trigger support end-to-end rather than a hand-written stand-in.
+registerCard(loadCard("herald_of_faith"));
 
 const ALICE = 0 as PlayerId;
 const BOB = 1 as PlayerId;

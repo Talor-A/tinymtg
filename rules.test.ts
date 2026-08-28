@@ -9,6 +9,7 @@ import type {
 } from "./index.ts";
 import {
 	addFloating,
+	advance,
 	checkStateBasedActions,
 	gameOver,
 	IllegalAttackDeclarationError,
@@ -665,10 +666,19 @@ describe("declaring attackers", () => {
 	} {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		// The direct-event boundary this validation actually checks: the current
-		// step and the active player (default P1), mirroring how other rules tests
-		// set state.step directly (e.g. the Chains of Mephistopheles tests above).
-		state.step = "declare attackers";
+		// Enough library cards that the normal draw step along the way doesn't
+		// lose either player the game before combat is reached.
+		spawnCard(state, "forest", P1, "library");
+		spawnCard(state, "forest", P2, "library");
+		// Establish a real declare-attackers scheduler boundary via advance(), not
+		// a direct state.step assignment: the battlefield is still empty here, so
+		// the step's own turn-based action declares no attackers, and advance()
+		// returns with turnScheduler.currentStep genuinely set to the
+		// declare-attackers occurrence of the current turn (the same boundary
+		// executeIn's "declare attackers" validation checks).
+		while (state.turnScheduler.currentStep?.kind !== "declare attackers") {
+			advance(state, agents);
+		}
 		return { state, agents };
 	}
 
@@ -847,7 +857,7 @@ describe("declaring attackers", () => {
 		).toBe(false);
 		expect(
 			permanent(state, bears.id).tapped,
-			"regeneration re-taps as part of the cost",
+			"regeneration re-taps as part of its effect, not a cost",
 		).toBe(true);
 	});
 });
