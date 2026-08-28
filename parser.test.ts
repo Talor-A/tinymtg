@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadCard, parseCard } from "./parser.ts";
+import { parseCard } from "./parser.ts";
 
 function* walkCards(dir: string): Generator<string> {
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -163,7 +163,14 @@ Oracle:When Arashin Cleric enters, you gain 3 life.
 	test("parses the real Herald of Faith fixture, including its attack trigger", () => {
 		// Validates the parser against the real Forge fixture, not a hand-written
 		// stand-in. Do not edit cards/cardsfolder/h/herald_of_faith.txt for this.
-		const herald = loadCard("herald_of_faith");
+		const text = readFileSync(
+			"./cards/cardsfolder/h/herald_of_faith.txt",
+			"utf-8",
+		);
+		const herald = parseCard(text);
+		if (!herald) {
+			throw new Error("Failed to parse herald_of_faith.txt fixture");
+		}
 		expect(herald.id).toBe("herald-of-faith");
 		expect(herald.name).toBe("Herald of Faith");
 		expect(herald.types).toEqual(["creature"]);

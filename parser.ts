@@ -1,5 +1,4 @@
 import type { CardDef, Color, Supertype } from "./index.ts";
-import fs from "node:fs";
 
 type CardType = CardDef["types"][number];
 
@@ -460,22 +459,5 @@ export function parseCard(text: string): CardDef | null {
 	]);
 	if (lines.some((line) => !allowed.has(line.key))) return null;
 
-	return card;
-}
-
-/**
- * Loads and parses one card straight from the Forge cardsfolder fixture, so
- * callers never hand-transcribe card data that the parser can produce itself.
- */
-export function loadCard(
-	/** like darksteel_myr */
-	name: string,
-): CardDef {
-	const text = fs.readFileSync(
-		`./cards/cardsfolder/${name[0]}/${name}.txt`,
-		"utf-8",
-	);
-	const card = parseCard(text);
-	if (!card) throw new Error(`Failed to parse card ${name}`);
 	return card;
 }

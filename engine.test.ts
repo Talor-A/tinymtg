@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts";
 import type { GameState, PlayerId, SyncAgent } from "./index.ts";
@@ -12,13 +13,24 @@ import {
 	spawnPermanent,
 	winner,
 } from "./index.ts";
-import { loadCard } from "./parser.ts";
+import { parseCard } from "./parser.ts";
 
 // Registered here (not in cards.ts) so normal runtime card registration never
 // depends on reading the untracked/gitignored Forge cardsfolder fixtures. This
 // test alone consumes the real parsed CardDef, exercising the parser's
 // "Attacks" self-trigger support end-to-end rather than a hand-written stand-in.
-registerCard(loadCard("herald_of_faith"));
+function loadHeraldOfFaith() {
+	const text = readFileSync(
+		"./cards/cardsfolder/h/herald_of_faith.txt",
+		"utf-8",
+	);
+	const card = parseCard(text);
+	if (!card) {
+		throw new Error("Failed to parse herald_of_faith.txt fixture");
+	}
+	return card;
+}
+registerCard(loadHeraldOfFaith());
 
 const ALICE = 0 as PlayerId;
 const BOB = 1 as PlayerId;
