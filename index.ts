@@ -442,12 +442,15 @@ interface FloatingEffect {
 export interface PassAction {
 	kind: "pass";
 }
+/** Reserved action shape; casting isn't observable or executable yet. */
 export interface CastAction {
 	kind: "cast";
 }
+/** Reserved action shape; activated abilities aren't observable or executable yet. */
 export interface ActivateAbilityAction {
 	kind: "activate ability";
 }
+/** Reserved action shape; land play isn't observable or executable yet. */
 export interface PlayLandAction {
 	kind: "play land";
 }
@@ -2506,14 +2509,15 @@ function settlePriorityIn(
 			getObservableActions(state, priority),
 		);
 
-		if (action.kind === "pass") {
-			if (lastWasPass) {
-				if (state.stack.length === 0) return;
-				resolveTopOfStack(state, choices);
-			} else {
-				lastWasPass = true;
-				priority = priority === 0 ? 1 : 0;
-			}
+		if (action.kind !== "pass") {
+			throw new Error(`priority action "${action.kind}" is not implemented`);
+		}
+		if (lastWasPass) {
+			if (state.stack.length === 0) return;
+			resolveTopOfStack(state, choices);
+		} else {
+			lastWasPass = true;
+			priority = priority === 0 ? 1 : 0;
 		}
 	}
 	throw new Error("priority loop did not settle");
@@ -2675,8 +2679,6 @@ function performTurnBasedActions(
 			);
 
 			break;
-		case "upkeep":
-		case "begin combat":
 		case "declare attackers":
 			performIn(
 				state,
@@ -2689,6 +2691,8 @@ function performTurnBasedActions(
 				0,
 			);
 			break;
+		case "upkeep":
+		case "begin combat":
 		case "declare blockers":
 		case "combat damage":
 		case "end combat":

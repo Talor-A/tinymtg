@@ -6,7 +6,7 @@
 	"scripts": {
 		"check": "bun run typecheck && bun test",
 		"format": "biome check --fix --unsafe",
-		"lint": "biome check agents.ts choices.ts choices.test.ts fuzz.test.ts index.test.ts index.ts test/fuzz-agent.ts",
+		"lint": "biome check agents.ts choices.ts choices.test.ts engine.test.ts fuzz.test.ts index.ts rules.test.ts test/fuzz-agent.ts",
 		"test": "bun test",
 		"typecheck": "tsc --noEmit",
 		"yawgatog": "bun ./yawgatog.ts"

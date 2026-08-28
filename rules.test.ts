@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RandomAgent, ScriptedAgent } from "./agents.ts";
+import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts"; // side effect: registers the card database
 import type {
 	SyncAgent as Agent,
@@ -9,7 +9,6 @@ import type {
 } from "./index.ts";
 import {
 	addFloating,
-	advance,
 	checkStateBasedActions,
 	gameOver,
 	newGame,
@@ -37,89 +36,46 @@ function created(result: { created: ObjectId[] }): ObjectId {
 	return result.created[0]!;
 }
 
-function advanceToNextTurn(state: GameState, agents: [Agent, Agent]): void {
-	const currentTurn = state.turn;
-	while (state.turn === currentTurn && !gameOver(state)) {
-		advance(state, agents);
+describe("replacement effects that add counters as a permanent enters", () => {
+	function enterWalkingBallista(preferences: string[]): {
+		counters: number;
+		state: GameState;
+		entered: ObjectId;
+	} {
+		const state = newGame();
+		const agents: [Agent, Agent] = [
+			new ScriptedAgent(preferences),
+			new ScriptedAgent(),
+		];
+		spawnPermanent(state, "hardened-scales", P1, "battlefield");
+		spawnPermanent(state, "doubling-season", P1, "battlefield");
+		const ballistaCard = spawnCard(state, "walking-ballista", P1, "hand");
+		const result = perform(
+			state,
+			{
+				kind: "zoneChange",
+				object: ballistaCard.id,
+				from: "hand",
+				to: "battlefield",
+				cause: "resolve",
+				toController: P1,
+			},
+			agents,
+		);
+		return {
+			counters: permanent(state, created(result)).counters["+1/+1"] ?? 0,
+			state,
+			entered: created(result),
+		};
 	}
-}
 
-function ballista(prefs: string[]): {
-	counters: number;
-	state: GameState;
-	entered: ObjectId;
-} {
-	const state = newGame();
-	const agents: [Agent, Agent] = [
-		new ScriptedAgent(prefs),
-		new ScriptedAgent(),
-	];
-	spawnPermanent(state, "hardened-scales", P1, "battlefield");
-	spawnPermanent(state, "doubling-season", P1, "battlefield");
-	const ballistaCard = spawnCard(state, "walking-ballista", P1, "hand");
-	const result = perform(
-		state,
-		{
-			kind: "zoneChange",
-			object: ballistaCard.id,
-			from: "hand",
-			to: "battlefield",
-			cause: "resolve",
-			toController: P1,
-		},
-		agents,
-	);
-	return {
-		counters: permanent(state, created(result)).counters["+1/+1"] ?? 0,
-		state,
-		entered: created(result),
-	};
-}
-
-function damageRace(p1Prefs: string[]): GameState {
-	const state = newGame();
-	const agents: [Agent, Agent] = [
-		new ScriptedAgent(),
-		new ScriptedAgent(p1Prefs),
-	];
-	spawnPermanent(state, "furnace-of-rath", P1, "battlefield");
-	const pyro = spawnPermanent(state, "eager-cadet", P1, "battlefield");
-	addFloating(
-		state,
-		P2,
-		"preventNextDamage",
-		{ targetType: "player", targetPlayer: P2, amount: 3 },
-		{
-			data: { remaining: 3 },
-		},
-	);
-	perform(
-		state,
-		{
-			kind: "damage",
-			source: pyro.id,
-			sourceController: P1,
-			sourceColors: ["r"],
-			target: { type: "player", player: P2 },
-			amount: 2,
-			combat: false,
-			deathtouch: false,
-			lifelink: false,
-			unpreventable: false,
-		},
-		agents,
-	);
-	return state;
-}
-
-describe("self-replacement first, then the player's ordering choice", () => {
-	test("Walking Ballista + Hardened Scales + Doubling Season (CR 616.1a, then 616.1e)", () => {
-		const scalesFirst = ballista(["hardened scales"]);
+	test("the permanent's own effect applies before its controller orders the remaining effects", () => {
+		const scalesFirst = enterWalkingBallista(["hardened scales"]);
 		dump(scalesFirst.state);
 		// "enters with 2" is self-replacement and always applies first: 2 -> +1 -> x2
 		expect(scalesFirst.counters, "Scales then Season").toBe(6);
 
-		const seasonFirst = ballista(["doubling season"]);
+		const seasonFirst = enterWalkingBallista(["doubling season"]);
 		seasonFirst.state.log.length = 0;
 		expect(seasonFirst.counters, "Season then Scales").toBe(5);
 		expect(
@@ -129,7 +85,7 @@ describe("self-replacement first, then the player's ordering choice", () => {
 	});
 });
 
-describe("two graveyard replacements, and the choice belongs to the victim", () => {
+describe("when two effects change where a destroyed creature goes", () => {
 	function kalitasVsRip(p1Prefs: string[]): GameState {
 		const state = newGame();
 		const agents: [Agent, Agent] = [
@@ -146,7 +102,7 @@ describe("two graveyard replacements, and the choice belongs to the victim", () 
 		);
 		return state;
 	}
-	test("Kalitas vs Rest in Peace — the dying creature's controller chooses (CR 616.1)", () => {
+	test("the creature's controller chooses which effect applies first", () => {
 		const ripFirst = kalitasVsRip(["rest in peace"]);
 		dump(ripFirst);
 		expect(
@@ -168,8 +124,8 @@ describe("two graveyard replacements, and the choice belongs to the victim", () 
 	});
 });
 
-describe("Chains of Mephistopheles", () => {
-	test("draw -> discard -> draw, exactly once (CR 614.5)", () => {
+describe("drawing with Chains of Mephistopheles on the battlefield", () => {
+	test("a player with a card in hand discards before drawing", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		spawnPermanent(state, "chains-of-mephistopheles", P1, "battlefield");
@@ -192,7 +148,7 @@ describe("Chains of Mephistopheles", () => {
 		expect(state.players[P1].library.length, "library down by one").toBe(1);
 	});
 
-	test("with an empty hand: the guarded draw never happens", () => {
+	test("a player with an empty hand mills instead of drawing", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		spawnPermanent(state, "chains-of-mephistopheles", P1, "battlefield");
@@ -206,20 +162,54 @@ describe("Chains of Mephistopheles", () => {
 	});
 });
 
-describe("damage: prevention vs doubling", () => {
-	test("Furnace of Rath vs a prevention shield — the damaged player chooses", () => {
-		const preventFirst = damageRace(["prevent"]);
+describe("choosing between damage replacement and prevention effects", () => {
+	function dealDamage(preferences: string[]): GameState {
+		const state = newGame();
+		const agents: [Agent, Agent] = [
+			new ScriptedAgent(),
+			new ScriptedAgent(preferences),
+		];
+		spawnPermanent(state, "furnace-of-rath", P1, "battlefield");
+		const source = spawnPermanent(state, "eager-cadet", P1, "battlefield");
+		addFloating(
+			state,
+			P2,
+			"preventNextDamage",
+			{ targetType: "player", targetPlayer: P2, amount: 3 },
+			{ data: { remaining: 3 } },
+		);
+		perform(
+			state,
+			{
+				kind: "damage",
+				source: source.id,
+				sourceController: P1,
+				sourceColors: ["r"],
+				target: { type: "player", player: P2 },
+				amount: 2,
+				combat: false,
+				deathtouch: false,
+				lifelink: false,
+				unpreventable: false,
+			},
+			agents,
+		);
+		return state;
+	}
+
+	test("the damaged player chooses which applicable effect happens first", () => {
+		const preventFirst = dealDamage(["prevent"]);
 		dump(preventFirst);
 		// Preventing 2 of 2 replaces the damage with nothing, so Furnace never applies.
 		expect(preventFirst.players[1].life, "shield first: P1 takes 0").toBe(20);
 
-		const furnaceFirst = damageRace(["furnace"]);
+		const furnaceFirst = dealDamage(["furnace"]);
 		furnaceFirst.log.length = 0;
 		// 2 -> 4, shield eats 3, 1 gets through.
 		expect(furnaceFirst.players[1].life, "furnace first: P1 takes 1").toBe(19);
 	});
 
-	test('"Can\'t be prevented" locks out prevention but not doubling (CR 615.12)', () => {
+	test("unpreventable damage can still be doubled", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [
 			new ScriptedAgent(),
@@ -256,7 +246,7 @@ describe("damage: prevention vs doubling", () => {
 		expect(state.players[1].life, "P1 takes the doubled 4").toBe(16);
 	});
 
-	test("Palisade Giant redirects, then Prismatic Strands prevents (chained replacements)", () => {
+	test("redirected damage can still be prevented", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		const giant = spawnPermanent(state, "palisade-giant", 1, "battlefield");
@@ -307,8 +297,8 @@ describe("damage: prevention vs doubling", () => {
 	});
 });
 
-describe("prohibitions and indestructible", () => {
-	test("indestructible prohibits destroy without consuming regeneration", () => {
+describe("indestructible permanents", () => {
+	test("a failed destruction attempt doesn't consume a regeneration shield", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		const myr = spawnPermanent(state, "darksteel-myr", P1, "battlefield");
@@ -335,7 +325,7 @@ describe("prohibitions and indestructible", () => {
 		).toBe(0);
 	});
 
-	test("indestructible ignores lethal-damage and deathtouch SBAs", () => {
+	test("lethal damage and deathtouch don't destroy them", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		const lethal = spawnPermanent(state, "darksteel-myr", P1, "battlefield");
@@ -357,7 +347,7 @@ describe("prohibitions and indestructible", () => {
 		expect(state.battlefield.includes(deathtouched.id)).toBe(true);
 	});
 
-	test("indestructible doesn't stop the toughness-zero SBA", () => {
+	test("zero toughness still puts them into the graveyard", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		const myr = spawnPermanent(state, "darksteel-myr", P1, "battlefield", {
@@ -371,8 +361,8 @@ describe("prohibitions and indestructible", () => {
 	});
 });
 
-describe("regeneration", () => {
-	test("Regeneration shield: saves from lethal damage, not from toughness 0 (CR 704.5f/g)", () => {
+describe("regenerating a creature", () => {
+	test("regeneration saves it from lethal damage but not zero toughness", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		const bears = spawnPermanent(state, "grizzly-bears", 0, "battlefield");
@@ -429,8 +419,8 @@ describe("regeneration", () => {
 	});
 });
 
-describe("CR 614.12 — ETB replacements see the would-be characteristics", () => {
-	test("Root Maze + Mycosynth Lattice: a Bear enters tapped because it would be an artifact", () => {
+describe("effects that inspect a permanent as it enters", () => {
+	test("Root Maze sees a creature that Mycosynth Lattice makes an artifact", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		spawnPermanent(state, "root-maze", 0, "battlefield");
@@ -474,27 +464,8 @@ describe("CR 614.12 — ETB replacements see the would-be characteristics", () =
 	});
 });
 
-describe('"Skip your draw step" is a replacement that returns nothing', () => {
-	test("Necropotence skips the draw step", () => {
-		const state = newGame();
-		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "necropotence", 0, "battlefield");
-		for (let i = 0; i < 5; i++) spawnCard(state, "forest", 0, "library");
-		for (let i = 0; i < 5; i++) spawnCard(state, "forest", 1, "library");
-
-		advanceToNextTurn(state, agents); // P0's turn
-		dump(state);
-		expect(state.players[0].hand.length, "P0 drew nothing").toBe(0);
-		expect(state.players[0].library.length, "P0 library intact").toBe(5);
-
-		advanceToNextTurn(state, agents); // P1's turn
-		state.log.length = 0;
-		expect(state.players[1].hand.length, "P1 still draws normally").toBe(1);
-	});
-});
-
-describe("tier ordering", () => {
-	test("Gather Specimens (control tier) applies before Root Maze (other tier)", () => {
+describe("interacting effects as permanents enter", () => {
+	test("a control-changing effect applies before Root Maze checks the permanent", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		spawnPermanent(state, "root-maze", 0, "battlefield");
@@ -521,7 +492,7 @@ describe("tier ordering", () => {
 		expect(entered.owner, "P1 still owns it").toBe(1);
 	});
 
-	test("Clone (copy tier) resolves before other ETB modifiers", () => {
+	test("Clone chooses what to copy before that card's own entry effect applies", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		spawnPermanent(state, "walking-ballista", 1, "battlefield", {
@@ -558,7 +529,7 @@ describe("tier ordering", () => {
 	});
 });
 
-describe("can't lose / alternate win", () => {
+describe("effects that change how players win or lose", () => {
 	test("Laboratory Maniac wins when drawing from an empty library", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
@@ -683,39 +654,5 @@ describe("triggered abilities", () => {
 		);
 		settlePriority(state, agents);
 		expect(state.players[P1].life).toBe(23);
-	});
-});
-
-describe("advance", () => {
-	test("executes one scheduler transition", () => {
-		const state = newGame();
-		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-
-		advance(state, agents);
-
-		expect(state.turn).toBe(0);
-		expect(state.turnScheduler.currentTurn?.player).toBe(P1);
-		expect(state.turnScheduler.currentPhase).toBe(null);
-		expect(state.turnScheduler.command.kind).toBe("advancePhase");
-	});
-
-	test("eventually terminates", () => {
-		function run() {
-			const state = newGame();
-
-			const agents: [Agent, Agent] = [new RandomAgent(), new RandomAgent()];
-
-			for (let i = 0; i < 10_000; i++) {
-				advance(state, agents);
-				if (state.players.some((p) => p.lost)) {
-					dump(state);
-					return;
-				}
-			}
-
-			throw new Error("max advancement count reached");
-		}
-
-		expect(run).not.toThrowError();
 	});
 });
