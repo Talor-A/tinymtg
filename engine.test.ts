@@ -138,11 +138,26 @@ describe("declaring attackers during normal progression", () => {
 	}
 
 	test("a creature can attack on the same turn it enters (all creatures are treated as having haste)", () => {
-		const { state, attacker } = setupAttackTurn("grizzly-bears");
-		const agents: Agents = [
-			new ScriptedAgent([], [], [], [[attacker.id]]),
-			new ScriptedAgent(),
-		];
+		// Spawning the creature before combat begins (rather than before the turn
+		// starts, as setupAttackTurn does) is what actually proves the title: the
+		// creature only exists once the game has naturally reached precombat main.
+		const state = newGame();
+		const attackerAgent = new ScriptedAgent();
+		const agents: Agents = [attackerAgent, new ScriptedAgent()];
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", BOB, "library");
+
+		advanceUntil(state, agents, (next) => next.step === "main");
+
+		const attacker = spawnPermanent(
+			state,
+			"grizzly-bears",
+			ALICE,
+			"battlefield",
+		);
+		// The attacker choice can only be scripted once the creature's id is known,
+		// which is only after it has been spawned into the already-reached main phase.
+		attackerAgent.attackerChoices.push([attacker.id]);
 
 		// The attacker choice is requested and committed inside the single advance()
 		// call that begins the declare-attackers step, so by the time state.step
