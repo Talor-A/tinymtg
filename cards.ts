@@ -211,6 +211,18 @@ export const EAGER_CADET = registerCard({
 	toughness: 1,
 });
 
+export const DARKSTEEL_MYR = registerCard({
+	id: "darksteel-myr",
+	name: "Darksteel Myr",
+	types: ["artifact", "creature"],
+	subtypes: ["Myr"],
+	colors: [],
+	mv: 3,
+	power: 0,
+	toughness: 1,
+	keywords: ["indestructible"],
+});
+
 export const AJANIS_MANTRA = registerCard({
 	id: "ajanis-mantra",
 	name: "Ajani's Mantra",
@@ -603,26 +615,18 @@ export const PLATINUM_ANGEL = registerCard({
 	power: 4,
 	toughness: 4,
 	keywords: ["flying"],
-	replacements: [
+	prohibitions: [
 		{
 			label: "platinum:lose",
-			layer: "other",
 			text: "You can't lose the game.",
-			applies(ev, ctx) {
-				if (!onBattlefield(ctx) || ev.kind !== "loseGame") return false;
-				return ev.player === ctx.controller;
-			},
-			replace: () => [],
+			applies: (ev, ctx) =>
+				ev.kind === "loseGame" && ev.player === ctx.controller,
 		},
 		{
 			label: "platinum:win",
-			layer: "other",
 			text: "Your opponents can't win the game.",
-			applies(ev, ctx) {
-				if (!onBattlefield(ctx) || ev.kind !== "winGame") return false;
-				return ev.player !== ctx.controller;
-			},
-			replace: () => [],
+			applies: (ev, ctx) =>
+				ev.kind === "winGame" && ev.player !== ctx.controller,
 		},
 	],
 });

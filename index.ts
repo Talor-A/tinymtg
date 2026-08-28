@@ -530,7 +530,7 @@ export interface EffectCtx {
 }
 
 export interface ReplacementDef {
-	/** label to  */
+	/** Stable label used to identify this effect on its source. */
 	label: string;
 	text: string;
 	layer: ReplacementLayer;
@@ -555,6 +555,37 @@ export interface BoundReplacement {
 	source: GameObject | null;
 	controller: PlayerId;
 	data: Record<string, number>;
+	label: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Prohibition effects — CR 614.17
+ * ------------------------------------------------------------------ */
+
+export interface ProhibitionCtx {
+	state: GameState;
+	/** The object generating the effect; null for rule effects. */
+	self: GameObject | null;
+	controller: PlayerId;
+}
+
+/**
+ * A static effect saying an event can't happen. Prohibitions aren't replacement
+ * effects: in particular, they don't compete with or consume replacement effects.
+ */
+export interface ProhibitionDef {
+	label: string;
+	text: string;
+	/** @default ['battlefield'] */
+	functionsIn?: ZoneScope[];
+	applies(ev: GameEvent, ctx: ProhibitionCtx): boolean;
+}
+
+export interface BoundProhibition {
+	id: EffectId;
+	def: ProhibitionDef;
+	source: GameObject | null;
+	controller: PlayerId;
 	label: string;
 }
 
@@ -619,6 +650,7 @@ export interface CardDef {
 	/** Printed "enters with N counters" — also a self-replacement. */
 	entersWith?: CounterBag;
 	replacements?: ReplacementDef[];
+	prohibitions?: ProhibitionDef[];
 	statics?: ContinuousEffect[];
 	triggers?: TriggerDef[];
 	/** STUB: activated abilities and alternate casting costs are not yet processed. */
@@ -1040,6 +1072,27 @@ function functionsHere(scopes: ZoneScope[] | undefined, zone: Zone): boolean {
  * from. Compiling them here rather than hand-writing them per card keeps the
  * self tier honest and automatic.
  */
+function synthesizedProhibitions(
+	state: GameState,
+	o: GameObject,
+): ProhibitionDef[] {
+	if (
+		o.kind !== "permanent" ||
+		o.zone !== "battlefield" ||
+		!view(state, o.id).keywords.includes("indestructible")
+	) {
+		return [];
+	}
+
+	return [
+		{
+			label: "keyword:indestructible",
+			text: "This permanent can't be destroyed.",
+			applies: (ev, ctx) => ev.kind === "destroy" && ev.object === ctx.self?.id,
+		},
+	];
+}
+
 function synthesizedSelfReplacements(o: GameObject): ReplacementDef[] {
 	// These are generated unconditionally and resolve the *effective* card inside
 	// applies(), because a copy-tier effect (CR 616.1c) can have already rewritten
@@ -1091,6 +1144,58 @@ function synthesizedSelfReplacements(o: GameObject): ReplacementDef[] {
  * one replacement can add or remove sources mid-chain. Cache it later behind a
  * dirty flag if profiling says so — correctness first.
  */
+export function collectProhibitions(state: GameState): BoundProhibition[] {
+	const out: BoundProhibition[] = [];
+
+	for (const zone of ALL_ZONES) {
+		const ids =
+			zone === "battlefield"
+				? state.battlefield
+				: zone === "stack"
+					? state.stack
+					: state.players.flatMap((p) => zoneList(state, zone, p.id));
+
+		for (const id of ids) {
+			const o = maybeObject(state, id);
+			if (!o) continue;
+			const defs = [
+				...synthesizedProhibitions(state, o),
+				...(card(o.cardId).prohibitions ?? []),
+			];
+			for (const def of defs) {
+				if (!functionsHere(def.functionsIn, zone)) continue;
+				out.push({
+					id: `${o.id}:${def.label}` as EffectId,
+					def,
+					source: o,
+					controller: o.controller,
+					label: `${card(o.cardId).name}#${o.id} — ${def.text}`,
+				});
+			}
+		}
+	}
+
+	return out;
+}
+
+function prohibitionsFor(
+	state: GameState,
+	event: GameEvent,
+): BoundProhibition[] {
+	return collectProhibitions(state).filter((p) =>
+		p.def.applies(event, {
+			state,
+			self: p.source,
+			controller: p.controller,
+		}),
+	);
+}
+
+/** Whether a static "can't" effect prohibits this event (CR 614.17). */
+export function canEventHappen(state: GameState, event: GameEvent): boolean {
+	return prohibitionsFor(state, event).length === 0;
+}
+
 export function collectReplacements(state: GameState): BoundReplacement[] {
 	const out: BoundReplacement[] = [];
 
@@ -1327,10 +1432,22 @@ function resolveReplacements(
 
 	for (let iter = 0; iter < MAX_REPLACEMENT_EFFECT_CHOICES; iter++) {
 		/**
-		 * find all replacement events that could be applied to this event.
+		 * CR 614.17c: if an event can't happen, only a self-replacement gets an
+		 * opportunity to change it. Other replacement/prevention effects don't
+		 * apply, so (for example) indestructible doesn't consume regeneration.
 		 */
-		const candidates = applicable(state, current, run);
-		if (candidates.length === 0) return [current];
+		const prohibitions = prohibitionsFor(state, current);
+		const allCandidates = applicable(state, current, run);
+		const candidates =
+			prohibitions.length === 0
+				? allCandidates
+				: allCandidates.filter((candidate) => candidate.def.layer === "self");
+		if (candidates.length === 0) {
+			for (const prohibition of prohibitions) {
+				log(state, `  [prohibit] ${prohibition.label}`);
+			}
+			return prohibitions.length === 0 ? [current] : [];
+		}
 
 		/** find the highest priority tier that has at least one candidate. */
 		const tier = LAYER_ORDER.find((l) =>
@@ -1725,19 +1842,18 @@ function checkStateBasedActionsIn(
 			// toughness, that creature has been dealt lethal damage and is destroyed.
 			// Regeneration can replace this event.
 			if (lethalDamage(state, id) || o.counters.__deathtouched) {
-				log(state, `  SBA: ${name(state, id)} has lethal damage`);
-				performIn(
-					state,
-					{
-						kind: "destroy",
-						object: id,
-						noRegen: false,
-					},
-					choices,
-					newScope(),
-					0,
-				);
-				acted = true;
+				const destroy: DestroyEvent = {
+					kind: "destroy",
+					object: id,
+					noRegen: false,
+				};
+				// CR 702.12b: an indestructible permanent ignores these SBAs. Ask the
+				// generic prohibition system rather than special-casing the keyword.
+				if (canEventHappen(state, destroy)) {
+					log(state, `  SBA: ${name(state, id)} has lethal damage`);
+					performIn(state, destroy, choices, newScope(), 0);
+					acted = true;
+				}
 			}
 
 			// 704.5q. If a permanent has both a +1/+1 counter and a -1/-1 counter on
@@ -2044,15 +2160,6 @@ function executeIn(
 				break;
 			}
 			const pv = view(state, o.id);
-			/**
-			 * 702.12b. A permanent with indestructible can't be destroyed. Such
-			 * permanents aren't destroyed by lethal damage, and they ignore the
-			 * state-based action that checks for lethal damage.
-			 */
-			if (pv.keywords.includes("indestructible")) {
-				happened = false;
-				break;
-			}
 			childResults.push(
 				performIn(
 					state,

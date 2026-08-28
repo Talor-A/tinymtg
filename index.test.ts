@@ -307,6 +307,70 @@ describe("damage: prevention vs doubling", () => {
 	});
 });
 
+describe("prohibitions and indestructible", () => {
+	test("indestructible prohibits destroy without consuming regeneration", () => {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		const myr = spawnPermanent(state, "darksteel-myr", P1, "battlefield");
+		addFloating(
+			state,
+			P1,
+			"regenerationShield",
+			{ target: myr.id },
+			{ data: { used: 0 } },
+		);
+
+		const result = perform(
+			state,
+			{ kind: "destroy", object: myr.id, noRegen: false },
+			agents,
+		);
+		dump(state);
+
+		expect(result.executed, "the prohibited event didn't execute").toEqual([]);
+		expect(state.battlefield.includes(myr.id), "Myr survived").toBe(true);
+		expect(
+			state.floating[0]?.data.used,
+			"a non-self replacement can't apply to a prohibited event (CR 614.17c)",
+		).toBe(0);
+	});
+
+	test("indestructible ignores lethal-damage and deathtouch SBAs", () => {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		const lethal = spawnPermanent(state, "darksteel-myr", P1, "battlefield");
+		const deathtouched = spawnPermanent(
+			state,
+			"darksteel-myr",
+			P1,
+			"battlefield",
+			{ counters: { "+1/+1": 1 } },
+		);
+		permanent(state, lethal.id).damage = 1;
+		permanent(state, deathtouched.id).damage = 1;
+		permanent(state, deathtouched.id).counters.__deathtouched = 1;
+
+		checkStateBasedActions(state, agents);
+		dump(state);
+
+		expect(state.battlefield.includes(lethal.id)).toBe(true);
+		expect(state.battlefield.includes(deathtouched.id)).toBe(true);
+	});
+
+	test("indestructible doesn't stop the toughness-zero SBA", () => {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		const myr = spawnPermanent(state, "darksteel-myr", P1, "battlefield", {
+			counters: { "-1/-1": 1 },
+		});
+
+		checkStateBasedActions(state, agents);
+		dump(state);
+
+		expect(state.battlefield.includes(myr.id)).toBe(false);
+	});
+});
+
 describe("regeneration", () => {
 	test("Regeneration shield: saves from lethal damage, not from toughness 0 (CR 704.5f/g)", () => {
 		const state = newGame();
