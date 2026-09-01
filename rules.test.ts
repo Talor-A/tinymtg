@@ -617,6 +617,38 @@ describe("effects that change how players win or lose", () => {
 });
 
 describe("triggered abilities", () => {
+	test("Clone queues and resolves a copied ETB trigger from its characteristics", () => {
+		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		spawnPermanent(state, "arashin-cleric", P1, "battlefield");
+		const clone = spawnCard(state, "clone", P1, "hand");
+
+		const result = perform(
+			state,
+			{
+				kind: "change zone",
+				object: clone.id,
+				from: "hand",
+				to: "battlefield",
+				cause: "resolve",
+				toController: P1,
+			},
+			agents,
+		);
+
+		const entered = created(result);
+		expect(view(state, entered).name).toBe("Arashin Cleric");
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(state.pendingTriggers[0]).toMatchObject({
+			source: entered,
+			triggerId: "arashin-cleric:0",
+		});
+		expect(() => structuredClone(state)).not.toThrow();
+
+		settlePriority(state, agents);
+		expect(state.players[P1].life).toBe(23);
+	});
+
 	test("Arashin Cleric queues its ETB trigger and gains life on resolution", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];

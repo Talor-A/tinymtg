@@ -546,6 +546,22 @@ export type StaticAbilityId = string & {
 	readonly __staticAbilityId: unique symbol;
 };
 
+/** Serializable `cardId:index` registry reference to a printed trigger. */
+export type TriggeredAbilityId = string & {
+	readonly __triggeredAbilityId: unique symbol;
+};
+
+export function triggeredAbilityId(
+	cardId: string,
+	index: number,
+): TriggeredAbilityId {
+	assert(
+		Number.isSafeInteger(index) && index >= 0,
+		"invalid triggered ability index",
+	);
+	return `${cardId}:${index}` as TriggeredAbilityId;
+}
+
 export function staticAbilityId(
 	cardId: string,
 	index: number,
@@ -568,6 +584,17 @@ export function resolveStaticAbility(id: StaticAbilityId): ContinuousEffect {
 	return effect;
 }
 
+export function resolveTriggeredAbility(id: TriggeredAbilityId): TriggerDef {
+	const separator = id.lastIndexOf(":");
+	assert(separator > 0, `invalid triggered ability id: ${id}`);
+	const cardId = id.slice(0, separator);
+	const indexText = id.slice(separator + 1);
+	assert(/^\d+$/.test(indexText), `invalid triggered ability id: ${id}`);
+	const ability = card(cardId).triggers?.[Number(indexText)];
+	assertDefined(ability, `unknown triggered ability: ${id}`);
+	return ability;
+}
+
 interface BaseCharacteristicsSnapshot {
 	name: string;
 	manaCost: CardDefManaCost;
@@ -577,9 +604,9 @@ interface BaseCharacteristicsSnapshot {
 	subtypes: string[];
 	keywords: Keyword[];
 	abilities: {
-		// TODO: replace these arrays with executable ability snapshot types.
+		// TODO: replace this array with an executable ability snapshot type.
 		activated: never[];
-		triggered: never[];
+		triggered: TriggeredAbilityId[];
 		static: StaticAbilityId[];
 	};
 }
@@ -696,10 +723,7 @@ type ObjectSnapshot =
 	| AbilitySnapshot
 	| NonbattlefieldTokenSnapshot;
 
-const PRINTED_CHARACTERISTICS = new WeakMap<
-	CardDef,
-	CharacteristicsSnapshot
->();
+const PRINTED_CHARACTERISTICS = new WeakMap<CardDef, CharacteristicsSnapshot>();
 
 function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
 	const cached = PRINTED_CHARACTERISTICS.get(def);
@@ -714,7 +738,9 @@ function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
 		keywords: [...(def.keywords ?? [])],
 		abilities: {
 			activated: [] as never[],
-			triggered: [] as never[],
+			triggered: (def.triggers ?? []).map((_ability, index) =>
+				triggeredAbilityId(def.id, index),
+			),
 			static: (def.statics ?? []).map((_effect, index) =>
 				staticAbilityId(def.id, index),
 			),
@@ -785,7 +811,7 @@ function cloneCharacteristics(
 		keywords: [...values.keywords],
 		abilities: {
 			activated: [] as never[],
-			triggered: [] as never[],
+			triggered: [...values.abilities.triggered],
 			static: [...values.abilities.static],
 		},
 	};
@@ -977,9 +1003,8 @@ function eid(id: string): EffectId {
 
 export interface PendingTrigger {
 	source: ObjectId;
-	sourceCardId: string;
+	triggerId: TriggeredAbilityId;
 	controller: PlayerId;
-	triggerId: string;
 	text: string;
 	effects: EffectDef[];
 }
@@ -1034,9 +1059,8 @@ export interface AbilityStackItem {
 	id: ObjectId;
 	kind: "ability";
 	source: ObjectId;
-	sourceCardId: string;
+	triggerId: TriggeredAbilityId;
 	controller: PlayerId;
-	triggerId: string;
 	text: string;
 	effects: EffectDef[];
 }
@@ -3309,23 +3333,21 @@ function performIn(
 function enqueueTrigger(
 	state: GameState,
 	source: GameObject,
+	triggerId: TriggeredAbilityId,
 	trigger: TriggerDef,
 ): void {
-	const sourceCardId = cardIdOf(source);
 	const controller = controllerOf(source);
-	assertDefined(sourceCardId);
 	assertDefined(controller);
 	state.pendingTriggers.push({
 		source: source.id,
-		sourceCardId,
+		triggerId,
 		controller,
-		triggerId: trigger.id,
 		text: trigger.text,
 		effects: trigger.effects,
 	});
 	log(
 		state,
-		`  [trigger] ${card(sourceCardId).name}#${source.id} — ${trigger.text}`,
+		`  [trigger] ${name(state, source.id)}#${source.id} — ${trigger.text}`,
 	);
 }
 
@@ -3489,13 +3511,15 @@ function detectTriggers(
 	created: ObjectId[],
 ): void {
 	for (const abilitySource of state.objects.values()) {
-		const sourceCardId = cardIdOf(abilitySource);
-		if (!sourceCardId) continue;
-		for (const trigger of card(sourceCardId).triggers ?? []) {
+		const snapshot = read.view.objects.get(abilitySource.id);
+		if (!snapshot || snapshot.kind === "ability") continue;
+		for (const triggerId of snapshot.currentCharacteristics.abilities
+			.triggered) {
+			const trigger = resolveTriggeredAbility(triggerId);
 			const functionsIn = trigger.functionsIn ?? ["battlefield"];
 			if (!functionsIn.includes(abilitySource.zone)) continue;
 			if (triggerMatches(read, abilitySource, trigger.condition, ev, created)) {
-				enqueueTrigger(state, abilitySource, trigger);
+				enqueueTrigger(state, abilitySource, triggerId, trigger);
 			}
 		}
 	}

@@ -19,6 +19,7 @@ import {
 	perform,
 	type SyncAgent,
 	spawnCard,
+	triggeredAbilityId,
 	spawnPermanent,
 } from "./index.ts";
 
@@ -267,9 +268,8 @@ describe("choice transcripts", () => {
 				id: 1 as ObjectId,
 				kind: "ability",
 				source: 1 as ObjectId,
-				sourceCardId: "ajanis-mantra",
+				triggerId: triggeredAbilityId("ajanis-mantra", 0),
 				controller: 0,
-				triggerId: "upkeep-life",
 				text: "gain 1 life",
 				effects: [
 					{
@@ -335,9 +335,8 @@ describe("choice transcripts", () => {
 				id: 99 as ObjectId,
 				kind: "ability",
 				source: 1 as ObjectId,
-				sourceCardId: "ajanis-mantra",
+				triggerId: triggeredAbilityId("ajanis-mantra", 0),
 				controller: 0,
-				triggerId: "upkeep-life",
 				text: "gain 1 life",
 				effects: [
 					{

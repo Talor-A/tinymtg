@@ -10,10 +10,12 @@ import {
 	readObject,
 	registerCard,
 	resolveStaticAbility,
+	resolveTriggeredAbility,
 	spawnCard,
 	spawnPermanent,
 	spawnToken,
 	staticAbilityId,
+	triggeredAbilityId,
 	type CharacteristicsSnapshot,
 	type PlayerId,
 } from "./index.ts";
@@ -57,6 +59,19 @@ describe("derived game views", () => {
 		expect(String(id)).toBe("card:id:with:colons:0");
 		expect(resolveStaticAbility(id)).toBe(colonCardStatic);
 		expect(resolveStaticAbility(snapshot.copiableValues.abilities.static[0]!)).toBeDefined();
+	});
+
+	test("triggered ability IDs resolve directly by cardId:index", () => {
+		const state = newGame();
+		const cleric = spawnPermanent(state, "arashin-cleric", P1, "battlefield");
+		const snapshot = readObject(createReadContext(state), cleric.id);
+		expect(snapshot.kind).toBe("permanent");
+		if (snapshot.kind !== "permanent") return;
+		expect(snapshot.copiableValues.abilities.triggered.map(String)).toEqual([
+			"arashin-cleric:0",
+		]);
+		const id = triggeredAbilityId("arashin-cleric", 0);
+		expect(resolveTriggeredAbility(id).id).toBe("etb-life");
 	});
 
 	test("counters change current characteristics but not copiable values", () => {
