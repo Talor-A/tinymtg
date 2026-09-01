@@ -7,12 +7,13 @@ import type {
 import { validateForgeCardIR } from "./forge-ir.ts";
 import type {
 	CardDef,
+	CardDefInput,
 	ContinuousEffect,
 	EffectDef,
 	PermanentView,
 	TriggerDef,
 } from "./index.ts";
-import { etbPreview } from "./index.ts";
+import { defineCard, etbPreview } from "./index.ts";
 
 function compileManaCost(ir: ForgeCardIR): CardDef["manaCost"] {
 	if (ir.manaCost.kind === "none") return "none";
@@ -154,7 +155,7 @@ export function compileForgeCard(value: ForgeCardIR): ForgeResult<CardDef> {
 		}
 	}
 
-	const card: CardDef = {
+	const card: CardDefInput = {
 		id: ir.id,
 		name: ir.name,
 		...(ir.supertypes.length > 0 ? { supertypes: [...ir.supertypes] } : {}),
@@ -259,5 +260,5 @@ export function compileForgeCard(value: ForgeCardIR): ForgeResult<CardDef> {
 		}
 	}
 
-	return { ok: true, value: card, diagnostics };
+	return { ok: true, value: defineCard(card), diagnostics };
 }

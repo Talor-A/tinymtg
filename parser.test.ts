@@ -52,6 +52,20 @@ describe("parseCard", () => {
 			},
 			power: 2,
 			toughness: 2,
+			abilityDefinitions: {
+				static: [],
+				activated: [],
+				triggered: [],
+				replacement: [],
+				prohibition: [],
+			},
+			printedAbilities: {
+				static: [],
+				activated: [],
+				triggered: [],
+				replacement: [],
+				prohibition: [],
+			},
 		});
 
 		const forest = parseCard(`
@@ -69,7 +83,7 @@ Oracle:({T}: Add {G}.)
 			colors: [],
 			manaCost: "none",
 		});
-		expect(forest?.activatedAbilities).toEqual([
+		expect(forest?.abilityDefinitions.activated).toEqual([
 			{
 				id: "intrinsic-mana-g",
 				text: "Add {G}.",
@@ -179,7 +193,7 @@ Types:Enchantment
 T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigGainLife | OptionalDecider$ You | TriggerDescription$ At the beginning of your upkeep, you may gain 1 life.
 SVar:TrigGainLife:DB$ GainLife | Defined$ You | LifeAmount$ 1
 Oracle:At the beginning of your upkeep, you may gain 1 life.
-`)?.triggers,
+`)?.abilityDefinitions.triggered,
 		).toEqual([
 			{
 				id: "TrigGainLife",
@@ -208,7 +222,7 @@ PT:1/3
 T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigGainLife | TriggerDescription$ When CARDNAME enters, you gain 3 life.
 SVar:TrigGainLife:DB$ GainLife | LifeAmount$ 3
 Oracle:When Arashin Cleric enters, you gain 3 life.
-`)?.triggers,
+`)?.abilityDefinitions.triggered,
 		).toEqual([
 			{
 				id: "TrigGainLife",
@@ -234,7 +248,7 @@ SVar:TrigLife:DB$ GainLife | Defined$ You | LifeAmount$ 2 | SubAbility$ DBDraw
 SVar:DBDraw:DB$ Draw | Defined$ You | NumCards$ 1
 Oracle:At the beginning of your upkeep, you may gain 2 life and draw a card.
 `);
-		expect(parsed?.triggers?.[0]?.effects).toEqual([
+		expect(parsed?.abilityDefinitions.triggered?.[0]?.effects).toEqual([
 			{
 				kind: "may",
 				decider: "you",
@@ -266,7 +280,7 @@ Oracle:At the beginning of your upkeep, you may gain 2 life and draw a card.
 		expect(herald.power).toBe(4);
 		expect(herald.toughness).toBe(3);
 		expect(herald.keywords).toEqual(["flying"]);
-		expect(herald.triggers).toEqual([
+		expect(herald.abilityDefinitions.triggered).toEqual([
 			{
 				id: "TrigGainLife",
 				text: "Whenever CARDNAME attacks, you gain 2 life.",
@@ -287,7 +301,7 @@ T:Mode$ Attacks | ValidCard$ Card.Self | Execute$ TrigGainLife | TriggerDescript
 SVar:TrigGainLife:DB$ GainLife | Defined$ You | LifeAmount$ 2
 Oracle:Flying\\nWhenever Test Herald attacks, you gain 2 life.
 `;
-		expect(parseCard(herald)?.triggers).toEqual([
+		expect(parseCard(herald)?.abilityDefinitions.triggered).toEqual([
 			{
 				id: "TrigGainLife",
 				text: "Whenever CARDNAME attacks, you gain 2 life.",
@@ -424,14 +438,14 @@ describe("structured Forge pipeline", () => {
 
 	test("parses targeted tap abilities and explicit mana abilities", () => {
 		const prodigal = parseCard(fixture("prodigal_sorcerer"));
-		expect(prodigal?.activatedAbilities?.[0]).toMatchObject({
+		expect(prodigal?.abilityDefinitions.activated?.[0]).toMatchObject({
 			manaAbility: false,
 			costs: [{ kind: "tap-self" }],
 			targets: [{ id: "target-1", legal: { kind: "any-target" } }],
 			effects: [{ kind: "damage", target: "target-1", amount: 1 }],
 		});
 		const elves = parseCard(fixture("llanowar_elves"));
-		expect(elves?.activatedAbilities?.[0]).toMatchObject({
+		expect(elves?.abilityDefinitions.activated?.[0]).toMatchObject({
 			manaAbility: true,
 			costs: [{ kind: "tap-self" }],
 			effects: [
@@ -450,12 +464,12 @@ describe("structured Forge pipeline", () => {
 		const compiled = compileForgeCard(parsed.value);
 		expect(compiled.ok).toBe(true);
 		if (!compiled.ok) return;
-		expect(compiled.value.statics).toHaveLength(1);
+		expect(compiled.value.abilityDefinitions.static).toHaveLength(1);
 		registerCard(compiled.value);
 		expect(String(staticAbilityId("glorious-anthem", 0))).toBe(
 			"glorious-anthem:0",
 		);
-		const compiledStatic = compiled.value.statics?.[0];
+		const compiledStatic = compiled.value.abilityDefinitions.static?.[0];
 		expect(compiledStatic).toBeDefined();
 		if (!compiledStatic) return;
 		expect(resolveStaticAbility(staticAbilityId("glorious-anthem", 0))).toBe(
@@ -515,7 +529,7 @@ describe("structured Forge pipeline", () => {
 		const dryadArbor = parseCard(
 			readFileSync("./cards/cardsfolder/d/dryad_arbor.txt", "utf-8"),
 		);
-		expect(dryadArbor?.activatedAbilities).toContainEqual({
+		expect(dryadArbor?.abilityDefinitions.activated).toContainEqual({
 			id: "intrinsic-mana-g",
 			text: "Add {G}.",
 			manaAbility: true,

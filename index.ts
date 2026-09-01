@@ -535,67 +535,114 @@ export type GameEvent =
  * Game state
  * ------------------------------------------------------------------ */
 /**
- * A complete set of an object's characteristics (CR 109.3).
+ * The kinds of abilities a card can carry.
  *
- * Copiable characteristics and fully evaluated characteristics are different
- * stages of the layer pipeline, but they have the same shape. Runtime state
- * such as zone, controller, tapped status, damage, and counters lives on the
- * containing object snapshot rather than here.
+ * Each kind exists in two forms. The *definition* is the executable
+ * implementation, owned by the card registry ({@link AbilityDefinitions}).
+ * *Possession* is a separate, serializable `cardId:index` reference
+ * ({@link AbilityReferences}). Splitting the two is what lets a card define an
+ * ability it does not itself have — for instance a lord whose layer-6 effect
+ * grants an activated ability to other creatures.
  */
+export const ABILITY_CATEGORIES = [
+	"static",
+	"activated",
+	"triggered",
+	"replacement",
+	"prohibition",
+] as const;
+export type AbilityCategory = (typeof ABILITY_CATEGORIES)[number];
+
+/** Serializable `cardId:index` registry reference to a static ability. */
 export type StaticAbilityId = string & {
 	readonly __staticAbilityId: unique symbol;
 };
 
-/** Serializable `cardId:index` registry reference to a printed activation. */
+/** Serializable `cardId:index` registry reference to an activated ability. */
 export type ActivatedAbilityId = string & {
 	readonly __activatedAbilityId: unique symbol;
 };
 
-export function activatedAbilityId(
-	cardId: string,
-	index: number,
-): ActivatedAbilityId {
-	assert(
-		Number.isSafeInteger(index) && index >= 0,
-		"invalid activated ability index",
-	);
-	return `${cardId}:${index}` as ActivatedAbilityId;
-}
-
-/** Serializable `cardId:index` registry reference to a printed trigger. */
+/** Serializable `cardId:index` registry reference to a triggered ability. */
 export type TriggeredAbilityId = string & {
 	readonly __triggeredAbilityId: unique symbol;
 };
 
-export function triggeredAbilityId(
+/** Serializable `cardId:index` registry reference to a replacement effect. */
+export type ReplacementAbilityId = string & {
+	readonly __replacementAbilityId: unique symbol;
+};
+
+/** Serializable `cardId:index` registry reference to a prohibition effect. */
+export type ProhibitionAbilityId = string & {
+	readonly __prohibitionAbilityId: unique symbol;
+};
+
+function abilityRef(
 	cardId: string,
 	index: number,
-): TriggeredAbilityId {
+	category: AbilityCategory,
+): string {
 	assert(
 		Number.isSafeInteger(index) && index >= 0,
-		"invalid triggered ability index",
+		`invalid ${category} ability index`,
 	);
-	return `${cardId}:${index}` as TriggeredAbilityId;
+	return `${cardId}:${index}`;
+}
+
+/**
+ * Card ids may themselves contain colons (`card:id:with:colons`), so the index
+ * is always the segment after the *last* colon.
+ */
+function parseAbilityRef(
+	id: string,
+	category: AbilityCategory,
+): { cardId: string; index: number } {
+	const separator = id.lastIndexOf(":");
+	assert(separator > 0, `invalid ${category} ability id: ${id}`);
+	const indexText = id.slice(separator + 1);
+	assert(/^\d+$/.test(indexText), `invalid ${category} ability id: ${id}`);
+	return { cardId: id.slice(0, separator), index: Number(indexText) };
 }
 
 export function staticAbilityId(
 	cardId: string,
 	index: number,
 ): StaticAbilityId {
-	assert(
-		Number.isSafeInteger(index) && index >= 0,
-		"invalid static ability index",
-	);
-	return `${cardId}:${index}` as StaticAbilityId;
+	return abilityRef(cardId, index, "static") as StaticAbilityId;
+}
+
+export function activatedAbilityId(
+	cardId: string,
+	index: number,
+): ActivatedAbilityId {
+	return abilityRef(cardId, index, "activated") as ActivatedAbilityId;
+}
+
+export function triggeredAbilityId(
+	cardId: string,
+	index: number,
+): TriggeredAbilityId {
+	return abilityRef(cardId, index, "triggered") as TriggeredAbilityId;
+}
+
+export function replacementAbilityId(
+	cardId: string,
+	index: number,
+): ReplacementAbilityId {
+	return abilityRef(cardId, index, "replacement") as ReplacementAbilityId;
+}
+
+export function prohibitionAbilityId(
+	cardId: string,
+	index: number,
+): ProhibitionAbilityId {
+	return abilityRef(cardId, index, "prohibition") as ProhibitionAbilityId;
 }
 
 export function resolveStaticAbility(id: StaticAbilityId): ContinuousEffect {
-	const separator = id.lastIndexOf(":");
-	assert(separator > 0, `invalid static ability id: ${id}`);
-	const cardId = id.slice(0, separator);
-	const indexText = id.slice(separator + 1);
-	assert(/^\d+$/.test(indexText), `invalid static ability id: ${id}`);
-	const effect = card(cardId).statics?.[Number(indexText)];
+	const { cardId, index } = parseAbilityRef(id, "static");
+	const effect = card(cardId).abilityDefinitions.static[index];
 	assertDefined(effect, `unknown static ability: ${id}`);
 	return effect;
 }
@@ -603,27 +650,58 @@ export function resolveStaticAbility(id: StaticAbilityId): ContinuousEffect {
 export function resolveActivatedAbility(
 	id: ActivatedAbilityId,
 ): ActivatedAbilityDef {
-	const separator = id.lastIndexOf(":");
-	assert(separator > 0, `invalid activated ability id: ${id}`);
-	const cardId = id.slice(0, separator);
-	const indexText = id.slice(separator + 1);
-	assert(/^\d+$/.test(indexText), `invalid activated ability id: ${id}`);
-	const ability = card(cardId).activatedAbilities?.[Number(indexText)];
+	const { cardId, index } = parseAbilityRef(id, "activated");
+	const ability = card(cardId).abilityDefinitions.activated[index];
 	assertDefined(ability, `unknown activated ability: ${id}`);
 	return ability;
 }
 
 export function resolveTriggeredAbility(id: TriggeredAbilityId): TriggerDef {
-	const separator = id.lastIndexOf(":");
-	assert(separator > 0, `invalid triggered ability id: ${id}`);
-	const cardId = id.slice(0, separator);
-	const indexText = id.slice(separator + 1);
-	assert(/^\d+$/.test(indexText), `invalid triggered ability id: ${id}`);
-	const ability = card(cardId).triggers?.[Number(indexText)];
+	const { cardId, index } = parseAbilityRef(id, "triggered");
+	const ability = card(cardId).abilityDefinitions.triggered[index];
 	assertDefined(ability, `unknown triggered ability: ${id}`);
 	return ability;
 }
 
+export function resolveReplacementAbility(
+	id: ReplacementAbilityId,
+): ReplacementDef {
+	const { cardId, index } = parseAbilityRef(id, "replacement");
+	const def = card(cardId).abilityDefinitions.replacement[index];
+	assertDefined(def, `unknown replacement ability: ${id}`);
+	return def;
+}
+
+export function resolveProhibitionAbility(
+	id: ProhibitionAbilityId,
+): ProhibitionDef {
+	const { cardId, index } = parseAbilityRef(id, "prohibition");
+	const def = card(cardId).abilityDefinitions.prohibition[index];
+	assertDefined(def, `unknown prohibition ability: ${id}`);
+	return def;
+}
+
+/**
+ * What an object currently *has*. Purely references, so this survives
+ * `structuredClone` and can be copied, granted, or removed without touching the
+ * executable definitions behind it.
+ */
+export interface AbilityReferences {
+	static: StaticAbilityId[];
+	activated: ActivatedAbilityId[];
+	triggered: TriggeredAbilityId[];
+	replacement: ReplacementAbilityId[];
+	prohibition: ProhibitionAbilityId[];
+}
+
+/**
+ * A complete set of an object's characteristics (CR 109.3).
+ *
+ * Copiable characteristics and fully evaluated characteristics are different
+ * stages of the layer pipeline, but they have the same shape. Runtime state
+ * such as zone, controller, tapped status, damage, and counters lives on the
+ * containing object snapshot rather than here.
+ */
 interface BaseCharacteristicsSnapshot {
 	name: string;
 	manaCost: CardDefManaCost;
@@ -632,11 +710,8 @@ interface BaseCharacteristicsSnapshot {
 	types: CardType[];
 	subtypes: string[];
 	keywords: Keyword[];
-	abilities: {
-		activated: ActivatedAbilityId[];
-		triggered: TriggeredAbilityId[];
-		static: StaticAbilityId[];
-	};
+	/** Current possession, as registry references. Never executable definitions. */
+	abilities: AbilityReferences;
 }
 
 interface CreatureCharacteristicsSnapshot extends BaseCharacteristicsSnapshot {
@@ -751,6 +826,18 @@ type ObjectSnapshot =
 	| AbilitySnapshot
 	| NonbattlefieldTokenSnapshot;
 
+function cloneAbilityReferences(
+	refs: DeepReadOnly<AbilityReferences>,
+): AbilityReferences {
+	return {
+		static: [...refs.static],
+		activated: [...refs.activated],
+		triggered: [...refs.triggered],
+		replacement: [...refs.replacement],
+		prohibition: [...refs.prohibition],
+	};
+}
+
 const PRINTED_CHARACTERISTICS = new WeakMap<CardDef, CharacteristicsSnapshot>();
 
 function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
@@ -764,17 +851,7 @@ function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
 		types: [...def.types],
 		subtypes: [...(def.subtypes ?? [])],
 		keywords: [...(def.keywords ?? [])],
-		abilities: {
-			activated: (def.activatedAbilities ?? []).map((_ability, index) =>
-				activatedAbilityId(def.id, index),
-			),
-			triggered: (def.triggers ?? []).map((_ability, index) =>
-				triggeredAbilityId(def.id, index),
-			),
-			static: (def.statics ?? []).map((_effect, index) =>
-				staticAbilityId(def.id, index),
-			),
-		},
+		abilities: cloneAbilityReferences(def.printedAbilities),
 	};
 
 	const values: CharacteristicsSnapshot = def.types.includes("creature")
@@ -839,11 +916,7 @@ function cloneCharacteristics(
 		types: [...values.types],
 		subtypes: [...values.subtypes],
 		keywords: [...values.keywords],
-		abilities: {
-			activated: [...values.abilities.activated],
-			triggered: [...values.abilities.triggered],
-			static: [...values.abilities.static],
-		},
+		abilities: cloneAbilityReferences(values.abilities),
 	};
 	return values.kind === "creature"
 		? {
@@ -880,8 +953,10 @@ export function buildGameView(state: ReadonlyGameState): GameView {
 	> = {};
 
 	for (const object of state.objects.values()) {
+		// `initial` is already a fresh clone, and layer 1a replaces rather than
+		// mutates its map entry, so it can serve as the copiable values directly.
 		const initial = initialCharacteristics(object);
-		copiable.set(object.id, cloneCharacteristics(initial));
+		copiable.set(object.id, initial);
 		characteristics.set(object.id, cloneCharacteristics(initial));
 
 		for (const abilityId of initial.abilities.static) {
@@ -1413,7 +1488,7 @@ interface ProhibitionCtx {
  * effects: in particular, they don't compete with or consume replacement
  * effects.
  */
-interface ProhibitionDef {
+export interface ProhibitionDef {
 	label: string;
 	text: string;
 	/** @default ['battlefield'] */
@@ -1664,7 +1739,30 @@ type CardDefManaCost =
 	 */
 	| "none";
 
-export interface CardDef {
+/**
+ * Executable ability implementations owned by the registry.
+ *
+ * A definition living here does *not* mean the card has that ability. It means
+ * the card is where the implementation is stored, and that
+ * `staticAbilityId(cardId, index)` and friends resolve to it. What the card
+ * actually has is {@link CardDef.printedAbilities}.
+ */
+export interface AbilityDefinitions {
+	static: ContinuousEffect[];
+	activated: ActivatedAbilityDef[];
+	triggered: TriggerDef[];
+	replacement: ReplacementDef[];
+	prohibition: ProhibitionDef[];
+}
+
+/**
+ * The abilities printed on the card, as registry references (CR 109.3). These
+ * seed an object's copiable values; continuous effects add to or remove from
+ * the derived copy without ever touching the card.
+ */
+export type PrintedAbilities = AbilityReferences;
+
+interface CardDefBase {
 	id: string;
 	name: string;
 	supertypes?: Supertype[];
@@ -1679,14 +1777,93 @@ export interface CardDef {
 	entersTapped?: boolean;
 	/** Printed "enters with N counters" — also a replacement. */
 	entersWith?: CounterBag;
-	replacements?: ReplacementDef[];
-	prohibitions?: ProhibitionDef[];
-	statics?: ContinuousEffect[];
-	triggers?: TriggerDef[];
 	/** Canonical declarative spell definition, including targets. */
 	spell?: SpellAbilityDef;
-	/** Activated definitions are parsed now; activation runtime is intentionally separate. */
+}
+
+export interface CardDef extends CardDefBase {
+	/** Registry-owned implementations. Not a statement of possession. */
+	abilityDefinitions: AbilityDefinitions;
+	/** Intrinsic possession, as `cardId:index` references. */
+	printedAbilities: PrintedAbilities;
+}
+
+/**
+ * Authoring shape for cards, the compiler, and tests. The per-kind arrays are
+ * the card's definitions; by default the card prints all of them.
+ */
+export interface CardDefInput extends CardDefBase {
+	statics?: ContinuousEffect[];
 	activatedAbilities?: ActivatedAbilityDef[];
+	triggers?: TriggerDef[];
+	replacements?: ReplacementDef[];
+	prohibitions?: ProhibitionDef[];
+	/**
+	 * Which definition *indices* the card actually prints, per kind. Omit a kind
+	 * to print all of its definitions (the normal case). Supply `[]` for a card
+	 * that only hosts an implementation — e.g. an anthem whose layer-6 effect
+	 * grants an ability the anthem itself doesn't have.
+	 */
+	printed?: Partial<Record<AbilityCategory, readonly number[]>>;
+}
+
+const ABILITY_REF_CONSTRUCTORS = {
+	static: staticAbilityId,
+	activated: activatedAbilityId,
+	triggered: triggeredAbilityId,
+	replacement: replacementAbilityId,
+	prohibition: prohibitionAbilityId,
+} as const;
+
+function printedRefsFor(
+	id: string,
+	definitions: AbilityDefinitions,
+	printed: CardDefInput["printed"],
+): PrintedAbilities {
+	const refs = {} as Record<AbilityCategory, string[]>;
+	for (const category of ABILITY_CATEGORIES) {
+		const count = definitions[category].length;
+		const indices =
+			printed?.[category] ?? definitions[category].map((_, i) => i);
+		refs[category] = indices.map((index) => {
+			assert(
+				Number.isSafeInteger(index) && index >= 0 && index < count,
+				`${id}: printed ${category} ability index ${index} has no definition`,
+			);
+			return ABILITY_REF_CONSTRUCTORS[category](id, index);
+		});
+	}
+	return refs as PrintedAbilities;
+}
+
+/**
+ * Normalizes the authoring shape into the engine shape. Idempotent, so an
+ * already-normalized def (from the compiler, or a round trip) passes through
+ * with its definition object identities intact.
+ */
+export function defineCard(input: CardDefInput | CardDef): CardDef {
+	if ("abilityDefinitions" in input) return input;
+	const {
+		statics,
+		activatedAbilities,
+		triggers,
+		replacements,
+		prohibitions,
+		printed,
+		...base
+	} = input;
+	const abilityDefinitions: AbilityDefinitions = {
+		static: statics ?? [],
+		activated: activatedAbilities ?? [],
+		triggered: triggers ?? [],
+		replacement: replacements ?? [],
+		prohibition: prohibitions ?? [],
+	};
+	return {
+		...base,
+		abilityDefinitions,
+		printedAbilities: printedRefsFor(input.id, abilityDefinitions, printed),
+	};
 }
 
 /** Name used at the source/compiler boundary; identical to the engine CardDef. */
@@ -1699,7 +1876,8 @@ export type OracleCardDef = CardDef;
  */
 const DB: Record<string, CardDef> = {};
 
-export function registerCard(def: CardDef): CardDef {
+export function registerCard(input: CardDefInput | CardDef): CardDef {
+	const def = defineCard(input);
 	DB[def.id] = def;
 	return def;
 }
@@ -2472,28 +2650,84 @@ function synthesizedSelfReplacements(
 	];
 }
 
+const EMPTY_ABILITY_REFERENCES: DeepReadOnly<AbilityReferences> = {
+	static: [],
+	activated: [],
+	triggered: [],
+	replacement: [],
+	prohibition: [],
+};
+
+/**
+ * Registry references an object currently has, or an empty set for objects with
+ * no characteristics (abilities on the stack).
+ *
+ * Possession is read off the derived view, never off the card's definition
+ * arrays: a token, a copy, or an object under a layer-6 grant has abilities its
+ * own printed card may know nothing about.
+ */
+function abilityReferencesOf(
+	view: GameView,
+	object: DeepReadOnly<GameObject>,
+): DeepReadOnly<AbilityReferences> {
+	const snapshot = view.objects.get(object.id);
+	if (!snapshot || snapshot.kind === "ability") return EMPTY_ABILITY_REFERENCES;
+	return snapshot.currentCharacteristics.abilities;
+}
+
+/** Effect-label name for logs, taken from the view rather than re-derived. */
+function viewName(
+	view: GameView,
+	state: ReadonlyGameState,
+	id: ObjectId,
+): string {
+	const snapshot = view.objects.get(id);
+	return snapshot && snapshot.kind !== "ability"
+		? snapshot.currentCharacteristics.name
+		: name(state, id);
+}
+
+/**
+ * Replacement effects an object has right now: the ones synthesized from its
+ * printed ETB shorthands, plus every replacement reference it possesses.
+ */
+function replacementsOf(
+	view: GameView,
+	object: DeepReadOnly<GameObject>,
+): ReplacementDef[] {
+	return [
+		...synthesizedSelfReplacements(object),
+		...abilityReferencesOf(view, object).replacement.map(
+			resolveReplacementAbility,
+		),
+	];
+}
+
 export function prepareEffectData(state: GameState): void {
-	let changed = false;
+	// Which replacements an object has is a derived fact, so the view has to be
+	// built before anything is written back.
+	const view = cachedGameView(state, state.revision);
+	const pending: [object: GameObject, label: string][] = [];
 	for (const object of state.objects.values()) {
-		const printedId = cardIdOf(object);
-		if (!printedId) continue;
-		for (const def of [
-			...synthesizedSelfReplacements(object),
-			...(card(printedId).replacements ?? []),
-		]) {
-			if (object.effectData[def.label] === undefined) {
-				object.effectData[def.label] = {};
-				changed = true;
-			}
+		for (const def of replacementsOf(view, object)) {
+			if (object.effectData[def.label] === undefined)
+				pending.push([object, def.label]);
 		}
 	}
-	if (changed) state.revision++;
+	if (pending.length === 0) return;
+	for (const [object, label] of pending) object.effectData[label] = {};
+	state.revision++;
+	// `effectData` is per-effect mutable scratch and is not an input to any
+	// derived characteristic, so the view stays accurate across this bump. Any
+	// ReadContext taken before the bump still goes stale, as it must.
+	GAME_VIEW_CACHE.set(state, { revision: state.revision, view });
 }
 
 export function collectReplacements(
 	state: ReadonlyGameState,
 ): BoundReplacement[] {
 	const out: BoundReplacement[] = [];
+	const view = cachedGameView(state, state.revision);
 
 	for (const zone of ALL_ZONES) {
 		const ids =
@@ -2506,13 +2740,7 @@ export function collectReplacements(
 		for (const id of ids) {
 			const o = maybeObject(state, id);
 			if (!o) continue;
-			const printedId = cardIdOf(o);
-			if (!printedId) continue;
-			const defs = [
-				...synthesizedSelfReplacements(o),
-				...(card(printedId).replacements ?? []),
-			];
-			for (const def of defs) {
+			for (const def of replacementsOf(view, o)) {
 				if (!functionsHere(def.functionsIn, zone)) continue;
 				const key = def.label;
 				const data: Record<string, number> | undefined = o.effectData[key];
@@ -2523,7 +2751,7 @@ export function collectReplacements(
 					source: o,
 					controller: controllerOf(o) ?? o.owner,
 					data,
-					label: `${card(printedId).name}#${o.id} — ${def.text}`,
+					label: `${viewName(view, state, o.id)}#${o.id} — ${def.text}`,
 				});
 			}
 		}
@@ -2641,16 +2869,16 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 	const out: BoundProhibition[] = [];
 	const abilityCanChangeKeywords = [...read.state.objects.values()].some(
 		(source) =>
-			(baseCardDefForObject(source)?.statics ?? []).some(
+			(baseCardDefForObject(source)?.abilityDefinitions.static ?? []).some(
 				(effect) => effect.layer === "6-ability-changing",
 			),
 	);
 	for (const object of read.state.objects.values()) {
 		const printedId = cardIdOf(object);
-		if (!printedId) continue;
 		const mightBeIndestructible =
 			object.kind === "permanent" &&
-			(card(printedId).keywords?.includes("indestructible") === true ||
+			((printedId !== null &&
+				card(printedId).keywords?.includes("indestructible") === true) ||
 				abilityCanChangeKeywords);
 		const snapshot = mightBeIndestructible
 			? read.view.objects.get(object.id)
@@ -2670,7 +2898,9 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 						},
 					]
 				: []),
-			...(card(printedId).prohibitions ?? []),
+			...abilityReferencesOf(read.view, object).prohibition.map(
+				resolveProhibitionAbility,
+			),
 		];
 		for (const def of definitions) {
 			if (!functionsHere(def.functionsIn, object.zone)) continue;
@@ -2684,7 +2914,7 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 				def,
 				source: object,
 				controller,
-				label: `${card(printedId).name}#${object.id} — ${def.text}`,
+				label: `${viewName(read.view, read.state, object.id)}#${object.id} — ${def.text}`,
 			});
 		}
 	}
@@ -3186,15 +3416,16 @@ function checkStateBasedActionsIn(
 
 		const hasCharacteristicChangingStatic = [...state.objects.values()].some(
 			(source) =>
-				(baseCardDefForObject(source)?.statics ?? []).some((effect) =>
-					[
-						"1a-copiable-values",
-						"4-type-changing",
-						"7a-power-toughness-defining",
-						"7b-set-specific-power-toughness",
-						"7c-modify-power-toughness",
-						"7d-swap-power-toughness",
-					].includes(effect.layer),
+				(baseCardDefForObject(source)?.abilityDefinitions.static ?? []).some(
+					(effect) =>
+						[
+							"1a-copiable-values",
+							"4-type-changing",
+							"7a-power-toughness-defining",
+							"7b-set-specific-power-toughness",
+							"7c-modify-power-toughness",
+							"7d-swap-power-toughness",
+						].includes(effect.layer),
 				),
 		);
 		const needsPermanentSbas =
