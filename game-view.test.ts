@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts";
 import {
+	activatedAbilityId,
 	advanceWithReplay,
 	buildGameView,
 	createReadContext,
@@ -9,6 +10,7 @@ import {
 	perform,
 	readObject,
 	registerCard,
+	resolveActivatedAbility,
 	resolveStaticAbility,
 	resolveTriggeredAbility,
 	spawnCard,
@@ -59,6 +61,77 @@ describe("derived game views", () => {
 		expect(String(id)).toBe("card:id:with:colons:0");
 		expect(resolveStaticAbility(id)).toBe(colonCardStatic);
 		expect(resolveStaticAbility(snapshot.copiableValues.abilities.static[0]!)).toBeDefined();
+	});
+
+	test("activated ability IDs resolve and survive tokens and copying", () => {
+		registerCard({
+			id: "snapshot-activation-test",
+			name: "Snapshot Activation Test",
+			types: ["creature"],
+			colors: [],
+			manaCost: "zero",
+			power: 1,
+			toughness: 1,
+			activatedAbilities: [
+				{
+					id: "unused-runtime-name",
+					text: "{T}: Draw a card.",
+					manaAbility: false,
+					costs: [{ kind: "tap-self" }],
+					targets: [],
+					effects: [{ kind: "draw", player: "you", amount: 1 }],
+				},
+			],
+		});
+		const state = newGame();
+		const source = spawnPermanent(
+			state,
+			"snapshot-activation-test",
+			P1,
+			"battlefield",
+		);
+		const sourceSnapshot = readObject(createReadContext(state), source.id);
+		expect(sourceSnapshot.kind).toBe("permanent");
+		if (sourceSnapshot.kind !== "permanent") return;
+		expect(sourceSnapshot.copiableValues.abilities.activated.map(String)).toEqual([
+			"snapshot-activation-test:0",
+		]);
+		const id = activatedAbilityId("snapshot-activation-test", 0);
+		expect(resolveActivatedAbility(id).id).toBe("unused-runtime-name");
+
+		const token = spawnToken(
+			state,
+			P1,
+			structuredClone(sourceSnapshot.copiableValues),
+			"snapshot-activation-test",
+		);
+		const tokenSnapshot = readObject(createReadContext(state), token.id);
+		expect(tokenSnapshot.kind).toBe("permanent");
+		if (tokenSnapshot.kind !== "permanent") return;
+		expect(tokenSnapshot.copiableValues.abilities.activated.map(String)).toEqual([
+			"snapshot-activation-test:0",
+		]);
+
+		const clone = spawnCard(state, "clone", P1, "hand");
+		const result = perform(
+			state,
+			{
+				kind: "change zone",
+				object: clone.id,
+				from: "hand",
+				to: "battlefield",
+				cause: "resolve",
+				toController: P1,
+			},
+			agents,
+		);
+		const copied = readObject(createReadContext(state), result.created[0]!);
+		expect(copied.kind).toBe("permanent");
+		if (copied.kind !== "permanent") return;
+		expect(copied.copiableValues.abilities.activated.map(String)).toEqual([
+			"snapshot-activation-test:0",
+		]);
+		expect(() => structuredClone(state)).not.toThrow();
 	});
 
 	test("triggered ability IDs resolve directly by cardId:index", () => {

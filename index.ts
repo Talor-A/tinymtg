@@ -546,6 +546,22 @@ export type StaticAbilityId = string & {
 	readonly __staticAbilityId: unique symbol;
 };
 
+/** Serializable `cardId:index` registry reference to a printed activation. */
+export type ActivatedAbilityId = string & {
+	readonly __activatedAbilityId: unique symbol;
+};
+
+export function activatedAbilityId(
+	cardId: string,
+	index: number,
+): ActivatedAbilityId {
+	assert(
+		Number.isSafeInteger(index) && index >= 0,
+		"invalid activated ability index",
+	);
+	return `${cardId}:${index}` as ActivatedAbilityId;
+}
+
 /** Serializable `cardId:index` registry reference to a printed trigger. */
 export type TriggeredAbilityId = string & {
 	readonly __triggeredAbilityId: unique symbol;
@@ -584,6 +600,19 @@ export function resolveStaticAbility(id: StaticAbilityId): ContinuousEffect {
 	return effect;
 }
 
+export function resolveActivatedAbility(
+	id: ActivatedAbilityId,
+): ActivatedAbilityDef {
+	const separator = id.lastIndexOf(":");
+	assert(separator > 0, `invalid activated ability id: ${id}`);
+	const cardId = id.slice(0, separator);
+	const indexText = id.slice(separator + 1);
+	assert(/^\d+$/.test(indexText), `invalid activated ability id: ${id}`);
+	const ability = card(cardId).activatedAbilities?.[Number(indexText)];
+	assertDefined(ability, `unknown activated ability: ${id}`);
+	return ability;
+}
+
 export function resolveTriggeredAbility(id: TriggeredAbilityId): TriggerDef {
 	const separator = id.lastIndexOf(":");
 	assert(separator > 0, `invalid triggered ability id: ${id}`);
@@ -604,8 +633,7 @@ interface BaseCharacteristicsSnapshot {
 	subtypes: string[];
 	keywords: Keyword[];
 	abilities: {
-		// TODO: replace this array with an executable ability snapshot type.
-		activated: never[];
+		activated: ActivatedAbilityId[];
 		triggered: TriggeredAbilityId[];
 		static: StaticAbilityId[];
 	};
@@ -737,7 +765,9 @@ function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
 		subtypes: [...(def.subtypes ?? [])],
 		keywords: [...(def.keywords ?? [])],
 		abilities: {
-			activated: [] as never[],
+			activated: (def.activatedAbilities ?? []).map((_ability, index) =>
+				activatedAbilityId(def.id, index),
+			),
 			triggered: (def.triggers ?? []).map((_ability, index) =>
 				triggeredAbilityId(def.id, index),
 			),
@@ -810,7 +840,7 @@ function cloneCharacteristics(
 		subtypes: [...values.subtypes],
 		keywords: [...values.keywords],
 		abilities: {
-			activated: [] as never[],
+			activated: [...values.abilities.activated],
 			triggered: [...values.abilities.triggered],
 			static: [...values.abilities.static],
 		},
