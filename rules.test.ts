@@ -1351,7 +1351,9 @@ describe("declaring blockers", () => {
 
 	test("blocking clears at end combat", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		const blocker = spawnPermanent(state, "grizzly-bears", P2, "battlefield", {
+			counters: { "+1/+1": 1 },
+		});
 		perform(
 			state,
 			{
@@ -1374,5 +1376,9 @@ describe("declaring blockers", () => {
 		expect(permanent(state, blocker.id).tapped, "blocking never tapped").toBe(
 			false,
 		);
+		expect(
+			state.blockAssignments,
+			"end combat clears block assignments",
+		).toEqual([]);
 	});
 });

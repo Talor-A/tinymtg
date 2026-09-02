@@ -72,6 +72,19 @@ function attackWith(ids: ObjectId[]): Agents {
 	return [new ScriptedAgent([], [], [], [ids]), new ScriptedAgent()];
 }
 
+function attackAndBlock(attacker: ObjectId, blockers: ObjectId[]): Agents {
+	return [
+		new ScriptedAgent([], [], [], [[attacker]]),
+		new ScriptedAgent(
+			[],
+			[],
+			[],
+			[],
+			[blockers.map((blocker) => ({ blocker, attacker }))],
+		),
+	];
+}
+
 describe("turn progress", () => {
 	test("notStarted is visible only before the first advance", () => {
 		const state = newGame();
@@ -292,6 +305,75 @@ describe("declaring attackers during normal progression", () => {
 });
 
 describe("dealing combat damage", () => {
+	test("a blocked attacker damages its blocker instead of the defending player", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const blocker = spawnPermanent(state, "grizzly-bears", BOB, "battlefield");
+		const agents = attackAndBlock(attacker.id, [blocker.id]);
+
+		advanceUntil(state, agents, (next) => isAt(next, "declare blockers"));
+		expect(state.blockAssignments).toEqual([
+			{ blocker: blocker.id, attacker: attacker.id },
+		]);
+
+		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		expect(state.players[BOB].life, "blocked attacker did not hit BOB").toBe(
+			20,
+		);
+		expect(state.objects.has(attacker.id), "blocker dealt lethal damage").toBe(
+			false,
+		);
+		expect(state.objects.has(blocker.id), "attacker dealt lethal damage").toBe(
+			false,
+		);
+	});
+
+	test("multiple blockers all deal damage and receive a legal ordered assignment", () => {
+		const state = newGame();
+		const attacker = spawnPermanent(
+			state,
+			"grizzly-bears",
+			ALICE,
+			"battlefield",
+			{
+				counters: { "+1/+1": 1 },
+			},
+		);
+		const first = spawnPermanent(state, "grizzly-bears", BOB, "battlefield");
+		const second = spawnPermanent(state, "eager-cadet", BOB, "battlefield");
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", BOB, "library");
+		const agents = attackAndBlock(attacker.id, [first.id, second.id]);
+
+		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+
+		expect(state.players[BOB].life).toBe(20);
+		expect(state.objects.has(attacker.id), "blockers dealt 2 + 1").toBe(false);
+		expect(state.objects.has(first.id), "first blocker received lethal 2").toBe(
+			false,
+		);
+		expect(
+			state.objects.has(second.id),
+			"second blocker received remaining 1",
+		).toBe(false);
+	});
+
+	test("an attacker remains blocked if its blocker regenerates before damage", () => {
+		const { state, attacker } = setupAttackTurn("grizzly-bears");
+		const blocker = spawnPermanent(state, "grizzly-bears", BOB, "battlefield");
+		const agents = attackAndBlock(attacker.id, [blocker.id]);
+
+		advanceUntil(state, agents, (next) => isAt(next, "declare blockers"));
+		perform(state, { kind: "regenerate", object: blocker.id }, agents);
+		expect(permanent(state, blocker.id).blocking).toBe(false);
+
+		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		expect(
+			state.players[BOB].life,
+			"blocked attacker did not become unblocked",
+		).toBe(20);
+		expect(permanent(state, attacker.id).damage).toBe(0);
+	});
+
 	test("a Grizzly Bears deals its power to the opponent at combat damage, not at declaration", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
 		const agents = attackWith([attacker.id]);

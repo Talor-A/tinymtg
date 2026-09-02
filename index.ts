@@ -1244,6 +1244,8 @@ export interface GameState {
 	/** Trigger occurrences waiting for the next time a player would receive priority. */
 	pendingTriggers: PendingTrigger[];
 	floating: FloatingEffect[];
+	/** Block declarations for the current combat, in damage-assignment order. */
+	blockAssignments: BlockAssignment[];
 	turn: number;
 	activePlayer: PlayerId;
 	turnScheduler: TurnScheduler;
@@ -2044,6 +2046,7 @@ export function newGame(): GameState {
 		stack: [],
 		pendingTriggers: [],
 		floating: [],
+		blockAssignments: [],
 		turn: 0,
 		activePlayer: 0 as PlayerId,
 		turnScheduler: {
@@ -4656,8 +4659,13 @@ function executeIn(
 					);
 				}
 			}
-			// Atomic commit: either every assignment marks its blocker, or none do.
-			for (const { blocker } of ev.blockers) {
+			// Atomic commit: either every assignment and blocker status is recorded,
+			// or none is. Keep the pair order as the deterministic damage-assignment
+			// order for the base engine's noninteractive combat model.
+			state.blockAssignments = ev.blockers.map((assignment) => ({
+				...assignment,
+			}));
+			for (const { blocker } of state.blockAssignments) {
 				permanent(state, blocker).blocking = true;
 			}
 			log(
@@ -5170,40 +5178,131 @@ function performTurnBasedActions(
 				o.attacking = false;
 				o.blocking = false;
 			}
+			state.blockAssignments = [];
 			break;
 		case "combat damage": {
 			// CR 510.2: all combat damage is assigned, then dealt, simultaneously.
-			// Blocker declarations are now tracked, but damage assignment to
-			// blockers (and trample) is not implemented yet. This step still
-			// treats every still-attacking permanent as unblocked and hits the
-			// opposing player directly. That is a deliberate deviation from a
-			// full combat model, flagged here rather than assumed equivalent.
-			// doubling it into a lethal blow — can't change another's amount.
 			const defender = (1 - state.activePlayer) as PlayerId;
 			const events: DamageEvent[] = [];
 			const read = createReadContext(state);
+			const blockedAttackers = new Set(
+				state.blockAssignments.map(({ attacker }) => attacker),
+			);
+			const blockersByAttacker = new Map<ObjectId, ObjectId[]>();
+			for (const { blocker, attacker } of state.blockAssignments) {
+				const blockers = blockersByAttacker.get(attacker) ?? [];
+				blockers.push(blocker);
+				blockersByAttacker.set(attacker, blockers);
+			}
+
+			const damageEvent = (
+				source: PermanentObject,
+				characteristics: CreatureCharacteristicsSnapshot,
+				target: EntityRef,
+				amount: number,
+			): DamageEvent => ({
+				kind: "damage",
+				source: source.id,
+				sourceController: source.controller,
+				sourceColors: characteristics.colors,
+				target,
+				amount,
+				combat: true,
+				// The engine has no deathtouch keyword yet; false is correct until
+				// one is added.
+				deathtouch: false,
+				lifelink: characteristics.keywords.includes("lifelink"),
+				unpreventable: false,
+			});
+
 			for (const id of state.battlefield) {
 				const o = maybePermanent(state, id);
 				if (!o?.attacking) continue;
 				const snapshot = readObject(read, id);
 				assert(snapshot.kind === "permanent");
 				const characteristics = snapshot.currentCharacteristics;
+				if (characteristics.kind !== "creature") continue;
+
+				if (!blockedAttackers.has(id)) {
+					if (characteristics.power > 0) {
+						events.push(
+							damageEvent(
+								o,
+								characteristics,
+								{
+									type: "player",
+									player: defender,
+								},
+								characteristics.power,
+							),
+						);
+					}
+					continue;
+				}
+
+				// With no trample, a blocked attacker can assign damage only to the
+				// creatures still blocking it. Assign lethal in declaration order,
+				// putting any remainder on the final blocker.
+				let remaining = Math.max(0, characteristics.power);
+				const blockers = (blockersByAttacker.get(id) ?? []).filter(
+					(blockerId) => maybePermanent(state, blockerId)?.blocking,
+				);
+				for (let index = 0; index < blockers.length && remaining > 0; index++) {
+					const blockerId = blockers[index];
+					assertDefined(blockerId);
+					const blocker = maybePermanent(state, blockerId);
+					assertDefined(blocker);
+					const blockerSnapshot = readObject(read, blockerId);
+					assert(blockerSnapshot.kind === "permanent");
+					const blockerCharacteristics = blockerSnapshot.currentCharacteristics;
+					if (blockerCharacteristics.kind !== "creature") continue;
+					const amount =
+						index === blockers.length - 1
+							? remaining
+							: Math.min(
+									remaining,
+									Math.max(
+										0,
+										blockerCharacteristics.toughness - blocker.damage,
+									),
+								);
+					if (amount > 0) {
+						events.push(
+							damageEvent(
+								o,
+								characteristics,
+								{
+									type: "permanent",
+									id: blockerId,
+								},
+								amount,
+							),
+						);
+						remaining -= amount;
+					}
+				}
+			}
+
+			for (const { blocker, attacker } of state.blockAssignments) {
+				const blockerObject = maybePermanent(state, blocker);
+				const attackerObject = maybePermanent(state, attacker);
+				if (!blockerObject?.blocking || !attackerObject?.attacking) continue;
+				const blockerSnapshot = readObject(read, blocker);
+				assert(blockerSnapshot.kind === "permanent");
+				const characteristics = blockerSnapshot.currentCharacteristics;
 				if (characteristics.kind !== "creature" || characteristics.power <= 0)
 					continue;
-				events.push({
-					kind: "damage",
-					source: id,
-					sourceController: o.controller,
-					sourceColors: characteristics.colors,
-					target: { type: "player", player: defender },
-					amount: characteristics.power,
-					combat: true,
-					// The engine has no deathtouch keyword yet; false is correct
-					// until one is added.
-					deathtouch: false,
-					lifelink: characteristics.keywords.includes("lifelink"),
-					unpreventable: false,
-				});
+				events.push(
+					damageEvent(
+						blockerObject,
+						characteristics,
+						{
+							type: "permanent",
+							id: attacker,
+						},
+						characteristics.power,
+					),
+				);
 			}
 			for (const ev of events) performIn(state, ev, choices, newScope(), 0);
 			break;
