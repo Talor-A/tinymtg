@@ -2971,7 +2971,7 @@ export function affectedPlayer(
 			return maybePermanent(state, ev.object)?.controller ?? 0;
 		case "tap":
 		case "untap":
-			if (ev.ref.kind === "all") return state.activePlayer;
+			if (ev.ref.kind === "all") return ev.ref.player;
 			return maybePermanent(state, ev.ref.object)?.controller ?? 0;
 
 		case "add counters":
@@ -3833,6 +3833,7 @@ function triggerMatches(
 	condition: TriggerCondition,
 	ev: GameEvent,
 	created: ObjectId[],
+	changed: ObjectId[],
 ): boolean {
 	if (ev.kind !== condition.kind) return false;
 
@@ -3895,16 +3896,10 @@ function triggerMatches(
 		case "tap":
 		case "untap": {
 			assert(ev.kind === "tap" || ev.kind === "untap");
-			let subjects: DeepReadOnly<GameObject>[];
-			if (ev.ref.kind === "object") {
-				const subject = maybeObject(read.state, ev.ref.object);
-				subjects = subject ? [subject] : [];
-			} else {
-				const player = ev.ref.player;
-				subjects = permanentsInPlay(read.state).filter(
-					(object) => object.controller === player,
-				);
-			}
+			const subjects = changed.flatMap((id) => {
+				const subject = maybeObject(read.state, id);
+				return subject ? [subject] : [];
+			});
 			return triggerSubjectsMatch(read, source, subjects, condition.selector);
 		}
 	}
@@ -3916,6 +3911,7 @@ function detectTriggers(
 	read: ReadContext,
 	ev: GameEvent,
 	created: ObjectId[],
+	changed: ObjectId[],
 ): void {
 	for (const abilitySource of state.objects.values()) {
 		const snapshot = read.view.objects.get(abilitySource.id);
@@ -3925,7 +3921,16 @@ function detectTriggers(
 			const trigger = resolveTriggeredAbility(triggerId);
 			const functionsIn = trigger.functionsIn ?? ["battlefield"];
 			if (!functionsIn.includes(abilitySource.zone)) continue;
-			if (triggerMatches(read, abilitySource, trigger.condition, ev, created)) {
+			if (
+				triggerMatches(
+					read,
+					abilitySource,
+					trigger.condition,
+					ev,
+					created,
+					changed,
+				)
+			) {
 				enqueueTrigger(state, abilitySource, triggerId, trigger);
 			}
 		}
@@ -3961,6 +3966,7 @@ function executeIn(
 
 	let happened = true;
 	const created: ObjectId[] = [];
+	const changed: ObjectId[] = [];
 	const childResults: PerformResult[] = [];
 
 	switch (ev.kind) {
@@ -4280,20 +4286,25 @@ function executeIn(
 
 		case "tap":
 		case "untap": {
+			const tapped = ev.kind === "tap";
 			if (ev.ref.kind === "all") {
 				const p = state.players[ev.ref.player];
 				for (const o of permanentsInPlay(state).filter(
 					(o) => o.controller === p.id,
 				)) {
-					o.tapped = ev.kind === "tap";
+					if (o.tapped === tapped) continue;
+					o.tapped = tapped;
+					changed.push(o.id);
 				}
+				if (changed.length === 0) happened = false;
 			} else {
 				const o = maybePermanent(state, ev.ref.object);
-				if (!o) {
+				if (!o || o.tapped === tapped) {
 					happened = false;
 					break;
 				}
-				o.tapped = ev.kind === "tap";
+				o.tapped = tapped;
+				changed.push(o.id);
 			}
 			break;
 		}
@@ -4468,7 +4479,7 @@ function executeIn(
 	if (happened) {
 		executed.push(ev);
 		state.revision++;
-		detectTriggers(state, createReadContext(state), ev, created);
+		detectTriggers(state, createReadContext(state), ev, created, changed);
 		if (ev.fact) scope.facts.add(ev.fact);
 	}
 
@@ -4490,9 +4501,7 @@ function putPendingTriggersOnStack(state: GameState): void {
 		 *
 		 * (See rule 503, "Upkeep Step.")
 		 */
-		// TODO: implement putting on stack in upkeep.
-		if (state.pendingTriggers.length > 0)
-			throw new Error("pending triggers in untap step");
+		return;
 	}
 	for (const pending of state.pendingTriggers) {
 		const item: AbilityStackItem = {
