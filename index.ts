@@ -4710,7 +4710,10 @@ function executeIn(
  * Priority and the stack
  * ------------------------------------------------------------------ */
 
-function putPendingTriggersOnStack(state: GameState): void {
+function putPendingTriggersOnStack(
+	state: GameState,
+	choices: AnyChoiceController,
+): void {
 	if (currentStepKind(state) === "untap") {
 		/**
 		 * 502.4:
@@ -4723,7 +4726,15 @@ function putPendingTriggersOnStack(state: GameState): void {
 		 */
 		return;
 	}
-	for (const pending of state.pendingTriggers) {
+	const nonactivePlayer = state.activePlayer === 0 ? 1 : 0;
+	const ordered: PendingTrigger[] = [];
+	for (const controller of [state.activePlayer, nonactivePlayer] as const) {
+		const controlled = state.pendingTriggers.filter(
+			(pending) => pending.controller === controller,
+		);
+		ordered.push(...choices.chooseTriggerOrder(state, controller, controlled));
+	}
+	for (const pending of ordered) {
 		const item: AbilityStackItem = {
 			id: state.nextStackItemId++ as StackItemId,
 			kind: "ability",
@@ -5022,7 +5033,7 @@ function settlePriorityIn(
 		checkStateBasedActionsIn(state, choices);
 		if (gameOver(state)) return;
 
-		putPendingTriggersOnStack(state);
+		putPendingTriggersOnStack(state, choices);
 		// players only get priority in the untap & cleanup steps
 		// if something goes on the stack.
 		const step = currentStepKind(state);

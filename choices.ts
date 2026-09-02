@@ -6,6 +6,7 @@ import type {
 	GameEvent,
 	GameState,
 	ObjectId,
+	PendingTrigger,
 	PlayerId,
 	PlayerView,
 	PriorityAction,
@@ -55,6 +56,18 @@ export interface PriorityActionChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
+export interface TriggerOrderChoiceRequest extends ChoiceRequestBase {
+	kind: "triggerOrder";
+	context: {
+		triggers: {
+			id: string;
+			source: ObjectId;
+			triggerId: string;
+			text: string;
+		}[];
+	};
+}
+
 /**
  * The defending player is intentionally omitted: this project supports
  * exactly two players and all attackers currently attack the opposing
@@ -87,6 +100,7 @@ export type ChoiceRequest =
 	| OwnHandChoiceRequest
 	| OptionalChoiceRequest
 	| PriorityActionChoiceRequest
+	| TriggerOrderChoiceRequest
 	| DeclareAttackersChoiceRequest
 	| DeclareBlockersChoiceRequest;
 
@@ -153,6 +167,10 @@ type RequestInput =
 	| Omit<ReplacementChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OwnHandChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OptionalChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
+	| Omit<
+			TriggerOrderChoiceRequest,
+			"version" | "id" | "ordinal" | "fingerprint"
+	  >
 	| Omit<
 			PriorityActionChoiceRequest,
 			"version" | "id" | "ordinal" | "fingerprint"
@@ -232,7 +250,41 @@ function normalizeAnswer(
 	) {
 		return normalizeMultiAnswer(request, answer);
 	}
+	if (request.kind === "triggerOrder") {
+		return normalizeOrderedAnswer(request, answer);
+	}
 	return normalizeSingleAnswer(request, answer);
+}
+
+function normalizeOrderedAnswer(
+	request: TriggerOrderChoiceRequest,
+	answer: ChoiceAnswer,
+): { optionIds: string[] } {
+	if (
+		!answer ||
+		!Array.isArray((answer as { optionIds?: unknown }).optionIds)
+	) {
+		throw new InvalidChoiceAnswerError(
+			`agent returned an invalid answer for choice ${request.id}`,
+		);
+	}
+	const optionIds = (answer as { optionIds: unknown[] }).optionIds;
+	if (optionIds.length !== request.options.length) {
+		throw new InvalidChoiceAnswerError(
+			`agent must order all ${request.options.length} options for choice ${request.id}`,
+		);
+	}
+	const legalIds = new Set(request.options.map((option) => option.id));
+	const seen = new Set<string>();
+	for (const id of optionIds) {
+		if (typeof id !== "string" || !legalIds.has(id) || seen.has(id)) {
+			throw new InvalidChoiceAnswerError(
+				`agent returned an invalid trigger order for choice ${request.id}`,
+			);
+		}
+		seen.add(id);
+	}
+	return { optionIds: [...optionIds] as string[] };
 }
 
 function normalizeSingleAnswer(
@@ -642,6 +694,35 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			})),
 		});
 		return this.choose(state, request, candidates);
+	}
+
+	chooseTriggerOrder(
+		state: GameState,
+		player: PlayerId,
+		triggers: PendingTrigger[],
+	): PendingTrigger[] {
+		if (triggers.length < 2) return [...triggers];
+		const candidates = triggers.map((trigger, index) => ({
+			id: `trigger:${index}:${trigger.source}:${trigger.triggerId}`,
+			value: trigger,
+		}));
+		const request = this.request({
+			kind: "triggerOrder",
+			player,
+			context: {
+				triggers: candidates.map((candidate) => ({
+					id: candidate.id,
+					source: candidate.value.source,
+					triggerId: String(candidate.value.triggerId),
+					text: candidate.value.text,
+				})),
+			},
+			options: candidates.map((candidate) => ({
+				id: candidate.id,
+				label: `${objectLabel(state, candidate.value.source)}#${candidate.value.source} — ${candidate.value.text}`,
+			})),
+		});
+		return this.chooseMulti(state, request, candidates);
 	}
 
 	/**

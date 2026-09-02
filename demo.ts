@@ -499,6 +499,9 @@ async function main(): Promise<void> {
 				}
 				if (request.kind === "declareAttackers") return { optionIds: [] };
 				if (request.kind === "declareBlockers") return { optionIds: [] };
+				if (request.kind === "triggerOrder") {
+					return { optionIds: request.options.map((option) => option.id) };
+				}
 				if (request.kind === "optional") return { optionId: "no" };
 				const first = request.options[0];
 				return { optionId: first ? first.id : "" };

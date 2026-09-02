@@ -25,6 +25,14 @@ export class FuzzAgent implements SyncAgent {
 	}
 
 	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
+		if (request.kind === "triggerOrder") {
+			return {
+				optionIds: request.options
+					.map((option) => ({ option, order: this.rng() }))
+					.sort((left, right) => left.order - right.order)
+					.map(({ option }) => option.id),
+			};
+		}
 		if (request.kind === "declareAttackers") {
 			return {
 				optionIds: request.options

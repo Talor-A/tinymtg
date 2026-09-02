@@ -130,6 +130,7 @@ describe("choice transcript fuzz", () => {
 				"ownHand",
 				"optional",
 				"priorityAction",
+				"triggerOrder",
 				"declareAttackers",
 				"declareBlockers",
 			]),

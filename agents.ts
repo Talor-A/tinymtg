@@ -75,6 +75,9 @@ export class ScriptedAgent implements SyncAgent {
 				return option ? { optionId: option.id } : firstOption(request);
 			}
 
+			case "triggerOrder":
+				return { optionIds: request.options.map((option) => option.id) };
+
 			case "declareAttackers": {
 				const attackers = this.attackerChoices.shift() ?? [];
 				return { optionIds: attackers.map((id) => String(id)) };
@@ -105,6 +108,13 @@ export class RandomAgent implements SyncAgent {
 						.filter(() => Math.random() < 0.5)
 						.map((option) => option.id),
 				};
+			case "triggerOrder":
+				return {
+					optionIds: request.options
+						.map((option) => ({ option, order: Math.random() }))
+						.sort((left, right) => left.order - right.order)
+						.map(({ option }) => option.id),
+				};
 			case "replacement":
 			case "ownHand":
 			case "optional":
@@ -131,6 +141,8 @@ export class KeyboardAgent implements SyncAgent {
 			case "priorityAction":
 				console.log("\n[Priority action choice]");
 				break;
+			case "triggerOrder":
+				return this.chooseTriggerOrder(request);
 			case "declareAttackers":
 				return this.chooseAttackers(request);
 			case "declareBlockers":
@@ -148,6 +160,41 @@ export class KeyboardAgent implements SyncAgent {
 			const option = request.options[index];
 			if (option) return { optionId: option.id };
 			console.log("Invalid input, try again.");
+		}
+	}
+
+	private chooseTriggerOrder(
+		request: Extract<ChoiceRequest, { kind: "triggerOrder" }>,
+	): ChoiceAnswer {
+		console.log(`\n[Player ${request.player}: order simultaneous triggers]`);
+		for (let i = 0; i < request.options.length; i++) {
+			console.log(`  ${i + 1}. ${request.options[i]?.label}`);
+		}
+		while (true) {
+			const input = prompt(
+				"Stack order, bottom first (comma-separated numbers): ",
+			);
+			const parts = input.split(",").map((part) => part.trim());
+			const indices = parts.map((part) => Number.parseInt(part, 10) - 1);
+			if (
+				parts.some((part) => !/^\d+$/.test(part)) ||
+				indices.length !== request.options.length ||
+				new Set(indices).size !== indices.length
+			) {
+				console.log("Enter every trigger exactly once.");
+				continue;
+			}
+			const options = indices.map((index) => request.options[index]);
+			if (options.some((option) => !option)) {
+				console.log("Invalid input, try again.");
+				continue;
+			}
+			const optionIds: string[] = [];
+			for (const option of options) {
+				assertDefined(option);
+				optionIds.push(option.id);
+			}
+			return { optionIds };
 		}
 	}
 

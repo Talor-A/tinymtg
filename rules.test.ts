@@ -3,6 +3,7 @@ import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts"; // side effect: registers the card database
 import type {
 	SyncAgent as Agent,
+	ChoiceRequest,
 	GameState,
 	ObjectId,
 	PlayerId,
@@ -10,6 +11,7 @@ import type {
 import {
 	addFloating,
 	advance,
+	ChoiceController,
 	checkStateBasedActions,
 	gameOver,
 	IllegalAttackDeclarationError,
@@ -22,6 +24,7 @@ import {
 	settlePriority,
 	spawnCard,
 	spawnPermanent,
+	triggeredAbilityId,
 	view,
 	winner,
 } from "./index.ts";
@@ -631,6 +634,106 @@ describe("effects that change how players win or lose", () => {
 });
 
 describe("triggered abilities", () => {
+	function queueTestTrigger(
+		state: GameState,
+		source: ObjectId,
+		controller: PlayerId,
+		text: string,
+	): void {
+		state.pendingTriggers.push({
+			source,
+			triggerId: triggeredAbilityId("test-trigger", 0),
+			controller,
+			text,
+			effects: [],
+		});
+	}
+
+	test("puts active-player triggers below nonactive-player triggers", () => {
+		const state = newGame();
+		const activeSource = spawnPermanent(
+			state,
+			"grizzly-bears",
+			P1,
+			"battlefield",
+		);
+		const nonactiveSource = spawnPermanent(
+			state,
+			"grizzly-bears",
+			P2,
+			"battlefield",
+		);
+		expect(state.activePlayer).toBe(P1);
+
+		// Deliberately enqueue in the opposite order from APNAP placement.
+		queueTestTrigger(state, nonactiveSource.id, P2, "nonactive trigger");
+		queueTestTrigger(state, activeSource.id, P1, "active trigger");
+		settlePriority(state, [new ScriptedAgent(), new ScriptedAgent()]);
+
+		expect(state.log.filter((line) => line.includes("[stack]"))).toEqual([
+			"  [stack] active trigger",
+			"  [stack] nonactive trigger",
+		]);
+		expect(state.log.filter((line) => line.includes("[resolve]"))).toEqual([
+			"  [resolve] nonactive trigger",
+			"  [resolve] active trigger",
+		]);
+	});
+
+	test("records and replays a controller's chosen trigger order", () => {
+		const checkpoint = newGame();
+		const first = spawnPermanent(
+			checkpoint,
+			"grizzly-bears",
+			P1,
+			"battlefield",
+		);
+		const second = spawnPermanent(checkpoint, "eager-cadet", P1, "battlefield");
+		queueTestTrigger(checkpoint, first.id, P1, "first trigger");
+		queueTestTrigger(checkpoint, second.id, P1, "second trigger");
+
+		let orderRequest:
+			| Extract<ChoiceRequest, { kind: "triggerOrder" }>
+			| undefined;
+		const orderingAgent: Agent = {
+			choose(_state, request) {
+				if (request.kind === "triggerOrder") {
+					orderRequest = request;
+					return {
+						optionIds: request.options.map((option) => option.id).reverse(),
+					};
+				}
+				const firstOption = request.options[0];
+				if (!firstOption) throw new Error("expected a choice option");
+				return { optionId: firstOption.id };
+			},
+		};
+		const recordedState = structuredClone(checkpoint);
+		const recorder = ChoiceController.record([
+			orderingAgent,
+			new ScriptedAgent(),
+		]);
+		settlePriority(recordedState, recorder);
+
+		const transcript = JSON.parse(
+			JSON.stringify(recorder.transcript()),
+		) as ReturnType<ChoiceController["transcript"]>;
+		expect(orderRequest?.player).toBe(P1);
+		expect(
+			orderRequest?.context.triggers.map((trigger) => trigger.text),
+		).toEqual(["first trigger", "second trigger"]);
+		expect(transcript.choices[0]?.request.kind).toBe("triggerOrder");
+		expect(
+			recordedState.log.filter((line) => line.includes("[stack]")),
+		).toEqual(["  [stack] second trigger", "  [stack] first trigger"]);
+
+		const replayedState = structuredClone(checkpoint);
+		const replay = ChoiceController.replay(transcript);
+		settlePriority(replayedState, replay);
+		replay.assertComplete();
+		expect(replayedState).toEqual(recordedState);
+	});
+
 	test("Clone queues and resolves a copied ETB trigger from its characteristics", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
