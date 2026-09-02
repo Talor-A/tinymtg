@@ -797,7 +797,7 @@ export const KALITAS = registerCard({
 					{
 						kind: "create token",
 						controller: ctx.controller,
-						cardId: "zombie-token",
+						tokenDefinitionId: "zombie-token",
 						amount: 1,
 					},
 				];

@@ -5,11 +5,14 @@ import {
 	activatedAbilityId,
 	advanceWithReplay,
 	buildGameView,
+	type CharacteristicsSnapshot,
 	createReadContext,
 	newGame,
+	type PlayerId,
 	perform,
-	readObject,
+	physicalCardId,
 	prohibitionAbilityId,
+	readObject,
 	registerCard,
 	replacementAbilityId,
 	resolveActivatedAbility,
@@ -20,8 +23,7 @@ import {
 	spawnToken,
 	staticAbilityId,
 	triggeredAbilityId,
-	type CharacteristicsSnapshot,
-	type PlayerId,
+	view,
 } from "./index.ts";
 
 const P1 = 0 as PlayerId;
@@ -168,7 +170,6 @@ describe("derived game views", () => {
 			state,
 			P1,
 			structuredClone(sourceSnapshot.copiableValues),
-			"snapshot-activation-test",
 		);
 		const tokenSnapshot = readObject(createReadContext(state), token.id);
 		expect(tokenSnapshot.kind).toBe("permanent");
@@ -270,7 +271,7 @@ describe("derived game views", () => {
 		);
 		const tokenValues = structuredClone(bearsSnapshot.copiableValues);
 		tokenValues.name = "Test Bear Token";
-		spawnToken(state, P1, tokenValues, "grizzly-bears");
+		spawnToken(state, P1, tokenValues);
 		const clone = spawnCard(state, "clone", P1, "hand");
 		const result = perform(
 			state,
@@ -284,11 +285,82 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const copied = readObject(createReadContext(state), result.created[0]!);
+		const copiedId = result.created[0];
+		expect(copiedId).toBeDefined();
+		if (copiedId === undefined) return;
+		const copied = readObject(createReadContext(state), copiedId);
 		expect(copied.kind).toBe("permanent");
 		if (copied.kind !== "permanent") return;
 		expect(copied.copiableValues.name).toBe("Test Bear Token");
 		expect(copied.copiableValues).toEqual(tokenValues);
+		const copiedObject = state.objects.get(copiedId);
+		expect(copiedObject).toBeDefined();
+		if (!copiedObject) return;
+		expect(physicalCardId(copiedObject)).toBe("clone");
+	});
+
+	test("an arbitrary token name never becomes registry identity", () => {
+		const state = newGame();
+		const arbitraryName = "Definitely Not A Registered Card";
+		const token = spawnToken(state, P1, {
+			kind: "creature",
+			name: arbitraryName,
+			manaCost: "zero",
+			colors: [],
+			supertypes: [],
+			types: ["creature"],
+			subtypes: ["Test"],
+			keywords: [],
+			abilities: {
+				static: [],
+				activated: [],
+				triggered: [],
+				replacement: [],
+				prohibition: [],
+			},
+			power: 1,
+			toughness: 1,
+		});
+
+		expect(token.representation).toEqual({
+			kind: "token",
+			createdValues: expect.objectContaining({ name: arbitraryName }),
+		});
+		expect(() => buildGameView(state)).not.toThrow();
+		expect(buildGameView(state).objects.get(token.id)).toMatchObject({
+			kind: "permanent",
+			currentCharacteristics: { name: arbitraryName },
+		});
+		expect(() => view(state, token.id)).not.toThrow();
+		expect(view(state, token.id)).toMatchObject({
+			name: arbitraryName,
+			cardId: null,
+		});
+		expect(physicalCardId(token)).toBe(null);
+
+		const clone = spawnCard(state, "clone", P1, "hand");
+		let result: ReturnType<typeof perform> | undefined;
+		expect(() => {
+			result = perform(
+				state,
+				{
+					kind: "change zone",
+					object: clone.id,
+					from: "hand",
+					to: "battlefield",
+					cause: "resolve",
+					toController: P1,
+				},
+				agents,
+			);
+		}).not.toThrow();
+		expect(result).toBeDefined();
+		if (result === undefined) return;
+		const copiedId = result.created[0];
+		expect(copiedId).toBeDefined();
+		if (copiedId === undefined) return;
+		expect(view(state, copiedId).name).toBe(arbitraryName);
+		expect(physicalCardId(token)).toBe(null);
 	});
 
 	test("copy-of-copy keeps effective values and a copied Clone leaves as Clone", () => {
@@ -382,10 +454,25 @@ describe("derived game views", () => {
 		const values = structuredClone(
 			source.copiableValues,
 		) as CharacteristicsSnapshot;
-		const token = spawnToken(state, P1, values, "baby-mycosynth-lattice");
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: lattice.id,
+				from: "battlefield",
+				to: "graveyard",
+				cause: "effect",
+				toController: P1,
+			},
+			agents,
+		);
+		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const token = spawnToken(state, P1, values);
 		expect(values.abilities.static.map(String)).toEqual([
 			"baby-mycosynth-lattice:0",
 		]);
+		expect(physicalCardId(token)).toBe(null);
+		expect(view(state, bears.id).types).toContain("artifact");
 		expect(() => structuredClone(state)).not.toThrow();
 		expect(() => buildGameView(structuredClone(state))).not.toThrow();
 		const result = await advanceWithReplay(state, agents);

@@ -19,8 +19,9 @@ import {
 	perform,
 	type SyncAgent,
 	spawnCard,
-	triggeredAbilityId,
 	spawnPermanent,
+	spawnToken,
+	triggeredAbilityId,
 } from "./index.ts";
 
 function agents(first = new ScriptedAgent()): [SyncAgent, SyncAgent] {
@@ -28,6 +29,46 @@ function agents(first = new ScriptedAgent()): [SyncAgent, SyncAgent] {
 }
 
 describe("choice transcripts", () => {
+	test("token display names label replay choices without becoming card IDs", () => {
+		let seen: ChoiceRequest | undefined;
+		const agent: SyncAgent = {
+			choose(_state, request) {
+				seen = request;
+				return { optionIds: [request.options[0]?.id ?? ""] };
+			},
+		};
+		const state = newGame();
+		const token = spawnToken(state, 0, {
+			kind: "creature",
+			name: "Unregistered Replay Bear",
+			manaCost: "zero",
+			colors: [],
+			supertypes: [],
+			types: ["creature"],
+			subtypes: ["Bear"],
+			keywords: [],
+			abilities: {
+				static: [],
+				activated: [],
+				triggered: [],
+				replacement: [],
+				prohibition: [],
+			},
+			power: 2,
+			toughness: 2,
+		});
+		const recorder = ChoiceController.record([agent, agent]);
+
+		expect(recorder.chooseAttackers(state, 0, [token.id])).toEqual([token.id]);
+		expect(seen?.options[0]?.label).toBe(
+			`Unregistered Replay Bear#${token.id}`,
+		);
+		const transcript = structuredClone(recorder.transcript());
+		const replay = ChoiceController.replay(transcript);
+		expect(replay.chooseAttackers(state, 0, [token.id])).toEqual([token.id]);
+		replay.assertComplete();
+	});
+
 	test("agents receive one unified serializable request", () => {
 		const seen: { request?: ChoiceRequest } = {};
 		const agent: SyncAgent = {

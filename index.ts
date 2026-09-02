@@ -496,7 +496,8 @@ interface BeginStepEvent extends EventCommon {
 interface CreateTokenEvent extends EventCommon {
 	kind: "create token";
 	controller: PlayerId;
-	cardId: string;
+	/** Registry definition used to construct the token's characteristic snapshot. */
+	tokenDefinitionId: string;
 	amount: number;
 }
 
@@ -1286,8 +1287,6 @@ export interface PermanentObject extends ObjectBase {
 		| {
 				kind: "token";
 				createdValues: CharacteristicsSnapshot;
-				/** Printed identity of whatever the token was created as, if any. */
-				sourceCardId?: string;
 		  };
 
 	/** Layer-1 copy effect, if one currently defines its copiable values. */
@@ -1310,8 +1309,6 @@ interface NonbattlefieldTokenObject extends ObjectBase {
 	zone: "hand" | "graveyard" | "library" | "exile";
 
 	createdValues: CharacteristicsSnapshot;
-	/** Printed identity retained only for rules text and diagnostics. */
-	sourceCardId?: string;
 }
 
 /* ------------------------------------------------------------------ *
@@ -2122,14 +2119,12 @@ export function spawnToken(
 	state: GameState,
 	owner: PlayerId,
 	attributes: CharacteristicsSnapshot,
-	sourceCardId: string = attributes.name,
 ): PermanentObject {
 	const obj: PermanentObject = {
 		kind: "permanent",
 		representation: {
 			kind: "token",
 			createdValues: attributes,
-			sourceCardId,
 		},
 		zone: "battlefield",
 		id: state.nextObjectId++ as ObjectId,
@@ -2199,30 +2194,10 @@ export function maybeObject(
 	return state.objects.get(id) ?? null;
 }
 
-/**
- * The registry identity an object *is*, for naming and diagnostics. Copy
- * effects never move it: a Clone that entered as something else is still a
- * Clone card. Copied abilities travel as references on the copiable values, so
- * nothing in the executable path routes through this.
- */
-export function cardIdOf(object: DeepReadOnly<GameObject>): string | null {
-	switch (object.kind) {
-		case "card":
-			return object.cardId;
-		case "spell":
-			return object.representation.kind === "card"
-				? object.representation.cardId
-				: null;
-		case "permanent":
-			return object.representation.kind === "card"
-				? object.representation.cardId
-				: (object.representation.sourceCardId ?? null);
-		case "nonbattlefield-token":
-			return object.sourceCardId ?? null;
-	}
-}
-
-function physicalCardIdOf(object: DeepReadOnly<GameObject>): string | null {
+/** The physical card represented by an object, unaffected by copy effects. */
+export function physicalCardId(
+	object: DeepReadOnly<GameObject>,
+): string | null {
 	switch (object.kind) {
 		case "card":
 			return object.cardId;
@@ -2237,6 +2212,11 @@ function physicalCardIdOf(object: DeepReadOnly<GameObject>): string | null {
 		case "nonbattlefield-token":
 			return null;
 	}
+}
+
+/** @deprecated Use {@link physicalCardId}. */
+export function cardIdOf(object: DeepReadOnly<GameObject>): string | null {
+	return physicalCardId(object);
 }
 
 export function controllerOf(
@@ -2614,7 +2594,7 @@ function evaluationView(
 	object: DeepReadOnly<GameObject>,
 	characteristics: DeepReadOnly<CharacteristicsSnapshot>,
 ): PermanentView {
-	const cardId = cardIdOf(object as GameObject);
+	const cardId = physicalCardId(object);
 	return {
 		...characteristics,
 		id: object.id,
@@ -3248,19 +3228,13 @@ function moveObject(
 	if (from === "stack") state.stackItems.delete(id);
 
 	// The printed card identity survives copy effects and zone changes.
-	const printedId = physicalCardIdOf(old);
+	const printedId = physicalCardId(old);
 	const tokenValues =
 		old.kind === "permanent" && old.representation.kind === "token"
 			? cloneCharacteristics(old.representation.createdValues)
 			: old.kind === "nonbattlefield-token"
 				? cloneCharacteristics(old.createdValues)
 				: null;
-	const tokenSourceId =
-		old.kind === "permanent" && old.representation.kind === "token"
-			? old.representation.sourceCardId
-			: old.kind === "nonbattlefield-token"
-				? old.sourceCardId
-				: undefined;
 	const freshId = state.nextObjectId++ as ObjectId;
 	let fresh: GameObject;
 	if (to === "battlefield") {
@@ -3278,7 +3252,6 @@ function moveObject(
 				? {
 						kind: "token",
 						createdValues: tokenValues,
-						...(tokenSourceId ? { sourceCardId: tokenSourceId } : {}),
 					}
 				: { kind: "card", cardId: printedId! },
 			...(opts.copyEffect
@@ -3312,7 +3285,6 @@ function moveObject(
 			owner: old.owner,
 			zone: to,
 			createdValues: tokenValues,
-			sourceCardId: tokenSourceId ?? printedId ?? undefined,
 			effectData: {},
 		};
 	} else {
@@ -3405,7 +3377,7 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 		case "begin phase":
 			return `beginPhase(P${ev.player}, ${ev.phase})`;
 		case "create token":
-			return `token(${ev.amount}x ${ev.cardId} for P${ev.controller})`;
+			return `token(${ev.amount}x ${ev.tokenDefinitionId} for P${ev.controller})`;
 		case "lose game":
 			return `loseGame(P${ev.player}: ${ev.reason})`;
 		case "declare attackers":
@@ -3787,7 +3759,7 @@ function triggerSubjectMatches(
 	} else if ("owner" in selector) {
 		matches = relativePlayerMatches(subject.owner, selector.owner, source);
 	} else {
-		const printedId = physicalCardIdOf(subject);
+		const printedId = physicalCardId(subject);
 		const subjectSnapshot =
 			subject.kind === "permanent" && subject.zone === "battlefield"
 				? readObject(read, subject.id)
@@ -4315,8 +4287,7 @@ function executeIn(
 				const t = spawnToken(
 					state,
 					ev.controller,
-					characteristicsFromCardDef(card(ev.cardId)),
-					ev.cardId,
+					characteristicsFromCardDef(card(ev.tokenDefinitionId)),
 				);
 				created.push(t.id);
 				log(state, `${"  ".repeat(depth)}created ${name(state, t.id)}`);

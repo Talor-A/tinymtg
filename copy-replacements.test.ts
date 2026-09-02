@@ -5,7 +5,6 @@ import type {
 	CharacteristicsSnapshot,
 	GameState,
 	ObjectId,
-	PermanentObject,
 	PlayerId,
 	ReadContext,
 } from "./index.ts";
@@ -333,11 +332,8 @@ describe("copied entry replacements across tokens and copy chains", () => {
 		const values = copiableOf(state, guard.id);
 		values.name = "Guard Token";
 		leave(state, guard.id);
-		const token = spawnToken(state, P1, values, GUARD);
-		expect((token as PermanentObject).representation).toMatchObject({
-			kind: "token",
-			sourceCardId: GUARD,
-		});
+		const token = spawnToken(state, P1, values);
+		expect(token.representation.kind).toBe("token");
 
 		const entered = permanent(
 			state,
@@ -355,7 +351,7 @@ describe("copied entry replacements across tokens and copy chains", () => {
 		leave(state, guard.id);
 		// Tokens are put onto the battlefield directly rather than through a zone
 		// change, so nothing here should have entered tapped.
-		const token = spawnToken(state, P1, values, GUARD);
+		const token = spawnToken(state, P1, values);
 		expect(permanent(state, token.id).tapped).toBe(false);
 	});
 

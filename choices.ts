@@ -10,11 +10,11 @@ import type {
 	PriorityAction,
 	TurnLocation,
 } from "./index.ts";
-import { cardIdOf, turnLocation } from "./index.ts";
+import { name, turnLocation } from "./index.ts";
 
 function objectLabel(state: GameState, id: ObjectId): string {
 	const object = state.objects.get(id);
-	return object ? (cardIdOf(object) ?? object.kind) : "unknown";
+	return object ? name(state, id) : "unknown";
 }
 
 export interface ChoiceOption {

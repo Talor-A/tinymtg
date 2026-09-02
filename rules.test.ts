@@ -18,6 +18,7 @@ import {
 	newGame,
 	perform,
 	permanent,
+	physicalCardId,
 	settlePriority,
 	spawnCard,
 	spawnPermanent,
@@ -365,6 +366,15 @@ describe("indestructible permanents", () => {
 });
 
 describe("tokens leaving the battlefield", () => {
+	test("a token on the battlefield has no physical card ID", () => {
+		const state = newGame();
+		const token = spawnPermanent(state, "zombie-token", P1, "battlefield", {
+			token: true,
+		});
+
+		expect(physicalCardId(token)).toBe(null);
+	});
+
 	test("the zone change happens before the token ceases to exist as an SBA", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
@@ -391,6 +401,10 @@ describe("tokens leaving the battlefield", () => {
 		const moved = state.objects.get(movedId);
 		expect(moved?.kind).toBe("nonbattlefield-token");
 		expect(moved?.zone).toBe("graveyard");
+		if (!moved) return;
+		expect(physicalCardId(moved)).toBe(null);
+		if (moved.kind !== "nonbattlefield-token") return;
+		expect(moved.createdValues.name).toBe("Zombie");
 
 		checkStateBasedActions(state, agents);
 		expect(state.objects.has(movedId)).toBe(false);
