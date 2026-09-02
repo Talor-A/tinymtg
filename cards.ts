@@ -615,25 +615,17 @@ export const CLONE = registerCard({
 			replace(ev, ctx) {
 				if (ev.kind !== "change zone") return [ev];
 				const target = pickCloneTarget(ctx.read);
-				return target
-					? [
-							{
-								...ev,
-								copyEffect: structuredClone(target.copiableValues),
-								copySourceCardId: target.sourceCardId ?? undefined,
-							},
-						]
-					: [ev];
+				// The copiable values carry the copied object's ability references,
+				// which is the whole of what Clone acquires. No card identity comes
+				// along: the Clone stays physically a Clone.
+				return target ? [{ ...ev, copyEffect: structuredClone(target) }] : [ev];
 			},
 		},
 	],
 });
 
 /** Stand-in for a real choice — a policy would pick here. */
-function pickCloneTarget(read: ReadContext): {
-	copiableValues: CharacteristicsSnapshot;
-	sourceCardId: string | null;
-} | null {
+function pickCloneTarget(read: ReadContext): CharacteristicsSnapshot | null {
 	for (const id of read.state.battlefield) {
 		const snapshot = readObject(read, id);
 		if (
@@ -641,18 +633,7 @@ function pickCloneTarget(read: ReadContext): {
 			!snapshot.currentCharacteristics.types.includes("creature")
 		)
 			continue;
-		const object = read.state.objects.get(id);
-		assertDefined(object);
-		return {
-			copiableValues: snapshot.copiableValues,
-			sourceCardId:
-				object.kind === "permanent"
-					? (object.copySourceCardId ??
-						(object.representation.kind === "card"
-							? object.representation.cardId
-							: object.representation.createdValues.name))
-					: null,
-		};
+		return snapshot.copiableValues;
 	}
 	return null;
 }

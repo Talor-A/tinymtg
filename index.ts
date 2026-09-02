@@ -404,10 +404,13 @@ interface ZoneChangeEvent extends EventCommon {
 	// --- fields only meaningful when entering the battlefield (CR 614.1c-d) ---
 	entersTapped?: boolean;
 	entersWithCounters?: CounterBag;
-	/** Serializable copiable-values override set by copy-tier replacements (CR 616.1c). */
+	/**
+	 * Serializable copiable-values override set by copy-tier replacements
+	 * (CR 616.1c). It carries the copied object's ability *references*, which is
+	 * all the rest of the event needs: nothing has to look up "which card was
+	 * this a copy of" to find the copied abilities' implementations.
+	 */
 	copyEffect?: CharacteristicsSnapshot;
-	/** Registry identity for copied non-static abilities; physical identity remains on the object. */
-	copySourceCardId?: string;
 	toBottom?: boolean;
 }
 
@@ -840,9 +843,15 @@ function cloneAbilityReferences(
 
 const PRINTED_CHARACTERISTICS = new WeakMap<CardDef, CharacteristicsSnapshot>();
 
-function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
+/**
+ * The card's printed characteristics, cached and *shared*. Callers must treat
+ * the result as immutable; use {@link characteristicsFromCardDef} for a copy.
+ */
+function printedCharacteristics(
+	def: CardDef,
+): DeepReadOnly<CharacteristicsSnapshot> {
 	const cached = PRINTED_CHARACTERISTICS.get(def);
-	if (cached) return cloneCharacteristics(cached);
+	if (cached) return cached;
 	const base = {
 		name: def.name,
 		manaCost: def.manaCost,
@@ -863,43 +872,51 @@ function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
 			}
 		: { ...base, kind: "non-creature" };
 	PRINTED_CHARACTERISTICS.set(def, values);
-	return cloneCharacteristics(values);
+	return values;
 }
 
-function baseCardDefForObject(
+function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
+	return cloneCharacteristics(printedCharacteristics(def));
+}
+
+/**
+ * An object's copiable-values source, without the defensive clone.
+ *
+ * Cheap enough to call in a prefilter over every object in the game, which is
+ * why the collectors that only need to ask "does anything here possess an
+ * ability of kind X?" read this rather than reaching for a card definition.
+ * The result is shared: never mutate it.
+ */
+function baseCharacteristics(
 	object: DeepReadOnly<GameObject>,
-): CardDef | null {
-	const id = cardIdOf(object);
-	return id ? card(id) : null;
+): DeepReadOnly<CharacteristicsSnapshot> {
+	switch (object.kind) {
+		case "card":
+			return printedCharacteristics(card(object.cardId));
+
+		case "spell":
+			return object.representation.kind === "copy"
+				? object.representation.copyEffect
+				: printedCharacteristics(card(object.representation.cardId));
+
+		case "permanent":
+			if (object.copyEffect) return object.copyEffect;
+			return object.representation.kind === "token"
+				? object.representation.createdValues
+				: printedCharacteristics(card(object.representation.cardId));
+
+		case "nonbattlefield-token":
+			return object.createdValues;
+
+		default:
+			return assertNever(object);
+	}
 }
 
 function initialCharacteristics(
 	object: DeepReadOnly<GameObject>,
 ): CharacteristicsSnapshot {
-	switch (object.kind) {
-		case "card":
-			return characteristicsFromCardDef(card(object.cardId));
-
-		case "spell":
-			return object.representation.kind === "copy"
-				? cloneCharacteristics(object.representation.copyEffect)
-				: characteristicsFromCardDef(card(object.representation.cardId));
-
-		case "permanent":
-			if (object.copyEffect) {
-				return cloneCharacteristics(object.copyEffect);
-			}
-			if (object.representation.kind === "token") {
-				return cloneCharacteristics(object.representation.createdValues);
-			}
-			return characteristicsFromCardDef(card(object.representation.cardId));
-
-		case "nonbattlefield-token":
-			return cloneCharacteristics(object.createdValues);
-
-		default:
-			return assertNever(object);
-	}
+	return cloneCharacteristics(baseCharacteristics(object));
 }
 
 function cloneCharacteristics(
@@ -1266,12 +1283,15 @@ export interface PermanentObject extends ObjectBase {
 
 	representation:
 		| { kind: "card"; cardId: string }
-		| { kind: "token"; createdValues: CharacteristicsSnapshot };
+		| {
+				kind: "token";
+				createdValues: CharacteristicsSnapshot;
+				/** Printed identity of whatever the token was created as, if any. */
+				sourceCardId?: string;
+		  };
 
 	/** Layer-1 copy effect, if one currently defines its copiable values. */
 	copyEffect?: CharacteristicsSnapshot;
-	/** Registry identity used for copied replacement/trigger definitions. */
-	copySourceCardId?: string;
 
 	tapped: boolean;
 	counters: CounterBag;
@@ -1837,6 +1857,62 @@ function printedRefsFor(
 }
 
 /**
+ * `entersTapped` / `entersWith` are authoring shorthand for two very ordinary
+ * replacement abilities (CR 614.1c), so that is what they compile to.
+ *
+ * Making them real registered abilities — rather than defs synthesized at
+ * collection time from whatever card the object "is" — is what makes them
+ * copiable. Walking Ballista's copiable values carry
+ * `walking-ballista:<n>` in `abilities.replacement`; a Clone that enters as a
+ * copy carries that same reference on the event's copy snapshot, and the
+ * reference *is* the provenance. Nothing at execution time has to ask which
+ * card an object was copied from.
+ *
+ * They function from anywhere, because the object is still in the zone it is
+ * leaving when they apply, and they are self-scoped to the object entering.
+ */
+function printedEntryReplacements(def: CardDefBase): ReplacementDef[] {
+	const out: ReplacementDef[] = [];
+	const entersSelf = (ev: GameEvent, ctx: EffectCtx): boolean =>
+		ev.kind === "change zone" &&
+		ev.to === "battlefield" &&
+		ctx.self !== null &&
+		ev.object === ctx.self.id;
+
+	if (def.entersTapped) {
+		out.push({
+			label: `${def.id}:enters-tapped`,
+			text: `${def.name} enters tapped.`,
+			layer: "other",
+			functionsIn: "any",
+			applies: (ev, ctx) =>
+				entersSelf(ev, ctx) && ev.kind === "change zone" && !ev.entersTapped,
+			replace: (ev) =>
+				ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
+		});
+	}
+
+	const entersWith = def.entersWith;
+	if (entersWith && Object.keys(entersWith).length > 0) {
+		out.push({
+			label: `${def.id}:enters-with`,
+			text: `${def.name} enters with counters.`,
+			layer: "other",
+			functionsIn: "any",
+			applies: (ev, ctx) =>
+				entersSelf(ev, ctx) &&
+				ev.kind === "change zone" &&
+				ev.entersWithCounters === undefined,
+			replace: (ev) =>
+				ev.kind === "change zone"
+					? [{ ...ev, entersWithCounters: { ...entersWith } }]
+					: [ev],
+		});
+	}
+	return out;
+}
+
+/**
  * Normalizes the authoring shape into the engine shape. Idempotent, so an
  * already-normalized def (from the compiler, or a round trip) passes through
  * with its definition object identities intact.
@@ -1856,13 +1932,27 @@ export function defineCard(input: CardDefInput | CardDef): CardDef {
 		static: statics ?? [],
 		activated: activatedAbilities ?? [],
 		triggered: triggers ?? [],
-		replacement: replacements ?? [],
+		replacement: [...(replacements ?? [])],
 		prohibition: prohibitions ?? [],
 	};
+	// Author-declared indices are resolved first so that an explicit `printed`
+	// list keeps meaning what it said; the entry shorthands are appended after,
+	// and are always printed.
+	const printedAbilities = printedRefsFor(
+		input.id,
+		abilityDefinitions,
+		printed,
+	);
+	for (const entry of printedEntryReplacements(input)) {
+		printedAbilities.replacement.push(
+			replacementAbilityId(input.id, abilityDefinitions.replacement.length),
+		);
+		abilityDefinitions.replacement.push(entry);
+	}
 	return {
 		...base,
 		abilityDefinitions,
-		printedAbilities: printedRefsFor(input.id, abilityDefinitions, printed),
+		printedAbilities,
 	};
 }
 
@@ -2039,8 +2129,8 @@ export function spawnToken(
 		representation: {
 			kind: "token",
 			createdValues: attributes,
+			sourceCardId,
 		},
-		copySourceCardId: sourceCardId,
 		zone: "battlefield",
 		id: state.nextObjectId++ as ObjectId,
 		owner,
@@ -2109,6 +2199,12 @@ export function maybeObject(
 	return state.objects.get(id) ?? null;
 }
 
+/**
+ * The registry identity an object *is*, for naming and diagnostics. Copy
+ * effects never move it: a Clone that entered as something else is still a
+ * Clone card. Copied abilities travel as references on the copiable values, so
+ * nothing in the executable path routes through this.
+ */
 export function cardIdOf(object: DeepReadOnly<GameObject>): string | null {
 	switch (object.kind) {
 		case "card":
@@ -2118,12 +2214,9 @@ export function cardIdOf(object: DeepReadOnly<GameObject>): string | null {
 				? object.representation.cardId
 				: null;
 		case "permanent":
-			return (
-				object.copySourceCardId ??
-				(object.representation.kind === "card"
-					? object.representation.cardId
-					: null)
-			);
+			return object.representation.kind === "card"
+				? object.representation.cardId
+				: (object.representation.sourceCardId ?? null);
 		case "nonbattlefield-token":
 			return object.sourceCardId ?? null;
 	}
@@ -2452,7 +2545,6 @@ export function etbPreview(
 		tapped: ev.entersTapped,
 		counters: ev.entersWithCounters,
 		copyEffect: ev.copyEffect,
-		copySourceCardId: ev.copySourceCardId,
 	});
 	const id = preview.battlefield[preview.battlefield.length - 1];
 	assertDefined(id);
@@ -2593,63 +2685,6 @@ export function view(state: ReadonlyGameState, id: ObjectId): ObjectView {
  * Effect collection
  * ------------------------------------------------------------------ */
 
-/**
- * Printed "enters tapped" / "enters with N counters" become replacement
- * effects that function from the zone the object is leaving. They resolve the
- * effective card inside `applies`, because an earlier copy effect may have
- * changed the characteristics being considered.
- */
-function synthesizedSelfReplacements(
-	o: DeepReadOnly<GameObject>,
-): ReplacementDef[] {
-	const printedId = cardIdOf(o);
-	if (!printedId) return [];
-	const effective = (ev: GameEvent) =>
-		card(
-			ev.kind === "change zone"
-				? (ev.copySourceCardId ?? printedId)
-				: printedId,
-		);
-	return [
-		{
-			label: "printed:entersTapped",
-			text: `${card(printedId).name}: printed enters tapped`,
-			layer: "other",
-			functionsIn: "any",
-			applies(ev, ctx) {
-				return (
-					ev.kind === "change zone" &&
-					ev.to === "battlefield" &&
-					ev.object === ctx.self?.id &&
-					!ev.entersTapped &&
-					effective(ev).entersTapped === true
-				);
-			},
-			replace: (ev) =>
-				ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
-		},
-		{
-			label: "printed:entersWith",
-			text: `${card(printedId).name}: printed enters with counters`,
-			layer: "other",
-			functionsIn: "any",
-			applies(ev, ctx) {
-				return (
-					ev.kind === "change zone" &&
-					ev.to === "battlefield" &&
-					ev.object === ctx.self?.id &&
-					ev.entersWithCounters === undefined &&
-					effective(ev).entersWith !== undefined
-				);
-			},
-			replace(ev) {
-				if (ev.kind !== "change zone") return [ev];
-				return [{ ...ev, entersWithCounters: { ...effective(ev).entersWith } }];
-			},
-		},
-	];
-}
-
 const EMPTY_ABILITY_REFERENCES: DeepReadOnly<AbilityReferences> = {
 	static: [],
 	activated: [],
@@ -2675,6 +2710,39 @@ function abilityReferencesOf(
 	return snapshot.currentCharacteristics.abilities;
 }
 
+/**
+ * Layers whose effects can change the characteristics state-based actions care
+ * about (types and power/toughness).
+ */
+const CHARACTERISTIC_CHANGING_LAYERS = [
+	"1a-copiable-values",
+	"4-type-changing",
+	"7a-power-toughness-defining",
+	"7b-set-specific-power-toughness",
+	"7c-modify-power-toughness",
+	"7d-swap-power-toughness",
+] satisfies readonly ContinuousEffectLayer[];
+
+/**
+ * Cheap prefilter: does any object in the game *possess* a static ability
+ * matching `predicate`?
+ *
+ * Possession, not definition: a token copy of a type-changer has the static on
+ * its created values and no card of its own, and a card that merely hosts an
+ * implementation it never prints must not count.
+ */
+function anyPossessedStatic(
+	state: ReadonlyGameState,
+	predicate: (effect: ContinuousEffect) => boolean,
+): boolean {
+	for (const object of state.objects.values()) {
+		for (const abilityId of baseCharacteristics(object).abilities.static) {
+			if (predicate(resolveStaticAbility(abilityId))) return true;
+		}
+	}
+	return false;
+}
+
 /** Effect-label name for logs, taken from the view rather than re-derived. */
 function viewName(
 	view: GameView,
@@ -2688,34 +2756,54 @@ function viewName(
 }
 
 /**
- * Replacement effects an object has right now: the ones synthesized from its
- * printed ETB shorthands, plus every replacement reference it possesses.
+ * Replacement effects an object has right now, as `(reference, definition)`
+ * pairs. Purely reference-driven: everything an object *has* — printed, copied,
+ * or granted in layer 6 — reaches this through `abilities.replacement`.
+ *
+ * The reference doubles as the effect's identity, so two definitions that
+ * happen to share a human `label` never collide, and the same ability keeps one
+ * identity across a copy.
  */
 function replacementsOf(
 	view: GameView,
 	object: DeepReadOnly<GameObject>,
-): ReplacementDef[] {
-	return [
-		...synthesizedSelfReplacements(object),
-		...abilityReferencesOf(view, object).replacement.map(
-			resolveReplacementAbility,
-		),
-	];
+): { id: ReplacementAbilityId; def: ReplacementDef }[] {
+	return abilityReferencesOf(view, object).replacement.map((id) => ({
+		id,
+		def: resolveReplacementAbility(id),
+	}));
+}
+
+/** Per-effect mutable scratch, addressed by the ability's registry reference. */
+function effectDataFor(
+	object: DeepReadOnly<GameObject>,
+	key: string,
+): Record<string, number> {
+	const existing = object.effectData[key];
+	if (existing) return existing as Record<string, number>;
+	// `effectData` is never an input to a derived characteristic, so filling a
+	// missing slot cannot invalidate a view or a live ReadContext. This is the
+	// path an entering *copied* replacement takes: its reference only becomes
+	// known once the copy tier has modified the event, long after
+	// `prepareEffectData` ran, and the object it binds to is still a card in the
+	// zone it is leaving — there is no permanent to hang scratch on yet.
+	const fresh: Record<string, number> = {};
+	(object as GameObject).effectData[key] = fresh;
+	return fresh;
 }
 
 export function prepareEffectData(state: GameState): void {
 	// Which replacements an object has is a derived fact, so the view has to be
 	// built before anything is written back.
 	const view = cachedGameView(state, state.revision);
-	const pending: [object: GameObject, label: string][] = [];
+	const pending: [object: GameObject, key: string][] = [];
 	for (const object of state.objects.values()) {
-		for (const def of replacementsOf(view, object)) {
-			if (object.effectData[def.label] === undefined)
-				pending.push([object, def.label]);
+		for (const { id } of replacementsOf(view, object)) {
+			if (object.effectData[id] === undefined) pending.push([object, id]);
 		}
 	}
 	if (pending.length === 0) return;
-	for (const [object, label] of pending) object.effectData[label] = {};
+	for (const [object, key] of pending) object.effectData[key] = {};
 	state.revision++;
 	// `effectData` is per-effect mutable scratch and is not an input to any
 	// derived characteristic, so the view stays accurate across this bump. Any
@@ -2723,11 +2811,53 @@ export function prepareEffectData(state: GameState): void {
 	GAME_VIEW_CACHE.set(state, { revision: state.revision, view });
 }
 
+/** The object this event is about to put onto the battlefield, if any. */
+function enteringObject(ev: GameEvent | undefined): ObjectId | null {
+	return ev?.kind === "change zone" && ev.to === "battlefield"
+		? ev.object
+		: null;
+}
+
+/**
+ * The replacement abilities an entering object *would have* on the battlefield
+ * (CR 614.12), which is what the rest of its own zone-change event must see.
+ *
+ * Once a copy-tier effect has run (CR 616.1c) the entering object's copiable
+ * values live on the event, so its possession for the remainder of the event is
+ * the copy's. That cuts both ways, and both are required:
+ *
+ *  - a copied "enters tapped" / "enters with counters" / other ETB replacement
+ *    is acquired and gets to participate in this same event, and
+ *  - the object's own printed ETB replacement stops applying, which is exactly
+ *    the Rusted Sentinel / Essence of the Wild ruling quoted above.
+ *
+ * This is derived from the event and the existing view only. Canonical state is
+ * never mutated to discover candidates.
+ */
+function incomingReplacementRefs(
+	view: GameView,
+	object: DeepReadOnly<GameObject>,
+	ev: ZoneChangeEvent,
+): readonly ReplacementAbilityId[] {
+	return ev.copyEffect
+		? ev.copyEffect.abilities.replacement
+		: abilityReferencesOf(view, object).replacement;
+}
+
+/**
+ * Every replacement effect currently in play, bound to its source.
+ *
+ * Pass the event being resolved to get the entering object's *would-be*
+ * possession instead of its canonical possession; without it this is the plain
+ * event-independent sweep.
+ */
 export function collectReplacements(
 	state: ReadonlyGameState,
+	ev?: GameEvent,
 ): BoundReplacement[] {
 	const out: BoundReplacement[] = [];
 	const view = cachedGameView(state, state.revision);
+	const entering = enteringObject(ev);
 
 	for (const zone of ALL_ZONES) {
 		const ids =
@@ -2738,20 +2868,46 @@ export function collectReplacements(
 					: state.players.flatMap((p) => zoneList(state, zone, p.id));
 
 		for (const id of ids) {
+			// The object this event is putting onto the battlefield is collected
+			// below instead, from what it would have rather than what it has.
+			if (id === entering) continue;
 			const o = maybeObject(state, id);
 			if (!o) continue;
-			for (const def of replacementsOf(view, o)) {
+			for (const { id: abilityId, def } of replacementsOf(view, o)) {
 				if (!functionsHere(def.functionsIn, zone)) continue;
-				const key = def.label;
-				const data: Record<string, number> | undefined = o.effectData[key];
-				assertDefined(data, `effect data was not prepared for ${key}`);
+				const data: Record<string, number> | undefined =
+					o.effectData[abilityId];
+				assertDefined(data, `effect data was not prepared for ${abilityId}`);
 				out.push({
-					id: `${o.id}:${key}` as EffectId,
+					id: `${o.id}:${abilityId}` as EffectId,
 					def,
 					source: o,
 					controller: controllerOf(o) ?? o.owner,
 					data,
 					label: `${viewName(view, state, o.id)}#${o.id} — ${def.text}`,
+				});
+			}
+		}
+	}
+
+	if (entering !== null && ev?.kind === "change zone") {
+		const o = maybeObject(state, entering);
+		// The would-be permanent is evaluated in the zone it is entering, so an
+		// ETB replacement written with the ordinary battlefield default works
+		// whether the object gets there on its own or as a copy.
+		if (o) {
+			const displayName = ev.copyEffect?.name ?? viewName(view, state, o.id);
+			for (const abilityId of incomingReplacementRefs(view, o, ev)) {
+				const def = resolveReplacementAbility(abilityId);
+				if (!functionsHere(def.functionsIn, "battlefield")) continue;
+				out.push({
+					id: `${o.id}:${abilityId}` as EffectId,
+					def,
+					source: o,
+					// CR 616.1b has already settled who it enters under.
+					controller: ev.toController,
+					data: effectDataFor(o, abilityId),
+					label: `${displayName}#${o.id} — ${def.text}`,
 				});
 			}
 		}
@@ -2867,18 +3023,14 @@ function ctxFor(
 
 function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 	const out: BoundProhibition[] = [];
-	const abilityCanChangeKeywords = [...read.state.objects.values()].some(
-		(source) =>
-			(baseCardDefForObject(source)?.abilityDefinitions.static ?? []).some(
-				(effect) => effect.layer === "6-ability-changing",
-			),
+	const abilityCanChangeKeywords = anyPossessedStatic(
+		read.state,
+		(effect) => effect.layer === "6-ability-changing",
 	);
 	for (const object of read.state.objects.values()) {
-		const printedId = cardIdOf(object);
 		const mightBeIndestructible =
 			object.kind === "permanent" &&
-			((printedId !== null &&
-				card(printedId).keywords?.includes("indestructible") === true) ||
+			(baseCharacteristics(object).keywords.includes("indestructible") ||
 				abilityCanChangeKeywords);
 		const snapshot = mightBeIndestructible
 			? read.view.objects.get(object.id)
@@ -2926,7 +3078,7 @@ function applicable(
 	ev: GameEvent,
 	run: ReplacementRun,
 ): BoundReplacement[] {
-	return collectReplacements(read.state).filter((r) => {
+	return collectReplacements(read.state, ev).filter((r) => {
 		// CR 614.5 — a replacement effect applies at most once to a given event.
 		if (run.applied.has(r.id)) return false;
 		/**
@@ -3079,7 +3231,6 @@ function moveObject(
 		tapped?: boolean;
 		counters?: CounterBag;
 		copyEffect?: CharacteristicsSnapshot;
-		copySourceCardId?: string;
 		toBottom?: boolean;
 	},
 ): ObjectId {
@@ -3104,6 +3255,12 @@ function moveObject(
 			: old.kind === "nonbattlefield-token"
 				? cloneCharacteristics(old.createdValues)
 				: null;
+	const tokenSourceId =
+		old.kind === "permanent" && old.representation.kind === "token"
+			? old.representation.sourceCardId
+			: old.kind === "nonbattlefield-token"
+				? old.sourceCardId
+				: undefined;
 	const freshId = state.nextObjectId++ as ObjectId;
 	let fresh: GameObject;
 	if (to === "battlefield") {
@@ -3118,13 +3275,14 @@ function moveObject(
 			controller: opts.toController,
 			zone: "battlefield",
 			representation: tokenValues
-				? { kind: "token", createdValues: tokenValues }
+				? {
+						kind: "token",
+						createdValues: tokenValues,
+						...(tokenSourceId ? { sourceCardId: tokenSourceId } : {}),
+					}
 				: { kind: "card", cardId: printedId! },
 			...(opts.copyEffect
 				? { copyEffect: cloneCharacteristics(opts.copyEffect) }
-				: {}),
-			...(opts.copySourceCardId
-				? { copySourceCardId: opts.copySourceCardId }
 				: {}),
 			tapped: opts.tapped ?? false,
 			counters: { ...opts.counters },
@@ -3154,7 +3312,7 @@ function moveObject(
 			owner: old.owner,
 			zone: to,
 			createdValues: tokenValues,
-			sourceCardId: printedId ?? undefined,
+			sourceCardId: tokenSourceId ?? printedId ?? undefined,
 			effectData: {},
 		};
 	} else {
@@ -3414,19 +3572,9 @@ function checkStateBasedActionsIn(
 
 		// 704.5aa. Speed: we don't support this.
 
-		const hasCharacteristicChangingStatic = [...state.objects.values()].some(
-			(source) =>
-				(baseCardDefForObject(source)?.abilityDefinitions.static ?? []).some(
-					(effect) =>
-						[
-							"1a-copiable-values",
-							"4-type-changing",
-							"7a-power-toughness-defining",
-							"7b-set-specific-power-toughness",
-							"7c-modify-power-toughness",
-							"7d-swap-power-toughness",
-						].includes(effect.layer),
-				),
+		const hasCharacteristicChangingStatic = anyPossessedStatic(
+			state,
+			(effect) => CHARACTERISTIC_CHANGING_LAYERS.includes(effect.layer),
 		);
 		const needsPermanentSbas =
 			hasCharacteristicChangingStatic ||
@@ -3639,7 +3787,7 @@ function triggerSubjectMatches(
 	} else if ("owner" in selector) {
 		matches = relativePlayerMatches(subject.owner, selector.owner, source);
 	} else {
-		const printedId = cardIdOf(subject);
+		const printedId = physicalCardIdOf(subject);
 		const subjectSnapshot =
 			subject.kind === "permanent" && subject.zone === "battlefield"
 				? readObject(read, subject.id)
@@ -4046,7 +4194,6 @@ function executeIn(
 				tapped: ev.entersTapped,
 				counters: ev.entersWithCounters,
 				copyEffect: ev.copyEffect,
-				copySourceCardId: ev.copySourceCardId,
 				toBottom: ev.toBottom,
 			});
 			created.push(newId);
