@@ -8,6 +8,7 @@ import type {
 	SyncAgent,
 } from "./index.ts";
 import {
+	activePlayer,
 	advanceWithReplay,
 	newGame,
 	perform,
@@ -227,7 +228,7 @@ describe("tap and untap occurrences", () => {
 		const requests: ChoiceRequest[] = [];
 		const unexpected: SyncAgent = {
 			choose: () => {
-				throw new Error("the active player must not order this replacement");
+				throw new Error("only the affected player may order this replacement");
 			},
 		};
 		const affected: SyncAgent = {
@@ -244,7 +245,9 @@ describe("tap and untap occurrences", () => {
 			affected,
 		]);
 
-		expect(state.activePlayer).toBe(ALICE);
+		// No turn has begun, so there is no active player here; ALICE is simply
+		// not the player the bulk event affects.
+		expect(activePlayer(state)).toBe(null);
 		expect(requests).toHaveLength(1);
 		expect(requests[0]).toMatchObject({ kind: "replacement", player: BOB });
 	});

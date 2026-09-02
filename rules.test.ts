@@ -9,6 +9,7 @@ import type {
 	PlayerId,
 } from "./index.ts";
 import {
+	activePlayer,
 	addFloating,
 	advance,
 	ChoiceController,
@@ -745,7 +746,8 @@ describe("triggered abilities", () => {
 			P2,
 			"battlefield",
 		);
-		expect(state.activePlayer).toBe(P1);
+		// No turn is in progress, so APNAP anchors on P1 (player 0) by fallback.
+		expect(activePlayer(state)).toBe(null);
 
 		// Deliberately enqueue in the opposite order from APNAP placement.
 		queueTestTrigger(state, nonactiveSource.id, P2, "nonactive trigger");

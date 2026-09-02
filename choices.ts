@@ -12,7 +12,7 @@ import type {
 	PriorityAction,
 	TurnLocation,
 } from "./index.ts";
-import { buildPlayerView, name, turnLocation } from "./index.ts";
+import { activePlayer, buildPlayerView, name, turnLocation } from "./index.ts";
 
 function objectLabel(state: GameState, id: ObjectId): string {
 	const object = state.objects.get(id);
@@ -51,7 +51,7 @@ export interface OptionalChoiceRequest extends ChoiceRequestBase {
 export interface PriorityActionChoiceRequest extends ChoiceRequestBase {
 	kind: "priorityAction";
 	context: {
-		activePlayer: PlayerId;
+		activePlayer: PlayerId | null;
 		location: TurnLocation | null;
 	};
 }
@@ -685,7 +685,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			kind: "priorityAction",
 			player,
 			context: {
-				activePlayer: state.activePlayer,
+				activePlayer: activePlayer(state),
 				location: turnLocation(state),
 			},
 			options: actions.map((action) => ({

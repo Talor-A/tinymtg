@@ -5,13 +5,13 @@ import type {
 	CounterNames,
 	EffectCtx,
 	GameEvent,
-	GameState,
 	ObjectId,
 	PlayerId,
 	ReadContext,
 	ReadonlyGameState,
 } from "./index.ts";
 import {
+	activePlayer,
 	cloneCharacteristics,
 	etbPreview,
 	maybeObject,
@@ -419,7 +419,7 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 				const inOwnDrawStep =
 					location?.kind === "step" &&
 					location.step.kind === "draw" &&
-					ctx.state.activePlayer === ev.player;
+					activePlayer(ctx.state) === ev.player;
 				const isFirstDrawOfDrawStep =
 					inOwnDrawStep && ctx.state.players[ev.player].drawnInDrawStep === 0;
 				// except the first draw of the draw step...

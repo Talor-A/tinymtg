@@ -123,7 +123,12 @@ export type GameProgress =
 	| {
 			kind: "inTurn";
 			turn: TurnOccurrence;
-			location: TurnLocation;
+			/**
+			 * Null between the moment a turn begins and the moment its first
+			 * phase begins: the turn is current, but no rules-defined location
+			 * inside it is yet.
+			 */
+			location: TurnLocation | null;
 	  };
 
 type SchedulerCommand =
@@ -154,6 +159,21 @@ interface TurnScheduler {
 export function turnLocation(state: ReadonlyGameState): TurnLocation | null {
 	const progress = state.turnScheduler.progress;
 	return progress.kind === "inTurn" ? progress.location : null;
+}
+
+/** Whose turn it is, or null before the first turn of the game begins. */
+export function activePlayer(state: ReadonlyGameState): PlayerId | null {
+	const progress = state.turnScheduler.progress;
+	return progress.kind === "inTurn" ? progress.turn.player : null;
+}
+
+/**
+ * The player APNAP order starts from. That is the active player, except when a
+ * priority window is opened outside any turn — only direct engine entry points
+ * (tests and tooling) can do that, and there P0 stands in for AP.
+ */
+function apnapAnchor(state: ReadonlyGameState): PlayerId {
+	return activePlayer(state) ?? (0 as PlayerId);
 }
 
 export function isTurnStep(state: GameState, step: StepKind): boolean {
@@ -963,8 +983,8 @@ export interface PlayerView {
 	readonly revision: number;
 	readonly viewer: PlayerId;
 	readonly turn: {
-		readonly number: number;
-		readonly activePlayer: PlayerId;
+		readonly completedTurns: number;
+		readonly activePlayer: PlayerId | null;
 		readonly location: DeepReadOnly<TurnLocation> | null;
 	};
 	readonly players: readonly [PlayerPublicView, PlayerPublicView];
@@ -1260,8 +1280,8 @@ export interface GameState {
 	floating: FloatingEffect[];
 	/** Block declarations for the current combat, in damage-assignment order. */
 	blockAssignments: BlockAssignment[];
-	turn: number;
-	activePlayer: PlayerId;
+	/** Turns whose phases have all been consumed; 0 during the first turn. */
+	completedTurns: number;
 	turnScheduler: TurnScheduler;
 	nextObjectId: number;
 	nextStackItemId: number;
@@ -2061,8 +2081,7 @@ export function newGame(): GameState {
 		pendingTriggers: [],
 		floating: [],
 		blockAssignments: [],
-		turn: 0,
-		activePlayer: 0 as PlayerId,
+		completedTurns: 0,
 		turnScheduler: {
 			command: { kind: "advanceTurn" },
 			progress: { kind: "notStarted" },
@@ -2790,8 +2809,8 @@ export function buildPlayerView(
 		revision: read.revision,
 		viewer,
 		turn: {
-			number: state.turn,
-			activePlayer: state.activePlayer,
+			completedTurns: state.completedTurns,
+			activePlayer: activePlayer(state),
 			location: structuredClone(turnLocation(state)),
 		},
 		players: [publicPlayer(0), publicPlayer(1)],
@@ -4220,7 +4239,10 @@ function executeIn(
 				happened = false;
 				break;
 			}
-			if (currentStepKind(state) === "draw" && state.activePlayer === ev.player)
+			if (
+				currentStepKind(state) === "draw" &&
+				activePlayer(state) === ev.player
+			)
 				p.drawnInDrawStep++;
 			// Drawing *is* a zone change, so zone-change replacements get a look too.
 			childResults.push(
@@ -4602,12 +4624,9 @@ function executeIn(
 				);
 			}
 			const currentTurn = progress.turn;
-			if (
-				ev.player !== currentTurn.player ||
-				ev.player !== state.activePlayer
-			) {
+			if (ev.player !== currentTurn.player) {
 				throw new IllegalAttackDeclarationError(
-					`P${ev.player} declared attackers, but P${state.activePlayer} is the active player`,
+					`P${ev.player} declared attackers, but P${currentTurn.player} is the active player`,
 				);
 			}
 			if (new Set(ev.attackers).size !== ev.attackers.length) {
@@ -4654,7 +4673,7 @@ function executeIn(
 			}
 			const currentTurn = progress.turn;
 			const defender = (1 - currentTurn.player) as PlayerId;
-			if (ev.player !== defender || ev.player === state.activePlayer) {
+			if (ev.player !== defender) {
 				throw new IllegalBlockDeclarationError(
 					`P${ev.player} declared blockers, but P${defender} is the defending player`,
 				);
@@ -4765,9 +4784,10 @@ function putPendingTriggersOnStack(
 		 */
 		return;
 	}
-	const nonactivePlayer = state.activePlayer === 0 ? 1 : 0;
+	const active = apnapAnchor(state);
+	const nonactivePlayer = (1 - active) as PlayerId;
 	const ordered: PendingTrigger[] = [];
-	for (const controller of [state.activePlayer, nonactivePlayer] as const) {
+	for (const controller of [active, nonactivePlayer] as const) {
 		const controlled = state.pendingTriggers.filter(
 			(pending) => pending.controller === controller,
 		);
@@ -4875,11 +4895,11 @@ function doTimingRestrictionsAllowCast(
 			assert(pv.types.length === 1, "instant type must be the only type");
 			return true;
 		}
-		if (state.turnScheduler.progress.location.phase.kind !== "main") {
+		if (turnLocation(state)?.phase.kind !== "main") {
 			return false;
 		}
 		// if it's not your turn:false
-		if (state.activePlayer !== player) return false;
+		if (activePlayer(state) !== player) return false;
 		// if stack is not empty: false
 		if (state.stack.length !== 0) return false;
 	}
@@ -4938,7 +4958,7 @@ function getCastableSpells(state: GameState, playerId: PlayerId): CastAction[] {
 function canPlayOrdinaryLand(state: GameState, player: PlayerId): boolean {
 	const location = turnLocation(state);
 	return (
-		player === state.activePlayer &&
+		player === activePlayer(state) &&
 		location?.kind === "mainPhase" &&
 		state.stack.length === 0 &&
 		state.players[player].landsPlayed < 1
@@ -4987,9 +5007,12 @@ function playLandIn(
 	action: PlayLandAction,
 	choices: AnyChoiceController,
 ): void {
-	if (priorityPlayer !== state.activePlayer) {
+	const active = activePlayer(state);
+	if (priorityPlayer !== active) {
 		throw new IllegalLandPlayError(
-			`P${priorityPlayer} cannot play a land while P${state.activePlayer} is active`,
+			active === null
+				? `P${priorityPlayer} cannot play a land outside a turn`
+				: `P${priorityPlayer} cannot play a land while P${active} is active`,
 		);
 	}
 	const location = turnLocation(state);
@@ -5066,7 +5089,7 @@ function settlePriorityIn(
 	choices: AnyChoiceController,
 ): void {
 	let lastWasPass = false;
-	let priority: 0 | 1 = state.activePlayer;
+	let priority: 0 | 1 = apnapAnchor(state);
 
 	// Runaway guard, not a rules limit. Each resolution costs a full priority
 	// round (both players pass again per CR 117.3b), so this must be at least
@@ -5087,7 +5110,7 @@ function settlePriorityIn(
 			assert(state.turnScheduler.remainingSteps.length === 0);
 			const progress = state.turnScheduler.progress;
 			assert(progress.kind === "inTurn");
-			assert(progress.location.kind === "step");
+			assert(progress.location?.kind === "step");
 
 			state.turnScheduler.remainingSteps.push({
 				id: nextScheduleId(state) as StepId,
@@ -5117,7 +5140,7 @@ function settlePriorityIn(
 			// CR 117.3b. The active player receives priority after a resolution,
 			// which re-opens the round: step 4's "goto 1" above.
 			lastWasPass = false;
-			priority = state.activePlayer;
+			priority = apnapAnchor(state);
 		} else {
 			lastWasPass = true;
 			priority = priority === 0 ? 1 : 0;
@@ -5139,6 +5162,7 @@ function performTurnBasedActions(
 	state: GameState,
 	choices: AnyChoiceController,
 	step: StepOccurrence,
+	active: PlayerId,
 ): void {
 	switch (step.kind) {
 		case "untap":
@@ -5146,7 +5170,7 @@ function performTurnBasedActions(
 				state,
 				{
 					kind: "untap",
-					ref: { kind: "all", player: state.activePlayer },
+					ref: { kind: "all", player: active },
 				},
 				choices,
 				newScope(),
@@ -5154,10 +5178,10 @@ function performTurnBasedActions(
 			);
 			break;
 		case "draw":
-			state.players[state.activePlayer].drawnInDrawStep = 0;
+			state.players[active].drawnInDrawStep = 0;
 			performIn(
 				state,
-				{ kind: "draw", player: state.activePlayer },
+				{ kind: "draw", player: active },
 				choices,
 				newScope(),
 				0,
@@ -5168,7 +5192,7 @@ function performTurnBasedActions(
 				state,
 				{
 					kind: "discard",
-					player: state.activePlayer,
+					player: active,
 					cards: { kind: "hand-size" },
 				},
 				choices,
@@ -5186,17 +5210,13 @@ function performTurnBasedActions(
 		case "declare attackers": {
 			// Ask once for a replayable subset, then commit it as one event. Battlefield
 			// order is preserved so the offered options are stable and deterministic.
-			const eligible = eligibleAttackers(state, state.activePlayer);
-			const attackers = choices.chooseAttackers(
-				state,
-				state.activePlayer,
-				eligible,
-			);
+			const eligible = eligibleAttackers(state, active);
+			const attackers = choices.chooseAttackers(state, active, eligible);
 			performIn(
 				state,
 				{
 					kind: "declare attackers",
-					player: state.activePlayer,
+					player: active,
 					attackers,
 				},
 				choices,
@@ -5217,7 +5237,7 @@ function performTurnBasedActions(
 			break;
 		case "combat damage": {
 			// CR 510.2: all combat damage is assigned, then dealt, simultaneously.
-			const defender = (1 - state.activePlayer) as PlayerId;
+			const defender = (1 - active) as PlayerId;
 			const events: DamageEvent[] = [];
 			const read = createReadContext(state);
 			const blockedAttackers = new Set(
@@ -5351,11 +5371,8 @@ function performTurnBasedActions(
 			// The defending player chooses which of their creatures block which
 			// attackers. This deviates from the attacker model: blockers are
 			// (blocker, attacker) pairs, not a plain list of IDs.
-			const defender = (1 - state.activePlayer) as PlayerId;
-			const attackers = creaturesControlledBy(
-				createReadContext(state),
-				state.activePlayer,
-			)
+			const defender = (1 - active) as PlayerId;
+			const attackers = creaturesControlledBy(createReadContext(state), active)
 				.filter((o) => o.attacking)
 				.map((o) => o.id);
 			const eligible = eligibleBlockers(state, defender);
@@ -5463,7 +5480,9 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 					continue;
 				}
 
-				state.activePlayer = turn.player;
+				// The turn is now current even though no phase of it has begun,
+				// so "whose turn is it" already answers with its player.
+				scheduler.progress = { kind: "inTurn", turn, location: null };
 				state.players[turn.player].landsPlayed = 0;
 				scheduler.remainingSteps = [];
 				scheduler.command = { kind: "advancePhase", turn };
@@ -5475,7 +5494,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				const phase = turn.remainingPhases.shift();
 				if (!phase) {
 					scheduler.remainingSteps = [];
-					state.turn++;
+					state.completedTurns++;
 					scheduler.command = { kind: "advanceTurn" };
 					continue;
 				}
@@ -5565,7 +5584,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 					location: { kind: "step", phase, step },
 				};
 				scheduler.command = { kind: "finishStep" };
-				performTurnBasedActions(state, choices, step);
+				performTurnBasedActions(state, choices, step, turn.player);
 				// Untap has no priority window. Cleanup normally has none, but the
 				// priority helper opens one if something triggered.
 				priority(state, choices);
@@ -5575,7 +5594,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 			case "finishStep": {
 				const progress = scheduler.progress;
 				assert(progress.kind === "inTurn");
-				assert(progress.location.kind === "step");
+				assert(progress.location?.kind === "step");
 				// CR 703.4q mana emptying belongs here once mana pools exist.
 				scheduler.command = {
 					kind: "advanceStep",

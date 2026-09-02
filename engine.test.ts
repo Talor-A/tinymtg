@@ -47,11 +47,11 @@ function isAt(state: GameState, expected: StepKind | "main"): boolean {
 }
 
 function playOneTurn(state: GameState, agents: Agents): void {
-	const completedTurns = state.turn;
+	const completedTurns = state.completedTurns;
 	advanceUntil(
 		state,
 		agents,
-		(next) => next.turn > completedTurns || gameOver(next),
+		(next) => next.completedTurns > completedTurns || gameOver(next),
 	);
 }
 
@@ -158,7 +158,7 @@ describe("playing a normal turn", () => {
 		expect(state.players[ALICE].library).toHaveLength(0);
 		expect(state.players[ALICE].hand).toHaveLength(7);
 		expect(state.players[ALICE].graveyard).toHaveLength(2);
-		expect(state.turn).toBe(1);
+		expect(state.completedTurns).toBe(1);
 		expect(gameOver(state)).toBe(false);
 	});
 
@@ -187,7 +187,7 @@ describe("playing a normal turn", () => {
 
 		expect(state.players[ALICE].hand).toHaveLength(1);
 		expect(state.players[BOB].hand).toHaveLength(1);
-		expect(state.turn).toBe(2);
+		expect(state.completedTurns).toBe(2);
 		expect(gameOver(state)).toBe(false);
 	});
 });
@@ -587,7 +587,7 @@ describe("draw steps and game endings", () => {
 
 		expect(state.players[ALICE].lost).toBe(true);
 		expect(winner(state)).toBe(BOB);
-		expect(state.turn).toBe(0);
+		expect(state.completedTurns).toBe(0);
 		expect(isAt(state, "draw")).toBe(true);
 	});
 
@@ -601,7 +601,7 @@ describe("draw steps and game endings", () => {
 		expect(state.players[ALICE].lost).toBe(false);
 		expect(winner(state)).toBe(ALICE);
 
-		expect(state.turn).toBe(0);
+		expect(state.completedTurns).toBe(0);
 		expect(isAt(state, "draw")).toBe(true);
 	});
 
@@ -617,7 +617,7 @@ describe("draw steps and game endings", () => {
 		expect(winner(state)).toBe(null);
 
 		advanceUntil(state, agents, gameOver);
-		expect(state.turn).toBe(1);
+		expect(state.completedTurns).toBe(1);
 		expect(isAt(state, "draw")).toBe(true);
 	});
 });
