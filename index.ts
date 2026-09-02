@@ -369,15 +369,9 @@ interface DamageEvent extends EventCommon {
  * deathtouch (see rule 704.5h). If a permanent is put into its owner's
  * graveyard for any other reason, it hasn't been "destroyed."
  *
- * TODO: Per above, if a replacement effect replaces
- * `{ kind: zone change, from: battlefield, to: graveyard }`, we might still
- * consider the permanent destroyed, but 701.8b says if it's not moved to the
- * graveyard, it hasn't been "destroyed."
- *
- * possible implementation:
- * ```
- * { kind: zone change, from: battlefield, to: graveyard, isDestroy: true }
- * ```
+ * The child zone-change event carries `cause: "destroy"`. The parent destroy
+ * succeeds only when that exact battlefield-to-graveyard movement executes
+ * after replacements.
  */
 interface DestroyEvent extends EventCommon {
 	kind: "destroy";
@@ -4375,21 +4369,28 @@ function executeIn(
 			}
 			const snapshot = readObject(before, o.id);
 			assert(snapshot.kind === "permanent");
-			childResults.push(
-				performIn(
-					state,
-					{
-						kind: "change zone",
-						object: o.id,
-						from: "battlefield",
-						to: "graveyard",
-						cause: "destroy",
-						toController: snapshot.controller,
-					},
-					choices,
-					scope,
-					depth + 1,
-				),
+			const movement = performIn(
+				state,
+				{
+					kind: "change zone",
+					object: o.id,
+					from: "battlefield",
+					to: "graveyard",
+					cause: "destroy",
+					toController: snapshot.controller,
+				},
+				choices,
+				scope,
+				depth + 1,
+			);
+			childResults.push(movement);
+			happened = movement.executed.some(
+				(child) =>
+					child.kind === "change zone" &&
+					child.object === o.id &&
+					child.from === "battlefield" &&
+					child.to === "graveyard" &&
+					child.cause === "destroy",
 			);
 			break;
 		}

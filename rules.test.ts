@@ -44,6 +44,88 @@ function created(result: { created: ObjectId[] }): ObjectId {
 	return result.created[0]!;
 }
 
+describe("destroy event success", () => {
+	const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+
+	test("ordinary destruction reports both the movement and successful destroy", () => {
+		const state = newGame();
+		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+
+		const result = perform(
+			state,
+			{ kind: "destroy", object: bears.id, noRegen: false },
+			agents,
+		);
+
+		expect(result.executed).toHaveLength(2);
+		expect(result.executed[0]).toMatchObject({
+			kind: "change zone",
+			object: bears.id,
+			from: "battlefield",
+			to: "graveyard",
+			cause: "destroy",
+		});
+		expect(result.executed[1]).toEqual({
+			kind: "destroy",
+			object: bears.id,
+			noRegen: false,
+		});
+		expect(state.players[P1].graveyard).toEqual(result.created);
+	});
+
+	test("regeneration replaces destruction without reporting a destroy", () => {
+		const state = newGame();
+		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield", {
+			tapped: false,
+		});
+		permanent(state, bears.id).damage = 2;
+		addFloating(
+			state,
+			P1,
+			"regenerationShield",
+			{ target: bears.id },
+			{ data: { used: 0 } },
+		);
+
+		const result = perform(
+			state,
+			{ kind: "destroy", object: bears.id, noRegen: false },
+			agents,
+		);
+
+		expect(result.executed).toEqual([{ kind: "regenerate", object: bears.id }]);
+		expect(state.battlefield).toContain(bears.id);
+		expect(state.players[P1].graveyard).toHaveLength(0);
+		expect(permanent(state, bears.id)).toMatchObject({
+			tapped: true,
+			damage: 0,
+		});
+	});
+
+	test("exile-instead movement executes without reporting a destroy", () => {
+		const state = newGame();
+		spawnPermanent(state, "rest-in-peace", P2, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+
+		const result = perform(
+			state,
+			{ kind: "destroy", object: bears.id, noRegen: false },
+			agents,
+		);
+
+		expect(result.executed).toHaveLength(1);
+		expect(result.executed[0]).toMatchObject({
+			kind: "change zone",
+			object: bears.id,
+			from: "battlefield",
+			to: "exile",
+			cause: "destroy",
+		});
+		expect(state.players[P1].graveyard).toHaveLength(0);
+		expect(state.players[P1].exile).toEqual(result.created);
+	});
+});
+
 describe("replacement effects that add counters as a permanent enters", () => {
 	function enterWalkingBallista(preferences: string[]): {
 		counters: number;
