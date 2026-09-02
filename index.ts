@@ -2261,6 +2261,8 @@ export function physicalCardId(
 				: null;
 		case "nonbattlefield-token":
 			return null;
+		default:
+			return assertNever(object);
 	}
 }
 
@@ -2370,11 +2372,7 @@ export function permanentsInPlay(
 export function permanentsInPlay(
 	state: ReadonlyGameState,
 ): DeepReadOnly<PermanentObject>[] {
-	return state.battlefield.map((id) => {
-		const object = permanent(state, id);
-		assert(object.kind === "permanent");
-		return object;
-	});
+	return state.battlefield.map((id) => permanent(state, id));
 }
 
 /**
@@ -2836,7 +2834,7 @@ function evaluationView(
 		id: object.id,
 		cardId,
 		owner: object.owner,
-		controller: controllerOf(object as GameObject),
+		controller: controllerOf(object),
 		zone: object.zone,
 		counters: object.kind === "permanent" ? { ...object.counters } : {},
 		tapped: object.kind === "permanent" ? object.tapped : false,
@@ -3465,15 +3463,11 @@ function moveObject(
 	const freshId = state.nextObjectId++ as ObjectId;
 	let fresh: GameObject;
 	if (to === "battlefield") {
-		assert(
-			printedId || tokenValues,
-			"moved object has no card identity or token values",
-		);
 		let representation: PermanentObject["representation"];
 		if (tokenValues) {
 			representation = { kind: "token", createdValues: tokenValues };
 		} else {
-			assertDefined(printedId);
+			assert(printedId, "moved object has no card identity or token values");
 			representation = { kind: "card", cardId: printedId };
 		}
 		fresh = {
@@ -3784,6 +3778,13 @@ function checkStateBasedActionsIn(
 
 		// 704.5aa. Speed: we don't support this.
 
+		// Prefilter for the permanent SBAs below. Skipping the sweep is only sound
+		// because every continuous effect in the engine comes from a *static
+		// ability* possessed by some object: floating effects are `ReplacementDef`s
+		// and cannot change characteristics. If a floating continuous effect ever
+		// exists (say, "target creature gets -3/-3 until end of turn"), this
+		// prefilter will silently stop noticing creatures that died to it, and
+		// `hasCharacteristicChangingStatic` must grow to cover `state.floating`.
 		const hasCharacteristicChangingStatic = anyPossessedStatic(
 			state,
 			(effect) => CHARACTERISTIC_CHANGING_LAYERS.includes(effect.layer),
