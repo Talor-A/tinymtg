@@ -75,7 +75,7 @@ Normal progression through `advance()` currently supports:
 
 - turn, phase, and step scheduling;
 - untapping, the normal draw, and cleanup discarding;
-- pass-only priority;
+- priority passing and one ordinary land play from the active player's hand during either main phase while the stack is empty;
 - the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith);
 - declaring attackers, and unblocked two-player combat damage; and
 - replacement, prohibition, and state-based effects encountered by those events.
@@ -123,6 +123,12 @@ any non-player defender), and multiple combat damage steps are not
 implemented — every still-attacking creature is unconditionally treated as
 unblocked and hits the defending player once.
 
-Deck construction, opening hands, mulligans, land play, mana, casting, activated abilities, blocker selection, and spell resolution are not implemented yet.
+### Playing a land
+
+During either precombat or postcombat main phase, the active player's priority choices include each land in their hand while the stack is empty and they have not already played a land that turn. Selecting one is a special action: it moves the identified card through the normal zone-change replacement and trigger pipeline, increments `landsPlayed`, and leaves priority with that player. The ordinary allowance resets when that player's next turn begins.
+
+This slice intentionally supports only one ordinary land from hand per turn. Modified allowances, playing from alternate zones, and effects granting special timing are not implemented. Invalid or stale land actions are rejected before action-specific state changes.
+
+Deck construction, opening hands, mulligans, mana, casting, activated abilities, and spell resolution are not implemented yet.
 
 `perform()` injects a rules event directly, and `settlePriority()` resolves the current priority window directly. They are useful for focused rules tests and integrations, but do not represent player actions supported by the normal gameplay loop.

@@ -416,6 +416,7 @@ interface ZoneChangeEvent extends EventCommon {
 
 type MoveCause =
 	| "draw"
+	| "play land"
 	| "discard"
 	| "mill"
 	| "destroy"
@@ -1168,9 +1169,10 @@ export interface CastAction {
 export interface ActivateAbilityAction {
 	kind: "activate ability";
 }
-/** Reserved action shape; land play isn't observable or executable yet. */
+/** The ordinary special action of playing one identified land from hand. */
 export interface PlayLandAction {
 	kind: "play land";
+	card: ObjectId;
 }
 export type PriorityAction =
 	| PassAction
@@ -2365,6 +2367,13 @@ export class IllegalBlockDeclarationError extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = "IllegalBlockDeclarationError";
+	}
+}
+
+export class IllegalLandPlayError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalLandPlayError";
 	}
 }
 
@@ -4630,13 +4639,115 @@ function getCastableSpells(state: GameState, playerId: PlayerId): CastAction[] {
 	return castable;
 }
 
-function getObservableActions(
-	_state: GameState,
-	_player: PlayerId,
+function canPlayOrdinaryLand(state: GameState, player: PlayerId): boolean {
+	const location = turnLocation(state);
+	return (
+		player === state.activePlayer &&
+		location?.kind === "mainPhase" &&
+		state.stack.length === 0 &&
+		state.players[player].landsPlayed < 1
+	);
+}
+
+/** Actions currently offered to a player receiving priority. */
+export function getObservableActions(
+	state: GameState,
+	player: PlayerId,
 ): PriorityAction[] {
-	// Casting and activation are not implemented yet. Do not derive every object
-	// view merely to discard the resulting actions in this pass-only engine.
-	return [{ kind: "pass" }];
+	const actions: PriorityAction[] = [{ kind: "pass" }];
+	if (!canPlayOrdinaryLand(state, player)) return actions;
+
+	const read = createReadContext(state);
+	for (const id of state.players[player].hand) {
+		const object = maybeObject(state, id);
+		if (object?.kind !== "card" || object.zone !== "hand") continue;
+		const snapshot = readObject(read, id);
+		if (
+			snapshot.kind === "card" &&
+			snapshot.currentCharacteristics.types.includes("land")
+		) {
+			actions.push({ kind: "play land", card: id });
+		}
+	}
+	return actions;
+}
+
+/**
+ * Executes a land action for the priority holder supplied by the scheduler.
+ * Timing, actor, card, zone, and allowance are rechecked before mutation.
+ */
+export function executeLandAction(
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: PlayLandAction,
+	source: ChoiceSource,
+): void {
+	playLandIn(state, priorityPlayer, action, asChoiceController(source));
+}
+
+function playLandIn(
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: PlayLandAction,
+	choices: AnyChoiceController,
+): void {
+	if (priorityPlayer !== state.activePlayer) {
+		throw new IllegalLandPlayError(
+			`P${priorityPlayer} cannot play a land while P${state.activePlayer} is active`,
+		);
+	}
+	const location = turnLocation(state);
+	if (location?.kind !== "mainPhase") {
+		throw new IllegalLandPlayError(
+			"a land can be played only during a main phase",
+		);
+	}
+	if (state.stack.length !== 0) {
+		throw new IllegalLandPlayError(
+			"a land cannot be played while the stack is nonempty",
+		);
+	}
+	if (state.players[priorityPlayer].landsPlayed >= 1) {
+		throw new IllegalLandPlayError(
+			"the ordinary one-land-per-turn limit is exhausted",
+		);
+	}
+
+	const object = maybeObject(state, action.card);
+	if (
+		object?.kind !== "card" ||
+		object.zone !== "hand" ||
+		!state.players[priorityPlayer].hand.includes(action.card)
+	) {
+		throw new IllegalLandPlayError(
+			`object ${action.card} is not in P${priorityPlayer}'s hand`,
+		);
+	}
+	const read = createReadContext(state);
+	const snapshot = readObject(read, action.card);
+	if (
+		snapshot.kind !== "card" ||
+		!snapshot.currentCharacteristics.types.includes("land")
+	) {
+		throw new IllegalLandPlayError(`object ${action.card} is not a land`);
+	}
+
+	performIn(
+		state,
+		{
+			kind: "change zone",
+			object: action.card,
+			from: "hand",
+			to: "battlefield",
+			cause: "play land",
+			toController: priorityPlayer,
+		},
+		choices,
+		newScope(),
+		0,
+	);
+	state.players[priorityPlayer].landsPlayed++;
+	state.revision++;
 }
 
 /**
@@ -4692,6 +4803,12 @@ function settlePriorityIn(
 			getObservableActions(state, priority),
 		);
 
+		if (action.kind === "play land") {
+			playLandIn(state, priority, action, choices);
+			// A special action neither passes nor changes who has priority.
+			lastWasPass = false;
+			continue;
+		}
 		if (action.kind !== "pass") {
 			throw new Error(`priority action "${action.kind}" is not implemented`);
 		}

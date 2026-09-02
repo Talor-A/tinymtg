@@ -1,5 +1,5 @@
 import { readSync } from "node:fs";
-import { blockAssignmentOptionId } from "./choices.ts";
+import { blockAssignmentOptionId, priorityOptionId } from "./choices.ts";
 import type {
 	BlockAssignment,
 	ChoiceAnswer,
@@ -65,12 +65,13 @@ export class ScriptedAgent implements SyncAgent {
 				};
 
 			case "priorityAction": {
-				const preferred = this.priorityActions.shift();
+				const preferred = this.priorityActions[0];
 				const option = preferred
-					? request.options.find((candidate) =>
-							candidate.label.includes(preferred.kind),
+					? request.options.find(
+							(candidate) => candidate.id === priorityOptionId(preferred),
 						)
 					: undefined;
+				if (option) this.priorityActions.shift();
 				return option ? { optionId: option.id } : firstOption(request);
 			}
 

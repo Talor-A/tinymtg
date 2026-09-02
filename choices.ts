@@ -297,10 +297,16 @@ function normalizeMultiAnswer(
 	return { optionIds: normalized };
 }
 
-function priorityOptionId(action: PriorityAction): string {
+export function priorityOptionId(action: PriorityAction): string {
 	return `priority:${createHash("sha256")
 		.update(canonicalize(action))
 		.digest("hex")}`;
+}
+
+function priorityOptionLabel(state: GameState, action: PriorityAction): string {
+	return action.kind === "play land"
+		? `play land ${objectLabel(state, action.card)}#${action.card}`
+		: action.kind;
 }
 
 /**
@@ -627,7 +633,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			},
 			options: actions.map((action) => ({
 				id: priorityOptionId(action),
-				label: action.kind,
+				label: priorityOptionLabel(state, action),
 			})),
 		});
 		return this.choose(state, request, candidates);

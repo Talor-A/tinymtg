@@ -2,13 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts";
-import type {
-	GameState,
-	ObjectId,
-	PlayerId,
-	StepKind,
-	SyncAgent,
-} from "./index.ts";
+import type { GameState, ObjectId, PlayerId, StepKind } from "./index.ts";
 import {
 	advance,
 	gameOver,
@@ -22,6 +16,13 @@ import {
 	winner,
 } from "./index.ts";
 import { parseCard } from "./parser.ts";
+import {
+	advanceUntil,
+	ALICE,
+	BOB,
+	passingAgents,
+	type SyncAgents as Agents,
+} from "./test/engine-helpers.ts";
 
 // TODO: this adds a dependency on card parser,
 // remove it
@@ -38,30 +39,11 @@ function loadHeraldOfFaith() {
 }
 registerCard(loadHeraldOfFaith());
 
-const ALICE = 0 as PlayerId;
-const BOB = 1 as PlayerId;
-type Agents = [SyncAgent, SyncAgent];
-
 function isAt(state: GameState, expected: StepKind | "main"): boolean {
 	const location = turnLocation(state);
 	return expected === "main"
 		? location?.kind === "mainPhase"
 		: location?.kind === "step" && location.step.kind === expected;
-}
-
-function advanceUntil(
-	state: GameState,
-	agents: Agents,
-	done: (state: GameState) => boolean,
-	maxAdvances = 100,
-): void {
-	for (let count = 0; count < maxAdvances; count++) {
-		if (done(state)) return;
-		advance(state, agents);
-	}
-	throw new Error(
-		`engine did not reach the expected state after ${maxAdvances} advances`,
-	);
 }
 
 function playOneTurn(state: GameState, agents: Agents): void {
@@ -71,10 +53,6 @@ function playOneTurn(state: GameState, agents: Agents): void {
 		agents,
 		(next) => next.turn > completedTurns || gameOver(next),
 	);
-}
-
-function passingAgents(): Agents {
-	return [new ScriptedAgent(), new ScriptedAgent()];
 }
 
 /** One attacker-eligible creature plus enough library to survive a full turn. */

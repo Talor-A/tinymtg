@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts";
-import { blockAssignmentOptionId } from "./choices.ts";
+import { blockAssignmentOptionId, priorityOptionId } from "./choices.ts";
 import {
 	type Agent,
 	advance,
@@ -27,6 +27,44 @@ import {
 function agents(first = new ScriptedAgent()): [SyncAgent, SyncAgent] {
 	return [first, new ScriptedAgent()];
 }
+
+describe("ScriptedAgent priority actions", () => {
+	test("keeps a scripted action queued until its exact option is available", () => {
+		const action = { kind: "play land", card: 42 as ObjectId } as const;
+		const agent = new ScriptedAgent([], [], [action]);
+		const base = {
+			version: 1 as const,
+			ordinal: 0,
+			fingerprint: "test",
+			player: 0 as const,
+			context: { activePlayer: 0 as const, location: null, stack: [] },
+		};
+
+		expect(
+			agent.choose(newGame(), {
+				...base,
+				kind: "priorityAction",
+				id: "before",
+				options: [{ id: "pass", label: "pass" }],
+			}),
+		).toEqual({ optionId: "pass" });
+		expect(agent.priorityActions).toEqual([action]);
+
+		const actionOptionId = priorityOptionId(action);
+		expect(
+			agent.choose(newGame(), {
+				...base,
+				kind: "priorityAction",
+				id: "available",
+				options: [
+					{ id: "pass", label: "pass" },
+					{ id: actionOptionId, label: "wording does not matter" },
+				],
+			}),
+		).toEqual({ optionId: actionOptionId });
+		expect(agent.priorityActions).toEqual([]);
+	});
+});
 
 describe("choice transcripts", () => {
 	test("token display names label replay choices without becoming card IDs", () => {
