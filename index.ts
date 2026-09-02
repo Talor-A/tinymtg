@@ -987,6 +987,26 @@ export function buildGameView(state: ReadonlyGameState): GameView {
 	return buildFilteredGameView(state);
 }
 
+/**
+ * CR 613.4: apply the P/T change from +1/+1 and -1/-1 counters. Part of layer
+ * 7c, so `buildFilteredGameView` calls this from within the layer walk.
+ */
+function applyCounters(
+	state: ReadonlyGameState,
+	characteristics: Map<ObjectId, CharacteristicsSnapshot>,
+): void {
+	for (const object of state.objects.values()) {
+		if (object.kind !== "permanent") continue;
+		const current = characteristics.get(object.id);
+		if (!current) continue;
+		if (current.kind !== "creature") continue;
+		const delta =
+			(object.counters["+1/+1"] ?? 0) - (object.counters["-1/-1"] ?? 0);
+		current.power += delta;
+		current.toughness += delta;
+	}
+}
+
 function buildFilteredGameView(
 	state: ReadonlyGameState,
 	included?: ReadonlySet<ObjectId>,
@@ -1057,18 +1077,12 @@ function buildFilteredGameView(
 				}
 			}
 		}
-	}
 
-	// Counters are applied after continuous P/T modifiers.
-	for (const object of state.objects.values()) {
-		if (object.kind !== "permanent") continue;
-		const current = characteristics.get(object.id);
-		if (!current) continue;
-		if (current.kind !== "creature") continue;
-		const delta =
-			(object.counters["+1/+1"] ?? 0) - (object.counters["-1/-1"] ?? 0);
-		current.power += delta;
-		current.toughness += delta;
+		// CR 613.4: +1/+1 and -1/-1 counters apply in layer 7c, so they are
+		// scheduled by the layer list like everything else -- notably before the
+		// 7d swap.
+		if (layer === "7c-modify-power-toughness")
+			applyCounters(state, characteristics);
 	}
 
 	const snapshots = new Map<ObjectId, GameObjectSnapshot>();

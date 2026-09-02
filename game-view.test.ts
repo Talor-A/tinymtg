@@ -95,6 +95,31 @@ const COMMUNAL_INSTRUCTION = registerCard({
 	printed: { activated: [], triggered: [] },
 });
 
+/**
+ * A layer-7d swap with a power-sensitive condition: the only way to observe
+ * whether counters (CR 613.4, layer 7c) were applied before 7d runs.
+ */
+const SWAP_SOURCE = registerCard({
+	id: "test-power-sensitive-swap",
+	name: "Power-Sensitive Swap",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	statics: [
+		{
+			layer: "7d-swap-power-toughness",
+			text: "Each creature with power 4 or greater has its power and toughness switched.",
+			applies: (v) => v.types.includes("creature") && v.power >= 4,
+			modify: (v) => {
+				if (v.kind !== "creature") return;
+				const power = v.power;
+				v.power = v.toughness;
+				v.toughness = power;
+			},
+		},
+	],
+});
+
 const LAYER_ONE_SOURCE = registerCard({
 	id: "test-layer-one-snapshot-source",
 	name: "Layer-One Snapshot Source",
@@ -578,6 +603,21 @@ describe("derived game views", () => {
 		expect(() => buildGameView(structuredClone(state))).not.toThrow();
 		const result = await advanceWithReplay(state, agents);
 		expect(result.state.objects.has(token.id)).toBe(true);
+	});
+
+	test("counters apply in layer 7c, before the 7d swap sees power", () => {
+		const state = newGame();
+		// 1/3 with three +1/+1 counters is a 4/6 at the end of 7c, so the swap
+		// applies and it ends up 6/4. Applying counters after the whole layer walk
+		// would show the swap a 1/3, leaving it an unswapped 4/6.
+		const cleric = spawnPermanent(state, "arashin-cleric", P1, "battlefield", {
+			counters: { "+1/+1": 3 },
+		});
+		spawnPermanent(state, SWAP_SOURCE.id, P1, "battlefield");
+		const current = effectiveCharacteristics(createReadContext(state), cleric);
+		expect(current.kind).toBe("creature");
+		if (current.kind !== "creature") return;
+		expect([current.power, current.toughness]).toEqual([6, 4]);
 	});
 });
 
