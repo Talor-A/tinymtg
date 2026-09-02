@@ -4493,12 +4493,22 @@ function executeIn(
 		}
 
 		case "gain life": {
+			if (ev.amount <= 0) {
+				throw new Error(
+					"undefined behavior: tried to gain non-natural quantity of life.",
+				);
+			}
 			const p = state.players[ev.player];
 			p.life += ev.amount;
 			log(state, `${"  ".repeat(depth)}P${ev.player} -> ${p.life} life`);
 			break;
 		}
 		case "lose life": {
+			if (ev.amount <= 0) {
+				throw new Error(
+					"undefined behavior: tried to lose non-natural quantity of life.",
+				);
+			}
 			const p = state.players[ev.player];
 			p.life -= ev.amount;
 			log(state, `${"  ".repeat(depth)}P${ev.player} -> ${p.life} life`);
