@@ -5040,7 +5040,10 @@ function settlePriorityIn(
 	let lastWasPass = false;
 	let priority: 0 | 1 = state.activePlayer;
 
-	for (let pass = 0; pass < 64; pass++) {
+	// Runaway guard, not a rules limit. Each resolution costs a full priority
+	// round (both players pass again per CR 117.3b), so this must be at least
+	// twice the deepest stack the engine can build.
+	for (let pass = 0; pass < 256; pass++) {
 		checkStateBasedActionsIn(state, choices);
 		if (gameOver(state)) return;
 
@@ -5083,6 +5086,10 @@ function settlePriorityIn(
 		if (lastWasPass) {
 			if (state.stack.length === 0) return;
 			resolveTopOfStack(state, choices);
+			// CR 117.3b. The active player receives priority after a resolution,
+			// which re-opens the round: step 4's "goto 1" above.
+			lastWasPass = false;
+			priority = state.activePlayer;
 		} else {
 			lastWasPass = true;
 			priority = priority === 0 ? 1 : 0;

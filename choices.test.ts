@@ -254,9 +254,12 @@ describe("choice transcripts", () => {
 		expect(
 			result.transcript.choices.map((choice) => choice.request.kind),
 		).toEqual([
+			// Both players pass, the trigger resolves (asking the optional), and
+			// CR 117.3b re-opens the round: the active player gets priority again.
 			"priorityAction",
 			"priorityAction",
 			"optional",
+			"priorityAction",
 			"priorityAction",
 		]);
 		expect(result.state.players[0].life).toBe(21);
