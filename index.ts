@@ -2130,40 +2130,16 @@ export function spawnCard(
 	return obj;
 }
 
-export function spawnPermanent(
+function spawnOnBattlefield(
 	state: GameState,
-	cardId: string,
 	owner: PlayerId,
-	battlefield?: "battlefield",
-	opts?: { tapped?: boolean; counters?: CounterBag; token?: boolean },
-): PermanentObject;
-export function spawnPermanent(
-	state: GameState,
-	cardId: string,
-	owner: PlayerId,
-	opts?: { tapped?: boolean; counters?: CounterBag; token?: boolean },
-): PermanentObject;
-export function spawnPermanent(
-	state: GameState,
-	cardId: string,
-	owner: PlayerId,
-	zoneOrOpts:
-		| "battlefield"
-		| {
-				tapped?: boolean;
-				counters?: CounterBag;
-				token?: boolean;
-		  } = "battlefield",
-	legacyOpts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
+	representation: PermanentObject["representation"],
+	opts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
 ): PermanentObject {
-	const opts = zoneOrOpts === "battlefield" ? legacyOpts : zoneOrOpts;
-	const values = characteristicsFromCardDef(card(cardId));
 	const obj: PermanentObject = {
-		representation: opts.token
-			? { kind: "token", createdValues: values }
-			: { kind: "card", cardId },
-		zone: "battlefield",
 		kind: "permanent",
+		representation,
+		zone: "battlefield",
 		id: state.nextObjectId++ as ObjectId,
 
 		owner,
@@ -2175,7 +2151,7 @@ export function spawnPermanent(
 		damage: 0,
 		attacking: false,
 		blocking: false,
-		token: opts.token ?? false,
+		token: opts.token ?? representation.kind === "token",
 		attributes: {},
 	};
 	state.objects.set(obj.id, obj);
@@ -2183,34 +2159,28 @@ export function spawnPermanent(
 	state.revision++;
 	return obj;
 }
+
+export function spawnPermanent(
+	state: GameState,
+	cardId: string,
+	owner: PlayerId,
+	opts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
+): PermanentObject {
+	const representation: PermanentObject["representation"] = opts.token
+		? { kind: "token", createdValues: characteristicsFromCardDef(card(cardId)) }
+		: { kind: "card", cardId };
+	return spawnOnBattlefield(state, owner, representation, opts);
+}
+
 export function spawnToken(
 	state: GameState,
 	owner: PlayerId,
 	attributes: CharacteristicsSnapshot,
 ): PermanentObject {
-	const obj: PermanentObject = {
-		kind: "permanent",
-		representation: {
-			kind: "token",
-			createdValues: attributes,
-		},
-		zone: "battlefield",
-		id: state.nextObjectId++ as ObjectId,
-		owner,
-		controller: owner,
-		attacking: false,
-		blocking: false,
-		counters: {},
-		damage: 0,
-		tapped: false,
-		effectData: {},
-		token: true,
-		attributes: {},
-	};
-	state.objects.set(obj.id, obj);
-	mutableZoneList(state, "battlefield", owner).push(obj.id);
-	state.revision++;
-	return obj;
+	return spawnOnBattlefield(state, owner, {
+		kind: "token",
+		createdValues: attributes,
+	});
 }
 
 /* ------------------------------------------------------------------ *
