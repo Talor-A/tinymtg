@@ -4,12 +4,14 @@ import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts";
 import type { GameState, ObjectId, PlayerId, StepKind } from "./index.ts";
 import {
+	activePlayer,
 	advance,
 	gameOver,
 	newGame,
 	perform,
 	permanent,
 	registerCard,
+	settlePriority,
 	spawnCard,
 	spawnPermanent,
 	turnLocation,
@@ -102,6 +104,21 @@ describe("turn progress", () => {
 		}
 	});
 
+	test("has no active player before the first turn begins", () => {
+		const state = newGame();
+		const agents = passingAgents();
+
+		expect(activePlayer(state)).toBe(null);
+		// Nothing in the rules is defined relative to "the active player" yet,
+		// so asking for a priority window here is a bug, not player 0's turn.
+		expect(() => settlePriority(state, agents)).toThrow(
+			"no player receives priority outside a turn",
+		);
+
+		advance(state, agents);
+		expect(activePlayer(state)).toBe(ALICE);
+	});
+
 	test("represents a main phase as a phase with its combat role", () => {
 		const state = newGame();
 		const agents = passingAgents();
@@ -189,6 +206,19 @@ describe("playing a normal turn", () => {
 		expect(state.players[BOB].hand).toHaveLength(1);
 		expect(state.completedTurns).toBe(2);
 		expect(gameOver(state)).toBe(false);
+	});
+
+	test("hands the active player role to each player in turn", () => {
+		const state = newGame();
+		const agents = passingAgents();
+		addCards(state, ALICE, "library", 2);
+		addCards(state, BOB, "library", 2);
+
+		playOneTurn(state, agents);
+		expect(activePlayer(state)).toBe(BOB);
+
+		playOneTurn(state, agents);
+		expect(activePlayer(state)).toBe(ALICE);
 	});
 });
 

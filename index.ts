@@ -167,15 +167,6 @@ export function activePlayer(state: ReadonlyGameState): PlayerId | null {
 	return progress.kind === "inTurn" ? progress.turn.player : null;
 }
 
-/**
- * The player APNAP order starts from. That is the active player, except when a
- * priority window is opened outside any turn — only direct engine entry points
- * (tests and tooling) can do that, and there P0 stands in for AP.
- */
-function apnapAnchor(state: ReadonlyGameState): PlayerId {
-	return activePlayer(state) ?? (0 as PlayerId);
-}
-
 export function isTurnStep(state: GameState, step: StepKind): boolean {
 	const location = turnLocation(state);
 	return location?.kind === "step" && location.step.kind === step;
@@ -4771,6 +4762,7 @@ function executeIn(
 function putPendingTriggersOnStack(
 	state: GameState,
 	choices: AnyChoiceController,
+	active: PlayerId,
 ): void {
 	if (currentStepKind(state) === "untap") {
 		/**
@@ -4784,7 +4776,6 @@ function putPendingTriggersOnStack(
 		 */
 		return;
 	}
-	const active = apnapAnchor(state);
 	const nonactivePlayer = (1 - active) as PlayerId;
 	const ordered: PendingTrigger[] = [];
 	for (const controller of [active, nonactivePlayer] as const) {
@@ -5088,8 +5079,12 @@ function settlePriorityIn(
 	state: GameState,
 	choices: AnyChoiceController,
 ): void {
+	// Priority, and the APNAP order triggers follow onto the stack, are both
+	// defined relative to the active player. Neither exists outside a turn.
+	const active = activePlayer(state);
+	assertDefined(active, "no player receives priority outside a turn");
 	let lastWasPass = false;
-	let priority: 0 | 1 = apnapAnchor(state);
+	let priority: 0 | 1 = active;
 
 	// Runaway guard, not a rules limit. Each resolution costs a full priority
 	// round (both players pass again per CR 117.3b), so this must be at least
@@ -5098,7 +5093,7 @@ function settlePriorityIn(
 		checkStateBasedActionsIn(state, choices);
 		if (gameOver(state)) return;
 
-		putPendingTriggersOnStack(state, choices);
+		putPendingTriggersOnStack(state, choices, active);
 		// players only get priority in the untap & cleanup steps
 		// if something goes on the stack.
 		const step = currentStepKind(state);
@@ -5140,7 +5135,7 @@ function settlePriorityIn(
 			// CR 117.3b. The active player receives priority after a resolution,
 			// which re-opens the round: step 4's "goto 1" above.
 			lastWasPass = false;
-			priority = apnapAnchor(state);
+			priority = active;
 		} else {
 			lastWasPass = true;
 			priority = priority === 0 ? 1 : 0;

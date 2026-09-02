@@ -29,6 +29,7 @@ import {
 	view,
 	winner,
 } from "./index.ts";
+import { beginFirstTurn, passingAgents } from "./test/engine-helpers.ts";
 
 const P1 = 0 as PlayerId;
 const P2 = 1 as PlayerId;
@@ -734,6 +735,11 @@ describe("triggered abilities", () => {
 
 	test("puts active-player triggers below nonactive-player triggers", () => {
 		const state = newGame();
+		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		// APNAP is meaningless without an active player, so run a real turn.
+		beginFirstTurn(state, agents);
+		expect(activePlayer(state)).toBe(P1);
+
 		const activeSource = spawnPermanent(
 			state,
 			"grizzly-bears",
@@ -746,13 +752,11 @@ describe("triggered abilities", () => {
 			P2,
 			"battlefield",
 		);
-		// No turn is in progress, so APNAP anchors on P1 (player 0) by fallback.
-		expect(activePlayer(state)).toBe(null);
 
 		// Deliberately enqueue in the opposite order from APNAP placement.
 		queueTestTrigger(state, nonactiveSource.id, P2, "nonactive trigger");
 		queueTestTrigger(state, activeSource.id, P1, "active trigger");
-		settlePriority(state, [new ScriptedAgent(), new ScriptedAgent()]);
+		settlePriority(state, agents);
 
 		expect(state.log.filter((line) => line.includes("[stack]"))).toEqual([
 			"  [stack] active trigger",
@@ -766,6 +770,7 @@ describe("triggered abilities", () => {
 
 	test("records and replays a controller's chosen trigger order", () => {
 		const checkpoint = newGame();
+		beginFirstTurn(checkpoint, passingAgents());
 		const first = spawnPermanent(
 			checkpoint,
 			"grizzly-bears",
@@ -821,6 +826,7 @@ describe("triggered abilities", () => {
 	test("Clone queues and resolves a copied ETB trigger from its characteristics", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
 		spawnPermanent(state, "arashin-cleric", P1, "battlefield");
 		const clone = spawnCard(state, "clone", P1, "hand");
 
@@ -853,6 +859,7 @@ describe("triggered abilities", () => {
 	test("Arashin Cleric queues its ETB trigger and gains life on resolution", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
 		const cleric = spawnCard(state, "arashin-cleric", P1, "hand");
 
 		perform(
@@ -882,6 +889,7 @@ describe("triggered abilities", () => {
 	test("Ajani's Mantra triggers only on its controller's upkeep", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
 		spawnPermanent(state, "ajanis-mantra", P1, "battlefield");
 
 		perform(state, { kind: "begin step", player: P2, step: "upkeep" }, agents);
@@ -899,6 +907,7 @@ describe("triggered abilities", () => {
 			new ScriptedAgent([], [false]),
 			new ScriptedAgent(),
 		];
+		beginFirstTurn(state, agents);
 		spawnPermanent(state, "ajanis-mantra", P1, "battlefield");
 		perform(state, { kind: "begin step", player: P1, step: "upkeep" }, agents);
 		settlePriority(state, agents);
@@ -908,6 +917,7 @@ describe("triggered abilities", () => {
 	test("a trigger resolves after its source leaves", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
 		const cleric = spawnCard(state, "arashin-cleric", P1, "hand");
 		const result = perform(
 			state,

@@ -18,6 +18,7 @@ import {
 	spawnPermanent,
 	turnLocation,
 } from "./index.ts";
+import { beginFirstTurn } from "./test/engine-helpers.ts";
 
 const ALICE = 0 as PlayerId;
 const BOB = 1 as PlayerId;
@@ -115,6 +116,9 @@ const passingAgents: [ScriptedAgent, ScriptedAgent] = [
 describe("tap and untap occurrences", () => {
 	test("single-object events occur and trigger only for actual transitions", () => {
 		const state = newGame();
+		// The trigger reaches the stack through a priority window, which only
+		// exists inside a turn.
+		beginFirstTurn(state, passingAgents);
 		const observer = spawnPermanent(state, TAP_OBSERVER, ALICE, "battlefield");
 
 		const tap = perform(
@@ -222,13 +226,14 @@ describe("tap and untap occurrences", () => {
 
 	test("the nonactive affected player orders replacements for their bulk event", () => {
 		const state = newGame();
+		beginFirstTurn(state, passingAgents);
 		spawnPermanent(state, "test-bulk-tap-replacement-a", ALICE, "battlefield");
 		spawnPermanent(state, "test-bulk-tap-replacement-b", ALICE, "battlefield");
 		spawnPermanent(state, "grizzly-bears", BOB, "battlefield");
 		const requests: ChoiceRequest[] = [];
 		const unexpected: SyncAgent = {
 			choose: () => {
-				throw new Error("only the affected player may order this replacement");
+				throw new Error("the active player must not order this replacement");
 			},
 		};
 		const affected: SyncAgent = {
@@ -245,9 +250,7 @@ describe("tap and untap occurrences", () => {
 			affected,
 		]);
 
-		// No turn has begun, so there is no active player here; ALICE is simply
-		// not the player the bulk event affects.
-		expect(activePlayer(state)).toBe(null);
+		expect(activePlayer(state)).toBe(ALICE);
 		expect(requests).toHaveLength(1);
 		expect(requests[0]).toMatchObject({ kind: "replacement", player: BOB });
 	});
