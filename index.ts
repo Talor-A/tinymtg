@@ -493,9 +493,9 @@ interface BeginPhaseEvent extends EventCommon {
 
 interface BeginStepEvent extends EventCommon {
 	kind: "begin step";
-	turnId?: TurnId;
-	phaseId?: PhaseId;
-	stepId?: StepId;
+	turnId: TurnId;
+	phaseId: PhaseId;
+	stepId: StepId;
 	player: PlayerId;
 	step: StepKind;
 }

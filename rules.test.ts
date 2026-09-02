@@ -29,7 +29,11 @@ import {
 	view,
 	winner,
 } from "./index.ts";
-import { beginFirstTurn, passingAgents } from "./test/engine-helpers.ts";
+import {
+	advanceUntil,
+	beginFirstTurn,
+	passingAgents,
+} from "./test/engine-helpers.ts";
 
 const P1 = 0 as PlayerId;
 const P2 = 1 as PlayerId;
@@ -886,19 +890,30 @@ describe("triggered abilities", () => {
 		expect(state.stack).toHaveLength(0);
 	});
 
+	/** Enough library for both players to survive the turns a test advances. */
+	function stockLibraries(state: GameState): void {
+		for (const player of [P1, P2]) {
+			for (let i = 0; i < 3; i++) spawnCard(state, "forest", player, "library");
+		}
+	}
+
+	function atUpkeepOf(state: GameState, player: PlayerId): boolean {
+		return isTurnStep(state, "upkeep") && activePlayer(state) === player;
+	}
+
 	test("Ajani's Mantra triggers only on its controller's upkeep", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		beginFirstTurn(state, agents);
 		spawnPermanent(state, "ajanis-mantra", P1, "battlefield");
+		stockLibraries(state);
 
-		perform(state, { kind: "begin step", player: P2, step: "upkeep" }, agents);
+		// The scheduler emits the upkeep itself: no hand-built begin-step event.
+		advanceUntil(state, agents, (next) => atUpkeepOf(next, P1));
+		expect(state.players[P1].life, "gains life on its own upkeep").toBe(21);
+
+		advanceUntil(state, agents, (next) => atUpkeepOf(next, P2));
+		expect(state.players[P1].life, "opponent's upkeep does nothing").toBe(21);
 		expect(state.pendingTriggers).toHaveLength(0);
-
-		perform(state, { kind: "begin step", player: P1, step: "upkeep" }, agents);
-		expect(state.pendingTriggers).toHaveLength(1);
-		settlePriority(state, agents);
-		expect(state.players[P1].life).toBe(21);
 	});
 
 	test("Ajani's Mantra's controller may decline", () => {
@@ -907,10 +922,11 @@ describe("triggered abilities", () => {
 			new ScriptedAgent([], [false]),
 			new ScriptedAgent(),
 		];
-		beginFirstTurn(state, agents);
 		spawnPermanent(state, "ajanis-mantra", P1, "battlefield");
-		perform(state, { kind: "begin step", player: P1, step: "upkeep" }, agents);
-		settlePriority(state, agents);
+		stockLibraries(state);
+
+		advanceUntil(state, agents, (next) => atUpkeepOf(next, P1));
+
 		expect(state.players[P1].life).toBe(20);
 	});
 
