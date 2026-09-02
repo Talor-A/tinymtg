@@ -11,6 +11,7 @@ import type {
 import {
 	activePlayer,
 	addFloating,
+	affectedPlayer,
 	advance,
 	ChoiceController,
 	checkStateBasedActions,
@@ -718,6 +719,51 @@ describe("effects that change how players win or lose", () => {
 		expect(state.players[P1].won, "P1 did not win").toBe(false);
 		expect(gameOver(state), "game is over").toBe(true);
 		expect(winner(state), "P2 wins by default").toBe(P2);
+	});
+});
+
+describe("choosing who applies a replacement effect", () => {
+	test("a permanent's controller chooses, not its owner", () => {
+		const state = newGame();
+		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		permanent(state, bears.id).controller = P2;
+
+		expect(
+			affectedPlayer(state, {
+				kind: "destroy",
+				object: bears.id,
+				noRegen: true,
+			}),
+		).toBe(P2);
+	});
+
+	test("an object with no controller falls back to its owner", () => {
+		const state = newGame();
+		const card = spawnCard(state, "grizzly-bears", P2, "graveyard");
+
+		expect(
+			affectedPlayer(state, {
+				kind: "add counters",
+				target: { type: "permanent", id: card.id },
+				counter: "+1/+1",
+				amount: 1,
+			}),
+		).toBe(P2);
+	});
+
+	test("an event naming no object has no chooser at all", () => {
+		const state = newGame();
+		const missing = 9999 as ObjectId;
+
+		// Answering P0 here would hand a real choice to a player the event
+		// never affected.
+		expect(() =>
+			affectedPlayer(state, {
+				kind: "destroy",
+				object: missing,
+				noRegen: true,
+			}),
+		).toThrow("no object 9999 to choose a replacement for");
 	});
 });
 

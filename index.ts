@@ -3166,6 +3166,23 @@ export function collectReplacements(
  * ------------------------------------------------------------------ */
 
 /**
+ * CR 616.1's chooser for an affected object: its controller, or its owner if it
+ * has none (a card in a graveyard, library or hand).
+ *
+ * An id that names no object has no chooser at all, so callers must not reach
+ * here with one. Silently answering P0 would hand a real choice to a player the
+ * event never affected.
+ */
+function affectedObjectPlayer(
+	state: ReadonlyGameState,
+	id: ObjectId,
+): PlayerId {
+	const object = maybeObject(state, id);
+	assertDefined(object, `no object ${id} to choose a replacement for`);
+	return controllerOf(object) ?? object.owner;
+}
+
+/**
  * "The affected object's controller (or its owner if it has no controller) or the
  * affected player chooses one to apply."
  */
@@ -3190,26 +3207,25 @@ export function affectedPlayer(
 		case "damage":
 			return ev.target.type === "player"
 				? ev.target.player
-				: (maybePermanent(state, ev.target.id)?.controller ??
-						ev.sourceController);
+				: affectedObjectPlayer(state, ev.target.id);
 
 		case "destroy":
 		case "regenerate":
-			return maybePermanent(state, ev.object)?.controller ?? 0;
+			return affectedObjectPlayer(state, ev.object);
 		case "tap":
 		case "untap":
 			if (ev.ref.kind === "all") return ev.ref.player;
-			return maybePermanent(state, ev.ref.object)?.controller ?? 0;
+			return affectedObjectPlayer(state, ev.ref.object);
 
 		case "add counters":
 			return ev.target.type === "player"
 				? ev.target.player
-				: (maybePermanent(state, ev.target.id)?.controller ?? 0);
+				: affectedObjectPlayer(state, ev.target.id);
 
 		case "remove counters":
 			return ev.target.type === "player"
 				? ev.target.player
-				: (maybePermanent(state, ev.target.id)?.controller ?? 0);
+				: affectedObjectPlayer(state, ev.target.id);
 
 		case "create token":
 			return ev.controller;
