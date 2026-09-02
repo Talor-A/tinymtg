@@ -12,6 +12,7 @@ import type {
 	ReadonlyGameState,
 } from "./index.ts";
 import {
+	cloneCharacteristics,
 	etbPreview,
 	maybeObject,
 	maybePermanent,
@@ -610,7 +611,7 @@ export const CLONE = registerCard({
 				ev.kind === "change zone" &&
 				ev.to === "battlefield" &&
 				ev.object === ctx.self?.id &&
-				ev.copyEffect === undefined &&
+				ev.copiableOverride === undefined &&
 				pickCloneTarget(ctx.read) !== null,
 			replace(ev, ctx) {
 				if (ev.kind !== "change zone") return [ev];
@@ -618,7 +619,9 @@ export const CLONE = registerCard({
 				// The copiable values carry the copied object's ability references,
 				// which is the whole of what Clone acquires. No card identity comes
 				// along: the Clone stays physically a Clone.
-				return target ? [{ ...ev, copyEffect: structuredClone(target) }] : [ev];
+				return target
+					? [{ ...ev, copiableOverride: cloneCharacteristics(target) }]
+					: [ev];
 			},
 		},
 	],

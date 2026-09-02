@@ -10,6 +10,7 @@ import type {
 } from "./index.ts";
 import {
 	advanceWithReplay,
+	cloneCharacteristics,
 	createReadContext,
 	newGame,
 	perform,
@@ -113,12 +114,12 @@ registerCard({
 				ev.kind === "change zone" &&
 				ev.to === "battlefield" &&
 				ev.object === ctx.self?.id &&
-				ev.copyEffect === undefined &&
+				ev.copiableOverride === undefined &&
 				firstCreature(ctx.read) !== null,
 			replace(ev, ctx) {
 				const target = firstCreature(ctx.read);
 				return ev.kind === "change zone" && target
-					? [{ ...ev, copyEffect: structuredClone(target) }]
+					? [{ ...ev, copiableOverride: cloneCharacteristics(target) }]
 					: [ev];
 			},
 		},

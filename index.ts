@@ -410,7 +410,7 @@ interface ZoneChangeEvent extends EventCommon {
 	 * all the rest of the event needs: nothing has to look up "which card was
 	 * this a copy of" to find the copied abilities' implementations.
 	 */
-	copyEffect?: CharacteristicsSnapshot;
+	copiableOverride?: CharacteristicsSnapshot;
 	toBottom?: boolean;
 }
 
@@ -902,7 +902,7 @@ function baseCharacteristics(
 				: printedCharacteristics(card(object.representation.cardId));
 
 		case "permanent":
-			if (object.copyEffect) return object.copyEffect;
+			if (object.copiableOverride) return object.copiableOverride;
 			return object.representation.kind === "token"
 				? object.representation.createdValues
 				: printedCharacteristics(card(object.representation.cardId));
@@ -921,7 +921,7 @@ function initialCharacteristics(
 	return cloneCharacteristics(baseCharacteristics(object));
 }
 
-function cloneCharacteristics(
+export function cloneCharacteristics(
 	values: DeepReadOnly<CharacteristicsSnapshot>,
 ): CharacteristicsSnapshot {
 	const base = {
@@ -1291,8 +1291,8 @@ export interface PermanentObject extends ObjectBase {
 				createdValues: CharacteristicsSnapshot;
 		  };
 
-	/** Layer-1 copy effect, if one currently defines its copiable values. */
-	copyEffect?: CharacteristicsSnapshot;
+	/** Owned layer-1 override captured by a copy effect. */
+	copiableOverride?: CharacteristicsSnapshot;
 
 	tapped: boolean;
 	counters: CounterBag;
@@ -2216,11 +2216,6 @@ export function physicalCardId(
 	}
 }
 
-/** @deprecated Use {@link physicalCardId}. */
-export function cardIdOf(object: DeepReadOnly<GameObject>): string | null {
-	return physicalCardId(object);
-}
-
 export function controllerOf(
 	object: DeepReadOnly<GameObject>,
 ): PlayerId | null {
@@ -2533,7 +2528,7 @@ export function etbPreview(
 		toController: ev.toController,
 		tapped: ev.entersTapped,
 		counters: ev.entersWithCounters,
-		copyEffect: ev.copyEffect,
+		copiableOverride: ev.copiableOverride,
 	});
 	const id = preview.battlefield[preview.battlefield.length - 1];
 	assertDefined(id);
@@ -2575,6 +2570,23 @@ export function readObject(read: ReadContext, id: ObjectId): ObjectSnapshot {
 	const snapshot = read.view.objects.get(id);
 	if (!snapshot) throw new Error(`no derived view for object ${id}`);
 	return snapshot;
+}
+
+/**
+ * Fully evaluated characteristics for an object in this read window.
+ *
+ * This is intentionally distinct from `snapshot.copiableValues`: callers
+ * making a copy must capture the latter so later-layer effects and counters do
+ * not leak into the copy.
+ */
+export function effectiveCharacteristics(
+	read: ReadContext,
+	object: DeepReadOnly<GameObject>,
+): DeepReadOnly<CharacteristicsSnapshot> {
+	const snapshot = readObject(read, object.id);
+	if (snapshot.kind === "ability")
+		throw new Error("ability snapshots have no characteristics");
+	return snapshot.currentCharacteristics;
 }
 
 export interface PermanentView {
@@ -2828,8 +2840,8 @@ function incomingReplacementRefs(
 	object: DeepReadOnly<GameObject>,
 	ev: ZoneChangeEvent,
 ): readonly ReplacementAbilityId[] {
-	return ev.copyEffect
-		? ev.copyEffect.abilities.replacement
+	return ev.copiableOverride
+		? ev.copiableOverride.abilities.replacement
 		: abilityReferencesOf(view, object).replacement;
 }
 
@@ -2885,7 +2897,8 @@ export function collectReplacements(
 		// ETB replacement written with the ordinary battlefield default works
 		// whether the object gets there on its own or as a copy.
 		if (o) {
-			const displayName = ev.copyEffect?.name ?? viewName(view, state, o.id);
+			const displayName =
+				ev.copiableOverride?.name ?? viewName(view, state, o.id);
 			for (const abilityId of incomingReplacementRefs(view, o, ev)) {
 				const def = resolveReplacementAbility(abilityId);
 				if (!functionsHere(def.functionsIn, "battlefield")) continue;
@@ -3219,7 +3232,7 @@ function moveObject(
 		toController: PlayerId;
 		tapped?: boolean;
 		counters?: CounterBag;
-		copyEffect?: CharacteristicsSnapshot;
+		copiableOverride?: CharacteristicsSnapshot;
 		toBottom?: boolean;
 	},
 ): ObjectId {
@@ -3263,8 +3276,10 @@ function moveObject(
 						createdValues: tokenValues,
 					}
 				: { kind: "card", cardId: printedId! },
-			...(opts.copyEffect
-				? { copyEffect: cloneCharacteristics(opts.copyEffect) }
+			...(opts.copiableOverride
+				? {
+						copiableOverride: cloneCharacteristics(opts.copiableOverride),
+					}
 				: {}),
 			tapped: opts.tapped ?? false,
 			counters: { ...opts.counters },
@@ -3347,7 +3362,9 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 			const extras = [
 				ev.entersTapped ? "tapped" : "",
 				ev.entersWithCounters ? JSON.stringify(ev.entersWithCounters) : "",
-				ev.copyEffect ? `copyOf=${ev.copyEffect.name}` : "",
+				ev.copiableOverride
+					? `copiableOverride=${ev.copiableOverride.name}`
+					: "",
 			]
 				.filter(Boolean)
 				.join(" ");
@@ -4174,7 +4191,7 @@ function executeIn(
 				toController: ev.toController,
 				tapped: ev.entersTapped,
 				counters: ev.entersWithCounters,
-				copyEffect: ev.copyEffect,
+				copiableOverride: ev.copiableOverride,
 				toBottom: ev.toBottom,
 			});
 			created.push(newId);

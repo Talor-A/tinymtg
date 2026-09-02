@@ -7,9 +7,11 @@ import {
 	buildGameView,
 	type CharacteristicsSnapshot,
 	createReadContext,
+	effectiveCharacteristics,
 	newGame,
 	type PlayerId,
 	perform,
+	permanent,
 	physicalCardId,
 	prohibitionAbilityId,
 	readObject,
@@ -91,6 +93,27 @@ const COMMUNAL_INSTRUCTION = registerCard({
 	// Definitions only: the instruction itself has no activated or triggered
 	// ability, just the static that grants them away.
 	printed: { activated: [], triggered: [] },
+});
+
+const LAYER_ONE_SOURCE = registerCard({
+	id: "test-layer-one-snapshot-source",
+	name: "Layer-One Snapshot Source",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	statics: [
+		{
+			layer: "1a-copiable-values",
+			text: "Grizzly Bears is named Layer-One Grizzly Bears.",
+			applies: (v, _state, source) =>
+				source.kind === "permanent" &&
+				source.zone === "battlefield" &&
+				v.cardId === "grizzly-bears",
+			modify: (v) => {
+				v.name = "Layer-One Grizzly Bears";
+			},
+		},
+	],
 });
 
 describe("derived game views", () => {
@@ -218,7 +241,8 @@ describe("derived game views", () => {
 		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield", {
 			counters: { "+1/+1": 1 },
 		});
-		const snapshot = readObject(createReadContext(state), bears.id);
+		const read = createReadContext(state);
+		const snapshot = readObject(read, bears.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
 		expect(snapshot.copiableValues).toMatchObject({
@@ -231,6 +255,83 @@ describe("derived game views", () => {
 			power: 3,
 			toughness: 3,
 		});
+		expect(effectiveCharacteristics(read, bears)).toMatchObject({
+			kind: "creature",
+			power: 3,
+			toughness: 3,
+		});
+	});
+
+	test("Clone retains a layer-1 snapshot after the source effect leaves", () => {
+		const state = newGame();
+		const target = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const source = spawnPermanent(
+			state,
+			LAYER_ONE_SOURCE.id,
+			P1,
+			"battlefield",
+		);
+
+		const beforeCopy = createReadContext(state);
+		const modifiedTarget = readObject(beforeCopy, target.id);
+		if (modifiedTarget.kind !== "permanent")
+			throw new Error("expected a permanent");
+		expect(modifiedTarget.copiableValues.name).toBe("Layer-One Grizzly Bears");
+		expect(modifiedTarget.currentCharacteristics.name).toBe(
+			"Layer-One Grizzly Bears",
+		);
+		const captured = structuredClone(modifiedTarget.copiableValues);
+
+		const clone = spawnCard(state, "clone", P1, "hand");
+		const entered = perform(
+			state,
+			{
+				kind: "change zone",
+				object: clone.id,
+				from: "hand",
+				to: "battlefield",
+				cause: "resolve",
+				toController: P1,
+			},
+			agents,
+		).created[0];
+		if (entered === undefined) throw new Error("Clone did not enter");
+		expect(permanent(state, entered).copiableOverride).toEqual(captured);
+		expect(physicalCardId(permanent(state, entered))).toBe("clone");
+
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: source.id,
+				from: "battlefield",
+				to: "graveyard",
+				cause: "effect",
+				toController: P1,
+			},
+			agents,
+		);
+
+		const afterSourceLeaves = createReadContext(state);
+		const revertedTarget = readObject(afterSourceLeaves, target.id);
+		const retainedCopy = readObject(afterSourceLeaves, entered);
+		if (
+			revertedTarget.kind !== "permanent" ||
+			retainedCopy.kind !== "permanent"
+		)
+			throw new Error("expected permanents");
+		expect(revertedTarget.copiableValues.name).toBe("Grizzly Bears");
+		expect(revertedTarget.currentCharacteristics.name).toBe("Grizzly Bears");
+		expect(retainedCopy.copiableValues).toEqual(captured);
+		expect(retainedCopy.currentCharacteristics.name).toBe(
+			"Layer-One Grizzly Bears",
+		);
+
+		const roundTripped = structuredClone(state);
+		const replaySnapshot = readObject(createReadContext(roundTripped), entered);
+		if (replaySnapshot.kind !== "permanent")
+			throw new Error("expected a permanent");
+		expect(replaySnapshot.copiableValues).toEqual(captured);
 	});
 
 	test("a successful mutation makes an existing ReadContext stale", () => {
