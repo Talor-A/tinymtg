@@ -28,7 +28,8 @@ export {
 import { assert, assertDefined, assertNever } from "./lib/assert";
 
 /** helper type to prevent accidentally assigning one type of ID to another */
-type Brand<T, K extends string> = T & { readonly __brand: K };
+declare const BRAND: unique symbol;
+type Brand<T, K extends string> = T & { readonly [BRAND]: K };
 
 /* ------------------------------------------------------------------ *
  * Game Concepts
@@ -66,9 +67,9 @@ export type CardType =
 /* ------------------------------------------------------------------ *
  * Turns
  * ------------------------------------------------------------------ */
-type TurnId = Brand<number, "TurnId">;
-type PhaseId = Brand<number, "PhaseId">;
-type StepId = Brand<number, "StepId">;
+export type TurnId = Brand<number, "TurnId">;
+export type PhaseId = Brand<number, "PhaseId">;
+export type StepId = Brand<number, "StepId">;
 
 type PhaseKind = "beginning" | "main" | "combat" | "ending";
 export type MainPhaseRole = "precombat" | "postcombat";
@@ -553,29 +554,19 @@ export const ABILITY_CATEGORIES = [
 export type AbilityCategory = (typeof ABILITY_CATEGORIES)[number];
 
 /** Serializable `cardId:index` registry reference to a static ability. */
-export type StaticAbilityId = string & {
-	readonly __staticAbilityId: unique symbol;
-};
+export type StaticAbilityId = Brand<string, "StaticAbilityId">;
 
 /** Serializable `cardId:index` registry reference to an activated ability. */
-export type ActivatedAbilityId = string & {
-	readonly __activatedAbilityId: unique symbol;
-};
+export type ActivatedAbilityId = Brand<string, "ActivatedAbilityId">;
 
 /** Serializable `cardId:index` registry reference to a triggered ability. */
-export type TriggeredAbilityId = string & {
-	readonly __triggeredAbilityId: unique symbol;
-};
+export type TriggeredAbilityId = Brand<string, "TriggeredAbilityId">;
 
 /** Serializable `cardId:index` registry reference to a replacement effect. */
-export type ReplacementAbilityId = string & {
-	readonly __replacementAbilityId: unique symbol;
-};
+export type ReplacementAbilityId = Brand<string, "ReplacementAbilityId">;
 
 /** Serializable `cardId:index` registry reference to a prohibition effect. */
-export type ProhibitionAbilityId = string & {
-	readonly __prohibitionAbilityId: unique symbol;
-};
+export type ProhibitionAbilityId = Brand<string, "ProhibitionAbilityId">;
 
 function abilityRef(
 	cardId: string,
@@ -1164,7 +1155,7 @@ function buildFilteredGameView(
  *
  */
 
-type EffectId = string & { readonly __effect: unique symbol };
+type EffectId = Brand<string, "EffectId">;
 
 function eid(id: string): EffectId {
 	return id as EffectId;
