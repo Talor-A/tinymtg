@@ -928,3 +928,59 @@ describe("granted replacements and prohibitions resolve through references", () 
 		expect(state.battlefield).not.toContain(bears.id);
 	});
 });
+
+/**
+ * The case that forces `functionsFrom` and `affects` apart: an anthem whose
+ * source sits in the graveyard and whose subjects are on the battlefield.
+ * While one field answered both questions, the candidate set was derived from
+ * the source's zone, so this card could only ever have modified other cards in
+ * the graveyard — i.e. it silently did nothing.
+ *
+ * TODO: replace this invented card with a real one once the engine supports
+ * them. Anger ("as long as Anger is in your graveyard and you control a
+ * Mountain, creatures you control have haste") is the canonical printing.
+ * Forge encodes the same split we do: its `EffectZone$ Graveyard` is our
+ * `functionsFrom`, and its `Affected$ Creature.YouCtrl` is our `affects`.
+ */
+const GRAVEYARD_ANTHEM = registerCard({
+	id: "test-graveyard-anthem",
+	name: "Graveyard Anthem",
+	types: ["enchantment"],
+	colors: ["b"],
+	manaCost: "zero",
+	statics: [
+		{
+			layer: "7c-modify-power-toughness",
+			text: "While this is in your graveyard, creatures you control get +1/+1.",
+			functionsFrom: ["graveyard"],
+			affects: ["battlefield"],
+			applies: (v, _state, source) =>
+				v.types.includes("creature") && v.controller === source.owner,
+			modify: (v) => {
+				if (v.kind !== "creature") return;
+				v.power += 1;
+				v.toughness += 1;
+			},
+		},
+	],
+});
+
+describe("functionsFrom and affects are separate questions", () => {
+	test("an anthem functions from the graveyard and affects the battlefield", () => {
+		const state = newGame();
+		const bear = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		expect(view(state, bear.id).power).toBe(2);
+
+		spawnCard(state, GRAVEYARD_ANTHEM.id, P1, "graveyard");
+		expect(view(state, bear.id).power).toBe(3);
+		expect(view(state, bear.id).toughness).toBe(3);
+	});
+
+	test("the same anthem does nothing from the battlefield", () => {
+		const state = newGame();
+		const bear = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		spawnPermanent(state, GRAVEYARD_ANTHEM.id, P1, "battlefield");
+		expect(view(state, bear.id).power).toBe(2);
+		expect(view(state, bear.id).toughness).toBe(2);
+	});
+});

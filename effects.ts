@@ -14,7 +14,7 @@ const gatherSpecimens: EffectFactory = (params) => {
 	return {
 		label: `gather:${you}`,
 		layer: "control",
-		functionsIn: "any",
+		functionsFrom: "any",
 		text: "If a creature would enter the battlefield under an opponent's control this turn, it enters under your control instead.",
 		applies(ev, ctx) {
 			if (ev.kind !== "change zone" || ev.to !== "battlefield") return false;
@@ -39,7 +39,7 @@ const preventNextDamage: EffectFactory = (params) => {
 		text: `Prevent the next ${n} damage that would be dealt to ${
 			target.type === "player" ? `P${target.player}` : `#${target.id}`
 		} this turn.`,
-		functionsIn: "any",
+		functionsFrom: "any",
 		applies(ev, ctx) {
 			if (ev.kind !== "damage" || ev.amount <= 0) return false;
 			if ((ctx.data.remaining ?? 0) <= 0) return false;
@@ -69,7 +69,7 @@ const prismaticStrands: EffectFactory = (params): ReplacementDef => {
 		label: `strands:${color}`,
 		layer: "other",
 		isPreventionEffect: true,
-		functionsIn: "any",
+		functionsFrom: "any",
 		text: `Prevent all damage that ${color} sources would deal this turn.`,
 		applies: (ev) => ev.kind === "damage" && ev.sourceColors.includes(color),
 		replace: () => [],
@@ -81,7 +81,7 @@ const regenerationShield: EffectFactory = (params): ReplacementDef => {
 	return {
 		label: `regen:${target}`,
 		layer: "other",
-		functionsIn: "any",
+		functionsFrom: "any",
 		text: `Regeneration shield on #${target}.`,
 		applies: (ev, ctx) =>
 			ev.kind === "destroy" &&

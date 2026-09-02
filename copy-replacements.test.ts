@@ -32,7 +32,7 @@ const agents: [ScriptedAgent, ScriptedAgent] = [
 
 /**
  * An ordinary, hand-written enter-the-battlefield replacement: no
- * `entersTapped` shorthand, no synthesis, and the default `functionsIn` that a
+ * `entersTapped` shorthand, no synthesis, and the default `functionsFrom` that a
  * card author would reach for. It only ever fires on the object it is bound to.
  *
  * `applies` is deliberately permissive about the counters already on the
@@ -108,7 +108,7 @@ registerCard({
 		{
 			label: "entry",
 			layer: "copy",
-			functionsIn: "any",
+			functionsFrom: "any",
 			text: "Test Mimic enters as a copy of a creature on the battlefield.",
 			applies: (ev, ctx) =>
 				ev.kind === "change zone" &&

@@ -112,8 +112,10 @@ function compileTrigger(
 		id: rule.id,
 		text: rule.text,
 		condition,
+		// The IR's `functionsIn` is the engine's `functionsFrom`: the zone the
+		// source must be in. The IR keeps its own spelling as a data format.
 		...(rule.functionsIn[0] !== "battlefield"
-			? { functionsIn: [rule.functionsIn[0]!] }
+			? { functionsFrom: [rule.functionsIn[0]!] }
 			: {}),
 		effects: structuredClone(rule.effects),
 	};

@@ -605,7 +605,7 @@ export const CLONE = registerCard({
 		{
 			label: "clone",
 			layer: "copy",
-			functionsIn: "any",
+			functionsFrom: "any",
 			text: "You may have Clone enter as a copy of any creature on the battlefield.",
 			applies: (ev, ctx) =>
 				ev.kind === "change zone" &&

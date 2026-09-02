@@ -1011,7 +1011,7 @@ function buildFilteredGameView(
 
 		for (const abilityId of initial.abilities.static) {
 			const ability = resolveStaticAbility(abilityId);
-			if (!functionsHere(ability.functionsIn, object.zone)) continue;
+			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
 			let layerAbilities = abilities[ability.layer];
 			if (!layerAbilities) {
 				layerAbilities = [];
@@ -1024,9 +1024,9 @@ function buildFilteredGameView(
 	for (const layer of CONTINUOUS_EFFECT_LAYERS) {
 		for (const [ability, source] of abilities[layer] ?? []) {
 			const zones: readonly Zone[] =
-				ability.functionsIn === "any"
+				ability.affects === "any"
 					? ALL_ZONES
-					: (ability.functionsIn ?? ["battlefield"]);
+					: (ability.affects ?? ["battlefield"]);
 
 			for (const zone of zones) {
 				for (const objectId of zoneList(state, zone, "any")) {
@@ -1463,10 +1463,10 @@ export interface EffectCtx {
 	rc: ReplacementRun;
 }
 
-/** Zones an ability functions in. 'any' == functions from anywhere (CR 113.6). */
-type FunctionsIn = Zone[] | "any";
+/** A set of zones. 'any' == every zone (CR 113.6). */
+type ZoneScope = Zone[] | "any";
 function functionsHere(
-	scopes: FunctionsIn = ["battlefield"],
+	scopes: ZoneScope = ["battlefield"],
 	zone: Zone,
 ): boolean {
 	if (scopes === "any") return true;
@@ -1484,8 +1484,8 @@ export interface ReplacementDef {
 	 * pre-filter applies, based on where the source of the event is located.
 	 * most effects apply on the battlefield.
 	 * @default ['battlefield']. */
-	functionsIn?: FunctionsIn;
-	/** further scope the rule, after applying functionsIn above. */
+	functionsFrom?: ZoneScope;
+	/** further scope the rule, after applying functionsFrom above. */
 	applies(ev: GameEvent, ctx: EffectCtx): boolean;
 	replace(ev: GameEvent, ctx: EffectCtx): GameEvent[];
 	/**
@@ -1552,7 +1552,7 @@ export interface ProhibitionDef {
 	label: string;
 	text: string;
 	/** @default ['battlefield'] */
-	functionsIn?: FunctionsIn;
+	functionsFrom?: ZoneScope;
 	applies(ev: GameEvent, ctx: ProhibitionCtx): boolean;
 }
 
@@ -1713,11 +1713,11 @@ export interface TriggerDef {
 	text: string;
 	condition: TriggerCondition;
 	/**
-	 * Zones in which this trigger can function.
+	 * Zones the source must be in for this trigger to function.
 	 *
 	 * Defaults to `["battlefield"]`.
 	 */
-	functionsIn?: [Zone];
+	functionsFrom?: [Zone];
 	effects: EffectDef[];
 }
 
@@ -1924,7 +1924,7 @@ function printedEntryReplacements(def: CardDefBase): ReplacementDef[] {
 			label: `${def.id}:enters-tapped`,
 			text: `${def.name} enters tapped.`,
 			layer: "other",
-			functionsIn: "any",
+			functionsFrom: "any",
 			applies: (ev, ctx) =>
 				entersSelf(ev, ctx) && ev.kind === "change zone" && !ev.entersTapped,
 			replace: (ev) =>
@@ -1938,7 +1938,7 @@ function printedEntryReplacements(def: CardDefBase): ReplacementDef[] {
 			label: `${def.id}:enters-with`,
 			text: `${def.name} enters with counters.`,
 			layer: "other",
-			functionsIn: "any",
+			functionsFrom: "any",
 			applies: (ev, ctx) =>
 				entersSelf(ev, ctx) &&
 				ev.kind === "change zone" &&
@@ -2458,7 +2458,21 @@ export function name(state: ReadonlyGameState, id: ObjectId): string {
 export interface ContinuousEffect {
 	text: string;
 	layer: ContinuousEffectLayer;
-	functionsIn?: Zone[] | "any";
+	/**
+	 * Where the *source* must be for this effect to exist at all.
+	 *
+	 * @default ['battlefield']
+	 */
+	functionsFrom?: ZoneScope;
+	/**
+	 * Which objects this effect may modify. `applies()` still filters within
+	 * this set; this only bounds which objects are offered to it. Independent of
+	 * `functionsFrom`: a graveyard-sourced anthem functions from the graveyard
+	 * but affects the battlefield.
+	 *
+	 * @default ['battlefield']
+	 */
+	affects?: ZoneScope;
 
 	/** `source` is the concrete object granting the effect. */
 	applies(
@@ -3065,7 +3079,7 @@ export function collectReplacements(
 			const o = maybeObject(state, id);
 			if (!o) continue;
 			for (const { id: abilityId, def } of replacementsOf(view, o)) {
-				if (!functionsHere(def.functionsIn, zone)) continue;
+				if (!functionsHere(def.functionsFrom, zone)) continue;
 				const data: Record<string, number> | undefined =
 					o.effectData[abilityId];
 				assertDefined(data, `effect data was not prepared for ${abilityId}`);
@@ -3090,7 +3104,7 @@ export function collectReplacements(
 			const displayName = ev.copiableOverride?.name ?? viewName(view, o.id);
 			for (const abilityId of incomingReplacementRefs(view, o, ev)) {
 				const def = resolveReplacementAbility(abilityId);
-				if (!functionsHere(def.functionsIn, "battlefield")) continue;
+				if (!functionsHere(def.functionsFrom, "battlefield")) continue;
 				out.push({
 					id: `${o.id}:${abilityId}` as EffectId,
 					def,
@@ -3246,7 +3260,7 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 			),
 		];
 		for (const def of definitions) {
-			if (!functionsHere(def.functionsIn, object.zone)) continue;
+			if (!functionsHere(def.functionsFrom, object.zone)) continue;
 			const controller = controllerOf(object) ?? object.owner;
 			if (
 				!def.applies(ev, { state: read.state, read, self: object, controller })
@@ -4128,8 +4142,8 @@ function detectTriggers(
 		for (const triggerId of snapshot.currentCharacteristics.abilities
 			.triggered) {
 			const trigger = resolveTriggeredAbility(triggerId);
-			const functionsIn = trigger.functionsIn ?? ["battlefield"];
-			if (!functionsIn.includes(abilitySource.zone)) continue;
+			const functionsFrom = trigger.functionsFrom ?? ["battlefield"];
+			if (!functionsFrom.includes(abilitySource.zone)) continue;
 			if (
 				triggerMatches(
 					read,
