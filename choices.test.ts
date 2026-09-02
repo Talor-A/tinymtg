@@ -122,9 +122,9 @@ describe("choice transcripts", () => {
 			},
 		};
 		const state = newGame();
-		spawnPermanent(state, "hardened-scales", 0, "battlefield");
-		spawnPermanent(state, "doubling-season", 0, "battlefield");
-		const creature = spawnPermanent(state, "grizzly-bears", 0, "battlefield");
+		spawnPermanent(state, "hardened-scales", 0);
+		spawnPermanent(state, "doubling-season", 0);
+		const creature = spawnPermanent(state, "grizzly-bears", 0);
 
 		perform(
 			state,
@@ -151,9 +151,9 @@ describe("choice transcripts", () => {
 		});
 		const agent: Agent = { choose: () => pending };
 		const state = newGame();
-		spawnPermanent(state, "hardened-scales", 0, "battlefield");
-		spawnPermanent(state, "doubling-season", 0, "battlefield");
-		const creature = spawnPermanent(state, "grizzly-bears", 0, "battlefield");
+		spawnPermanent(state, "hardened-scales", 0);
+		spawnPermanent(state, "doubling-season", 0);
+		const creature = spawnPermanent(state, "grizzly-bears", 0);
 		const choices = ChoiceController.suspending([agent, agent]);
 
 		let suspension: ChoicePendingError | undefined;
@@ -203,7 +203,7 @@ describe("choice transcripts", () => {
 
 	test("advanceWithReplay completes synchronous agents in one attempt", async () => {
 		const checkpoint = newGame();
-		spawnPermanent(checkpoint, "ajanis-mantra", 0, "battlefield");
+		spawnPermanent(checkpoint, "ajanis-mantra", 0);
 		advance(checkpoint, agents());
 		const snapshot = structuredClone(checkpoint);
 
@@ -222,7 +222,7 @@ describe("choice transcripts", () => {
 
 	test("advanceWithReplay rewinds one transition around an async choice", async () => {
 		const checkpoint = newGame();
-		spawnPermanent(checkpoint, "ajanis-mantra", 0, "battlefield");
+		spawnPermanent(checkpoint, "ajanis-mantra", 0);
 		const setupAgents = agents();
 		advance(checkpoint, setupAgents);
 		const snapshot = structuredClone(checkpoint);
@@ -272,7 +272,7 @@ describe("choice transcripts", () => {
 
 	test("advanceWithReplay propagates async rejection without mutating checkpoint", async () => {
 		const checkpoint = newGame();
-		spawnPermanent(checkpoint, "ajanis-mantra", 0, "battlefield");
+		spawnPermanent(checkpoint, "ajanis-mantra", 0);
 		const setupAgents = agents();
 		advance(checkpoint, setupAgents);
 		const snapshot = structuredClone(checkpoint);
@@ -332,7 +332,7 @@ describe("choice transcripts", () => {
 
 	test("rejects an invalid fulfilled answer without mutating the checkpoint", async () => {
 		const checkpoint = newGame();
-		spawnPermanent(checkpoint, "ajanis-mantra", 0, "battlefield");
+		spawnPermanent(checkpoint, "ajanis-mantra", 0);
 		advance(checkpoint, agents());
 		const snapshot = structuredClone(checkpoint);
 		const invalid: Agent = {
@@ -382,14 +382,9 @@ describe("choice transcripts", () => {
 
 	test("records synchronous choices and replays without agents", () => {
 		const checkpoint = newGame();
-		spawnPermanent(checkpoint, "hardened-scales", 0, "battlefield");
-		spawnPermanent(checkpoint, "doubling-season", 0, "battlefield");
-		const creature = spawnPermanent(
-			checkpoint,
-			"grizzly-bears",
-			0,
-			"battlefield",
-		);
+		spawnPermanent(checkpoint, "hardened-scales", 0);
+		spawnPermanent(checkpoint, "doubling-season", 0);
+		const creature = spawnPermanent(checkpoint, "grizzly-bears", 0);
 		const event = {
 			kind: "add counters" as const,
 			target: { type: "permanent" as const, id: creature.id },
@@ -440,14 +435,9 @@ describe("choice transcripts", () => {
 
 	test("rejects a transcript when the request changes", () => {
 		const checkpoint = newGame();
-		spawnPermanent(checkpoint, "hardened-scales", 0, "battlefield");
-		spawnPermanent(checkpoint, "doubling-season", 0, "battlefield");
-		const creature = spawnPermanent(
-			checkpoint,
-			"grizzly-bears",
-			0,
-			"battlefield",
-		);
+		spawnPermanent(checkpoint, "hardened-scales", 0);
+		spawnPermanent(checkpoint, "doubling-season", 0);
+		const creature = spawnPermanent(checkpoint, "grizzly-bears", 0);
 		const recorder = ChoiceController.record(agents());
 		perform(
 			structuredClone(checkpoint),
@@ -478,9 +468,9 @@ describe("choice transcripts", () => {
 
 describe("chooseAttackers", () => {
 	function eligibleCreatures(state: GameState): [ObjectId, ObjectId, ObjectId] {
-		const a = spawnPermanent(state, "grizzly-bears", 0, "battlefield").id;
-		const b = spawnPermanent(state, "grizzly-bears", 0, "battlefield").id;
-		const c = spawnPermanent(state, "grizzly-bears", 0, "battlefield").id;
+		const a = spawnPermanent(state, "grizzly-bears", 0).id;
+		const b = spawnPermanent(state, "grizzly-bears", 0).id;
+		const c = spawnPermanent(state, "grizzly-bears", 0).id;
 		return [a, b, c];
 	}
 
@@ -641,25 +631,15 @@ describe("chooseBlockers", () => {
 		blockerA: ObjectId;
 		blockerB: ObjectId;
 	} {
-		const attacker = spawnPermanent(
-			state,
-			"grizzly-bears",
-			0,
-			"battlefield",
-		).id;
-		const blockerA = spawnPermanent(
-			state,
-			"grizzly-bears",
-			1,
-			"battlefield",
-		).id;
-		const blockerB = spawnPermanent(state, "eager-cadet", 1, "battlefield").id;
+		const attacker = spawnPermanent(state, "grizzly-bears", 0).id;
+		const blockerA = spawnPermanent(state, "grizzly-bears", 1).id;
+		const blockerB = spawnPermanent(state, "eager-cadet", 1).id;
 		return { attacker, blockerA, blockerB };
 	}
 
 	test("empty attacker list returns [] with no request", () => {
 		const state = newGame();
-		const blocker = spawnPermanent(state, "grizzly-bears", 1, "battlefield").id;
+		const blocker = spawnPermanent(state, "grizzly-bears", 1).id;
 		const recorder = ChoiceController.record(agents());
 		const result = recorder.chooseBlockers(state, 1, [], [blocker]);
 		expect(result).toEqual([]);
@@ -668,12 +648,7 @@ describe("chooseBlockers", () => {
 
 	test("empty eligible blocker list returns [] with no request", () => {
 		const state = newGame();
-		const attacker = spawnPermanent(
-			state,
-			"grizzly-bears",
-			0,
-			"battlefield",
-		).id;
+		const attacker = spawnPermanent(state, "grizzly-bears", 0).id;
 		const recorder = ChoiceController.record(agents());
 		const result = recorder.chooseBlockers(state, 1, [attacker], []);
 		expect(result).toEqual([]);

@@ -213,7 +213,7 @@ function copiableOf(state: GameState, id: ObjectId): CharacteristicsSnapshot {
 describe("copied enter-the-battlefield replacements", () => {
 	test("a copy executes the copied card's own explicit ETB replacement", () => {
 		const state = newGame();
-		spawnPermanent(state, GUARD, P1, "battlefield");
+		spawnPermanent(state, GUARD, P1);
 		const clone = spawnCard(state, "clone", P1, "hand");
 
 		const entered = enter(state, clone.id);
@@ -229,7 +229,7 @@ describe("copied enter-the-battlefield replacements", () => {
 
 	test("the copied replacement is acquired as a reference, not a card lookup", () => {
 		const state = newGame();
-		spawnPermanent(state, GUARD, P1, "battlefield");
+		spawnPermanent(state, GUARD, P1);
 		const clone = spawnCard(state, "clone", P1, "hand");
 		const entered = enter(state, clone.id);
 
@@ -254,7 +254,7 @@ describe("copied enter-the-battlefield replacements", () => {
 
 	test("copied entersTapped and entersWith work with no copied card identity", () => {
 		const tapped = newGame();
-		spawnPermanent(tapped, "test-rusted-sentinel", P1, "battlefield");
+		spawnPermanent(tapped, "test-rusted-sentinel", P1);
 		const sentinelCopy = permanent(
 			tapped,
 			enter(tapped, spawnCard(tapped, "clone", P1, "hand").id),
@@ -267,7 +267,7 @@ describe("copied enter-the-battlefield replacements", () => {
 		});
 
 		const counters = newGame();
-		spawnPermanent(counters, "walking-ballista", P1, "battlefield");
+		spawnPermanent(counters, "walking-ballista", P1);
 		const ballistaCopy = permanent(
 			counters,
 			enter(counters, spawnCard(counters, "clone", P1, "hand").id),
@@ -280,7 +280,7 @@ describe("copied enter-the-battlefield replacements", () => {
 		// CR 616.1c, quoted in the engine: a Rusted Sentinel that enters as a copy
 		// of something else no longer has the ability that taps it.
 		const state = newGame();
-		spawnPermanent(state, "test-plain-bear", P1, "battlefield");
+		spawnPermanent(state, "test-plain-bear", P1);
 		const mimic = spawnCard(state, MIMIC, P1, "hand");
 		const entered = permanent(state, enter(state, mimic.id));
 
@@ -300,7 +300,7 @@ describe("copied enter-the-battlefield replacements", () => {
 		// "entry". Under label-keyed identity the copy would consume the entry
 		// effect's once-per-event slot and the counter would never be placed.
 		const state = newGame();
-		spawnPermanent(state, GUARD, P1, "battlefield");
+		spawnPermanent(state, GUARD, P1);
 		const mimic = spawnCard(state, MIMIC, P1, "hand");
 		const entered = permanent(state, enter(state, mimic.id));
 
@@ -311,7 +311,7 @@ describe("copied enter-the-battlefield replacements", () => {
 
 	test("effect data is keyed by ability reference and not shared between cards", () => {
 		const state = newGame();
-		const guard = spawnPermanent(state, GUARD, P1, "battlefield");
+		const guard = spawnPermanent(state, GUARD, P1);
 		spawnCard(state, MIMIC, P1, "hand");
 		enter(state, spawnCard(state, "clone", P1, "hand").id);
 
@@ -329,7 +329,7 @@ describe("copied enter-the-battlefield replacements", () => {
 describe("copied entry replacements across tokens and copy chains", () => {
 	test("a token copy carries the entry replacement to the next copy", () => {
 		const state = newGame();
-		const guard = spawnPermanent(state, GUARD, P1, "battlefield");
+		const guard = spawnPermanent(state, GUARD, P1);
 		const values = copiableOf(state, guard.id);
 		values.name = "Guard Token";
 		leave(state, guard.id);
@@ -347,7 +347,7 @@ describe("copied entry replacements across tokens and copy chains", () => {
 
 	test("a token that is itself a copy still runs its own entry replacement", () => {
 		const state = newGame();
-		const guard = spawnPermanent(state, GUARD, P1, "battlefield");
+		const guard = spawnPermanent(state, GUARD, P1);
 		const values = copiableOf(state, guard.id);
 		leave(state, guard.id);
 		// Tokens are put onto the battlefield directly rather than through a zone
@@ -358,7 +358,7 @@ describe("copied entry replacements across tokens and copy chains", () => {
 
 	test("copy of a copy keeps the same-event entry behavior", () => {
 		const state = newGame();
-		const guard = spawnPermanent(state, GUARD, P1, "battlefield");
+		const guard = spawnPermanent(state, GUARD, P1);
 		const first = enter(state, spawnCard(state, "clone", P1, "hand").id);
 		expect(permanent(state, first).counters["+1/+1"]).toBe(1);
 
@@ -381,7 +381,7 @@ describe("copied entry replacements across tokens and copy chains", () => {
 describe("physical identity and serialization of copied entry replacements", () => {
 	test("a copied Clone is still a Clone card in the graveyard", () => {
 		const state = newGame();
-		spawnPermanent(state, GUARD, P1, "battlefield");
+		spawnPermanent(state, GUARD, P1);
 		const entered = enter(state, spawnCard(state, "clone", P1, "hand").id);
 		expect(view(state, entered).name).toBe("Entry Guard");
 
@@ -395,7 +395,7 @@ describe("physical identity and serialization of copied entry replacements", () 
 
 	test("state with copied entry replacements is structuredClone and replay safe", async () => {
 		const state = newGame();
-		spawnPermanent(state, GUARD, P1, "battlefield");
+		spawnPermanent(state, GUARD, P1);
 		const entered = enter(state, spawnCard(state, "clone", P1, "hand").id);
 
 		expect(() => structuredClone(state)).not.toThrow();

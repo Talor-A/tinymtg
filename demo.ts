@@ -280,8 +280,8 @@ async function main(): Promise<void> {
 		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
-		spawnPermanent(state, "furnace-of-rath", ALICE, "battlefield");
-		const bear = spawnPermanent(state, "grizzly-bears", ALICE, "battlefield");
+		spawnPermanent(state, "furnace-of-rath", ALICE);
+		const bear = spawnPermanent(state, "grizzly-bears", ALICE);
 
 		const agents: Agents = [
 			new ScriptedAgent([], [], [], [[bear.id]]),
@@ -320,8 +320,8 @@ async function main(): Promise<void> {
 		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
-		const bear = spawnPermanent(state, "grizzly-bears", ALICE, "battlefield");
-		spawnPermanent(state, "palisade-giant", BOB, "battlefield");
+		const bear = spawnPermanent(state, "grizzly-bears", ALICE);
+		spawnPermanent(state, "palisade-giant", BOB);
 
 		const agents: Agents = [
 			new ScriptedAgent([], [], [], [[bear.id]]),
@@ -366,8 +366,8 @@ async function main(): Promise<void> {
 		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
-		spawnPermanent(state, "furnace-of-rath", BOB, "battlefield");
-		const myr = spawnPermanent(state, "darksteel-myr", ALICE, "battlefield");
+		spawnPermanent(state, "furnace-of-rath", BOB);
+		const myr = spawnPermanent(state, "darksteel-myr", ALICE);
 
 		const agents: Agents = [
 			new ScriptedAgent([], [], [], [[myr.id]]),
@@ -396,7 +396,7 @@ async function main(): Promise<void> {
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
 		state.players[ALICE].life = 10;
-		const monk = spawnPermanent(state, "rhox-war-monk", ALICE, "battlefield");
+		const monk = spawnPermanent(state, "rhox-war-monk", ALICE);
 
 		const agents: Agents = [
 			new ScriptedAgent([], [], [], [[monk.id]]),
@@ -430,8 +430,8 @@ async function main(): Promise<void> {
 		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
-		spawnPermanent(state, "kalitas", ALICE, "battlefield");
-		const doomed = spawnPermanent(state, "eager-cadet", BOB, "battlefield");
+		spawnPermanent(state, "kalitas", ALICE);
+		const doomed = spawnPermanent(state, "eager-cadet", BOB);
 		permanent(state, doomed.id).damage = 1; // 1/1 with 1 damage marked = lethal at SBA
 
 		const agents = passing();
@@ -471,13 +471,8 @@ async function main(): Promise<void> {
 		fillLibrary(state, BOB, 40);
 		state.players[ALICE].life = 6;
 		state.players[BOB].life = 6;
-		const aliceBear = spawnPermanent(
-			state,
-			"grizzly-bears",
-			ALICE,
-			"battlefield",
-		);
-		const bobBear = spawnPermanent(state, "grizzly-bears", BOB, "battlefield");
+		const aliceBear = spawnPermanent(state, "grizzly-bears", ALICE);
+		const bobBear = spawnPermanent(state, "grizzly-bears", BOB);
 
 		class SwingingAgent implements SyncAgent {
 			constructor(

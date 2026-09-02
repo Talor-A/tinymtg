@@ -76,7 +76,7 @@ function landAction(card: ObjectId): PriorityAction {
 }
 
 function occupyStack(state: GameState): void {
-	const source = spawnPermanent(state, "ajanis-mantra", ALICE, "battlefield");
+	const source = spawnPermanent(state, "ajanis-mantra", ALICE);
 	state.stack.push({
 		id: state.nextStackItemId++ as StackItemId,
 		kind: "ability",
@@ -166,7 +166,7 @@ describe("playing a land through priority", () => {
 	test("runs ETB replacements and triggers through the existing event pipeline", () => {
 		const state = newGame();
 		seedLibraries(state);
-		spawnPermanent(state, "root-maze", BOB, "battlefield");
+		spawnPermanent(state, "root-maze", BOB);
 		const land = spawnCard(state, "test-etb-land", ALICE, "hand");
 		const agents: Agents = [
 			new ScriptedAgent([], [], [landAction(land.id)]),

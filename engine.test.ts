@@ -19,11 +19,11 @@ import {
 } from "./index.ts";
 import { parseCard } from "./parser.ts";
 import {
-	advanceUntil,
+	type SyncAgents as Agents,
 	ALICE,
+	advanceUntil,
 	BOB,
 	passingAgents,
-	type SyncAgents as Agents,
 } from "./test/engine-helpers.ts";
 
 // TODO: this adds a dependency on card parser,
@@ -63,7 +63,7 @@ function setupAttackTurn(cardId: string): {
 	attacker: ReturnType<typeof spawnPermanent>;
 } {
 	const state = newGame();
-	const attacker = spawnPermanent(state, cardId, ALICE, "battlefield");
+	const attacker = spawnPermanent(state, cardId, ALICE);
 	spawnCard(state, "forest", ALICE, "library");
 	spawnCard(state, "forest", BOB, "library");
 	return { state, attacker };
@@ -153,13 +153,9 @@ describe("playing a normal turn", () => {
 		tappedPermanent: ReturnType<typeof spawnPermanent>;
 	} {
 		const state = newGame();
-		const tappedPermanent = spawnPermanent(
-			state,
-			"grizzly-bears",
-			ALICE,
-			"battlefield",
-			{ tapped: true },
-		);
+		const tappedPermanent = spawnPermanent(state, "grizzly-bears", ALICE, {
+			tapped: true,
+		});
 		addCards(state, ALICE, "hand", 8);
 		addCards(state, ALICE, "library", 1);
 		addCards(state, BOB, "library", 2);
@@ -235,12 +231,7 @@ describe("declaring attackers during normal progression", () => {
 
 		advanceUntil(state, agents, (next) => isAt(next, "main"));
 
-		const attacker = spawnPermanent(
-			state,
-			"grizzly-bears",
-			ALICE,
-			"battlefield",
-		);
+		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
 		// The attacker choice can only be scripted once the creature's id is known,
 		// which is only after it has been spawned into the already-reached main phase.
 		attackerAgent.attackerChoices.push([attacker.id]);
@@ -337,7 +328,7 @@ describe("declaring attackers during normal progression", () => {
 describe("dealing combat damage", () => {
 	test("a blocked attacker damages its blocker instead of the defending player", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB, "battlefield");
+		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
 		const agents = attackAndBlock(attacker.id, [blocker.id]);
 
 		advanceUntil(state, agents, (next) => isAt(next, "declare blockers"));
@@ -359,17 +350,11 @@ describe("dealing combat damage", () => {
 
 	test("multiple blockers all deal damage and receive a legal ordered assignment", () => {
 		const state = newGame();
-		const attacker = spawnPermanent(
-			state,
-			"grizzly-bears",
-			ALICE,
-			"battlefield",
-			{
-				counters: { "+1/+1": 1 },
-			},
-		);
-		const first = spawnPermanent(state, "grizzly-bears", BOB, "battlefield");
-		const second = spawnPermanent(state, "eager-cadet", BOB, "battlefield");
+		const attacker = spawnPermanent(state, "grizzly-bears", ALICE, {
+			counters: { "+1/+1": 1 },
+		});
+		const first = spawnPermanent(state, "grizzly-bears", BOB);
+		const second = spawnPermanent(state, "eager-cadet", BOB);
 		spawnCard(state, "forest", ALICE, "library");
 		spawnCard(state, "forest", BOB, "library");
 		const agents = attackAndBlock(attacker.id, [first.id, second.id]);
@@ -389,7 +374,7 @@ describe("dealing combat damage", () => {
 
 	test("an attacker remains blocked if its blocker regenerates before damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB, "battlefield");
+		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
 		const agents = attackAndBlock(attacker.id, [blocker.id]);
 
 		advanceUntil(state, agents, (next) => isAt(next, "declare blockers"));
@@ -422,19 +407,9 @@ describe("dealing combat damage", () => {
 
 	test("multiple selected attackers deal the sum of their current powers while an unselected creature deals none", () => {
 		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE, "battlefield");
-		const attackingCadet = spawnPermanent(
-			state,
-			"eager-cadet",
-			ALICE,
-			"battlefield",
-		);
-		const benchedCadet = spawnPermanent(
-			state,
-			"eager-cadet",
-			ALICE,
-			"battlefield",
-		);
+		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
+		const attackingCadet = spawnPermanent(state, "eager-cadet", ALICE);
+		const benchedCadet = spawnPermanent(state, "eager-cadet", ALICE);
 		spawnCard(state, "forest", ALICE, "library");
 		spawnCard(state, "forest", BOB, "library");
 		const agents = attackWith([bears.id, attackingCadet.id]);
@@ -448,7 +423,7 @@ describe("dealing combat damage", () => {
 
 	test("current modified power is used: a +1/+1 counter makes Bears deal 3", () => {
 		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE, "battlefield", {
+		const bears = spawnPermanent(state, "grizzly-bears", ALICE, {
 			counters: { "+1/+1": 1 },
 		});
 		spawnCard(state, "forest", ALICE, "library");
@@ -472,7 +447,7 @@ describe("dealing combat damage", () => {
 
 	test("Furnace of Rath doubles combat damage through the normal replacement pipeline", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
-		spawnPermanent(state, "furnace-of-rath", ALICE, "battlefield");
+		spawnPermanent(state, "furnace-of-rath", ALICE);
 		const agents = attackWith([attacker.id]);
 
 		playOneTurn(state, agents);
@@ -554,7 +529,7 @@ describe("abilities encountered during normal progression", () => {
 		agents: Agents;
 	} {
 		const state = newGame();
-		spawnPermanent(state, "ajanis-mantra", ALICE, "battlefield");
+		spawnPermanent(state, "ajanis-mantra", ALICE);
 		spawnCard(state, "forest", ALICE, "library");
 		spawnCard(state, "forest", BOB, "library");
 		return {
@@ -595,7 +570,7 @@ describe("draw steps and game endings", () => {
 
 	test("Necropotence skips only its controller's normal draw", () => {
 		const { state, agents } = setupDrawStep();
-		spawnPermanent(state, "necropotence", ALICE, "battlefield");
+		spawnPermanent(state, "necropotence", ALICE);
 		for (let i = 0; i < 2; i++) {
 			spawnCard(state, "forest", ALICE, "library");
 			spawnCard(state, "forest", BOB, "library");
@@ -623,7 +598,7 @@ describe("draw steps and game endings", () => {
 
 	test("Laboratory Maniac wins when its controller would draw from an empty library", () => {
 		const { state, agents } = setupDrawStep();
-		spawnPermanent(state, "laboratory-maniac", ALICE, "battlefield");
+		spawnPermanent(state, "laboratory-maniac", ALICE);
 
 		advanceUntil(state, agents, gameOver);
 
@@ -637,7 +612,7 @@ describe("draw steps and game endings", () => {
 
 	test("Platinum Angel lets the game continue after an empty-library draw", () => {
 		const { state, agents } = setupDrawStep();
-		spawnPermanent(state, "platinum-angel", ALICE, "battlefield");
+		spawnPermanent(state, "platinum-angel", ALICE);
 
 		advanceUntil(state, agents, (next) => isAt(next, "main"));
 

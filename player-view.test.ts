@@ -103,10 +103,10 @@ describe("player views", () => {
 
 	test("includes both boards and every public zone with derived values", () => {
 		const state = newGame();
-		const mine = spawnPermanent(state, "grizzly-bears", 0, "battlefield", {
+		const mine = spawnPermanent(state, "grizzly-bears", 0, {
 			counters: { "+1/+1": 1 },
 		});
-		const theirs = spawnPermanent(state, "eager-cadet", 1, "battlefield");
+		const theirs = spawnPermanent(state, "eager-cadet", 1);
 		const graveyard = spawnCard(state, "clone", 0, "graveyard");
 		const exile = spawnCard(state, "forest", 1, "exile");
 		const stackId = state.nextStackItemId++ as StackItemId;
@@ -190,7 +190,7 @@ describe("player views", () => {
 			},
 			[new ScriptedAgent(), new ScriptedAgent()],
 		);
-		const source = spawnPermanent(state, "ajanis-mantra", 0, "battlefield");
+		const source = spawnPermanent(state, "ajanis-mantra", 0);
 		state.stack.push({
 			id: state.nextStackItemId++ as StackItemId,
 			kind: "ability",

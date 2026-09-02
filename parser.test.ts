@@ -476,19 +476,9 @@ describe("structured Forge pipeline", () => {
 			compiledStatic,
 		);
 		const game = newGame();
-		spawnPermanent(game, "glorious-anthem", 0, "battlefield");
-		const yourCreature = spawnPermanent(
-			game,
-			"grizzly-bears",
-			0,
-			"battlefield",
-		);
-		const opposingCreature = spawnPermanent(
-			game,
-			"grizzly-bears",
-			1,
-			"battlefield",
-		);
+		spawnPermanent(game, "glorious-anthem", 0);
+		const yourCreature = spawnPermanent(game, "grizzly-bears", 0);
+		const opposingCreature = spawnPermanent(game, "grizzly-bears", 1);
 		const creatureSnapshot = readObject(
 			createReadContext(game),
 			yourCreature.id,

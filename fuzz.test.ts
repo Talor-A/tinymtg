@@ -74,7 +74,7 @@ function startingState(seed: number): GameState {
 
 		const permanentCount = 1 + Math.floor(rng() * 8);
 		for (let i = 0; i < permanentCount; i++) {
-			spawnPermanent(state, pick(rng, PERMANENTS), player, "battlefield");
+			spawnPermanent(state, pick(rng, PERMANENTS), player);
 		}
 	}
 

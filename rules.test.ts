@@ -56,7 +56,7 @@ describe("destroy event success", () => {
 
 	test("ordinary destruction reports both the movement and successful destroy", () => {
 		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 
 		const result = perform(
 			state,
@@ -82,7 +82,7 @@ describe("destroy event success", () => {
 
 	test("regeneration replaces destruction without reporting a destroy", () => {
 		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield", {
+		const bears = spawnPermanent(state, "grizzly-bears", P1, {
 			tapped: false,
 		});
 		permanent(state, bears.id).damage = 2;
@@ -111,8 +111,8 @@ describe("destroy event success", () => {
 
 	test("exile-instead movement executes without reporting a destroy", () => {
 		const state = newGame();
-		spawnPermanent(state, "rest-in-peace", P2, "battlefield");
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		spawnPermanent(state, "rest-in-peace", P2);
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 
 		const result = perform(
 			state,
@@ -144,8 +144,8 @@ describe("replacement effects that add counters as a permanent enters", () => {
 			new ScriptedAgent(preferences),
 			new ScriptedAgent(),
 		];
-		spawnPermanent(state, "hardened-scales", P1, "battlefield");
-		spawnPermanent(state, "doubling-season", P1, "battlefield");
+		spawnPermanent(state, "hardened-scales", P1);
+		spawnPermanent(state, "doubling-season", P1);
 		const ballistaCard = spawnCard(state, "walking-ballista", P1, "hand");
 		const result = perform(
 			state,
@@ -189,9 +189,9 @@ describe("when two effects change where a destroyed creature goes", () => {
 			new ScriptedAgent(),
 			new ScriptedAgent(p1Prefs),
 		];
-		spawnPermanent(state, "kalitas", P1, "battlefield");
-		spawnPermanent(state, "rest-in-peace", P2, "battlefield");
-		const bears = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		spawnPermanent(state, "kalitas", P1);
+		spawnPermanent(state, "rest-in-peace", P2);
+		const bears = spawnPermanent(state, "grizzly-bears", P2);
 		perform(
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
@@ -225,7 +225,7 @@ describe("drawing with Chains of Mephistopheles on the battlefield", () => {
 	test("a player with a card in hand discards before drawing", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "chains-of-mephistopheles", P1, "battlefield");
+		spawnPermanent(state, "chains-of-mephistopheles", P1);
 		spawnCard(state, "forest", P1, "library");
 		spawnCard(state, "forest", P1, "library");
 		spawnCard(state, "grizzly-bears", P1, "hand");
@@ -247,7 +247,7 @@ describe("drawing with Chains of Mephistopheles on the battlefield", () => {
 	test("a player with an empty hand mills instead of drawing", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "chains-of-mephistopheles", P1, "battlefield");
+		spawnPermanent(state, "chains-of-mephistopheles", P1);
 		spawnCard(state, "forest", P1, "library");
 
 		perform(state, { kind: "draw", player: P1 }, agents);
@@ -265,8 +265,8 @@ describe("choosing between damage replacement and prevention effects", () => {
 			new ScriptedAgent(),
 			new ScriptedAgent(preferences),
 		];
-		spawnPermanent(state, "furnace-of-rath", P1, "battlefield");
-		const source = spawnPermanent(state, "eager-cadet", P1, "battlefield");
+		spawnPermanent(state, "furnace-of-rath", P1);
+		const source = spawnPermanent(state, "eager-cadet", P1);
 		addFloating(
 			state,
 			P2,
@@ -311,8 +311,8 @@ describe("choosing between damage replacement and prevention effects", () => {
 			new ScriptedAgent(),
 			new ScriptedAgent(["prevent"]),
 		];
-		spawnPermanent(state, "furnace-of-rath", P1, "battlefield");
-		const pyro = spawnPermanent(state, "eager-cadet", 0, "battlefield");
+		spawnPermanent(state, "furnace-of-rath", P1);
+		const pyro = spawnPermanent(state, "eager-cadet", 0);
 		addFloating(
 			state,
 			P2,
@@ -345,8 +345,8 @@ describe("choosing between damage replacement and prevention effects", () => {
 	test("redirected damage can still be prevented", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		const giant = spawnPermanent(state, "palisade-giant", 1, "battlefield");
-		const pyro = spawnPermanent(state, "eager-cadet", 0, "battlefield");
+		const giant = spawnPermanent(state, "palisade-giant", 1);
+		const pyro = spawnPermanent(state, "eager-cadet", 0);
 		perform(
 			state,
 			{
@@ -397,7 +397,7 @@ describe("indestructible permanents", () => {
 	test("a failed destruction attempt doesn't consume a regeneration shield", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		const myr = spawnPermanent(state, "darksteel-myr", P1, "battlefield");
+		const myr = spawnPermanent(state, "darksteel-myr", P1);
 		addFloating(
 			state,
 			P1,
@@ -424,14 +424,10 @@ describe("indestructible permanents", () => {
 	test("lethal damage and deathtouch don't destroy them", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		const lethal = spawnPermanent(state, "darksteel-myr", P1, "battlefield");
-		const deathtouched = spawnPermanent(
-			state,
-			"darksteel-myr",
-			P1,
-			"battlefield",
-			{ counters: { "+1/+1": 1 } },
-		);
+		const lethal = spawnPermanent(state, "darksteel-myr", P1);
+		const deathtouched = spawnPermanent(state, "darksteel-myr", P1, {
+			counters: { "+1/+1": 1 },
+		});
 		permanent(state, lethal.id).damage = 1;
 		permanent(state, deathtouched.id).damage = 1;
 		permanent(state, deathtouched.id).attributes.deathtouched = true;
@@ -446,7 +442,7 @@ describe("indestructible permanents", () => {
 	test("zero toughness still puts them into the graveyard", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		const myr = spawnPermanent(state, "darksteel-myr", P1, "battlefield", {
+		const myr = spawnPermanent(state, "darksteel-myr", P1, {
 			counters: { "-1/-1": 1 },
 		});
 
@@ -460,7 +456,7 @@ describe("indestructible permanents", () => {
 describe("tokens leaving the battlefield", () => {
 	test("a token on the battlefield has no physical card ID", () => {
 		const state = newGame();
-		const token = spawnPermanent(state, "zombie-token", P1, "battlefield", {
+		const token = spawnPermanent(state, "zombie-token", P1, {
 			token: true,
 		});
 
@@ -470,7 +466,7 @@ describe("tokens leaving the battlefield", () => {
 	test("the zone change happens before the token ceases to exist as an SBA", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		const token = spawnPermanent(state, "zombie-token", P1, "battlefield", {
+		const token = spawnPermanent(state, "zombie-token", P1, {
 			token: true,
 		});
 
@@ -508,8 +504,8 @@ describe("regenerating a creature", () => {
 	test("regeneration saves it from lethal damage but not zero toughness", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		const bears = spawnPermanent(state, "grizzly-bears", 0, "battlefield");
-		const pyro = spawnPermanent(state, "eager-cadet", 1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", 0);
+		const pyro = spawnPermanent(state, "eager-cadet", 1);
 		addFloating(
 			state,
 			0,
@@ -566,7 +562,7 @@ describe("effects that inspect a permanent as it enters", () => {
 	test("Root Maze sees a creature that Baby Mycosynth Lattice makes an artifact", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "root-maze", 0, "battlefield");
+		spawnPermanent(state, "root-maze", 0);
 		const bearsCard = spawnCard(state, "grizzly-bears", 0, "hand");
 		const r1 = perform(
 			state,
@@ -585,7 +581,7 @@ describe("effects that inspect a permanent as it enters", () => {
 			"no Lattice: bear enters untapped",
 		).toBe(false);
 
-		spawnPermanent(state, "baby-mycosynth-lattice", 0, "battlefield");
+		spawnPermanent(state, "baby-mycosynth-lattice", 0);
 		const bears2 = spawnCard(state, "grizzly-bears", 0, "hand");
 		const r2 = perform(
 			state,
@@ -611,8 +607,8 @@ describe("interacting effects as permanents enter", () => {
 	test("a control-changing effect applies before Root Maze checks the permanent", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "root-maze", 0, "battlefield");
-		spawnPermanent(state, "baby-mycosynth-lattice", 0, "battlefield");
+		spawnPermanent(state, "root-maze", 0);
+		spawnPermanent(state, "baby-mycosynth-lattice", 0);
 		addFloating(state, 0, "gatherSpecimens", { you: 0 });
 		const bears = spawnCard(state, "grizzly-bears", 1, "hand");
 
@@ -638,7 +634,7 @@ describe("interacting effects as permanents enter", () => {
 	test("Clone chooses what to copy before that card's own entry effect applies", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "walking-ballista", 1, "battlefield", {
+		spawnPermanent(state, "walking-ballista", 1, {
 			counters: { "+1/+1": 2 },
 		});
 		const clone = spawnCard(state, "clone", 0, "hand");
@@ -680,7 +676,7 @@ describe("effects that change how players win or lose", () => {
 	test("Laboratory Maniac wins when drawing from an empty library", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "laboratory-maniac", P1, "battlefield");
+		spawnPermanent(state, "laboratory-maniac", P1);
 
 		perform(state, { kind: "draw", player: P1 }, agents);
 		checkStateBasedActions(state, agents);
@@ -695,7 +691,7 @@ describe("effects that change how players win or lose", () => {
 	test("Platinum Angel prevents losing from drawing an empty library", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "platinum-angel", P1, "battlefield");
+		spawnPermanent(state, "platinum-angel", P1);
 
 		perform(state, { kind: "draw", player: P1 }, agents);
 		checkStateBasedActions(state, agents);
@@ -725,7 +721,7 @@ describe("effects that change how players win or lose", () => {
 describe("choosing who applies a replacement effect", () => {
 	test("a permanent's controller chooses, not its owner", () => {
 		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		permanent(state, bears.id).controller = P2;
 
 		expect(
@@ -790,18 +786,8 @@ describe("triggered abilities", () => {
 		beginFirstTurn(state, agents);
 		expect(activePlayer(state)).toBe(P1);
 
-		const activeSource = spawnPermanent(
-			state,
-			"grizzly-bears",
-			P1,
-			"battlefield",
-		);
-		const nonactiveSource = spawnPermanent(
-			state,
-			"grizzly-bears",
-			P2,
-			"battlefield",
-		);
+		const activeSource = spawnPermanent(state, "grizzly-bears", P1);
+		const nonactiveSource = spawnPermanent(state, "grizzly-bears", P2);
 
 		// Deliberately enqueue in the opposite order from APNAP placement.
 		queueTestTrigger(state, nonactiveSource.id, P2, "nonactive trigger");
@@ -821,13 +807,8 @@ describe("triggered abilities", () => {
 	test("records and replays a controller's chosen trigger order", () => {
 		const checkpoint = newGame();
 		beginFirstTurn(checkpoint, passingAgents());
-		const first = spawnPermanent(
-			checkpoint,
-			"grizzly-bears",
-			P1,
-			"battlefield",
-		);
-		const second = spawnPermanent(checkpoint, "eager-cadet", P1, "battlefield");
+		const first = spawnPermanent(checkpoint, "grizzly-bears", P1);
+		const second = spawnPermanent(checkpoint, "eager-cadet", P1);
 		queueTestTrigger(checkpoint, first.id, P1, "first trigger");
 		queueTestTrigger(checkpoint, second.id, P1, "second trigger");
 
@@ -877,7 +858,7 @@ describe("triggered abilities", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(state, agents);
-		spawnPermanent(state, "arashin-cleric", P1, "battlefield");
+		spawnPermanent(state, "arashin-cleric", P1);
 		const clone = spawnCard(state, "clone", P1, "hand");
 
 		const result = perform(
@@ -950,7 +931,7 @@ describe("triggered abilities", () => {
 	test("Ajani's Mantra triggers only on its controller's upkeep", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "ajanis-mantra", P1, "battlefield");
+		spawnPermanent(state, "ajanis-mantra", P1);
 		stockLibraries(state);
 
 		// The scheduler emits the upkeep itself: no hand-built begin-step event.
@@ -968,7 +949,7 @@ describe("triggered abilities", () => {
 			new ScriptedAgent([], [false]),
 			new ScriptedAgent(),
 		];
-		spawnPermanent(state, "ajanis-mantra", P1, "battlefield");
+		spawnPermanent(state, "ajanis-mantra", P1);
 		stockLibraries(state);
 
 		advanceUntil(state, agents, (next) => atUpkeepOf(next, P1));
@@ -1025,7 +1006,7 @@ describe("declaring attackers", () => {
 
 	test("an empty declaration is legal and changes nothing", () => {
 		const { state, agents } = declareAttackersSetup();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 
 		const result = perform(
 			state,
@@ -1040,8 +1021,8 @@ describe("declaring attackers", () => {
 
 	test("a partial subset of eligible creatures taps and marks only those selected", () => {
 		const { state, agents } = declareAttackersSetup();
-		const attacker = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
-		const stayHome = spawnPermanent(state, "eager-cadet", P1, "battlefield");
+		const attacker = spawnPermanent(state, "grizzly-bears", P1);
+		const stayHome = spawnPermanent(state, "eager-cadet", P1);
 
 		perform(
 			state,
@@ -1065,7 +1046,7 @@ describe("declaring attackers", () => {
 
 	test("rejects a tapped creature", () => {
 		const { state, agents } = declareAttackersSetup();
-		const tapped = spawnPermanent(state, "grizzly-bears", P1, "battlefield", {
+		const tapped = spawnPermanent(state, "grizzly-bears", P1, {
 			tapped: true,
 		});
 
@@ -1081,7 +1062,7 @@ describe("declaring attackers", () => {
 
 	test("rejects a creature controlled by the opponent", () => {
 		const { state, agents } = declareAttackersSetup();
-		const opposing = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		const opposing = spawnPermanent(state, "grizzly-bears", P2);
 
 		expect(() =>
 			perform(
@@ -1095,7 +1076,7 @@ describe("declaring attackers", () => {
 
 	test("rejects a noncreature permanent", () => {
 		const { state, agents } = declareAttackersSetup();
-		const mantra = spawnPermanent(state, "ajanis-mantra", P1, "battlefield");
+		const mantra = spawnPermanent(state, "ajanis-mantra", P1);
 
 		expect(() =>
 			perform(
@@ -1108,7 +1089,7 @@ describe("declaring attackers", () => {
 
 	test("rejects duplicate IDs atomically, even with only one eligible creature", () => {
 		const { state, agents } = declareAttackersSetup();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 
 		expect(() =>
 			perform(
@@ -1129,8 +1110,8 @@ describe("declaring attackers", () => {
 
 	test("rejects the whole declaration atomically when a valid ID precedes an ineligible one", () => {
 		const { state, agents } = declareAttackersSetup();
-		const eligible = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
-		const tapped = spawnPermanent(state, "eager-cadet", P1, "battlefield", {
+		const eligible = spawnPermanent(state, "grizzly-bears", P1);
+		const tapped = spawnPermanent(state, "eager-cadet", P1, {
 			tapped: true,
 		});
 
@@ -1155,7 +1136,7 @@ describe("declaring attackers", () => {
 	test("rejects declaring attackers outside the declare attackers step", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 
 		expect(() =>
 			perform(
@@ -1168,7 +1149,7 @@ describe("declaring attackers", () => {
 
 	test("rejects a declaration from a player who isn't the active player", () => {
 		const { state, agents } = declareAttackersSetup();
-		const bears = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P2);
 		// default activePlayer is P1; P2 tries to declare attackers.
 		expect(() =>
 			perform(
@@ -1181,7 +1162,7 @@ describe("declaring attackers", () => {
 
 	test("regeneration still clears attacking (and blocking), not just damage and tapped state", () => {
 		const { state, agents } = declareAttackersSetup();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		perform(
 			state,
 			{ kind: "declare attackers", player: P1, attackers: [bears.id] },
@@ -1213,7 +1194,7 @@ describe("declaring blockers", () => {
 		const agents: [Agent, Agent] = [attackerAgent, new ScriptedAgent()];
 		spawnCard(state, "forest", P1, "library");
 		spawnCard(state, "forest", P2, "library");
-		const attacker = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const attacker = spawnPermanent(state, "grizzly-bears", P1);
 		attackerAgent.attackerChoices.push([attacker.id]);
 		while (!isTurnStep(state, "declare blockers")) {
 			advance(state, agents);
@@ -1223,7 +1204,7 @@ describe("declaring blockers", () => {
 
 	test("an empty declaration is legal and changes nothing", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		const blocker = spawnPermanent(state, "grizzly-bears", P2);
 
 		const result = perform(
 			state,
@@ -1239,7 +1220,7 @@ describe("declaring blockers", () => {
 
 	test("a blocker assignment marks the blocker but does not tap it", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		const blocker = spawnPermanent(state, "grizzly-bears", P2);
 
 		perform(
 			state,
@@ -1262,8 +1243,8 @@ describe("declaring blockers", () => {
 
 	test("multiple blockers can block the same attacker", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const alpha = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
-		const beta = spawnPermanent(state, "eager-cadet", P2, "battlefield");
+		const alpha = spawnPermanent(state, "grizzly-bears", P2);
+		const beta = spawnPermanent(state, "eager-cadet", P2);
 
 		perform(
 			state,
@@ -1284,7 +1265,7 @@ describe("declaring blockers", () => {
 
 	test("rejects a tapped creature as a blocker", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const tapped = spawnPermanent(state, "grizzly-bears", P2, "battlefield", {
+		const tapped = spawnPermanent(state, "grizzly-bears", P2, {
 			tapped: true,
 		});
 
@@ -1304,12 +1285,7 @@ describe("declaring blockers", () => {
 
 	test("rejects a creature controlled by the active player as a blocker", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const activeBlocker = spawnPermanent(
-			state,
-			"grizzly-bears",
-			P1,
-			"battlefield",
-		);
+		const activeBlocker = spawnPermanent(state, "grizzly-bears", P1);
 
 		expect(() =>
 			perform(
@@ -1327,7 +1303,7 @@ describe("declaring blockers", () => {
 
 	test("rejects a noncreature permanent as a blocker", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const mantra = spawnPermanent(state, "ajanis-mantra", P2, "battlefield");
+		const mantra = spawnPermanent(state, "ajanis-mantra", P2);
 
 		expect(() =>
 			perform(
@@ -1344,11 +1320,11 @@ describe("declaring blockers", () => {
 
 	test("rejects a blocker assigned to multiple attackers atomically", () => {
 		const { state, agents } = declareBlockersSetup();
-		const alpha = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
-		const beta = spawnPermanent(state, "eager-cadet", P1, "battlefield");
+		const alpha = spawnPermanent(state, "grizzly-bears", P1);
+		const beta = spawnPermanent(state, "eager-cadet", P1);
 		alpha.attacking = true;
 		beta.attacking = true;
-		const blocker = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		const blocker = spawnPermanent(state, "grizzly-bears", P2);
 
 		expect(() =>
 			perform(
@@ -1371,8 +1347,8 @@ describe("declaring blockers", () => {
 
 	test("rejects a blocker assigned to a creature that is not attacking", () => {
 		const { state, agents } = declareBlockersSetup();
-		const nonAttacker = spawnPermanent(state, "eager-cadet", P1, "battlefield");
-		const blocker = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		const nonAttacker = spawnPermanent(state, "eager-cadet", P1);
+		const blocker = spawnPermanent(state, "grizzly-bears", P2);
 
 		expect(() =>
 			perform(
@@ -1390,8 +1366,8 @@ describe("declaring blockers", () => {
 	test("rejects declaring blockers outside the declare blockers step", () => {
 		const state = newGame();
 		const agents: [Agent, Agent] = [new ScriptedAgent(), new ScriptedAgent()];
-		const attacker = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
-		const blocker = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		const attacker = spawnPermanent(state, "grizzly-bears", P1);
+		const blocker = spawnPermanent(state, "grizzly-bears", P2);
 
 		expect(() =>
 			perform(
@@ -1408,7 +1384,7 @@ describe("declaring blockers", () => {
 
 	test("rejects a declaration from a player who isn't the defending player", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
+		const blocker = spawnPermanent(state, "grizzly-bears", P2);
 
 		expect(() =>
 			perform(
@@ -1425,7 +1401,7 @@ describe("declaring blockers", () => {
 
 	test("blocking clears at end combat", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "grizzly-bears", P2, "battlefield", {
+		const blocker = spawnPermanent(state, "grizzly-bears", P2, {
 			counters: { "+1/+1": 1 },
 		});
 		perform(

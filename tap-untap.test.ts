@@ -119,7 +119,7 @@ describe("tap and untap occurrences", () => {
 		// The trigger reaches the stack through a priority window, which only
 		// exists inside a turn.
 		beginFirstTurn(state, passingAgents);
-		const observer = spawnPermanent(state, TAP_OBSERVER, ALICE, "battlefield");
+		const observer = spawnPermanent(state, TAP_OBSERVER, ALICE);
 
 		const tap = perform(
 			state,
@@ -148,10 +148,10 @@ describe("tap and untap occurrences", () => {
 
 	test("single-object events already in the requested state do not occur", () => {
 		const state = newGame();
-		const tapped = spawnPermanent(state, TAP_OBSERVER, ALICE, "battlefield", {
+		const tapped = spawnPermanent(state, TAP_OBSERVER, ALICE, {
 			tapped: true,
 		});
-		const untapped = spawnPermanent(state, TAP_OBSERVER, ALICE, "battlefield");
+		const untapped = spawnPermanent(state, TAP_OBSERVER, ALICE);
 		const revision = state.revision;
 
 		expect(
@@ -174,22 +174,11 @@ describe("tap and untap occurrences", () => {
 
 	test("bulk events expose exactly the permanents whose state changed to triggers", () => {
 		const state = newGame();
-		spawnPermanent(state, BULK_OBSERVER, ALICE, "battlefield");
-		const red = spawnPermanent(
-			state,
-			"test-red-permanent",
-			ALICE,
-			"battlefield",
-			{
-				tapped: true,
-			},
-		);
-		const green = spawnPermanent(
-			state,
-			"test-green-permanent",
-			ALICE,
-			"battlefield",
-		);
+		spawnPermanent(state, BULK_OBSERVER, ALICE);
+		const red = spawnPermanent(state, "test-red-permanent", ALICE, {
+			tapped: true,
+		});
+		const green = spawnPermanent(state, "test-green-permanent", ALICE);
 
 		const result = perform(
 			state,
@@ -207,8 +196,8 @@ describe("tap and untap occurrences", () => {
 
 	test("a bulk event with no state transitions does not occur", () => {
 		const state = newGame();
-		spawnPermanent(state, TAP_OBSERVER, ALICE, "battlefield", { tapped: true });
-		spawnPermanent(state, "test-red-permanent", ALICE, "battlefield", {
+		spawnPermanent(state, TAP_OBSERVER, ALICE, { tapped: true });
+		spawnPermanent(state, "test-red-permanent", ALICE, {
 			tapped: true,
 		});
 		const revision = state.revision;
@@ -227,9 +216,9 @@ describe("tap and untap occurrences", () => {
 	test("the nonactive affected player orders replacements for their bulk event", () => {
 		const state = newGame();
 		beginFirstTurn(state, passingAgents);
-		spawnPermanent(state, "test-bulk-tap-replacement-a", ALICE, "battlefield");
-		spawnPermanent(state, "test-bulk-tap-replacement-b", ALICE, "battlefield");
-		spawnPermanent(state, "grizzly-bears", BOB, "battlefield");
+		spawnPermanent(state, "test-bulk-tap-replacement-a", ALICE);
+		spawnPermanent(state, "test-bulk-tap-replacement-b", ALICE);
+		spawnPermanent(state, "grizzly-bears", BOB);
 		const requests: ChoiceRequest[] = [];
 		const unexpected: SyncAgent = {
 			choose: () => {
@@ -257,13 +246,9 @@ describe("tap and untap occurrences", () => {
 
 	test("untap-step triggers stay pending until the upkeep priority window", async () => {
 		const checkpoint = newGame();
-		const observer = spawnPermanent(
-			checkpoint,
-			TAP_OBSERVER,
-			ALICE,
-			"battlefield",
-			{ tapped: true },
-		);
+		const observer = spawnPermanent(checkpoint, TAP_OBSERVER, ALICE, {
+			tapped: true,
+		});
 
 		const untap = await advanceWithReplay(checkpoint, passingAgents);
 		expect(turnLocation(untap.state)).toMatchObject({

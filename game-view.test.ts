@@ -144,12 +144,7 @@ const LAYER_ONE_SOURCE = registerCard({
 describe("derived game views", () => {
 	test("static ability IDs are exact cardId:index registry references", () => {
 		const state = newGame();
-		const source = spawnPermanent(
-			state,
-			"baby-mycosynth-lattice",
-			P1,
-			"battlefield",
-		);
+		const source = spawnPermanent(state, "baby-mycosynth-lattice", P1);
 		const snapshot = readObject(createReadContext(state), source.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
@@ -199,12 +194,7 @@ describe("derived game views", () => {
 			],
 		});
 		const state = newGame();
-		const source = spawnPermanent(
-			state,
-			"snapshot-activation-test",
-			P1,
-			"battlefield",
-		);
+		const source = spawnPermanent(state, "snapshot-activation-test", P1);
 		const sourceSnapshot = readObject(createReadContext(state), source.id);
 		expect(sourceSnapshot.kind).toBe("permanent");
 		if (sourceSnapshot.kind !== "permanent") return;
@@ -250,7 +240,7 @@ describe("derived game views", () => {
 
 	test("triggered ability IDs resolve directly by cardId:index", () => {
 		const state = newGame();
-		const cleric = spawnPermanent(state, "arashin-cleric", P1, "battlefield");
+		const cleric = spawnPermanent(state, "arashin-cleric", P1);
 		const snapshot = readObject(createReadContext(state), cleric.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
@@ -263,7 +253,7 @@ describe("derived game views", () => {
 
 	test("counters change current characteristics but not copiable values", () => {
 		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield", {
+		const bears = spawnPermanent(state, "grizzly-bears", P1, {
 			counters: { "+1/+1": 1 },
 		});
 		const read = createReadContext(state);
@@ -289,13 +279,8 @@ describe("derived game views", () => {
 
 	test("Clone retains a layer-1 snapshot after the source effect leaves", () => {
 		const state = newGame();
-		const target = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
-		const source = spawnPermanent(
-			state,
-			LAYER_ONE_SOURCE.id,
-			P1,
-			"battlefield",
-		);
+		const target = spawnPermanent(state, "grizzly-bears", P1);
+		const source = spawnPermanent(state, LAYER_ONE_SOURCE.id, P1);
 
 		const beforeCopy = createReadContext(state);
 		const modifiedTarget = readObject(beforeCopy, target.id);
@@ -361,7 +346,7 @@ describe("derived game views", () => {
 
 	test("a successful mutation makes an existing ReadContext stale", () => {
 		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		const read = createReadContext(state);
 		expect(readObject(read, bears.id).kind).toBe("permanent");
 		perform(
@@ -379,7 +364,7 @@ describe("derived game views", () => {
 
 	test("Clone copies a creature token's actual copiable values", () => {
 		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		const bearsSnapshot = readObject(createReadContext(state), bears.id);
 		expect(bearsSnapshot.kind).toBe("permanent");
 		if (bearsSnapshot.kind !== "permanent") return;
@@ -491,12 +476,7 @@ describe("derived game views", () => {
 
 	test("copy-of-copy keeps effective values and a copied Clone leaves as Clone", () => {
 		const state = newGame();
-		const ballista = spawnPermanent(
-			state,
-			"walking-ballista",
-			P1,
-			"battlefield",
-		);
+		const ballista = spawnPermanent(state, "walking-ballista", P1);
 		const firstCard = spawnCard(state, "clone", P1, "hand");
 		const firstResult = perform(
 			state,
@@ -568,12 +548,7 @@ describe("derived game views", () => {
 
 	test("callback-bearing token state is structuredClone and replay safe", async () => {
 		const state = newGame();
-		const lattice = spawnPermanent(
-			state,
-			"baby-mycosynth-lattice",
-			P1,
-			"battlefield",
-		);
+		const lattice = spawnPermanent(state, "baby-mycosynth-lattice", P1);
 		const source = readObject(createReadContext(state), lattice.id);
 		expect(source.kind).toBe("permanent");
 		if (source.kind !== "permanent") return;
@@ -592,7 +567,7 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		const token = spawnToken(state, P1, values);
 		expect(values.abilities.static.map(String)).toEqual([
 			"baby-mycosynth-lattice:0",
@@ -610,10 +585,10 @@ describe("derived game views", () => {
 		// 1/3 with three +1/+1 counters is a 4/6 at the end of 7c, so the swap
 		// applies and it ends up 6/4. Applying counters after the whole layer walk
 		// would show the swap a 1/3, leaving it an unswapped 4/6.
-		const cleric = spawnPermanent(state, "arashin-cleric", P1, "battlefield", {
+		const cleric = spawnPermanent(state, "arashin-cleric", P1, {
 			counters: { "+1/+1": 3 },
 		});
-		spawnPermanent(state, SWAP_SOURCE.id, P1, "battlefield");
+		spawnPermanent(state, SWAP_SOURCE.id, P1);
 		const current = effectiveCharacteristics(createReadContext(state), cleric);
 		expect(current.kind).toBe("creature");
 		if (current.kind !== "creature") return;
@@ -678,13 +653,13 @@ registerCard({
 describe("layer 6 ability grants", () => {
 	function withInstruction() {
 		const state = newGame();
-		const instruction = spawnPermanent(state, GRANT_CARD, P1, "battlefield");
+		const instruction = spawnPermanent(state, GRANT_CARD, P1);
 		return { state, instruction };
 	}
 
 	test("a granted ability reaches current characteristics, never copiable values", () => {
 		const { state } = withInstruction();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		const snapshot = readObject(createReadContext(state), bears.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
@@ -710,13 +685,8 @@ describe("layer 6 ability grants", () => {
 
 	test("the grant respects its own condition", () => {
 		const { state } = withInstruction();
-		const theirs = spawnPermanent(state, "grizzly-bears", P2, "battlefield");
-		const mine = spawnPermanent(
-			state,
-			"baby-mycosynth-lattice",
-			P1,
-			"battlefield",
-		);
+		const theirs = spawnPermanent(state, "grizzly-bears", P2);
+		const mine = spawnPermanent(state, "baby-mycosynth-lattice", P1);
 		const read = createReadContext(state);
 
 		const theirSnapshot = readObject(read, theirs.id);
@@ -784,7 +754,7 @@ describe("layer 6 ability grants", () => {
 
 	test("Clone copies the creature, not the grant hanging on it", () => {
 		const { state, instruction } = withInstruction();
-		spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		spawnPermanent(state, "grizzly-bears", P1);
 		const cloneCard = spawnCard(state, "clone", P1, "hand");
 		const result = perform(
 			state,
@@ -856,7 +826,7 @@ describe("layer 6 ability grants", () => {
 
 	test("granted references survive structuredClone and replay", async () => {
 		const { state } = withInstruction();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		const cloned = structuredClone(state);
 		const snapshot = readObject(createReadContext(cloned), bears.id);
 		if (snapshot.kind !== "permanent") throw new Error("expected permanent");
@@ -871,8 +841,8 @@ describe("layer 6 ability grants", () => {
 describe("granted replacements and prohibitions resolve through references", () => {
 	function withWard() {
 		const state = newGame();
-		const ward = spawnPermanent(state, WARD_CARD, P1, "battlefield");
-		const bears = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const ward = spawnPermanent(state, WARD_CARD, P1);
+		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		return { state, ward, bears };
 	}
 
@@ -1008,7 +978,7 @@ const GRAVEYARD_ANTHEM = registerCard({
 describe("functionsFrom and affects are separate questions", () => {
 	test("an anthem functions from the graveyard and affects the battlefield", () => {
 		const state = newGame();
-		const bear = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
+		const bear = spawnPermanent(state, "grizzly-bears", P1);
 		expect(view(state, bear.id).power).toBe(2);
 
 		spawnCard(state, GRAVEYARD_ANTHEM.id, P1, "graveyard");
@@ -1018,8 +988,8 @@ describe("functionsFrom and affects are separate questions", () => {
 
 	test("the same anthem does nothing from the battlefield", () => {
 		const state = newGame();
-		const bear = spawnPermanent(state, "grizzly-bears", P1, "battlefield");
-		spawnPermanent(state, GRAVEYARD_ANTHEM.id, P1, "battlefield");
+		const bear = spawnPermanent(state, "grizzly-bears", P1);
+		spawnPermanent(state, GRAVEYARD_ANTHEM.id, P1);
 		expect(view(state, bear.id).power).toBe(2);
 		expect(view(state, bear.id).toughness).toBe(2);
 	});
