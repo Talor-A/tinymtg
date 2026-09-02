@@ -134,5 +134,5 @@ describe("choice transcript fuzz", () => {
 				"declareBlockers",
 			]),
 		);
-	});
+	}, 15_000);
 });

@@ -7,6 +7,7 @@ import type {
 	ObjectId,
 	PlayerId,
 	PriorityAction,
+	StackItemId,
 	SyncAgent,
 } from "./index.ts";
 import {
@@ -19,14 +20,15 @@ import {
 	registerCard,
 	spawnCard,
 	spawnPermanent,
+	triggeredAbilityId,
 	turnLocation,
 } from "./index.ts";
 import {
-	advanceUntil,
+	type SyncAgents as Agents,
 	ALICE,
+	advanceUntil,
 	BOB,
 	passingAgents,
-	type SyncAgents as Agents,
 } from "./test/engine-helpers.ts";
 
 registerCard({
@@ -73,6 +75,19 @@ function landAction(card: ObjectId): PriorityAction {
 	return { kind: "play land", card };
 }
 
+function occupyStack(state: GameState): void {
+	const source = spawnPermanent(state, "ajanis-mantra", ALICE, "battlefield");
+	state.stack.push({
+		id: state.nextStackItemId++ as StackItemId,
+		kind: "ability",
+		source: source.id,
+		triggerId: triggeredAbilityId("ajanis-mantra", 0),
+		controller: ALICE,
+		text: "At the beginning of your upkeep, you may gain 1 life.",
+		effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+	});
+}
+
 describe("land action observability", () => {
 	test("identifies each land in the active player's hand during either main phase", () => {
 		for (const role of ["precombat", "postcombat"] as const) {
@@ -100,7 +115,7 @@ describe("land action observability", () => {
 		state.players[ALICE].landsPlayed = 1;
 		expect(getObservableActions(state, ALICE)).toEqual([{ kind: "pass" }]);
 		state.players[ALICE].landsPlayed = 0;
-		state.stack.push(999 as ObjectId);
+		occupyStack(state);
 		expect(getObservableActions(state, ALICE)).toEqual([{ kind: "pass" }]);
 	});
 });
@@ -259,7 +274,7 @@ describe("authoritative land-play rejection", () => {
 
 		const stacked = setupMain();
 		const blocked = spawnCard(stacked, "forest", ALICE, "hand");
-		stacked.stack.push(999 as ObjectId);
+		occupyStack(stacked);
 		expectAtomicRejection(stacked, ALICE, landAction(blocked.id));
 	});
 });

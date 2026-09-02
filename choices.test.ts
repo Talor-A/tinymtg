@@ -6,6 +6,7 @@ import {
 	type Agent,
 	advance,
 	advanceWithReplay,
+	buildPlayerView,
 	type ChoiceAnswer,
 	ChoiceController,
 	ChoicePendingError,
@@ -16,7 +17,9 @@ import {
 	isTurnStep,
 	newGame,
 	type ObjectId,
+	type PlayerView,
 	perform,
+	type StackItemId,
 	type SyncAgent,
 	spawnCard,
 	spawnPermanent,
@@ -37,11 +40,11 @@ describe("ScriptedAgent priority actions", () => {
 			ordinal: 0,
 			fingerprint: "test",
 			player: 0 as const,
-			context: { activePlayer: 0 as const, location: null, stack: [] },
+			context: { activePlayer: 0 as const, location: null },
 		};
 
 		expect(
-			agent.choose(newGame(), {
+			agent.choose(buildPlayerView(newGame(), 0), {
 				...base,
 				kind: "priorityAction",
 				id: "before",
@@ -52,7 +55,7 @@ describe("ScriptedAgent priority actions", () => {
 
 		const actionOptionId = priorityOptionId(action);
 		expect(
-			agent.choose(newGame(), {
+			agent.choose(buildPlayerView(newGame(), 0), {
 				...base,
 				kind: "priorityAction",
 				id: "available",
@@ -107,10 +110,11 @@ describe("choice transcripts", () => {
 		replay.assertComplete();
 	});
 
-	test("agents receive one unified serializable request", () => {
-		const seen: { request?: ChoiceRequest } = {};
+	test("agents receive one player view and one serializable request", () => {
+		const seen: { view?: PlayerView; request?: ChoiceRequest } = {};
 		const agent: SyncAgent = {
-			choose(_state, request) {
+			choose(view, request) {
+				seen.view = view;
 				seen.request = request;
 				const option = request.options[0];
 				if (!option) throw new Error("expected an option");
@@ -134,6 +138,9 @@ describe("choice transcripts", () => {
 		);
 
 		expect(seen.request?.kind).toBe("replacement");
+		expect(seen.view?.viewer).toBe(0);
+		expect(seen.view?.battlefield).toHaveLength(3);
+		expect(() => JSON.stringify(seen.view)).not.toThrow();
 		expect(() => JSON.stringify(seen.request)).not.toThrow();
 	});
 
@@ -344,7 +351,7 @@ describe("choice transcripts", () => {
 		let pending: ChoicePendingError | undefined;
 		try {
 			choices.chooseOptional(state, {
-				id: 1 as ObjectId,
+				id: 1 as StackItemId,
 				kind: "ability",
 				source: 1 as ObjectId,
 				triggerId: triggeredAbilityId("ajanis-mantra", 0),
@@ -411,7 +418,7 @@ describe("choice transcripts", () => {
 
 		expect(() =>
 			choices.chooseOptional(state, {
-				id: 99 as ObjectId,
+				id: 99 as StackItemId,
 				kind: "ability",
 				source: 1 as ObjectId,
 				triggerId: triggeredAbilityId("ajanis-mantra", 0),

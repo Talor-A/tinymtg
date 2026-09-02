@@ -4,8 +4,8 @@ import type {
 	BlockAssignment,
 	ChoiceAnswer,
 	ChoiceRequest,
-	GameState,
 	ObjectId,
+	PlayerView,
 	PriorityAction,
 	SyncAgent,
 } from "./index.ts";
@@ -45,7 +45,7 @@ export class ScriptedAgent implements SyncAgent {
 		public blockerChoices: BlockAssignment[][] = [],
 	) {}
 
-	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
+	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
 		switch (request.kind) {
 			case "replacement":
 				for (const preference of this.preferences) {
@@ -96,7 +96,7 @@ export class ScriptedAgent implements SyncAgent {
 }
 
 export class RandomAgent implements SyncAgent {
-	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
+	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
 		switch (request.kind) {
 			case "declareAttackers":
 			case "declareBlockers":
@@ -117,7 +117,7 @@ export class RandomAgent implements SyncAgent {
 }
 
 export class KeyboardAgent implements SyncAgent {
-	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
+	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
 		switch (request.kind) {
 			case "replacement":
 				console.log(`\n[Replacement choice for ${request.context.event.kind}]`);

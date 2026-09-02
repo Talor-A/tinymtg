@@ -24,6 +24,7 @@ import type {
 	GameState,
 	ObjectId,
 	PlayerId,
+	PlayerView,
 	SyncAgent,
 } from "./index.ts";
 import {
@@ -483,12 +484,17 @@ async function main(): Promise<void> {
 				private readonly self: PlayerId,
 				private readonly own: ObjectId,
 			) {}
-			choose(state: GameState, request: ChoiceRequest) {
+			choose(view: PlayerView, request: ChoiceRequest) {
 				if (
 					request.kind === "declareAttackers" &&
 					request.player === this.self
 				) {
-					const p = permanent(state, this.own);
+					const p = view.battlefield.find(
+						(object) => object.objectId === this.own,
+					);
+					if (p?.kind !== "permanent") {
+						throw new Error(`own permanent ${this.own} is not visible`);
+					}
 					return { optionIds: p.tapped ? [] : [String(this.own)] };
 				}
 				if (request.kind === "declareAttackers") return { optionIds: [] };

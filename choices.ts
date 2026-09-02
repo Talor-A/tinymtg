@@ -7,10 +7,11 @@ import type {
 	GameState,
 	ObjectId,
 	PlayerId,
+	PlayerView,
 	PriorityAction,
 	TurnLocation,
 } from "./index.ts";
-import { name, turnLocation } from "./index.ts";
+import { buildPlayerView, name, turnLocation } from "./index.ts";
 
 function objectLabel(state: GameState, id: ObjectId): string {
 	const object = state.objects.get(id);
@@ -51,7 +52,6 @@ export interface PriorityActionChoiceRequest extends ChoiceRequestBase {
 	context: {
 		activePlayer: PlayerId;
 		location: TurnLocation | null;
-		stack: ObjectId[];
 	};
 }
 
@@ -93,13 +93,13 @@ export type ChoiceRequest =
 export type ChoiceAnswer = { optionId: string } | { optionIds: string[] };
 
 export interface SyncAgent {
-	choose(state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer;
+	choose(view: PlayerView, request: ChoiceRequest): ChoiceAnswer;
 }
 
 /** The one engine-facing interface implemented by local and remote agents. */
 export interface Agent {
 	choose(
-		state: Readonly<GameState>,
+		view: PlayerView,
 		request: ChoiceRequest,
 	): ChoiceAnswer | PromiseLike<ChoiceAnswer>;
 }
@@ -450,7 +450,10 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				`transcript ended before choice ${request.id}`,
 			);
 		}
-		const answer = agent.choose(state, request);
+		const answer = agent.choose(
+			buildPlayerView(state, request.player),
+			request,
+		);
 		if (isPromiseLike(answer)) {
 			if (!this.allowSuspension) {
 				throw new Error("an async agent was used outside advanceWithReplay()");
@@ -521,7 +524,10 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				`transcript ended before choice ${request.id}`,
 			);
 		}
-		const answer = agent.choose(state, request);
+		const answer = agent.choose(
+			buildPlayerView(state, request.player),
+			request,
+		);
 		if (isPromiseLike(answer)) {
 			if (!this.allowSuspension) {
 				throw new Error("an async agent was used outside advanceWithReplay()");
@@ -629,7 +635,6 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			context: {
 				activePlayer: state.activePlayer,
 				location: turnLocation(state),
-				stack: [...state.stack],
 			},
 			options: actions.map((action) => ({
 				id: priorityOptionId(action),

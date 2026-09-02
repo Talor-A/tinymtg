@@ -1,7 +1,7 @@
 import type {
 	ChoiceAnswer,
 	ChoiceRequest,
-	GameState,
+	PlayerView,
 	SyncAgent,
 } from "../index.ts";
 
@@ -24,7 +24,7 @@ export class FuzzAgent implements SyncAgent {
 		this.rng = mulberry32(seed);
 	}
 
-	choose(_state: Readonly<GameState>, request: ChoiceRequest): ChoiceAnswer {
+	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
 		if (request.kind === "declareAttackers") {
 			return {
 				optionIds: request.options
@@ -40,7 +40,8 @@ export class FuzzAgent implements SyncAgent {
 			return {
 				optionIds: selected
 					.filter((option) => {
-						const blocker = option.id.split(":")[0]!;
+						const blocker = option.id.split(":")[0];
+						if (blocker === undefined) return false;
 						if (used.has(blocker)) return false;
 						used.add(blocker);
 						return true;

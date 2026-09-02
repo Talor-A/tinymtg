@@ -1,4 +1,3 @@
-import { KeyboardAgent, RandomAgent } from "./agents";
 import {
 	type AgentPair,
 	type AnyChoiceController,
@@ -7,7 +6,6 @@ import {
 	ChoicePendingError,
 	type ChoiceSource,
 	type ChoiceTranscript,
-	type SyncAgentPair,
 } from "./choices.ts";
 import * as EFFECTS from "./effects";
 
@@ -247,6 +245,7 @@ function makeSteps(state: GameState, phase: PhaseOccurrence): StepOccurrence[] {
  * ------------------------------------------------------------------ */
 
 export type ObjectId = Brand<number, "ObjectId">;
+export type StackItemId = Brand<number, "StackItemId">;
 
 export type CounterNames = "+1/+1" | "-1/-1" | "charge" | "poison";
 export type CounterBag = Partial<Record<CounterNames, number>>;
@@ -415,6 +414,7 @@ interface ZoneChangeEvent extends EventCommon {
 }
 
 type MoveCause =
+	| "cast"
 	| "draw"
 	| "play land"
 	| "discard"
@@ -772,9 +772,6 @@ interface SpellSnapshot extends SnapshotBase {
 				kind: "copy";
 				copyEffect: CharacteristicsSnapshot;
 		  };
-
-	// TODO
-	choices?: never;
 }
 
 interface PermanentSnapshot extends SnapshotBase {
@@ -804,17 +801,6 @@ interface PermanentSnapshot extends SnapshotBase {
 	};
 }
 
-interface AbilitySnapshot {
-	kind: "ability";
-	zone: "stack";
-	objectId: ObjectId;
-	controller: PlayerId;
-
-	source: ObjectSnapshot;
-	/** TODO */
-	ability: never;
-}
-
 interface NonbattlefieldTokenSnapshot extends SnapshotBase {
 	kind: "nonbattlefield-token";
 	zone: "library" | "hand" | "graveyard" | "exile";
@@ -824,12 +810,29 @@ interface NonbattlefieldTokenSnapshot extends SnapshotBase {
 	currentCharacteristics: CharacteristicsSnapshot;
 }
 
-type ObjectSnapshot =
+export type GameObjectSnapshot =
 	| CardSnapshot
 	| SpellSnapshot
 	| PermanentSnapshot
-	| AbilitySnapshot
 	| NonbattlefieldTokenSnapshot;
+
+/** A detached, serializable object exposed to one player. */
+export type PlayerObjectView = DeepReadOnly<GameObjectSnapshot>;
+
+type PlayerNonbattlefieldObjectView<
+	ZoneName extends "hand" | "graveyard" | "exile",
+> =
+	| (DeepReadOnly<CardSnapshot> & { readonly zone: ZoneName })
+	| (DeepReadOnly<NonbattlefieldTokenSnapshot> & { readonly zone: ZoneName });
+
+export type PlayerHandObjectView = PlayerNonbattlefieldObjectView<"hand">;
+export type PlayerGraveyardObjectView =
+	PlayerNonbattlefieldObjectView<"graveyard">;
+export type PlayerExileObjectView = PlayerNonbattlefieldObjectView<"exile">;
+export type PlayerBattlefieldObjectView = DeepReadOnly<PermanentSnapshot>;
+
+/** Stack entries are either spell snapshots or declarative ability items. */
+export type PlayerStackView = DeepReadOnly<SpellSnapshot | AbilityStackItem>;
 
 function cloneAbilityReferences(
 	refs: DeepReadOnly<AbilityReferences>,
@@ -948,7 +951,41 @@ export function cloneCharacteristics(
 }
 
 export interface GameView {
-	readonly objects: ReadonlyMap<ObjectId, ObjectSnapshot>;
+	readonly objects: ReadonlyMap<ObjectId, GameObjectSnapshot>;
+}
+
+export interface PlayerPublicView {
+	readonly id: PlayerId;
+	readonly life: number;
+	readonly counters: DeepReadOnly<CounterBag>;
+	readonly handCount: number;
+	readonly libraryCount: number;
+	readonly graveyard: readonly PlayerGraveyardObjectView[];
+	readonly exile: readonly PlayerExileObjectView[];
+	readonly landsPlayed: number;
+	readonly lost: boolean;
+	readonly won: boolean;
+}
+
+/**
+ * The complete JSON-safe game projection delivered to one agent.
+ *
+ * Hidden zones are deliberately asymmetric: `hand` contains only the
+ * viewer's cards, while both libraries and the opponent's hand are counts.
+ */
+export interface PlayerView {
+	readonly version: 1;
+	readonly revision: number;
+	readonly viewer: PlayerId;
+	readonly turn: {
+		readonly number: number;
+		readonly activePlayer: PlayerId;
+		readonly location: DeepReadOnly<TurnLocation> | null;
+	};
+	readonly players: readonly [PlayerPublicView, PlayerPublicView];
+	readonly hand: readonly PlayerHandObjectView[];
+	readonly battlefield: readonly PlayerBattlefieldObjectView[];
+	readonly stack: readonly PlayerStackView[];
 }
 
 export interface ReadContext {
@@ -962,6 +999,13 @@ export interface ReadContext {
  * Callers must discard this view as soon as they mutate `state`.
  */
 export function buildGameView(state: ReadonlyGameState): GameView {
+	return buildFilteredGameView(state);
+}
+
+function buildFilteredGameView(
+	state: ReadonlyGameState,
+	included?: ReadonlySet<ObjectId>,
+): GameView {
 	const copiable = new Map<ObjectId, CharacteristicsSnapshot>();
 	const characteristics = new Map<ObjectId, CharacteristicsSnapshot>();
 	const abilities: Partial<
@@ -972,16 +1016,23 @@ export function buildGameView(state: ReadonlyGameState): GameView {
 	> = {};
 
 	for (const object of state.objects.values()) {
-		// `initial` is already a fresh clone, and layer 1a replaces rather than
-		// mutates its map entry, so it can serve as the copiable values directly.
 		const initial = initialCharacteristics(object);
-		copiable.set(object.id, initial);
-		characteristics.set(object.id, cloneCharacteristics(initial));
+		if (!included || included.has(object.id)) {
+			// `initial` is already a fresh clone, and layer 1a replaces rather than
+			// mutates its map entry, so it can serve as the copiable values directly.
+			copiable.set(object.id, initial);
+			characteristics.set(object.id, cloneCharacteristics(initial));
+		}
 
 		for (const abilityId of initial.abilities.static) {
 			const ability = resolveStaticAbility(abilityId);
 			if (!functionsHere(ability.functionsIn, object.zone)) continue;
-			(abilities[ability.layer] ??= []).push([ability, object]);
+			let layerAbilities = abilities[ability.layer];
+			if (!layerAbilities) {
+				layerAbilities = [];
+				abilities[ability.layer] = layerAbilities;
+			}
+			layerAbilities.push([ability, object]);
 		}
 	}
 
@@ -994,6 +1045,7 @@ export function buildGameView(state: ReadonlyGameState): GameView {
 
 			for (const zone of zones) {
 				for (const objectId of zoneList(state, zone, "any")) {
+					if (!characteristics.has(objectId)) continue;
 					const subject = state.objects.get(objectId);
 					assertDefined(subject, "subject object not found");
 					if (layer === "1a-copiable-values") {
@@ -1026,7 +1078,7 @@ export function buildGameView(state: ReadonlyGameState): GameView {
 	for (const object of state.objects.values()) {
 		if (object.kind !== "permanent") continue;
 		const current = characteristics.get(object.id);
-		assertDefined(current);
+		if (!current) continue;
 		if (current.kind !== "creature") continue;
 		const delta =
 			(object.counters["+1/+1"] ?? 0) - (object.counters["-1/-1"] ?? 0);
@@ -1034,12 +1086,11 @@ export function buildGameView(state: ReadonlyGameState): GameView {
 		current.toughness += delta;
 	}
 
-	const snapshots = new Map<ObjectId, ObjectSnapshot>();
+	const snapshots = new Map<ObjectId, GameObjectSnapshot>();
 	for (const object of state.objects.values()) {
 		const copy = copiable.get(object.id);
 		const current = characteristics.get(object.id);
-		assertDefined(copy);
-		assertDefined(current);
+		if (!copy || !current) continue;
 
 		switch (object.kind) {
 			case "card":
@@ -1181,7 +1232,7 @@ export type PriorityAction =
 	| PlayLandAction;
 
 export interface AbilityStackItem {
-	id: ObjectId;
+	id: StackItemId;
 	kind: "ability";
 	source: ObjectId;
 	triggerId: TriggeredAbilityId;
@@ -1190,15 +1241,21 @@ export interface AbilityStackItem {
 	effects: EffectDef[];
 }
 
+export interface SpellStackEntry {
+	kind: "spell";
+	objectId: ObjectId;
+}
+
+/** Canonical, serializable ordering of spells and abilities on the stack. */
+export type StackEntry = SpellStackEntry | AbilityStackItem;
+
 export interface GameState {
 	/** Incremented whenever canonical state changes and used to reject stale views. */
 	revision: number;
 	objects: Map<ObjectId, GameObject>;
 	players: [PlayerState, PlayerState];
 	battlefield: ObjectId[];
-	stack: ObjectId[];
-	/** Ability stack entries are not game objects; the shared stack stores their ids. */
-	stackItems: Map<ObjectId, AbilityStackItem>;
+	stack: StackEntry[];
 	/** Trigger occurrences waiting for the next time a player would receive priority. */
 	pendingTriggers: PendingTrigger[];
 	floating: FloatingEffect[];
@@ -1206,6 +1263,7 @@ export interface GameState {
 	activePlayer: PlayerId;
 	turnScheduler: TurnScheduler;
 	nextObjectId: number;
+	nextStackItemId: number;
 	/** Monotonic tag source for guard facts (e.g. Chains of Mephistopheles). */
 	nextTag: number;
 	log: string[];
@@ -1273,10 +1331,6 @@ interface SpellObject extends ObjectBase {
 				kind: "copy";
 				copyEffect: CharacteristicsSnapshot;
 		  };
-
-	/** Casting choices that are properties of the spell. */
-	// TODO
-	choices: never;
 }
 
 export interface PermanentObject extends ObjectBase {
@@ -2003,7 +2057,6 @@ export function newGame(): GameState {
 		players: [newPlayerState(0), newPlayerState(1)],
 		battlefield: [],
 		stack: [],
-		stackItems: new Map(),
 		pendingTriggers: [],
 		floating: [],
 		turn: 0,
@@ -2017,6 +2070,7 @@ export function newGame(): GameState {
 			nextId: 0,
 		},
 		nextObjectId: 0,
+		nextStackItemId: 0,
 		nextTag: 0,
 		log: [],
 		rngState: 0,
@@ -2059,7 +2113,7 @@ export function spawnCard(
 		effectData: {},
 	};
 	state.objects.set(obj.id, obj);
-	zoneList(state, zone, owner).push(obj.id);
+	mutableZoneList(state, zone, owner).push(obj.id);
 	state.revision++;
 	return obj;
 }
@@ -2113,7 +2167,7 @@ export function spawnPermanent(
 		attributes: {},
 	};
 	state.objects.set(obj.id, obj);
-	zoneList(state, "battlefield", owner).push(obj.id);
+	mutableZoneList(state, "battlefield", owner).push(obj.id);
 	state.revision++;
 	return obj;
 }
@@ -2142,7 +2196,7 @@ export function spawnToken(
 		attributes: {},
 	};
 	state.objects.set(obj.id, obj);
-	zoneList(state, "battlefield", owner).push(obj.id);
+	mutableZoneList(state, "battlefield", owner).push(obj.id);
 	state.revision++;
 	return obj;
 }
@@ -2224,7 +2278,14 @@ export function controllerOf(
 		: null;
 }
 
-export function isTokenObject(object: DeepReadOnly<GameObject>): boolean {
+export function isTokenObject(
+	object: DeepReadOnly<GameObject>,
+): object is DeepReadOnly<
+	| NonbattlefieldTokenObject
+	| (PermanentObject & {
+			representation: { kind: "token"; createdValues: CharacteristicsSnapshot };
+	  })
+> {
 	return (
 		object.kind === "nonbattlefield-token" ||
 		(object.kind === "permanent" && object.representation.kind === "token")
@@ -2247,11 +2308,17 @@ function creaturesControlledBy(
 	});
 }
 
-export function zoneList<T extends GameState | ReadonlyGameState>(
-	state: T,
+function stackObjectIds(state: ReadonlyGameState): ObjectId[] {
+	return state.stack.flatMap((entry) =>
+		entry.kind === "spell" ? [entry.objectId] : [],
+	);
+}
+
+export function zoneList(
+	state: ReadonlyGameState,
 	zone: Zone,
 	owner: PlayerId | "any",
-): T["battlefield"] {
+): readonly ObjectId[] {
 	if (
 		owner === "any" &&
 		(zone === "library" ||
@@ -2265,7 +2332,7 @@ export function zoneList<T extends GameState | ReadonlyGameState>(
 		case "battlefield":
 			return state.battlefield;
 		case "stack":
-			return state.stack;
+			return stackObjectIds(state);
 		case "library":
 			assert(owner !== "any");
 			return state.players[owner].library;
@@ -2281,6 +2348,24 @@ export function zoneList<T extends GameState | ReadonlyGameState>(
 			assert(owner !== "any");
 
 			return state.players[owner].exile;
+	}
+}
+
+function mutableZoneList(
+	state: GameState,
+	zone: Exclude<Zone, "stack">,
+	owner: PlayerId,
+): ObjectId[] {
+	switch (zone) {
+		case "battlefield":
+			return state.battlefield;
+		case "library":
+		case "hand":
+		case "graveyard":
+		case "exile":
+			return state.players[owner][zone];
+		default:
+			return assertNever(zone);
 	}
 }
 
@@ -2511,13 +2596,7 @@ export function etbPreview(
 			counters: { ...player.counters },
 		})) as [PlayerState, PlayerState],
 		battlefield: [...state.battlefield],
-		stack: [...state.stack],
-		stackItems: new Map(
-			[...state.stackItems].map(([id, item]) => [
-				id,
-				structuredClone(item) as AbilityStackItem,
-			]),
-		),
+		stack: structuredClone(state.stack) as StackEntry[],
 		pendingTriggers: state.pendingTriggers.map(
 			(trigger) => structuredClone(trigger) as PendingTrigger,
 		),
@@ -2559,17 +2638,161 @@ export function createReadContext(state: ReadonlyGameState): ReadContext {
 		get view() {
 			if (state.revision !== revision)
 				throw new Error("attempted to use a stale ReadContext");
-			return (derived ??= cachedGameView(state, revision));
+			if (!derived) derived = cachedGameView(state, revision);
+			return derived;
 		},
 	};
 }
 
-export function readObject(read: ReadContext, id: ObjectId): ObjectSnapshot {
+export function readObject(
+	read: ReadContext,
+	id: ObjectId,
+): GameObjectSnapshot {
 	if (read.state.revision !== read.revision)
 		throw new Error("attempted to use a stale ReadContext");
 	const snapshot = read.view.objects.get(id);
 	if (!snapshot) throw new Error(`no derived view for object ${id}`);
 	return snapshot;
+}
+
+const PLAYER_VIEW_CACHE = new WeakMap<
+	object,
+	{
+		revision: number;
+		views: [PlayerView | undefined, PlayerView | undefined];
+	}
+>();
+
+const PLAYER_GAME_VIEW_CACHE = new WeakMap<
+	object,
+	{ revision: number; view: GameView }
+>();
+
+function cachedPlayerGameView(
+	state: ReadonlyGameState,
+	revision: number,
+): GameView {
+	const complete = GAME_VIEW_CACHE.get(state);
+	if (complete?.revision === revision) return complete.view;
+	const cached = PLAYER_GAME_VIEW_CACHE.get(state);
+	if (cached?.revision === revision) return cached.view;
+
+	// Libraries expose counts only, so deriving snapshots for every card there
+	// would add substantial work to each agent decision without adding data.
+	const visibleObjects = new Set<ObjectId>();
+	for (const object of state.objects.values()) {
+		if (object.zone !== "library") visibleObjects.add(object.id);
+	}
+	const view = buildFilteredGameView(state, visibleObjects);
+	PLAYER_GAME_VIEW_CACHE.set(state, { revision, view });
+	return view;
+}
+
+function deepFreeze<T>(value: T): DeepReadOnly<T> {
+	if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
+		return value as DeepReadOnly<T>;
+	}
+	for (const nested of Object.values(value)) deepFreeze(nested);
+	return Object.freeze(value) as DeepReadOnly<T>;
+}
+
+/** Build a detached player-specific projection from one stable read window. */
+export function buildPlayerView(
+	state: ReadonlyGameState,
+	viewer: PlayerId,
+): PlayerView {
+	let cached = PLAYER_VIEW_CACHE.get(state);
+	if (cached?.revision === state.revision) {
+		const existing = cached.views[viewer];
+		if (existing) return existing;
+	} else {
+		cached = { revision: state.revision, views: [undefined, undefined] };
+		PLAYER_VIEW_CACHE.set(state, cached);
+	}
+	const revision = state.revision;
+	const read: ReadContext = {
+		state,
+		revision,
+		view: cachedPlayerGameView(state, revision),
+	};
+	const objectSnapshot = (id: ObjectId): PlayerObjectView => {
+		const snapshot = read.view.objects.get(id);
+		assertDefined(snapshot, `no derived view for object ${id}`);
+		return snapshot;
+	};
+	const nonbattlefieldSnapshot = <
+		ZoneName extends "hand" | "graveyard" | "exile",
+	>(
+		id: ObjectId,
+		zone: ZoneName,
+	): PlayerNonbattlefieldObjectView<ZoneName> => {
+		const snapshot = objectSnapshot(id);
+		assert(
+			snapshot.kind === "card" || snapshot.kind === "nonbattlefield-token",
+			`${zone} contains non-card object ${id}`,
+		);
+		assert(snapshot.zone === zone, `object ${id} is not in ${zone}`);
+		return { ...snapshot, zone };
+	};
+	const battlefieldSnapshot = (id: ObjectId): PlayerBattlefieldObjectView => {
+		const snapshot = objectSnapshot(id);
+		assert(
+			snapshot.kind === "permanent",
+			`battlefield contains nonpermanent ${id}`,
+		);
+		return snapshot;
+	};
+	const publicPlayer = (id: PlayerId): PlayerPublicView => {
+		const player = state.players[id];
+		return {
+			id,
+			life: player.life,
+			counters: { ...player.counters },
+			handCount: player.hand.length,
+			libraryCount: player.library.length,
+			graveyard: player.graveyard.map((objectId) =>
+				nonbattlefieldSnapshot(objectId, "graveyard"),
+			),
+			exile: player.exile.map((objectId) =>
+				nonbattlefieldSnapshot(objectId, "exile"),
+			),
+			landsPlayed: player.landsPlayed,
+			lost: player.lost,
+			won: player.won,
+		};
+	};
+	const stack = state.stack.map((entry): PlayerStackView => {
+		if (entry.kind === "ability") return structuredClone(entry);
+		const snapshot = read.view.objects.get(entry.objectId);
+		assertDefined(snapshot, `no spell object ${entry.objectId}`);
+		assert(
+			snapshot.kind === "spell",
+			`stack object ${entry.objectId} is not a spell`,
+		);
+		return snapshot;
+	});
+	const view: PlayerView = {
+		version: 1,
+		revision: read.revision,
+		viewer,
+		turn: {
+			number: state.turn,
+			activePlayer: state.activePlayer,
+			location: structuredClone(turnLocation(state)),
+		},
+		players: [publicPlayer(0), publicPlayer(1)],
+		hand: state.players[viewer].hand.map((objectId) =>
+			nonbattlefieldSnapshot(objectId, "hand"),
+		),
+		battlefield: state.battlefield.map(battlefieldSnapshot),
+		stack,
+	};
+
+	// Selected GameView snapshots are detached from canonical state. Freezing
+	// them makes sharing the revision cache safe for local agents as well as RPC.
+	const frozen = deepFreeze(view) as PlayerView;
+	cached.views[viewer] = frozen;
+	return frozen;
 }
 
 /**
@@ -2584,8 +2807,6 @@ export function effectiveCharacteristics(
 	object: DeepReadOnly<GameObject>,
 ): DeepReadOnly<CharacteristicsSnapshot> {
 	const snapshot = readObject(read, object.id);
-	if (snapshot.kind === "ability")
-		throw new Error("ability snapshots have no characteristics");
 	return snapshot.currentCharacteristics;
 }
 
@@ -2630,10 +2851,7 @@ function evaluationView(
 	};
 }
 
-function flattenSnapshot(snapshot: ObjectSnapshot): PermanentView {
-	if (snapshot.kind === "ability") {
-		throw new Error("ability snapshots have no characteristics");
-	}
+function flattenSnapshot(snapshot: GameObjectSnapshot): PermanentView {
 	const cardId =
 		snapshot.kind === "card"
 			? snapshot.cardId
@@ -2686,17 +2904,8 @@ export function view(state: ReadonlyGameState, id: ObjectId): ObjectView {
  * Effect collection
  * ------------------------------------------------------------------ */
 
-const EMPTY_ABILITY_REFERENCES: DeepReadOnly<AbilityReferences> = {
-	static: [],
-	activated: [],
-	triggered: [],
-	replacement: [],
-	prohibition: [],
-};
-
 /**
- * Registry references an object currently has, or an empty set for objects with
- * no characteristics (abilities on the stack).
+ * Registry references an object currently has.
  *
  * Possession is read off the derived view, never off the card's definition
  * arrays: a token, a copy, or an object under a layer-6 grant has abilities its
@@ -2707,7 +2916,7 @@ function abilityReferencesOf(
 	object: DeepReadOnly<GameObject>,
 ): DeepReadOnly<AbilityReferences> {
 	const snapshot = view.objects.get(object.id);
-	if (!snapshot || snapshot.kind === "ability") return EMPTY_ABILITY_REFERENCES;
+	assertDefined(snapshot, `no derived view for object ${object.id}`);
 	return snapshot.currentCharacteristics.abilities;
 }
 
@@ -2745,15 +2954,10 @@ function anyPossessedStatic(
 }
 
 /** Effect-label name for logs, taken from the view rather than re-derived. */
-function viewName(
-	view: GameView,
-	state: ReadonlyGameState,
-	id: ObjectId,
-): string {
+function viewName(view: GameView, id: ObjectId): string {
 	const snapshot = view.objects.get(id);
-	return snapshot && snapshot.kind !== "ability"
-		? snapshot.currentCharacteristics.name
-		: name(state, id);
+	assertDefined(snapshot, `no derived view for object ${id}`);
+	return snapshot.currentCharacteristics.name;
 }
 
 /**
@@ -2865,7 +3069,7 @@ export function collectReplacements(
 			zone === "battlefield"
 				? state.battlefield
 				: zone === "stack"
-					? state.stack
+					? stackObjectIds(state)
 					: state.players.flatMap((p) => zoneList(state, zone, p.id));
 
 		for (const id of ids) {
@@ -2885,7 +3089,7 @@ export function collectReplacements(
 					source: o,
 					controller: controllerOf(o) ?? o.owner,
 					data,
-					label: `${viewName(view, state, o.id)}#${o.id} — ${def.text}`,
+					label: `${viewName(view, o.id)}#${o.id} — ${def.text}`,
 				});
 			}
 		}
@@ -2897,8 +3101,7 @@ export function collectReplacements(
 		// ETB replacement written with the ordinary battlefield default works
 		// whether the object gets there on its own or as a copy.
 		if (o) {
-			const displayName =
-				ev.copiableOverride?.name ?? viewName(view, state, o.id);
+			const displayName = ev.copiableOverride?.name ?? viewName(view, o.id);
 			for (const abilityId of incomingReplacementRefs(view, o, ev)) {
 				const def = resolveReplacementAbility(abilityId);
 				if (!functionsHere(def.functionsIn, "battlefield")) continue;
@@ -3068,7 +3271,7 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 				def,
 				source: object,
 				controller,
-				label: `${viewName(read.view, read.state, object.id)}#${object.id} — ${def.text}`,
+				label: `${viewName(read.view, object.id)}#${object.id} — ${def.text}`,
 			});
 		}
 	}
@@ -3193,8 +3396,9 @@ function resolveReplacements(
 
 		// A single same-kind result is a *modification*: keep iterating on it so
 		// further effects (and the once-only rule) see one continuous event.
-		if (produced.length === 1 && produced[0]?.kind === current.kind) {
-			current = produced[0]!;
+		const onlyProduced = produced[0];
+		if (produced.length === 1 && onlyProduced?.kind === current.kind) {
+			current = onlyProduced;
 			continue;
 		}
 
@@ -3242,12 +3446,19 @@ function moveObject(
 		old.zone === from,
 		`cannot move object ${id} from ${from}: it is in ${old.zone}`,
 	);
-	const src = zoneList(state, from, old.owner) as ObjectId[];
-	const index = src.indexOf(id);
-	assert(index !== -1, `object ${id} is missing from its ${from} zone list`);
-	src.splice(index, 1);
+	if (from === "stack") {
+		const index = state.stack.findIndex(
+			(entry) => entry.kind === "spell" && entry.objectId === id,
+		);
+		assert(index !== -1, `spell ${id} is missing from the stack`);
+		state.stack.splice(index, 1);
+	} else {
+		const src = mutableZoneList(state, from, old.owner);
+		const index = src.indexOf(id);
+		assert(index !== -1, `object ${id} is missing from its ${from} zone list`);
+		src.splice(index, 1);
+	}
 	state.objects.delete(id);
-	if (from === "stack") state.stackItems.delete(id);
 
 	// The printed card identity survives copy effects and zone changes.
 	const printedId = physicalCardId(old);
@@ -3264,18 +3475,20 @@ function moveObject(
 			printedId || tokenValues,
 			"moved object has no card identity or token values",
 		);
+		let representation: PermanentObject["representation"];
+		if (tokenValues) {
+			representation = { kind: "token", createdValues: tokenValues };
+		} else {
+			assertDefined(printedId);
+			representation = { kind: "card", cardId: printedId };
+		}
 		fresh = {
 			kind: "permanent",
 			id: freshId,
 			owner: old.owner,
 			controller: opts.toController,
 			zone: "battlefield",
-			representation: tokenValues
-				? {
-						kind: "token",
-						createdValues: tokenValues,
-					}
-				: { kind: "card", cardId: printedId! },
+			representation,
 			...(opts.copiableOverride
 				? {
 						copiableOverride: cloneCharacteristics(opts.copiableOverride),
@@ -3299,7 +3512,6 @@ function moveObject(
 			controller: opts.toController,
 			zone: "stack",
 			representation: { kind: "card", cardId: printedId },
-			choices: undefined as never,
 			effectData: {},
 		};
 	} else if (tokenValues) {
@@ -3323,9 +3535,17 @@ function moveObject(
 		};
 	}
 	state.objects.set(fresh.id, fresh);
-	const dst = zoneList(state, to, fresh.owner) as ObjectId[];
-	if (to === "library" && opts.toBottom) dst.unshift(fresh.id);
-	else dst.push(fresh.id);
+	if (to === "stack") {
+		assert(
+			fresh.kind === "spell",
+			"only spells can enter the stack as objects",
+		);
+		state.stack.push({ kind: "spell", objectId: fresh.id });
+	} else {
+		const dst = mutableZoneList(state, to, fresh.owner);
+		if (to === "library" && opts.toBottom) dst.unshift(fresh.id);
+		else dst.push(fresh.id);
+	}
 	log(
 		state,
 		`  ${initialCharacteristics(fresh).name}#${fresh.id} is now in ${to}`,
@@ -3495,8 +3715,8 @@ function checkStateBasedActionsIn(
 		// 704.5d. If a token is in a zone other than the battlefield, it ceases
 		// to exist. The zone change itself still happened and can trigger abilities.
 		for (const o of state.objects.values()) {
-			if (!isTokenObject(o) || o.zone === "battlefield") continue;
-			const zone = zoneList(state, o.zone, o.owner);
+			if (o.kind !== "nonbattlefield-token") continue;
+			const zone = mutableZoneList(state, o.zone, o.owner);
 			const idx = zone.indexOf(o.id);
 			assert(
 				idx !== -1,
@@ -3915,7 +4135,7 @@ function detectTriggers(
 ): void {
 	for (const abilitySource of state.objects.values()) {
 		const snapshot = read.view.objects.get(abilitySource.id);
-		if (!snapshot || snapshot.kind === "ability") continue;
+		assertDefined(snapshot, `no derived view for object ${abilitySource.id}`);
 		for (const triggerId of snapshot.currentCharacteristics.abilities
 			.triggered) {
 			const trigger = resolveTriggeredAbility(triggerId);
@@ -4505,12 +4725,11 @@ function putPendingTriggersOnStack(state: GameState): void {
 	}
 	for (const pending of state.pendingTriggers) {
 		const item: AbilityStackItem = {
-			id: state.nextObjectId++ as ObjectId,
+			id: state.nextStackItemId++ as StackItemId,
 			kind: "ability",
 			...pending,
 		};
-		state.stackItems.set(item.id, item);
-		state.stack.push(item.id);
+		state.stack.push(item);
 		log(state, `  [stack] ${item.text}`);
 	}
 	state.pendingTriggers.length = 0;
@@ -4520,11 +4739,12 @@ function resolveTopOfStack(
 	state: GameState,
 	choices: AnyChoiceController,
 ): void {
-	const id = state.stack.pop();
-	if (id === undefined) return;
-	const item = state.stackItems.get(id);
-	if (!item) throw new Error(`no stack item ${id}`);
-	state.stackItems.delete(id);
+	const entry = state.stack.pop();
+	if (entry === undefined) return;
+	if (entry.kind === "spell") {
+		throw new Error("spell resolution is not implemented");
+	}
+	const item = entry;
 
 	log(state, `  [resolve] ${item.text}`);
 
