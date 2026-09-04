@@ -2047,10 +2047,6 @@ function card(id: string): CardDef {
  * Game creation
  * ------------------------------------------------------------------ */
 
-function emptyManaPool(): ManaPool {
-	return { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 };
-}
-
 const newPlayerState = (id: PlayerId): PlayerState => ({
 	id,
 	life: 20,
@@ -2060,7 +2056,7 @@ const newPlayerState = (id: PlayerId): PlayerState => ({
 	exile: [],
 	drawnInDrawStep: 0,
 	drewFromEmptyLibrary: false,
-	manaPool: emptyManaPool(),
+	manaPool: { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 },
 	landsPlayed: 0,
 	lost: false,
 	won: false,
