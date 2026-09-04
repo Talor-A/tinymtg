@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts";
 import {
-	activatedAbilityId,
+	abilityId,
 	advanceWithReplay,
 	buildGameView,
 	type CharacteristicsSnapshot,
@@ -13,18 +13,12 @@ import {
 	perform,
 	permanent,
 	physicalCardId,
-	prohibitionAbilityId,
 	readObject,
 	registerCard,
-	replacementAbilityId,
-	resolveActivatedAbility,
-	resolveStaticAbility,
-	resolveTriggeredAbility,
+	getAbilityDefinition,
 	spawnCard,
 	spawnPermanent,
 	spawnToken,
-	staticAbilityId,
-	triggeredAbilityId,
 	view,
 } from "./index.ts";
 
@@ -42,9 +36,9 @@ const agents: [ScriptedAgent, ScriptedAgent] = [
  * it can't tap to draw, and nothing ever triggers off it entering.
  */
 const GRANT_CARD = "test-communal-instruction";
-const GRANTED_ACTIVATED = String(activatedAbilityId(GRANT_CARD, 0));
-const GRANTED_TRIGGERED = String(triggeredAbilityId(GRANT_CARD, 0));
-const GRANT_STATIC = String(staticAbilityId(GRANT_CARD, 0));
+const GRANTED_ACTIVATED = String(abilityId("activated", GRANT_CARD, 0));
+const GRANTED_TRIGGERED = String(abilityId("triggered", GRANT_CARD, 0));
+const GRANT_STATIC = String(abilityId("static", GRANT_CARD, 0));
 
 const COMMUNAL_INSTRUCTION = registerCard({
 	id: GRANT_CARD,
@@ -85,8 +79,8 @@ const COMMUNAL_INSTRUCTION = registerCard({
 				v.types.includes("creature") &&
 				v.controller === source.controller,
 			modify: (v) => {
-				v.abilities.activated.push(activatedAbilityId(GRANT_CARD, 0));
-				v.abilities.triggered.push(triggeredAbilityId(GRANT_CARD, 0));
+				v.abilities.activated.push(abilityId("activated", GRANT_CARD, 0));
+				v.abilities.triggered.push(abilityId("triggered", GRANT_CARD, 0));
 			},
 		},
 	],
@@ -165,11 +159,14 @@ describe("derived game views", () => {
 			manaCost: "zero",
 			statics: [colonCardStatic],
 		});
-		const id = staticAbilityId("card:id:with:colons", 0);
+		const id = abilityId("static", "card:id:with:colons", 0);
 		expect(String(id)).toBe("card:id:with:colons:0");
-		expect(resolveStaticAbility(id)).toBe(colonCardStatic);
+		expect(getAbilityDefinition("static", id)).toBe(colonCardStatic);
 		expect(
-			resolveStaticAbility(snapshot.copiableValues.abilities.static[0]!),
+			getAbilityDefinition(
+				"static",
+				snapshot.copiableValues.abilities.static[0]!,
+			),
 		).toBeDefined();
 	});
 
@@ -201,8 +198,10 @@ describe("derived game views", () => {
 		expect(
 			sourceSnapshot.copiableValues.abilities.activated.map(String),
 		).toEqual(["snapshot-activation-test:0"]);
-		const id = activatedAbilityId("snapshot-activation-test", 0);
-		expect(resolveActivatedAbility(id).id).toBe("unused-runtime-name");
+		const id = abilityId("activated", "snapshot-activation-test", 0);
+		expect(getAbilityDefinition("activated", id).id).toBe(
+			"unused-runtime-name",
+		);
 
 		const token = spawnToken(
 			state,
@@ -247,8 +246,8 @@ describe("derived game views", () => {
 		expect(snapshot.copiableValues.abilities.triggered.map(String)).toEqual([
 			"arashin-cleric:0",
 		]);
-		const id = triggeredAbilityId("arashin-cleric", 0);
-		expect(resolveTriggeredAbility(id).id).toBe("etb-life");
+		const id = abilityId("triggered", "arashin-cleric", 0);
+		expect(getAbilityDefinition("triggered", id).id).toBe("etb-life");
 	});
 
 	test("counters change current characteristics but not copiable values", () => {
@@ -601,8 +600,8 @@ describe("derived game views", () => {
  * read the card's definition arrays directly.
  */
 const WARD_CARD = "test-collective-ward";
-const GRANTED_REPLACEMENT = String(replacementAbilityId(WARD_CARD, 0));
-const GRANTED_PROHIBITION = String(prohibitionAbilityId(WARD_CARD, 0));
+const GRANTED_REPLACEMENT = String(abilityId("replacement", WARD_CARD, 0));
+const GRANTED_PROHIBITION = String(abilityId("prohibition", WARD_CARD, 0));
 
 registerCard({
 	id: WARD_CARD,
@@ -642,8 +641,8 @@ registerCard({
 				v.types.includes("creature") &&
 				v.controller === source.controller,
 			modify: (v) => {
-				v.abilities.replacement.push(replacementAbilityId(WARD_CARD, 0));
-				v.abilities.prohibition.push(prohibitionAbilityId(WARD_CARD, 0));
+				v.abilities.replacement.push(abilityId("replacement", WARD_CARD, 0));
+				v.abilities.prohibition.push(abilityId("prohibition", WARD_CARD, 0));
 			},
 		},
 	],
@@ -679,7 +678,7 @@ describe("layer 6 ability grants", () => {
 		const granted = snapshot.currentCharacteristics.abilities.activated[0];
 		expect(granted).toBeDefined();
 		if (!granted) return;
-		expect(resolveActivatedAbility(granted).id).toBe("granted-draw");
+		expect(getAbilityDefinition("activated", granted).id).toBe("granted-draw");
 		expect(() => structuredClone(state)).not.toThrow();
 	});
 
@@ -712,9 +711,10 @@ describe("layer 6 ability grants", () => {
 
 		// A definition it does not print still resolves: the registry owns the
 		// implementation, `printedAbilities` owns possession.
-		expect(resolveTriggeredAbility(triggeredAbilityId(GRANT_CARD, 0)).id).toBe(
-			"granted-etb-life",
-		);
+		expect(
+			getAbilityDefinition("triggered", abilityId("triggered", GRANT_CARD, 0))
+				.id,
+		).toBe("granted-etb-life");
 
 		const { state, instruction } = withInstruction();
 		const snapshot = readObject(createReadContext(state), instruction.id);

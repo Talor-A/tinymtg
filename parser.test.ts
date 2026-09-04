@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-	createReadContext,
+	abilityId,
+	getAbilityDefinitionext,
 	newGame,
 	readObject,
 	registerCard,
-	resolveStaticAbility,
+	resolveAbility,
 	spawnPermanent,
-	staticAbilityId,
 	view,
 } from "./index.ts";
 import {
@@ -465,15 +465,15 @@ describe("structured Forge pipeline", () => {
 		if (!compiled.ok) return;
 		expect(compiled.value.abilityDefinitions.static).toHaveLength(1);
 		registerCard(compiled.value);
-		expect(String(staticAbilityId("glorious-anthem", 0))).toBe(
+		expect(String(abilityId("static", "glorious-anthem", 0))).toBe(
 			"glorious-anthem:0",
 		);
 		const compiledStatic = compiled.value.abilityDefinitions.static?.[0];
 		expect(compiledStatic).toBeDefined();
 		if (!compiledStatic) return;
-		expect(resolveStaticAbility(staticAbilityId("glorious-anthem", 0))).toBe(
-			compiledStatic,
-		);
+		expect(getAbilityDefinition
+			resolveAbility("static", abilityId("static", "glorious-anthem", 0)),
+		).toBe(compiledStatic);
 		const game = newGame();
 		spawnPermanent(game, "glorious-anthem", 0);
 		const yourCreature = spawnPermanent(game, "grizzly-bears", 0);

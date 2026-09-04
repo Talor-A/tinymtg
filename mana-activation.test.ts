@@ -9,7 +9,7 @@ import type {
 	PlayerId,
 } from "./index.ts";
 import {
-	activatedAbilityId,
+	abilityId,
 	advance,
 	advanceWithReplay,
 	executeAbilityAction,
@@ -48,7 +48,7 @@ registerCard({
 	],
 });
 
-const forestMana = activatedAbilityId("forest", 0);
+const forestMana = abilityId("activated", "forest", 0);
 
 function manaAction(source: ObjectId): ActivateAbilityAction {
 	return { kind: "activate ability", source, ability: forestMana };
@@ -194,7 +194,7 @@ describe("authoritative mana-ability rejection", () => {
 		expectAtomicRejection(absent, ALICE, {
 			kind: "activate ability",
 			source: artifact.id,
-			ability: activatedAbilityId("test-nonmana-ability", 0),
+			ability: abilityId("activated", "test-nonmana-ability", 0),
 		});
 	});
 

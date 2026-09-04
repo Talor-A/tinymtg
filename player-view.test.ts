@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "./agents.ts";
 import "./cards.ts";
 import {
+	abilityId,
 	buildPlayerView,
 	newGame,
 	type PlayerBattlefieldObjectView,
@@ -14,7 +15,6 @@ import {
 	type StackItemId,
 	spawnCard,
 	spawnPermanent,
-	triggeredAbilityId,
 } from "./index.ts";
 
 function assertExactPlayerViewTypes(
@@ -117,7 +117,7 @@ describe("player views", () => {
 			id: stackId,
 			kind: "ability",
 			source: mine.id,
-			triggerId: triggeredAbilityId("ajanis-mantra", 0),
+			triggerId: abilityId("triggered", "ajanis-mantra", 0),
 			controller: 0,
 			text: "gain 1 life",
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
@@ -208,7 +208,7 @@ describe("player views", () => {
 			id: state.nextStackItemId++ as StackItemId,
 			kind: "ability",
 			source: source.id,
-			triggerId: triggeredAbilityId("ajanis-mantra", 0),
+			triggerId: abilityId("triggered", "ajanis-mantra", 0),
 			controller: 0,
 			text: "gain 1 life",
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],

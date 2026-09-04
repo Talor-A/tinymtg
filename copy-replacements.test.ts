@@ -9,6 +9,7 @@ import type {
 	ReadContext,
 } from "./index.ts";
 import {
+	abilityId,
 	advanceWithReplay,
 	cloneCharacteristics,
 	createReadContext,
@@ -17,7 +18,6 @@ import {
 	permanent,
 	readObject,
 	registerCard,
-	replacementAbilityId,
 	spawnCard,
 	spawnPermanent,
 	spawnToken,
@@ -41,7 +41,7 @@ const agents: [ScriptedAgent, ScriptedAgent] = [
  * "exactly one counter" a meaningful assertion.
  */
 const GUARD = "test-entry-guard";
-const GUARD_ENTRY = String(replacementAbilityId(GUARD, 0));
+const GUARD_ENTRY = String(abilityId("replacement", GUARD, 0));
 
 registerCard({
 	id: GUARD,

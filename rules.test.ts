@@ -9,6 +9,7 @@ import type {
 	PlayerId,
 } from "./index.ts";
 import {
+	abilityId,
 	activePlayer,
 	addFloating,
 	advance,
@@ -26,7 +27,6 @@ import {
 	settlePriority,
 	spawnCard,
 	spawnPermanent,
-	triggeredAbilityId,
 	view,
 	winner,
 } from "./index.ts";
@@ -772,7 +772,7 @@ describe("triggered abilities", () => {
 	): void {
 		state.pendingTriggers.push({
 			source,
-			triggerId: triggeredAbilityId("test-trigger", 0),
+			triggerId: abilityId("triggered", "test-trigger", 0),
 			controller,
 			text,
 			effects: [],

@@ -4,6 +4,7 @@ import "./cards.ts";
 import { blockAssignmentOptionId, priorityOptionId } from "./choices.ts";
 import {
 	type Agent,
+	abilityId,
 	advance,
 	advanceWithReplay,
 	buildPlayerView,
@@ -24,7 +25,6 @@ import {
 	spawnCard,
 	spawnPermanent,
 	spawnToken,
-	triggeredAbilityId,
 } from "./index.ts";
 
 function agents(first = new ScriptedAgent()): [SyncAgent, SyncAgent] {
@@ -357,7 +357,7 @@ describe("choice transcripts", () => {
 				id: 1 as StackItemId,
 				kind: "ability",
 				source: 1 as ObjectId,
-				triggerId: triggeredAbilityId("ajanis-mantra", 0),
+				triggerId: abilityId("triggered", "ajanis-mantra", 0),
 				controller: 0,
 				text: "gain 1 life",
 				effects: [
@@ -419,7 +419,7 @@ describe("choice transcripts", () => {
 				id: 99 as StackItemId,
 				kind: "ability",
 				source: 1 as ObjectId,
-				triggerId: triggeredAbilityId("ajanis-mantra", 0),
+				triggerId: abilityId("triggered", "ajanis-mantra", 0),
 				controller: 0,
 				text: "gain 1 life",
 				effects: [

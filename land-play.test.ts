@@ -11,6 +11,7 @@ import type {
 	SyncAgent,
 } from "./index.ts";
 import {
+	abilityId,
 	advanceWithReplay,
 	executeLandAction,
 	getObservableActions,
@@ -20,7 +21,6 @@ import {
 	registerCard,
 	spawnCard,
 	spawnPermanent,
-	triggeredAbilityId,
 	turnLocation,
 } from "./index.ts";
 import {
@@ -81,7 +81,7 @@ function occupyStack(state: GameState): void {
 		id: state.nextStackItemId++ as StackItemId,
 		kind: "ability",
 		source: source.id,
-		triggerId: triggeredAbilityId("ajanis-mantra", 0),
+		triggerId: abilityId("triggered", "ajanis-mantra", 0),
 		controller: ALICE,
 		text: "At the beginning of your upkeep, you may gain 1 life.",
 		effects: [{ kind: "gain-life", player: "you", amount: 1 }],

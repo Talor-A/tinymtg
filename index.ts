@@ -605,7 +605,7 @@ export type ProhibitionAbilityId = AbilityId<"prohibition">;
 /**
  * The definition a given category resolves to. {@link AbilityDefinitions} is
  * the registry's category-keyed store, so its element types are exactly the
- * return types {@link resolveAbility} owes each category.
+ * return types {@link getAbilityDefinition} owes each category.
  */
 type AbilityDef<C extends AbilityCategory> = AbilityDefinitions[C][number];
 
@@ -621,54 +621,27 @@ export function abilityId<C extends AbilityCategory>(
 	return `${cardId}:${index}` as AbilityId<C>;
 }
 
-/**
- * Card ids may themselves contain colons (`card:id:with:colons`), so the index
- * is always the segment after the *last* colon.
- */
-function parseAbilityRef(
-	id: string,
-	category: AbilityCategory,
-): { cardId: string; index: number } {
+export function getAbilityDefinition<C extends AbilityCategory>(
+	category: C,
+	id: AbilityId<C>,
+): AbilityDef<C> {
+	/**
+	 * Card ids may themselves contain colons (`card:id:with:colons`), so the index
+	 * is always the segment after the *last* colon.
+	 */
 	const separator = id.lastIndexOf(":");
 	assert(separator > 0, `invalid ${category} ability id: ${id}`);
 	const indexText = id.slice(separator + 1);
 	assert(/^\d+$/.test(indexText), `invalid ${category} ability id: ${id}`);
-	return { cardId: id.slice(0, separator), index: Number(indexText) };
-}
+	const cardId = id.slice(0, separator);
+	const index = Number(indexText);
 
-export function resolveAbility<C extends AbilityCategory>(
-	category: C,
-	id: AbilityId<C>,
-): AbilityDef<C> {
-	const { cardId, index } = parseAbilityRef(id, category);
 	const definitions: AbilityDef<C>[] =
 		card(cardId).abilityDefinitions[category];
 	const definition = definitions[index];
 	assertDefined(definition, `unknown ${category} ability: ${id}`);
 	return definition;
 }
-
-export const staticAbilityId = (cardId: string, index: number) =>
-	abilityId("static", cardId, index);
-export const activatedAbilityId = (cardId: string, index: number) =>
-	abilityId("activated", cardId, index);
-export const triggeredAbilityId = (cardId: string, index: number) =>
-	abilityId("triggered", cardId, index);
-export const replacementAbilityId = (cardId: string, index: number) =>
-	abilityId("replacement", cardId, index);
-export const prohibitionAbilityId = (cardId: string, index: number) =>
-	abilityId("prohibition", cardId, index);
-
-export const resolveStaticAbility = (id: StaticAbilityId) =>
-	resolveAbility("static", id);
-export const resolveActivatedAbility = (id: ActivatedAbilityId) =>
-	resolveAbility("activated", id);
-export const resolveTriggeredAbility = (id: TriggeredAbilityId) =>
-	resolveAbility("triggered", id);
-export const resolveReplacementAbility = (id: ReplacementAbilityId) =>
-	resolveAbility("replacement", id);
-export const resolveProhibitionAbility = (id: ProhibitionAbilityId) =>
-	resolveAbility("prohibition", id);
 
 /**
  * What an object currently *has*. Purely references, so this survives
@@ -1029,8 +1002,8 @@ function buildFilteredGameView(
 			characteristics.set(object.id, cloneCharacteristics(initial));
 		}
 
-		for (const abilityId of initial.abilities.static) {
-			const ability = resolveStaticAbility(abilityId);
+		for (const id of initial.abilities.static) {
+			const ability = getAbilityDefinition("static", id);
 			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
 			let layerAbilities = abilities[ability.layer];
 			if (!layerAbilities) {
@@ -1644,7 +1617,7 @@ export type EffectDef =
 	| {
 			kind: "add-mana";
 			player: "you";
-			mana: Record<Color, number>;
+			mana: ManaAmount;
 	  }
 	| {
 			kind: "may";
@@ -1824,7 +1797,7 @@ type CardDefManaCost =
  *
  * A definition living here does *not* mean the card has that ability. It means
  * the card is where the implementation is stored, and that
- * `staticAbilityId(cardId, index)` and friends resolve to it. What the card
+ * `abilityId("static", cardId, index)` and friends resolve to it. What the card
  * actually has is {@link CardDef.printedAbilities}.
  */
 export interface AbilityDefinitions {
@@ -1887,14 +1860,6 @@ export interface CardDefInput extends CardDefBase {
 	printed?: Partial<Record<AbilityCategory, readonly number[]>>;
 }
 
-const ABILITY_REF_CONSTRUCTORS = {
-	static: staticAbilityId,
-	activated: activatedAbilityId,
-	triggered: triggeredAbilityId,
-	replacement: replacementAbilityId,
-	prohibition: prohibitionAbilityId,
-} as const;
-
 function printedRefsFor(
 	id: string,
 	definitions: AbilityDefinitions,
@@ -1910,7 +1875,7 @@ function printedRefsFor(
 				Number.isSafeInteger(index) && index >= 0 && index < count,
 				`${id}: printed ${category} ability index ${index} has no definition`,
 			);
-			return ABILITY_REF_CONSTRUCTORS[category](id, index);
+			return abilityId(category, id, index);
 		});
 	}
 	return refs as PrintedAbilities;
@@ -2005,7 +1970,7 @@ export function defineCard(input: CardDefInput | CardDef): CardDef {
 	);
 	for (const entry of printedEntryReplacements(input)) {
 		printedAbilities.replacement.push(
-			replacementAbilityId(input.id, abilityDefinitions.replacement.length),
+			abilityId("replacement", input.id, abilityDefinitions.replacement.length),
 		);
 		abilityDefinitions.replacement.push(entry);
 	}
@@ -2964,8 +2929,8 @@ function anyPossessedStatic(
 	predicate: (effect: ContinuousEffect) => boolean,
 ): boolean {
 	for (const object of state.objects.values()) {
-		for (const abilityId of baseCharacteristics(object).abilities.static) {
-			if (predicate(resolveStaticAbility(abilityId))) return true;
+		for (const id of baseCharacteristics(object).abilities.static) {
+			if (predicate(getAbilityDefinition("static", id))) return true;
 		}
 	}
 	return false;
@@ -2993,7 +2958,7 @@ function replacementsOf(
 ): { id: ReplacementAbilityId; def: ReplacementDef }[] {
 	return abilityReferencesOf(view, object).replacement.map((id) => ({
 		id,
-		def: resolveReplacementAbility(id),
+		def: getAbilityDefinition("replacement", id),
 	}));
 }
 
@@ -3120,16 +3085,16 @@ export function collectReplacements(
 		// whether the object gets there on its own or as a copy.
 		if (o) {
 			const displayName = ev.copiableOverride?.name ?? viewName(view, o.id);
-			for (const abilityId of incomingReplacementRefs(view, o, ev)) {
-				const def = resolveReplacementAbility(abilityId);
+			for (const id of incomingReplacementRefs(view, o, ev)) {
+				const def = getAbilityDefinition("replacement", id);
 				if (!functionsHere(def.functionsFrom, "battlefield")) continue;
 				out.push({
-					id: `${o.id}:${abilityId}` as EffectId,
+					id: `${o.id}:${id}` as EffectId,
 					def,
 					source: o,
 					// CR 616.1b has already settled who it enters under.
 					controller: ev.toController,
-					data: effectDataFor(o, abilityId),
+					data: effectDataFor(o, id),
 					label: `${displayName}#${o.id} — ${def.text}`,
 				});
 			}
@@ -3290,8 +3255,8 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 						},
 					]
 				: []),
-			...abilityReferencesOf(read.view, object).prohibition.map(
-				resolveProhibitionAbility,
+			...abilityReferencesOf(read.view, object).prohibition.map((id) =>
+				getAbilityDefinition("prohibition", id),
 			),
 		];
 		for (const def of definitions) {
@@ -4182,7 +4147,7 @@ function detectTriggers(
 		assertDefined(snapshot, `no derived view for object ${abilitySource.id}`);
 		for (const triggerId of snapshot.currentCharacteristics.abilities
 			.triggered) {
-			const trigger = resolveTriggeredAbility(triggerId);
+			const trigger = getAbilityDefinition("triggered", triggerId);
 			const functionsFrom = trigger.functionsFrom ?? ["battlefield"];
 			if (!functionsFrom.includes(abilitySource.zone)) continue;
 			if (
@@ -4926,19 +4891,19 @@ function doTimingRestrictionsAllowCast(
 
 	if (!pv.types) throw new Error("object has no types");
 
-	for (const type of pv.types) {
-		if (type === "instant") {
-			assert(pv.types.length === 1, "instant type must be the only type");
-			return true;
-		}
-		if (turnLocation(state)?.phase.kind !== "main") {
-			return false;
-		}
-		// if it's not your turn:false
-		if (activePlayer(state) !== player) return false;
-		// if stack is not empty: false
-		if (state.stack.length !== 0) return false;
+	if (pv.types.includes("instant")) {
+		assert(pv.types.length === 1, "instant type must be the only type");
+		return true;
 	}
+
+	if (turnLocation(state)?.phase.kind !== "main") {
+		return false;
+	}
+	// if it's not your turn:false
+	if (activePlayer(state) !== player) return false;
+	// if stack is not empty: false
+	if (state.stack.length !== 0) return false;
+
 	return false;
 }
 
@@ -5025,7 +4990,7 @@ function manaAbilityActions(
 		if (snapshot.kind !== "permanent") return [];
 		return snapshot.currentCharacteristics.abilities.activated.flatMap(
 			(ability): ActivateAbilityAction[] => {
-				const definition = resolveActivatedAbility(ability);
+				const definition = getAbilityDefinition("activated", ability);
 				return definition.kind === "mana" &&
 					definition.costs.length === 1 &&
 					definition.costs[0]?.kind === "tap-self"
@@ -5124,7 +5089,7 @@ function activateAbilityIn(
 			`object ${action.source} does not have ability ${action.ability}`,
 		);
 	}
-	const ability = resolveActivatedAbility(action.ability);
+	const ability = getAbilityDefinition("activated", action.ability);
 	if (ability.kind !== "mana") {
 		throw new IllegalAbilityActivationError(
 			`ability ${action.ability} is not a mana ability`,
