@@ -872,12 +872,10 @@ export function parseForgeCard(text: string): ForgeResult<ForgeCardIR> {
 					line.line,
 				);
 			rules.push({
-				kind: "activated",
+				kind: "mana",
 				id: `activated-${++activatedCount}`,
 				text: fields.get("SpellDescription") ?? `Add {${produced}}.`,
-				manaAbility: true,
 				costs: [{ kind: "tap-self" }],
-				targets: [],
 				effects: [
 					{ kind: "add-mana", player: "you", mana: fullMana(color, amount) },
 				],
@@ -948,7 +946,6 @@ export function parseForgeCard(text: string): ForgeResult<ForgeCardIR> {
 				kind: "activated",
 				id: `activated-${++activatedCount}`,
 				text: fields.get("SpellDescription")!,
-				manaAbility: false,
 				costs: [{ kind: "tap-self" }],
 				targets,
 				effects,
@@ -965,20 +962,17 @@ export function parseForgeCard(text: string): ForgeResult<ForgeCardIR> {
 		for (const color of intrinsicColors) {
 			const alreadyPresent = rules.some(
 				(rule) =>
-					rule.kind === "activated" &&
-					rule.manaAbility &&
+					rule.kind === "mana" &&
 					rule.effects.some(
 						(effect) => effect.kind === "add-mana" && effect.mana[color] > 0,
 					),
 			);
 			if (alreadyPresent) continue;
 			rules.push({
-				kind: "activated",
+				kind: "mana",
 				id: `intrinsic-mana-${color}`,
 				text: `Add {${color.toUpperCase()}}.`,
-				manaAbility: true,
 				costs: [{ kind: "tap-self" }],
-				targets: [],
 				effects: [{ kind: "add-mana", player: "you", mana: fullMana(color) }],
 			});
 		}
@@ -996,7 +990,7 @@ export function parseForgeCard(text: string): ForgeResult<ForgeCardIR> {
 	)
 		usedSvars.add("PlayMain1");
 	if (
-		rules.some((rule) => rule.kind === "activated" && !rule.manaAbility) &&
+		rules.some((rule) => rule.kind === "activated") &&
 		svars.get("NonCombatPriority")?.value === "1"
 	)
 		usedSvars.add("NonCombatPriority");

@@ -42,7 +42,7 @@ Low-level callers handling `ChoicePendingError` themselves must discard the spec
 Card import is deliberately split into two boundaries:
 
 ```text
-raw Forge .txt -> ForgeCardIR v1 (static JSON) -> OracleCardDef / CardDef
+raw Forge .txt -> ForgeCardIR v2 (static JSON) -> OracleCardDef / CardDef
 ```
 
 - `parseForgeCard(text)` parses and normalizes Forge syntax into a versioned,

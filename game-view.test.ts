@@ -54,9 +54,9 @@ const COMMUNAL_INSTRUCTION = registerCard({
 	manaCost: { u: 1, c: 1 },
 	activatedAbilities: [
 		{
+			kind: "activated",
 			id: "granted-draw",
 			text: "{T}: Draw a card.",
-			manaAbility: false,
 			costs: [{ kind: "tap-self" }],
 			targets: [],
 			effects: [{ kind: "draw", player: "you", amount: 1 }],
@@ -184,9 +184,9 @@ describe("derived game views", () => {
 			toughness: 1,
 			activatedAbilities: [
 				{
+					kind: "activated",
 					id: "unused-runtime-name",
 					text: "{T}: Draw a card.",
-					manaAbility: false,
 					costs: [{ kind: "tap-self" }],
 					targets: [],
 					effects: [{ kind: "draw", player: "you", amount: 1 }],

@@ -250,11 +250,23 @@ export function compileForgeCard(value: ForgeCardIR): ForgeResult<CardDef> {
 				const compiled = structuredClone(rule);
 				card.activatedAbilities ??= [];
 				card.activatedAbilities.push({
+					kind: "activated",
 					id: compiled.id,
 					text: compiled.text,
-					manaAbility: compiled.manaAbility,
 					costs: compiled.costs,
 					targets: compiled.targets,
+					effects: compiled.effects,
+				});
+				break;
+			}
+			case "mana": {
+				const compiled = structuredClone(rule);
+				card.activatedAbilities ??= [];
+				card.activatedAbilities.push({
+					kind: "mana",
+					id: compiled.id,
+					text: compiled.text,
+					costs: compiled.costs,
 					effects: compiled.effects,
 				});
 				break;

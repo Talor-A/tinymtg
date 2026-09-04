@@ -85,11 +85,10 @@ Oracle:({T}: Add {G}.)
 		});
 		expect(forest?.abilityDefinitions.activated).toEqual([
 			{
+				kind: "mana",
 				id: "intrinsic-mana-g",
 				text: "Add {G}.",
-				manaAbility: true,
 				costs: [{ kind: "tap-self" }],
-				targets: [],
 				effects: [
 					{
 						kind: "add-mana",
@@ -381,7 +380,7 @@ describe("structured Forge pipeline", () => {
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) return;
 		expect(parsed.value).toEqual({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			id: "grizzly-bears",
 			name: "Grizzly Bears",
 			supertypes: [],
@@ -439,14 +438,14 @@ describe("structured Forge pipeline", () => {
 	test("parses targeted tap abilities and explicit mana abilities", () => {
 		const prodigal = parseCard(fixture("prodigal_sorcerer"));
 		expect(prodigal?.abilityDefinitions.activated?.[0]).toMatchObject({
-			manaAbility: false,
+			kind: "activated",
 			costs: [{ kind: "tap-self" }],
 			targets: [{ id: "target-1", legal: { kind: "any-target" } }],
 			effects: [{ kind: "damage", target: "target-1", amount: 1 }],
 		});
 		const elves = parseCard(fixture("llanowar_elves"));
 		expect(elves?.abilityDefinitions.activated?.[0]).toMatchObject({
-			manaAbility: true,
+			kind: "mana",
 			costs: [{ kind: "tap-self" }],
 			effects: [
 				{
@@ -520,11 +519,10 @@ describe("structured Forge pipeline", () => {
 			readFileSync("./cards/cardsfolder/d/dryad_arbor.txt", "utf-8"),
 		);
 		expect(dryadArbor?.abilityDefinitions.activated).toContainEqual({
+			kind: "mana",
 			id: "intrinsic-mana-g",
 			text: "Add {G}.",
-			manaAbility: true,
 			costs: [{ kind: "tap-self" }],
-			targets: [],
 			effects: [
 				{
 					kind: "add-mana",
@@ -564,6 +562,34 @@ Oracle:Deal 1 damage to target player or planeswalker.
 		const validated = validateForgeCardIR(invalid);
 		expect(validated.ok).toBe(false);
 		if (!validated.ok) expect(validated.diagnostics[0]?.path).toBe("$.extra");
+	});
+
+	test("strict validation rejects targets on mana abilities", () => {
+		const parsed = parseForgeCard(fixture("llanowar_elves"));
+		if (!parsed.ok) throw new Error("fixture did not parse");
+		const invalid = structuredClone(parsed.value) as unknown as {
+			rules: Record<string, unknown>[];
+		};
+		const mana = invalid.rules.find((rule) => rule.kind === "mana");
+		if (!mana) throw new Error("fixture has no mana ability");
+		mana.targets = [
+			{
+				id: "illegal-target",
+				min: 1,
+				max: 1,
+				legal: { kind: "player" },
+			},
+		];
+
+		const validated = validateForgeCardIR(invalid);
+		expect(validated.ok).toBe(false);
+		if (!validated.ok)
+			expect(validated.diagnostics).toContainEqual(
+				expect.objectContaining({
+					path: expect.stringMatching(/\.targets$/),
+					message: "unknown property",
+				}),
+			);
 	});
 });
 

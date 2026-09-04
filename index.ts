@@ -656,7 +656,7 @@ export function resolveStaticAbility(id: StaticAbilityId): ContinuousEffect {
 
 export function resolveActivatedAbility(
 	id: ActivatedAbilityId,
-): ActivatedAbilityDef {
+): AnyActivatedAbilityDef {
 	const { cardId, index } = parseAbilityRef(id, "activated");
 	const ability = card(cardId).abilityDefinitions.activated[index];
 	assertDefined(ability, `unknown activated ability: ${id}`);
@@ -1781,14 +1781,25 @@ export interface SpellAbilityDef {
 	effects: EffectDef[];
 }
 
-export interface ActivatedAbilityDef {
+interface ActivatedAbilityDefBase {
 	id: string;
 	text: string;
-	manaAbility: boolean;
 	costs: { kind: "tap-self" }[];
-	targets: TargetDef[];
 	effects: EffectDef[];
 }
+
+export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
+	kind: "activated";
+	targets: TargetDef[];
+}
+
+/** CR 605.1a mana abilities cannot require targets. */
+export interface ManaAbilityDef extends ActivatedAbilityDefBase {
+	kind: "mana";
+}
+
+/** Every ability definition possessed through an activated-ability reference. */
+export type AnyActivatedAbilityDef = ActivatedAbilityDef | ManaAbilityDef;
 
 type CardDefManaCost =
 	| {
@@ -1834,7 +1845,7 @@ type CardDefManaCost =
  */
 export interface AbilityDefinitions {
 	static: ContinuousEffect[];
-	activated: ActivatedAbilityDef[];
+	activated: AnyActivatedAbilityDef[];
 	triggered: TriggerDef[];
 	replacement: ReplacementDef[];
 	prohibition: ProhibitionDef[];
@@ -1879,7 +1890,7 @@ export interface CardDef extends CardDefBase {
  */
 export interface CardDefInput extends CardDefBase {
 	statics?: ContinuousEffect[];
-	activatedAbilities?: ActivatedAbilityDef[];
+	activatedAbilities?: AnyActivatedAbilityDef[];
 	triggers?: TriggerDef[];
 	replacements?: ReplacementDef[];
 	prohibitions?: ProhibitionDef[];

@@ -1,7 +1,7 @@
 import type { Color, EffectDef, Keyword, Supertype } from "./index.ts";
 
 /** The JSON format emitted by the Forge source parser. Bump for breaking changes. */
-export const FORGE_CARD_IR_VERSION = 1 as const;
+export const FORGE_CARD_IR_VERSION = 2 as const;
 
 export type ForgeCardType =
 	| "artifact"
@@ -109,15 +109,22 @@ export type ForgeRule =
 			kind: "activated";
 			id: string;
 			text: string;
-			manaAbility: boolean;
 			costs: { kind: "tap-self" }[];
 			targets: ForgeTarget[];
+			effects: EffectDef[];
+	  }
+	| {
+			kind: "mana";
+			id: string;
+			text: string;
+			costs: { kind: "tap-self" }[];
 			effects: EffectDef[];
 	  };
 
 /**
  * Versioned, callback-free and JSON-round-trippable representation of a card.
- * Arrays are always present so a consumer never has to infer defaults.
+ * Declared arrays are always present so a consumer never has to infer defaults.
+ * Fields forbidden by a variant, such as targets on mana abilities, are absent.
  */
 export interface ForgeCardIR {
 	schemaVersion: typeof FORGE_CARD_IR_VERSION;
@@ -463,19 +470,9 @@ export function validateForgeCardIR(value: unknown): ForgeResult<ForgeCardIR> {
 				array(o.effects, `${path}.effects`, effect);
 				return true;
 			case "activated":
-				exact(o, path, [
-					"kind",
-					"id",
-					"text",
-					"manaAbility",
-					"costs",
-					"targets",
-					"effects",
-				]);
+				exact(o, path, ["kind", "id", "text", "costs", "targets", "effects"]);
 				string(o.id, `${path}.id`);
 				string(o.text, `${path}.text`);
-				if (typeof o.manaAbility !== "boolean")
-					error(`${path}.manaAbility`, "expected boolean");
 				array(
 					o.costs,
 					`${path}.costs`,
@@ -489,6 +486,24 @@ export function validateForgeCardIR(value: unknown): ForgeResult<ForgeCardIR> {
 					},
 				);
 				array(o.targets, `${path}.targets`, target);
+				array(o.effects, `${path}.effects`, effect);
+				return true;
+			case "mana":
+				exact(o, path, ["kind", "id", "text", "costs", "effects"]);
+				string(o.id, `${path}.id`);
+				string(o.text, `${path}.text`);
+				array(
+					o.costs,
+					`${path}.costs`,
+					(entry, p): entry is { kind: "tap-self" } => {
+						const cost = object(entry, p);
+						if (!cost) return false;
+						exact(cost, p, ["kind"]);
+						if (cost.kind !== "tap-self")
+							error(`${p}.kind`, "expected tap-self");
+						return true;
+					},
+				);
 				array(o.effects, `${path}.effects`, effect);
 				return true;
 			default:
