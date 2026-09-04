@@ -104,6 +104,7 @@ describe("player views", () => {
 	test("includes both boards and every public zone with derived values", () => {
 		const state = newGame();
 		state.players[0].manaPool.g = 2;
+		state.players[0].manaPool.c = 3;
 		state.players[1].manaPool.u = 1;
 		const mine = spawnPermanent(state, "grizzly-bears", 0, {
 			counters: { "+1/+1": 1 },
@@ -140,8 +141,8 @@ describe("player views", () => {
 		expect(view.players[0].graveyard[0]?.objectId).toBe(graveyard.id);
 		expect(view.players[1].exile[0]?.objectId).toBe(exile.id);
 		expect(view.players.map((player) => player.manaPool)).toEqual([
-			{ w: 0, u: 0, b: 0, r: 0, g: 2 },
-			{ w: 0, u: 1, b: 0, r: 0, g: 0 },
+			{ w: 0, u: 0, b: 0, r: 0, g: 2, c: 3 },
+			{ w: 0, u: 1, b: 0, r: 0, g: 0, c: 0 },
 		]);
 		expect(view.stack).toEqual([
 			expect.objectContaining({ id: stackId, kind: "ability" }),

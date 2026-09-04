@@ -53,8 +53,11 @@ export type Zone = (typeof ALL_ZONES)[number];
 
 export type Color = "w" | "u" | "b" | "r" | "g";
 
-/** Mana currently available to a player, tracked separately by color. */
-export type ManaPool = Record<Color, number>;
+/** A kind of mana that can exist in a player's pool. */
+export type ManaType = Color | "c";
+
+/** Mana currently available to a player, including colorless mana. */
+export type ManaPool = Record<ManaType, number>;
 
 export type Supertype = "legendary" | "basic" | "snow";
 
@@ -2045,7 +2048,7 @@ function card(id: string): CardDef {
  * ------------------------------------------------------------------ */
 
 function emptyManaPool(): ManaPool {
-	return { w: 0, u: 0, b: 0, r: 0, g: 0 };
+	return { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 };
 }
 
 const newPlayerState = (id: PlayerId): PlayerState => ({
