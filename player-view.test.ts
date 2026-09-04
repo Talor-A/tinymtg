@@ -103,6 +103,8 @@ describe("player views", () => {
 
 	test("includes both boards and every public zone with derived values", () => {
 		const state = newGame();
+		state.players[0].manaPool.g = 2;
+		state.players[1].manaPool.u = 1;
 		const mine = spawnPermanent(state, "grizzly-bears", 0, {
 			counters: { "+1/+1": 1 },
 		});
@@ -137,6 +139,10 @@ describe("player views", () => {
 		});
 		expect(view.players[0].graveyard[0]?.objectId).toBe(graveyard.id);
 		expect(view.players[1].exile[0]?.objectId).toBe(exile.id);
+		expect(view.players.map((player) => player.manaPool)).toEqual([
+			{ w: 0, u: 0, b: 0, r: 0, g: 2 },
+			{ w: 0, u: 1, b: 0, r: 0, g: 0 },
+		]);
 		expect(view.stack).toEqual([
 			expect.objectContaining({ id: stackId, kind: "ability" }),
 		]);
@@ -152,7 +158,10 @@ describe("player views", () => {
 
 		const mutable = view as unknown as {
 			hand: { currentCharacteristics: { name: string } }[];
-			players: [{ life: number }, { life: number }];
+			players: [
+				{ life: number; manaPool: { g: number } },
+				{ life: number; manaPool: { g: number } },
+			];
 		};
 		const mutableCard = mutable.hand[0];
 		if (!mutableCard) throw new Error("expected a card in hand");
@@ -161,6 +170,9 @@ describe("player views", () => {
 		}).toThrow(TypeError);
 		expect(() => {
 			mutable.players[0].life = 1;
+		}).toThrow(TypeError);
+		expect(() => {
+			mutable.players[0].manaPool.g = 1;
 		}).toThrow(TypeError);
 		expect(buildPlayerView(state, 0)).toBe(view);
 		spawnCard(state, "clone", 0, "hand");

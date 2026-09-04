@@ -53,6 +53,9 @@ export type Zone = (typeof ALL_ZONES)[number];
 
 export type Color = "w" | "u" | "b" | "r" | "g";
 
+/** Mana currently available to a player, tracked separately by color. */
+export type ManaPool = Record<Color, number>;
+
 export type Supertype = "legendary" | "basic" | "snow";
 
 export type CardType =
@@ -954,6 +957,7 @@ export interface PlayerPublicView {
 	readonly id: PlayerId;
 	readonly life: number;
 	readonly counters: DeepReadOnly<CounterBag>;
+	readonly manaPool: DeepReadOnly<ManaPool>;
 	readonly handCount: number;
 	readonly libraryCount: number;
 	readonly graveyard: readonly PlayerGraveyardObjectView[];
@@ -1206,14 +1210,7 @@ interface PlayerState {
 	drawnInDrawStep: number;
 	/** Set when the player has attempted to draw from an empty library since the last SBA check (CR 704.5b). */
 	drewFromEmptyLibrary: boolean;
-
-	// manaPool: {
-	// 	w?: number;
-	// 	u?: number;
-	// 	b?: number;
-	// 	r?: number;
-	// 	g?: number;
-	// };
+	manaPool: ManaPool;
 	landsPlayed: number;
 	lost: boolean;
 	won: boolean;
@@ -2047,6 +2044,10 @@ function card(id: string): CardDef {
  * Game creation
  * ------------------------------------------------------------------ */
 
+function emptyManaPool(): ManaPool {
+	return { w: 0, u: 0, b: 0, r: 0, g: 0 };
+}
+
 const newPlayerState = (id: PlayerId): PlayerState => ({
 	id,
 	life: 20,
@@ -2056,6 +2057,7 @@ const newPlayerState = (id: PlayerId): PlayerState => ({
 	exile: [],
 	drawnInDrawStep: 0,
 	drewFromEmptyLibrary: false,
+	manaPool: emptyManaPool(),
 	landsPlayed: 0,
 	lost: false,
 	won: false,
@@ -2588,6 +2590,7 @@ export function etbPreview(
 			graveyard: [...player.graveyard],
 			exile: [...player.exile],
 			counters: { ...player.counters },
+			manaPool: { ...player.manaPool },
 		})) as [PlayerState, PlayerState],
 		battlefield: [...state.battlefield],
 		stack: structuredClone(state.stack) as StackEntry[],
@@ -2742,6 +2745,7 @@ export function buildPlayerView(
 			id,
 			life: player.life,
 			counters: { ...player.counters },
+			manaPool: { ...player.manaPool },
 			handCount: player.hand.length,
 			libraryCount: player.library.length,
 			graveyard: player.graveyard.map((objectId) =>
