@@ -319,6 +319,21 @@ export const FOREST = registerCard({
 	subtypes: ["Forest"],
 	colors: [],
 	manaCost: "none",
+	activatedAbilities: [
+		{
+			kind: "mana",
+			id: "intrinsic-mana-g",
+			text: "Add {G}.",
+			costs: [{ kind: "tap-self" }],
+			effects: [
+				{
+					kind: "add-mana",
+					player: "you",
+					mana: { w: 0, u: 0, b: 0, r: 0, g: 1 },
+				},
+			],
+		},
+	],
 });
 
 export const SAPROLING_TOKEN = registerCard({

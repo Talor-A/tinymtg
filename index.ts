@@ -53,11 +53,18 @@ export type Zone = (typeof ALL_ZONES)[number];
 
 export type Color = "w" | "u" | "b" | "r" | "g";
 
+const COLORS: readonly Color[] = ["w", "u", "b", "r", "g"];
+
 /** A kind of mana that can exist in a player's pool. */
 export type ManaType = Color | "c";
 
+const MANA_TYPES: readonly ManaType[] = [...COLORS, "c"];
+
 /** Mana currently available to a player, including colorless mana. */
 export type ManaPool = Record<ManaType, number>;
+
+/** A quantity of one or more kinds of mana. Missing kinds mean zero. */
+export type ManaAmount = Partial<ManaPool>;
 
 export type Supertype = "legendary" | "basic" | "snow";
 
@@ -468,6 +475,13 @@ interface LoseLifeEvent extends EventCommon {
 	source?: ObjectId;
 }
 
+interface AddManaEvent extends EventCommon {
+	kind: "add mana";
+	player: PlayerId;
+	source: ObjectId;
+	mana: ManaAmount;
+}
+
 interface TapEvent extends EventCommon {
 	kind: "tap" | "untap";
 	ref:
@@ -540,6 +554,7 @@ export type GameEvent =
 	| RemoveCountersEvent
 	| GainLifeEvent
 	| LoseLifeEvent
+	| AddManaEvent
 	| TapEvent
 	| BeginTurnEvent
 	| BeginStepEvent
@@ -1226,9 +1241,11 @@ export interface PassAction {
 export interface CastAction {
 	kind: "cast";
 }
-/** Reserved action shape; activated abilities aren't observable or executable yet. */
+/** Activates one currently possessed ability on a concrete source. */
 export interface ActivateAbilityAction {
 	kind: "activate ability";
+	source: ObjectId;
+	ability: ActivatedAbilityId;
 }
 /** The ordinary special action of playing one identified land from hand. */
 export interface PlayLandAction {
@@ -2074,6 +2091,21 @@ const newPlayerState = (id: PlayerId): PlayerState => ({
 	counters: {},
 });
 
+function emptyManaPools(state: GameState): void {
+	let changed = false;
+	for (const player of state.players) {
+		for (const type of MANA_TYPES) {
+			if (player.manaPool[type] === 0) continue;
+			player.manaPool[type] = 0;
+			changed = true;
+		}
+	}
+	if (changed) {
+		state.revision++;
+		log(state, "  mana pools empty");
+	}
+}
+
 export function newGame(): GameState {
 	return {
 		revision: 0,
@@ -2446,6 +2478,13 @@ export class IllegalLandPlayError extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = "IllegalLandPlayError";
+	}
+}
+
+export class IllegalAbilityActivationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalAbilityActivationError";
 	}
 }
 
@@ -3183,6 +3222,7 @@ export function affectedPlayer(
 		case "begin phase":
 		case "gain life":
 		case "lose life":
+		case "add mana":
 			return ev.player;
 		case "declare attackers":
 		case "declare blockers":
@@ -3630,6 +3670,12 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 		case "gain life":
 		case "lose life":
 			return `life(P${ev.player} ${ev.amount >= 0 ? "+" : ""}${ev.amount})`;
+		case "add mana":
+			return `mana(P${ev.player} +${MANA_TYPES.map((type) =>
+				ev.mana[type] ? `${ev.mana[type]}${type.toUpperCase()}` : "",
+			)
+				.filter(Boolean)
+				.join(" ")})`;
 		case "tap":
 			if (ev.ref.kind === "all") return `tap(all P${ev.ref.player})`;
 			return `tap(${name(state, ev.ref.object)})`;
@@ -4551,6 +4597,29 @@ function executeIn(
 			break;
 		}
 
+		case "add mana": {
+			let total = 0;
+			for (const type of MANA_TYPES) {
+				const amount = ev.mana[type] ?? 0;
+				if (!Number.isSafeInteger(amount) || amount < 0) {
+					throw new Error(
+						"undefined behavior: tried to add an invalid quantity of mana",
+					);
+				}
+				total += amount;
+			}
+			if (total <= 0) {
+				throw new Error("undefined behavior: tried to add no mana");
+			}
+			const pool = state.players[ev.player].manaPool;
+			for (const type of MANA_TYPES) pool[type] += ev.mana[type] ?? 0;
+			log(
+				state,
+				`${"  ".repeat(depth)}P${ev.player} mana pool -> ${MANA_TYPES.map((type) => `${pool[type]}${type.toUpperCase()}`).join(" ")}`,
+			);
+			break;
+		}
+
 		case "tap":
 		case "untap": {
 			const tapped = ev.kind === "tap";
@@ -4835,7 +4904,7 @@ function resolveEffects(
 }
 
 function effectToEvent(
-	item: AbilityStackItem,
+	item: Pick<AbilityStackItem, "controller" | "source">,
 	effect: Exclude<EffectDef, { kind: "may" }>,
 ): GameEvent {
 	const player = (relative: "you" | "opponent") =>
@@ -4864,7 +4933,12 @@ function effectToEvent(
 		case "modify-pt":
 			throw new Error(`target resolution is not implemented: ${effect.kind}`);
 		case "add-mana":
-			throw new Error("mana pools are not implemented");
+			return {
+				kind: "add mana",
+				player: player(effect.player),
+				source: item.source,
+				mana: effect.mana,
+			};
 	}
 }
 
@@ -4956,27 +5030,184 @@ function canPlayOrdinaryLand(state: GameState, player: PlayerId): boolean {
 	);
 }
 
+function manaAbilityActions(
+	state: GameState,
+	player: PlayerId,
+	read: ReadContext,
+): ActivateAbilityAction[] {
+	if (state.turnScheduler.progress.kind !== "inTurn") return [];
+	if (currentStepKind(state) === "untap") return [];
+	if (currentStepKind(state) === "cleanup" && state.stack.length === 0)
+		return [];
+	return state.battlefield.flatMap((id) => {
+		const object = maybeObject(state, id);
+		if (
+			object?.kind !== "permanent" ||
+			object.controller !== player ||
+			object.tapped
+		)
+			return [];
+		const snapshot = readObject(read, id);
+		if (snapshot.kind !== "permanent") return [];
+		return snapshot.currentCharacteristics.abilities.activated.flatMap(
+			(ability): ActivateAbilityAction[] => {
+				const definition = resolveActivatedAbility(ability);
+				return definition.kind === "mana" &&
+					definition.costs.length === 1 &&
+					definition.costs[0]?.kind === "tap-self"
+					? [{ kind: "activate ability", source: id, ability }]
+					: [];
+			},
+		);
+	});
+}
+
 /** Actions currently offered to a player receiving priority. */
 export function getObservableActions(
 	state: GameState,
 	player: PlayerId,
 ): PriorityAction[] {
 	const actions: PriorityAction[] = [{ kind: "pass" }];
-	if (!canPlayOrdinaryLand(state, player)) return actions;
-
 	const read = createReadContext(state);
-	for (const id of state.players[player].hand) {
-		const object = maybeObject(state, id);
-		if (object?.kind !== "card" || object.zone !== "hand") continue;
-		const snapshot = readObject(read, id);
-		if (
-			snapshot.kind === "card" &&
-			snapshot.currentCharacteristics.types.includes("land")
-		) {
-			actions.push({ kind: "play land", card: id });
+	if (canPlayOrdinaryLand(state, player)) {
+		for (const id of state.players[player].hand) {
+			const object = maybeObject(state, id);
+			if (object?.kind !== "card" || object.zone !== "hand") continue;
+			const snapshot = readObject(read, id);
+			if (
+				snapshot.kind === "card" &&
+				snapshot.currentCharacteristics.types.includes("land")
+			) {
+				actions.push({ kind: "play land", card: id });
+			}
 		}
 	}
+	actions.push(...manaAbilityActions(state, player, read));
 	return actions;
+}
+
+/**
+ * Executes a currently possessed fixed-cost mana ability without using the
+ * stack. The priority holder is supplied by the scheduler and all legality is
+ * rechecked before the tap cost mutates canonical state.
+ */
+export function executeAbilityAction(
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: ActivateAbilityAction,
+	source: ChoiceSource,
+): void {
+	activateAbilityIn(state, priorityPlayer, action, asChoiceController(source));
+}
+
+function activateAbilityIn(
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: ActivateAbilityAction,
+	choices: AnyChoiceController,
+): void {
+	if (state.turnScheduler.progress.kind !== "inTurn") {
+		throw new IllegalAbilityActivationError(
+			"an ability cannot be activated outside a turn",
+		);
+	}
+	if (currentStepKind(state) === "untap") {
+		throw new IllegalAbilityActivationError(
+			"an ability cannot be activated during the untap step",
+		);
+	}
+	if (currentStepKind(state) === "cleanup" && state.stack.length === 0) {
+		throw new IllegalAbilityActivationError(
+			"an ability cannot be activated during an ordinary cleanup step",
+		);
+	}
+
+	const object = maybeObject(state, action.source);
+	if (object?.kind !== "permanent" || object.zone !== "battlefield") {
+		throw new IllegalAbilityActivationError(
+			`object ${action.source} is not a permanent on the battlefield`,
+		);
+	}
+	if (object.controller !== priorityPlayer) {
+		throw new IllegalAbilityActivationError(
+			`P${priorityPlayer} does not control object ${action.source}`,
+		);
+	}
+	if (object.tapped) {
+		throw new IllegalAbilityActivationError(
+			`object ${action.source} is already tapped`,
+		);
+	}
+
+	const snapshot = readObject(createReadContext(state), object.id);
+	assert(snapshot.kind === "permanent");
+	if (
+		!snapshot.currentCharacteristics.abilities.activated.includes(
+			action.ability,
+		)
+	) {
+		throw new IllegalAbilityActivationError(
+			`object ${action.source} does not have ability ${action.ability}`,
+		);
+	}
+	const ability = resolveActivatedAbility(action.ability);
+	if (ability.kind !== "mana") {
+		throw new IllegalAbilityActivationError(
+			`ability ${action.ability} is not a mana ability`,
+		);
+	}
+	if (ability.costs.length !== 1 || ability.costs[0]?.kind !== "tap-self") {
+		throw new IllegalAbilityActivationError(
+			`mana ability ${action.ability} does not have the supported tap-self cost`,
+		);
+	}
+
+	const context = { source: object.id, controller: priorityPlayer };
+	const events = ability.effects.map((effect) => {
+		if (effect.kind !== "add-mana") {
+			throw new IllegalAbilityActivationError(
+				"only fixed mana production is supported for mana abilities",
+			);
+		}
+		let total = 0;
+		for (const type of COLORS) {
+			const amount = effect.mana[type] ?? 0;
+			if (!Number.isSafeInteger(amount) || amount < 0) {
+				throw new IllegalAbilityActivationError(
+					`mana ability ${action.ability} produces an invalid quantity`,
+				);
+			}
+			total += amount;
+		}
+		if (total <= 0) {
+			throw new IllegalAbilityActivationError(
+				`mana ability ${action.ability} produces no mana`,
+			);
+		}
+		return effectToEvent(context, effect);
+	});
+	const scope = newScope();
+	const payment = performIn(
+		state,
+		{ kind: "tap", ref: { kind: "object", object: object.id } },
+		choices,
+		scope,
+		0,
+	);
+	if (
+		!payment.executed.some(
+			(event) =>
+				event.kind === "tap" &&
+				event.ref.kind === "object" &&
+				event.ref.object === object.id,
+		)
+	) {
+		throw new IllegalAbilityActivationError(
+			`the tap cost for ability ${action.ability} was not paid`,
+		);
+	}
+	log(state, `  [mana ability] ${ability.text}`);
+	for (const event of events) performIn(state, event, choices, scope, 0);
 }
 
 /**
@@ -5123,6 +5354,12 @@ function settlePriorityIn(
 		if (action.kind === "play land") {
 			playLandIn(state, priority, action, choices);
 			// A special action neither passes nor changes who has priority.
+			lastWasPass = false;
+			continue;
+		}
+		if (action.kind === "activate ability") {
+			activateAbilityIn(state, priority, action, choices);
+			// Activating a mana ability is immediate and retains priority.
 			lastWasPass = false;
 			continue;
 		}
@@ -5590,7 +5827,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				const progress = scheduler.progress;
 				assert(progress.kind === "inTurn");
 				assert(progress.location?.kind === "step");
-				// CR 703.4q mana emptying belongs here once mana pools exist.
+				emptyManaPools(state);
 				scheduler.command = {
 					kind: "advanceStep",
 					turn: progress.turn,
@@ -5602,7 +5839,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 			case "finishPhase": {
 				const progress = scheduler.progress;
 				assert(progress.kind === "inTurn");
-				// CR 703.4q also empties mana at this boundary.
+				emptyManaPools(state);
 				scheduler.remainingSteps = [];
 				scheduler.command = {
 					kind: "advancePhase",

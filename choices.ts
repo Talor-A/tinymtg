@@ -356,9 +356,14 @@ export function priorityOptionId(action: PriorityAction): string {
 }
 
 function priorityOptionLabel(state: GameState, action: PriorityAction): string {
-	return action.kind === "play land"
-		? `play land ${objectLabel(state, action.card)}#${action.card}`
-		: action.kind;
+	switch (action.kind) {
+		case "play land":
+			return `play land ${objectLabel(state, action.card)}#${action.card}`;
+		case "activate ability":
+			return `activate ${objectLabel(state, action.source)}#${action.source} — ${action.ability}`;
+		default:
+			return action.kind;
+	}
 }
 
 /**
