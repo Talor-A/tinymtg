@@ -1177,9 +1177,10 @@ interface PlayerState {
 export interface PassAction {
 	kind: "pass";
 }
-/** Reserved action shape; casting isn't observable or executable yet. */
+/** Casts one identified card from the caster's hand. */
 export interface CastAction {
 	kind: "cast";
+	card: ObjectId;
 }
 /** Activates one currently possessed ability on a concrete source. */
 export interface ActivateAbilityAction {
@@ -2421,6 +2422,13 @@ export class IllegalAbilityActivationError extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = "IllegalAbilityActivationError";
+	}
+}
+
+export class IllegalCastError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalCastError";
 	}
 }
 
@@ -4878,6 +4886,11 @@ function effectToEvent(
 	}
 }
 
+/**
+ * CR 601.3 / CR 307.1: when a spell may be *begun*. The engine has no flash and
+ * no "as though" effects, so the whole rule is: instants any time you have
+ * priority, everything else only at sorcery speed.
+ */
 function doTimingRestrictionsAllowCast(
 	pv: PermanentView,
 	state: GameState,
@@ -4889,71 +4902,150 @@ function doTimingRestrictionsAllowCast(
 	);
 	// TODO: "you may cast x as though it had flash"
 
-	if (!pv.types) throw new Error("object has no types");
+	assert(pv.types.length > 0, "object has no types");
 
 	if (pv.types.includes("instant")) {
 		assert(pv.types.length === 1, "instant type must be the only type");
 		return true;
 	}
 
-	if (turnLocation(state)?.phase.kind !== "main") {
-		return false;
-	}
-	// if it's not your turn:false
+	// CR 307.1: sorcery timing. A main phase of your own turn, with the stack
+	// empty. Every non-instant card type shares this restriction, so unlike the
+	// instant case above there is nothing per-type left to check.
+	if (turnLocation(state)?.kind !== "mainPhase") return false;
 	if (activePlayer(state) !== player) return false;
-	// if stack is not empty: false
 	if (state.stack.length !== 0) return false;
 
-	return false;
+	return true;
 }
 
-function _simpleCanAfford(
-	pv: PermanentView,
-	state: GameState,
-	player: PlayerId,
-): boolean {
-	if (pv.manaCost === "none") return false;
-
-	if (pv.manaCost === "zero") return true;
-
-	return false;
+/**
+ * The mana a cost demands, split into the colored part (which only that color
+ * can pay) and the generic part (which anything can pay).
+ *
+ * `CardDefManaCost` spells generic as `c`, which is *not* the `c` of
+ * {@link ManaType}: the former means "one mana of any type", the latter means
+ * one colorless mana. Keeping them apart is the whole reason this returns a
+ * split rather than a `ManaAmount`.
+ */
+interface ManaCostBreakdown {
+	colored: Partial<Record<Color, number>>;
+	generic: number;
 }
 
+function manaCostBreakdown(cost: CardDefManaCost): ManaCostBreakdown | null {
+	if (cost === "none") return null;
+	if (cost === "zero") return { colored: {}, generic: 0 };
+	const colored: Partial<Record<Color, number>> = {};
+	for (const color of COLORS) {
+		const amount = cost[color] ?? 0;
+		assert(
+			Number.isSafeInteger(amount) && amount >= 0,
+			`invalid ${color} quantity in mana cost`,
+		);
+		if (amount > 0) colored[color] = amount;
+	}
+	const generic = cost.c ?? 0;
+	assert(
+		Number.isSafeInteger(generic) && generic >= 0,
+		"invalid generic quantity in mana cost",
+	);
+	return { colored, generic };
+}
+
+/**
+ * The exact mana to spend from `pool` for `cost`, or null if the pool cannot
+ * pay it. Pool-only: untapped sources are deliberately not considered, so a
+ * player taps for mana first and then casts.
+ *
+ * Colored requirements are satisfied first, since only their own color can pay
+ * them. Whatever generic remains is then paid in a fixed order — colorless
+ * first, because nothing else can want it, then colors in WUBRG order. That is
+ * a deterministic engine choice rather than a player decision: it can spend
+ * mana the player was saving, but it never fails a payment that some other
+ * assignment would have made, because after the colored requirements are met
+ * every remaining unit of mana is interchangeable for generic.
+ */
+function planManaPayment(
+	pool: DeepReadOnly<ManaPool>,
+	cost: CardDefManaCost,
+): ManaAmount | null {
+	const breakdown = manaCostBreakdown(cost);
+	if (!breakdown) return null;
+
+	const payment: ManaPool = { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 };
+	const remaining: ManaPool = { ...pool };
+
+	for (const color of COLORS) {
+		const required = breakdown.colored[color] ?? 0;
+		if (remaining[color] < required) return null;
+		remaining[color] -= required;
+		payment[color] += required;
+	}
+
+	let generic = breakdown.generic;
+	// Colorless first: it is the only kind no colored requirement could have
+	// wanted, so spending it can never make a later payment impossible.
+	for (const type of ["c", ...COLORS] as const) {
+		if (generic === 0) break;
+		const spend = Math.min(generic, remaining[type]);
+		remaining[type] -= spend;
+		payment[type] += spend;
+		generic -= spend;
+	}
+	if (generic > 0) return null;
+
+	return payment;
+}
+
+/**
+ * Whether `player` could begin casting `object` from hand right now, under the
+ * engine's deliberate simplification that a spell never goes on the stack and
+ * then fails payment (so affordability is decided here, before anything moves).
+ */
 function canCast(
-	object: CardObject,
+	object: DeepReadOnly<CardObject>,
 	state: GameState,
 	read: ReadContext,
 	player: PlayerId,
 ): boolean {
 	// TODO: this is simplified, and only accounts for the basics of casting
 	// from hand. it does not account for special cast actions.
-	assert(object.owner === player);
-	assert(object.zone === "hand");
 	assert(object.kind === "card");
+	assert(object.zone === "hand");
+	assert(object.owner === player);
 
 	const pv = flattenSnapshot(readObject(read, object.id));
 
+	// CR 202.1: a card with no mana cost cannot be cast without an alternative
+	// cost, and the engine has none.
 	if (pv.manaCost === "none") return false;
 
-	// basic timing restrictions
+	// CR 305.1: lands are played as a special action, never cast.
+	if (pv.types.includes("land")) return false;
+
 	if (!doTimingRestrictionsAllowCast(pv, state, player)) return false;
 
-	// affordability restrictions
-	return true;
+	return planManaPayment(state.players[player].manaPool, pv.manaCost) !== null;
 }
 
-function _getCastableSpells(
+function castableSpells(
 	state: GameState,
-	playerId: PlayerId,
+	read: ReadContext,
+	player: PlayerId,
 ): CastAction[] {
 	const castable: CastAction[] = [];
-	const read = createReadContext(state);
-	for (const objectId of state.players[playerId].hand) {
-		const object = state.objects.get(objectId);
-		assertDefined(object);
-		assert(object.kind === "card");
-		if (object && canCast(object, state, read, playerId)) {
-			castable.push({ kind: "cast" });
+	for (const objectId of state.players[player].hand) {
+		const object = maybeObject(state, objectId);
+		assertDefined(object, `hand contains missing object ${objectId}`);
+		assert(
+			object.kind === "card" || object.kind === "nonbattlefield-token",
+			`hand contains unexpected object kind ${object.kind}`,
+		);
+		// CR 704.5d will remove a token in hand; it is never castable meanwhile.
+		if (object.kind !== "card") continue;
+		if (canCast(object, state, read, player)) {
+			castable.push({ kind: "cast", card: objectId });
 		}
 	}
 	return castable;
@@ -5022,6 +5114,7 @@ export function getObservableActions(
 		}
 	}
 	actions.push(...manaAbilityActions(state, player, read));
+	actions.push(...castableSpells(state, read, player));
 	return actions;
 }
 
@@ -5147,6 +5240,110 @@ function activateAbilityIn(
 	}
 	log(state, `  [mana ability] ${ability.text}`);
 	for (const event of events) performIn(state, event, choices, scope, 0);
+}
+
+/**
+ * Casts a spell for the priority holder supplied by the scheduler, putting it
+ * onto the stack (CR 601.2). Timing, actor, card, zone and affordability are
+ * all rechecked before anything mutates.
+ *
+ * The engine deliberately simplifies CR 601.2: costs are locked in and paid
+ * from the mana pool *before* the card moves, so a spell can never sit on the
+ * stack with its payment unresolved. Mana abilities are therefore activated
+ * beforehand at priority rather than during casting.
+ */
+export function executeCastAction(
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: CastAction,
+	source: ChoiceSource,
+): void {
+	castSpellIn(state, priorityPlayer, action, asChoiceController(source));
+}
+
+function castSpellIn(
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: CastAction,
+	choices: AnyChoiceController,
+): void {
+	if (state.turnScheduler.progress.kind !== "inTurn") {
+		throw new IllegalCastError("a spell cannot be cast outside a turn");
+	}
+
+	const object = maybeObject(state, action.card);
+	if (
+		object?.kind !== "card" ||
+		object.zone !== "hand" ||
+		object.owner !== priorityPlayer ||
+		!state.players[priorityPlayer].hand.includes(action.card)
+	) {
+		throw new IllegalCastError(
+			`object ${action.card} is not a card in P${priorityPlayer}'s hand`,
+		);
+	}
+
+	const read = createReadContext(state);
+	const pv = flattenSnapshot(readObject(read, action.card));
+
+	if (pv.manaCost === "none") {
+		throw new IllegalCastError(`${pv.name} has no mana cost and cannot be cast`);
+	}
+	if (pv.types.includes("land")) {
+		throw new IllegalCastError(`${pv.name} is a land and is played, not cast`);
+	}
+	if (!doTimingRestrictionsAllowCast(pv, state, priorityPlayer)) {
+		throw new IllegalCastError(
+			`P${priorityPlayer} cannot cast ${pv.name} at this time`,
+		);
+	}
+
+	const payment = planManaPayment(
+		state.players[priorityPlayer].manaPool,
+		pv.manaCost,
+	);
+	if (!payment) {
+		throw new IllegalCastError(
+			`P${priorityPlayer} cannot pay ${pv.name}'s mana cost from their mana pool`,
+		);
+	}
+
+	// Payment is deducted directly rather than as an event: spending mana is a
+	// cost, not something that happens to a player, so nothing may replace or
+	// trigger off it. The move to the stack below is the replaceable part.
+	const pool = state.players[priorityPlayer].manaPool;
+	for (const type of MANA_TYPES) {
+		const spent = payment[type] ?? 0;
+		assert(
+			pool[type] >= spent,
+			`payment plan spends ${spent} ${type} from a pool holding ${pool[type]}`,
+		);
+		pool[type] -= spent;
+	}
+	state.revision++;
+	log(
+		state,
+		`  [cast] P${priorityPlayer} pays ${MANA_TYPES.map((type) =>
+			payment[type] ? `${payment[type]}${type.toUpperCase()}` : "",
+		)
+			.filter(Boolean)
+			.join(" ") || "nothing"} for ${pv.name}`,
+	);
+
+	performIn(
+		state,
+		{
+			kind: "change zone",
+			object: action.card,
+			from: "hand",
+			to: "stack",
+			cause: "cast",
+			toController: priorityPlayer,
+		},
+		choices,
+		newScope(),
+		0,
+	);
 }
 
 /**
@@ -5299,6 +5496,13 @@ function settlePriorityIn(
 		if (action.kind === "activate ability") {
 			activateAbilityIn(state, priority, action, choices);
 			// Activating a mana ability is immediate and retains priority.
+			lastWasPass = false;
+			continue;
+		}
+		if (action.kind === "cast") {
+			castSpellIn(state, priority, action, choices);
+			// CR 117.3c: the caster receives priority again after casting, and the
+			// round re-opens, so a pass already made no longer stands.
 			lastWasPass = false;
 			continue;
 		}

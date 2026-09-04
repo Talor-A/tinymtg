@@ -361,6 +361,8 @@ function priorityOptionLabel(state: GameState, action: PriorityAction): string {
 			return `play land ${objectLabel(state, action.card)}#${action.card}`;
 		case "activate ability":
 			return `activate ${objectLabel(state, action.source)}#${action.source} — ${action.ability}`;
+		case "cast":
+			return `cast ${objectLabel(state, action.card)}#${action.card}`;
 		default:
 			return action.kind;
 	}
