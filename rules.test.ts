@@ -11,8 +11,8 @@ import type {
 import {
 	activePlayer,
 	addFloating,
-	affectedPlayer,
 	advance,
+	affectedPlayer,
 	ChoiceController,
 	checkStateBasedActions,
 	gameOver,

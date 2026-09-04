@@ -64,7 +64,7 @@ const MANA_TYPES: readonly ManaType[] = [...COLORS, "c"];
 export type ManaPool = Record<ManaType, number>;
 
 /** A quantity of one or more kinds of mana. Missing kinds mean zero. */
-export type ManaAmount = Partial<ManaPool>;
+type ManaAmount = Partial<ManaPool>;
 
 export type Supertype = "legendary" | "basic" | "snow";
 
@@ -585,31 +585,40 @@ export const ABILITY_CATEGORIES = [
 ] as const;
 export type AbilityCategory = (typeof ABILITY_CATEGORIES)[number];
 
-/** Serializable `cardId:index` registry reference to a static ability. */
-export type StaticAbilityId = Brand<string, "StaticAbilityId">;
+/**
+ * Serializable `cardId:index` registry reference to an ability of category `C`.
+ *
+ * The category is part of the brand, so a `AbilityId<"static">` is never
+ * assignable to a `AbilityId<"activated">` even though both erase to `string`.
+ */
+export type AbilityId<C extends AbilityCategory> = Brand<
+	string,
+	`${C}AbilityId`
+>;
 
-/** Serializable `cardId:index` registry reference to an activated ability. */
-export type ActivatedAbilityId = Brand<string, "ActivatedAbilityId">;
+export type StaticAbilityId = AbilityId<"static">;
+export type ActivatedAbilityId = AbilityId<"activated">;
+export type TriggeredAbilityId = AbilityId<"triggered">;
+export type ReplacementAbilityId = AbilityId<"replacement">;
+export type ProhibitionAbilityId = AbilityId<"prohibition">;
 
-/** Serializable `cardId:index` registry reference to a triggered ability. */
-export type TriggeredAbilityId = Brand<string, "TriggeredAbilityId">;
+/**
+ * The definition a given category resolves to. {@link AbilityDefinitions} is
+ * the registry's category-keyed store, so its element types are exactly the
+ * return types {@link resolveAbility} owes each category.
+ */
+type AbilityDef<C extends AbilityCategory> = AbilityDefinitions[C][number];
 
-/** Serializable `cardId:index` registry reference to a replacement effect. */
-export type ReplacementAbilityId = Brand<string, "ReplacementAbilityId">;
-
-/** Serializable `cardId:index` registry reference to a prohibition effect. */
-export type ProhibitionAbilityId = Brand<string, "ProhibitionAbilityId">;
-
-function abilityRef(
+export function abilityId<C extends AbilityCategory>(
+	category: C,
 	cardId: string,
 	index: number,
-	category: AbilityCategory,
-): string {
+): AbilityId<C> {
 	assert(
 		Number.isSafeInteger(index) && index >= 0,
 		`invalid ${category} ability index`,
 	);
-	return `${cardId}:${index}`;
+	return `${cardId}:${index}` as AbilityId<C>;
 }
 
 /**
@@ -627,81 +636,39 @@ function parseAbilityRef(
 	return { cardId: id.slice(0, separator), index: Number(indexText) };
 }
 
-export function staticAbilityId(
-	cardId: string,
-	index: number,
-): StaticAbilityId {
-	return abilityRef(cardId, index, "static") as StaticAbilityId;
+export function resolveAbility<C extends AbilityCategory>(
+	category: C,
+	id: AbilityId<C>,
+): AbilityDef<C> {
+	const { cardId, index } = parseAbilityRef(id, category);
+	const definitions: AbilityDef<C>[] =
+		card(cardId).abilityDefinitions[category];
+	const definition = definitions[index];
+	assertDefined(definition, `unknown ${category} ability: ${id}`);
+	return definition;
 }
 
-export function activatedAbilityId(
-	cardId: string,
-	index: number,
-): ActivatedAbilityId {
-	return abilityRef(cardId, index, "activated") as ActivatedAbilityId;
-}
+export const staticAbilityId = (cardId: string, index: number) =>
+	abilityId("static", cardId, index);
+export const activatedAbilityId = (cardId: string, index: number) =>
+	abilityId("activated", cardId, index);
+export const triggeredAbilityId = (cardId: string, index: number) =>
+	abilityId("triggered", cardId, index);
+export const replacementAbilityId = (cardId: string, index: number) =>
+	abilityId("replacement", cardId, index);
+export const prohibitionAbilityId = (cardId: string, index: number) =>
+	abilityId("prohibition", cardId, index);
 
-export function triggeredAbilityId(
-	cardId: string,
-	index: number,
-): TriggeredAbilityId {
-	return abilityRef(cardId, index, "triggered") as TriggeredAbilityId;
-}
-
-export function replacementAbilityId(
-	cardId: string,
-	index: number,
-): ReplacementAbilityId {
-	return abilityRef(cardId, index, "replacement") as ReplacementAbilityId;
-}
-
-export function prohibitionAbilityId(
-	cardId: string,
-	index: number,
-): ProhibitionAbilityId {
-	return abilityRef(cardId, index, "prohibition") as ProhibitionAbilityId;
-}
-
-export function resolveStaticAbility(id: StaticAbilityId): ContinuousEffect {
-	const { cardId, index } = parseAbilityRef(id, "static");
-	const effect = card(cardId).abilityDefinitions.static[index];
-	assertDefined(effect, `unknown static ability: ${id}`);
-	return effect;
-}
-
-export function resolveActivatedAbility(
-	id: ActivatedAbilityId,
-): AnyActivatedAbilityDef {
-	const { cardId, index } = parseAbilityRef(id, "activated");
-	const ability = card(cardId).abilityDefinitions.activated[index];
-	assertDefined(ability, `unknown activated ability: ${id}`);
-	return ability;
-}
-
-export function resolveTriggeredAbility(id: TriggeredAbilityId): TriggerDef {
-	const { cardId, index } = parseAbilityRef(id, "triggered");
-	const ability = card(cardId).abilityDefinitions.triggered[index];
-	assertDefined(ability, `unknown triggered ability: ${id}`);
-	return ability;
-}
-
-export function resolveReplacementAbility(
-	id: ReplacementAbilityId,
-): ReplacementDef {
-	const { cardId, index } = parseAbilityRef(id, "replacement");
-	const def = card(cardId).abilityDefinitions.replacement[index];
-	assertDefined(def, `unknown replacement ability: ${id}`);
-	return def;
-}
-
-export function resolveProhibitionAbility(
-	id: ProhibitionAbilityId,
-): ProhibitionDef {
-	const { cardId, index } = parseAbilityRef(id, "prohibition");
-	const def = card(cardId).abilityDefinitions.prohibition[index];
-	assertDefined(def, `unknown prohibition ability: ${id}`);
-	return def;
-}
+export const resolveStaticAbility = (id: StaticAbilityId) =>
+	resolveAbility("static", id);
+export const resolveActivatedAbility = (id: ActivatedAbilityId) =>
+	resolveAbility("activated", id);
+export const resolveTriggeredAbility = (id: TriggeredAbilityId) =>
+	resolveAbility("triggered", id);
+export const resolveReplacementAbility = (id: ReplacementAbilityId) =>
+	resolveAbility("replacement", id);
+export const resolveProhibitionAbility = (id: ProhibitionAbilityId) =>
+	resolveAbility("prohibition", id);
 
 /**
  * What an object currently *has*. Purely references, so this survives
@@ -2137,7 +2104,11 @@ export function newGame(): GameState {
  * Object creation
  * ------------------------------------------------------------------ */
 
-function defaultVisibility(zone: Zone, to: PlayerId, owner: PlayerId): boolean {
+function _defaultVisibility(
+	zone: Zone,
+	to: PlayerId,
+	owner: PlayerId,
+): boolean {
 	switch (zone) {
 		case "stack":
 		case "battlefield":
@@ -4971,7 +4942,7 @@ function doTimingRestrictionsAllowCast(
 	return false;
 }
 
-function simpleCanAfford(
+function _simpleCanAfford(
 	pv: PermanentView,
 	state: GameState,
 	player: PlayerId,
@@ -5006,7 +4977,10 @@ function canCast(
 	return true;
 }
 
-function getCastableSpells(state: GameState, playerId: PlayerId): CastAction[] {
+function _getCastableSpells(
+	state: GameState,
+	playerId: PlayerId,
+): CastAction[] {
 	const castable: CastAction[] = [];
 	const read = createReadContext(state);
 	for (const objectId of state.players[playerId].hand) {
