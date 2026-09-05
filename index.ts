@@ -1725,7 +1725,7 @@ export interface TriggerDef {
  * Cards
  * ------------------------------------------------------------------ */
 
-export type Keyword = "indestructible" | "lifelink" | "flying";
+export type Keyword = "indestructible" | "lifelink" | "flying" | "vigilance";
 
 /** Importer-neutral selector retained until targeting is executable. */
 export type TargetSelectorDef =
@@ -4668,7 +4668,18 @@ function executeIn(
 			for (const id of ev.attackers) {
 				const o = permanent(state, id);
 				o.attacking = true;
-				o.tapped = true;
+				// CR 508.1f / 702.20b: attacking taps the creature, unless it has
+				// vigilance. Read the derived characteristics rather than the printed
+				// card, so a granted or copied vigilance counts.
+				const attackerSnapshot = readObject(before, id);
+				assert(attackerSnapshot.kind === "permanent");
+				if (
+					!attackerSnapshot.currentCharacteristics.keywords.includes(
+						"vigilance",
+					)
+				) {
+					o.tapped = true;
+				}
 			}
 			log(
 				state,
