@@ -27,7 +27,7 @@ const PERMANENTS = [
 	"furnace-of-rath",
 	"grizzly-bears",
 	"hardened-scales",
-	"leyline-of-the-void",
+	"baby-leyline-of-the-void",
 	"necropotence",
 	"rest-in-peace",
 	"root-maze",

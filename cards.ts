@@ -411,9 +411,12 @@ export const REST_IN_PEACE = registerCard({
 	],
 });
 
-export const LEYLINE_OF_THE_VOID = registerCard({
-	id: "leyline-of-the-void",
-	name: "Leyline of the Void",
+// this only implements the graveyard-replacement half of leyline of the void
+// card text; it does not implement the opening-hand ability (the engine has
+// no pre-game phase yet).
+export const BABY_LEYLINE_OF_THE_VOID = registerCard({
+	id: "baby-leyline-of-the-void",
+	name: "Baby Leyline of the Void",
 	types: ["enchantment"],
 	colors: ["b"],
 	manaCost: {
