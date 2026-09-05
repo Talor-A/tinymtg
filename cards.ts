@@ -206,9 +206,6 @@ export const WALKING_BALLISTA = registerCard({
  * Enters with three +1/+1 counters, and is a 0/0 without them — so a test that
  * sees it alive on the battlefield has proven the ETB replacement applied.
  *
- * Vigilance is printed on the real card but omitted here: the engine's
- * `Keyword` union has no such member yet, and inventing one would be a lie in
- * the card definition.
  */
 export const FAITHFUL_WATCHDOG = registerCard({
 	id: "faithful-watchdog",
@@ -222,6 +219,7 @@ export const FAITHFUL_WATCHDOG = registerCard({
 	},
 	power: 0,
 	toughness: 0,
+	keywords: ["vigilance"],
 	entersWith: { "+1/+1": 3 },
 });
 
