@@ -1656,6 +1656,12 @@ export type EffectDef =
       player: "you" | "opponent";
       amount: number;
     }
+  | {
+      kind: "discard";
+      selector: "any" | "random";
+      amount: number;
+      player: "you" | "opponent";
+    }
   /** Definition-time targets are slot ids until casting binds them. */
   | { kind: "damage"; target: EntityRef | string; amount: number }
   | { kind: "destroy"; target: EntityRef | string }
@@ -5169,6 +5175,19 @@ function effectToEvent(
         player: player(effect.player),
         amount: effect.amount,
       };
+    case "discard": {
+      if (effect.selector === "any") {
+        return {
+          kind: "discard",
+          player: player(effect.player),
+          cards: { kind: "any" },
+        };
+      }
+      if (effect.selector === "random") {
+        throw new Error("discard at random not implemented");
+      }
+      throw new Error("unexpected discard effect kind");
+    }
     case "damage": {
       assert(typeof effect.target !== "string", "damage target is unbound");
       const source = readObject(createReadContext(state), item.source);
