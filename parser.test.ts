@@ -3,11 +3,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	abilityId,
-	getAbilityDefinitionext,
+	createReadContext,
+	getAbilityDefinition,
 	newGame,
 	readObject,
 	registerCard,
-	resolveAbility,
 	spawnPermanent,
 	view,
 } from "./index.ts";
@@ -471,8 +471,8 @@ describe("structured Forge pipeline", () => {
 		const compiledStatic = compiled.value.abilityDefinitions.static?.[0];
 		expect(compiledStatic).toBeDefined();
 		if (!compiledStatic) return;
-		expect(getAbilityDefinition
-			resolveAbility("static", abilityId("static", "glorious-anthem", 0)),
+		expect(
+			getAbilityDefinition("static", abilityId("static", "glorious-anthem", 0)),
 		).toBe(compiledStatic);
 		const game = newGame();
 		spawnPermanent(game, "glorious-anthem", 0);
