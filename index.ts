@@ -465,6 +465,7 @@ type MoveCause =
 	| "sacrifice"
 	| "sba"
 	| "cast"
+	| "illegal target"
 	| "resolve"
 	| "effect"
 	| "return"
@@ -1630,8 +1631,8 @@ export function addFloating(
  * Effects
  *
  * One serializable effect language is shared by card definitions, imported IR,
- * stack items, and the resolver. Target-bearing effects are definition-ready;
- * the current runtime executes only the targetless subset.
+ * stack items, and the resolver. Damage and destruction bind one target slot;
+ * temporary P/T effects remain definition-only.
  * ------------------------------------------------------------------ */
 
 export type EffectDef =
@@ -1745,7 +1746,7 @@ export interface TriggerDef {
 
 export type Keyword = "indestructible" | "lifelink" | "flying" | "vigilance";
 
-/** Importer-neutral selector retained until targeting is executable. */
+/** Importer-neutral selectors; runtime targeting currently supports creature type only. */
 export type TargetSelectorDef =
 	| { kind: "self" }
 	| { kind: "type"; type: CardType }
@@ -1756,7 +1757,7 @@ export type TargetSelectorDef =
 	| { kind: "all" | "any"; selectors: TargetSelectorDef[] }
 	| { kind: "not"; selector: TargetSelectorDef };
 
-/** Declarative targeting retained on compiled cards until casting is implemented. */
+/** Declarative targeting; runtime casting supports one required target. */
 export interface TargetDef {
 	id: string;
 	min: number;
@@ -4427,6 +4428,14 @@ function executeIn(
 					happened = false;
 					break;
 				}
+				const characteristics = readObject(before, o.id);
+				assert(characteristics.kind === "permanent");
+				assert(
+					!characteristics.currentCharacteristics.types.includes(
+						"planeswalker",
+					),
+					"planeswalker damage is not implemented",
+				);
 				o.damage += ev.amount;
 				if (ev.deathtouch) o.attributes.deathtouched = true;
 				log(
@@ -4970,18 +4979,35 @@ function resolveSpell(
 		definition,
 		`${characteristics.name} has no spell ability to resolve`,
 	);
+	const target = spellTargetDefinition(definition);
 	assert(
-		definition.targets.length === 0,
-		`targeted spells are not implemented: ${characteristics.name}`,
+		entry.targets.length === (target ? 1 : 0),
+		"spell target binding count disagrees with its definition",
 	);
-	/** Share a scope so facts can pass through the complete effect sequence. */
-	resolveEffects(
-		state,
-		choices,
-		{ controller: object.controller, source: object.id, ability: null },
-		definition.effects,
-		newScope(),
-	);
+	const binding = entry.targets[0];
+	if (target)
+		assert(binding?.slot === target.id, "spell has the wrong target slot");
+	// CR 608.2b: with one required target, an illegal target stops every effect.
+	const legal =
+		!target ||
+		(binding !== undefined && isLegalSpellTarget(read, target, binding.target));
+	if (legal) {
+		/** Share a scope so facts can pass through the complete effect sequence. */
+		resolveEffects(
+			state,
+			choices,
+			{
+				controller: object.controller,
+				source: object.id,
+				ability: null,
+				targets: entry.targets,
+			},
+			definition.effects,
+			newScope(),
+		);
+	} else {
+		log(state, "  [illegal target] spell does not resolve");
+	}
 	performIn(
 		state,
 		{
@@ -4989,7 +5015,7 @@ function resolveSpell(
 			object: object.id,
 			from: "stack",
 			to: "graveyard",
-			cause: "resolve",
+			cause: legal ? "resolve" : "illegal target",
 			toController: object.controller,
 		},
 		choices,
@@ -5017,7 +5043,12 @@ function resolveStackAbility(
 	resolveEffects(
 		state,
 		choices,
-		{ controller: entry.controller, source: entry.source, ability: entry },
+		{
+			controller: entry.controller,
+			source: entry.source,
+			ability: entry,
+			targets: [],
+		},
 		entry.effects,
 		newScope(),
 	);
@@ -5033,6 +5064,7 @@ interface ResolutionSource {
 	controller: PlayerId;
 	source: ObjectId;
 	ability: AbilityStackItem | null;
+	targets: SpellTargets;
 }
 
 function resolveEffects(
@@ -5060,11 +5092,24 @@ function resolveEffects(
 				resolveEffects(state, choices, item, effect.effects, scope);
 			continue;
 		}
-		performIn(state, effectToEvent(item, effect), choices, scope, 0);
+		let bound = effect;
+		if (
+			(effect.kind === "damage" || effect.kind === "destroy") &&
+			typeof effect.target === "string"
+		) {
+			const binding = item.targets[0];
+			assert(
+				binding?.slot === effect.target,
+				"effect has no matching target binding",
+			);
+			bound = { ...effect, target: binding.target };
+		}
+		performIn(state, effectToEvent(state, item, bound), choices, scope, 0);
 	}
 }
 
 function effectToEvent(
+	state: GameState,
 	item: Pick<AbilityStackItem, "controller" | "source">,
 	effect: Exclude<EffectDef, { kind: "may" }>,
 ): GameEvent {
@@ -5089,10 +5134,40 @@ function effectToEvent(
 				player: player(effect.player),
 				amount: effect.amount,
 			};
-		case "damage":
+		case "damage": {
+			assert(typeof effect.target !== "string", "damage target is unbound");
+			const source = readObject(createReadContext(state), item.source);
+			assert(
+				source.kind === "spell" || source.kind === "permanent",
+				"damage source has no characteristics",
+			);
+			const characteristics = source.currentCharacteristics;
+			return {
+				kind: "damage",
+				source: item.source,
+				sourceController: item.controller,
+				sourceColors: [...characteristics.colors],
+				target: effect.target,
+				amount: effect.amount,
+				combat: false,
+				deathtouch: false,
+				lifelink: characteristics.keywords.includes("lifelink"),
+				unpreventable: false,
+			};
+		}
 		case "destroy":
+			assert(
+				typeof effect.target !== "string" && effect.target.type === "permanent",
+				"destroy requires a bound permanent target",
+			);
+			return {
+				kind: "destroy",
+				object: effect.target.id,
+				source: item.source,
+				noRegen: false,
+			};
 		case "modify-pt":
-			throw new Error(`target resolution is not implemented: ${effect.kind}`);
+			throw new Error("temporary P/T effects are not implemented");
 		case "add-mana":
 			return {
 				kind: "add mana",
@@ -5215,6 +5290,92 @@ export function planManaPayment(
 	return payment;
 }
 
+/** Validate the executable subset before a cast can spend mana. */
+function spellTargetDefinition(definition: SpellAbilityDef): TargetDef | null {
+	assert(
+		definition.targets.length <= 1,
+		"multiple target slots are not implemented",
+	);
+	const target = definition.targets[0] ?? null;
+	if (target) {
+		assert(
+			target.min === 1 && target.max === 1,
+			"only one required target is implemented",
+		);
+		if (target.legal.kind === "permanent") {
+			assert(
+				target.legal.selector.kind === "type" &&
+					target.legal.selector.type === "creature",
+				"target restrictions beyond creature type are not implemented",
+			);
+		}
+	}
+	for (const effect of definition.effects) {
+		assert(
+			effect.kind !== "modify-pt",
+			"temporary P/T effects are not implemented",
+		);
+		if (effect.kind === "damage" || effect.kind === "destroy") {
+			assert(
+				target && effect.target === target.id,
+				"spell effect must reference its target slot",
+			);
+			if (effect.kind === "destroy") {
+				assert(
+					target.legal.kind === "permanent",
+					"destroy requires a permanent target",
+				);
+			}
+		}
+	}
+	return target;
+}
+
+/** Both announcement and resolution use current characteristics. */
+function isLegalSpellTarget(
+	read: ReadContext,
+	definition: TargetDef,
+	target: EntityRef,
+): boolean {
+	if (target.type === "player") {
+		return (
+			(definition.legal.kind === "player" ||
+				definition.legal.kind === "any-target") &&
+			!read.state.players[target.player].lost &&
+			!read.state.players[target.player].won
+		);
+	}
+	if (definition.legal.kind === "player") return false;
+	const object = read.view.objects.get(target.id);
+	if (object?.kind !== "permanent") return false;
+	const types = object.currentCharacteristics.types;
+	if (definition.legal.kind === "any-target") {
+		return types.includes("creature") || types.includes("planeswalker");
+	}
+	assert(
+		definition.legal.selector.kind === "type" &&
+			definition.legal.selector.type === "creature",
+		"target restrictions beyond creature type are not implemented",
+	);
+	return types.includes("creature");
+}
+
+function legalSpellTargets(
+	read: ReadContext,
+	definition: TargetDef,
+): EntityRef[] {
+	const candidates: EntityRef[] = [
+		{ type: "player", player: 0 },
+		{ type: "player", player: 1 },
+		...read.state.battlefield.map(
+			(id): EntityRef => ({ type: "permanent", id }),
+		),
+	];
+	return candidates.filter((target) =>
+		isLegalSpellTarget(read, definition, target),
+	);
+}
+
 /**
  * Whether `player` could begin casting `object` from hand right now, under the
  * engine's deliberate simplification that a spell never goes on the stack and
@@ -5243,7 +5404,20 @@ function canCast(
 
 	if (!doTimingRestrictionsAllowCast(pv, state, player)) return false;
 
-	return planManaPayment(state.players[player].manaPool, pv.manaCost) !== null;
+	if (planManaPayment(state.players[player].manaPool, pv.manaCost) === null)
+		return false;
+	const definition = card(object.cardId).spell;
+	if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
+		assertDefined(definition, `${pv.name} has no spell definition`);
+		const target = spellTargetDefinition(definition);
+		if (target && legalSpellTargets(read, target).length === 0) return false;
+	} else {
+		assert(
+			!definition?.targets.length,
+			"targeted permanent spells are not implemented",
+		);
+	}
+	return true;
 }
 
 function castableSpells(
@@ -5433,7 +5607,7 @@ function activateAbilityIn(
 				`mana ability ${action.ability} produces no mana`,
 			);
 		}
-		return effectToEvent(context, effect);
+		return effectToEvent(state, context, effect);
 	});
 	const scope = newScope();
 	const payment = performIn(
@@ -5527,6 +5701,36 @@ function castSpellIn(
 		);
 	}
 
+	const definition = card(object.cardId).spell;
+	let targets: SpellTargets = [];
+	if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
+		assertDefined(definition, `${pv.name} has no spell definition`);
+		const target = spellTargetDefinition(definition);
+		if (target) {
+			const candidates = legalSpellTargets(read, target);
+			if (candidates.length === 0)
+				throw new IllegalCastError(`${pv.name} has no legal target`);
+			const chosen = choices.chooseTarget(
+				state,
+				priorityPlayer,
+				action.card,
+				target,
+				candidates,
+			);
+			if (!isLegalSpellTarget(createReadContext(state), target, chosen)) {
+				throw new IllegalCastError(
+					`${pv.name}'s chosen target is no longer legal`,
+				);
+			}
+			targets = [{ slot: target.id, target: chosen }];
+		}
+	} else {
+		assert(
+			!definition?.targets.length,
+			"targeted permanent spells are not implemented",
+		);
+	}
+
 	// Payment is deducted directly rather than as an event: spending mana is a
 	// cost, not something that happens to a player, so nothing may replace or
 	// trigger off it. The move to the stack below is the replaceable part.
@@ -5560,6 +5764,7 @@ function castSpellIn(
 			to: "stack",
 			cause: "cast",
 			toController: priorityPlayer,
+			spellTargets: targets,
 		},
 		choices,
 		newScope(),

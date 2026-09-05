@@ -63,11 +63,11 @@ items, and resolution share one canonical serializable effect model; optional
 simple sequences are represented by one `may` effect containing its children. Basic-land mana abilities are synthesized
 from their subtype because Forge omits explicit `A:` lines for them.
 
-Targeted spells, activated abilities, and mana production are retained as
-strongly typed declarative definitions on `CardDef`. The normal gameplay loop
-does not yet cast spells, select targets, activate abilities, or maintain mana
-pools; importing those definitions does not pretend that runtime support exists.
-Unsupported or dynamic Forge syntax is rejected rather than partially parsed.
+Card definitions retain targeted spells, activated abilities, and mana production.
+Runtime support covers fixed tap-for-mana abilities, casting from hand, and the
+single-target spell subset described below. Other imported definitions can
+require runtime features that the engine does not support.
+The importer rejects unsupported or dynamic Forge syntax.
 
 ## Current gameplay boundary
 
@@ -76,6 +76,8 @@ Normal progression through `advance()` currently supports:
 - turn, phase, and step scheduling;
 - untapping, the normal draw, and cleanup discarding;
 - priority passing and one ordinary land play from the active player's hand during either main phase while the stack is empty;
+- fixed tap-for-mana abilities and mana pools;
+- casting from hand with mana already in the pool, including supported single-target instants and sorceries;
 - the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith);
 - declaring attackers, and unblocked two-player combat damage; and
 - replacement, prohibition, and state-based effects encountered by those events.
@@ -129,6 +131,34 @@ During either precombat or postcombat main phase, the active player's priority c
 
 This slice intentionally supports only one ordinary land from hand per turn. Modified allowances, playing from alternate zones, and effects granting special timing are not implemented. Invalid or stale land actions are rejected before action-specific state changes.
 
-Deck construction, opening hands, mulligans, mana, casting, activated abilities, and spell resolution are not implemented yet.
+Deck construction, opening hands, mulligans, and non-mana activated abilities are not implemented yet.
+
+### Targeted spells
+
+The agent first chooses a spell, then answers a separate `target` request.
+The engine checks that choice before payment or zone movement. A spell with
+no legal required target is absent from the priority options.
+
+The runtime supports one required target: a creature, a player, or an
+`any-target` recipient. Murder and Lightning Bolt exercise the creature and
+`any-target` paths. Planeswalker damage raises an assertion because the engine
+does not support planeswalkers yet. Battles are outside the card-type model.
+
+The stack entry stores the target slot and chosen reference. Both players can
+see this binding. Before resolution, the engine checks the target against its
+current characteristics. If the target is illegal, the spell does nothing and
+moves to its owner's graveyard. A permanent that leaves and returns has a new
+object ID and does not remain the target.
+
+Damage and destruction use the existing event pipeline, including replacement
+effects and indestructible. Mana abilities must run before casting. Payment
+still precedes the move to the stack.
+
+Additional target restrictions, including Doom Blade's color restriction and
+hexproof, remain deferred. Multiple or optional targets, ability targets,
+stack/graveyard targets, and temporary P/T effects also remain deferred.
+Unsupported target selectors and temporary P/T spell effects raise assertions
+before payment. Target-choice requests use the same replay protocol as other
+agent choices.
 
 `perform()` injects a rules event directly, and `settlePriority()` resolves the current priority window directly. They are useful for focused rules tests and integrations, but do not represent player actions supported by the normal gameplay loop.
