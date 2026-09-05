@@ -372,3 +372,109 @@ describe("casting onto the stack", () => {
 		expect(state.players[ALICE].manaPool.g).toBe(0);
 	});
 });
+
+describe("instant and sorcery resolution", () => {
+	test("effects happen and the card is put into its owner's graveyard", () => {
+		const state = setupMain();
+		const revitalize = spawnCard(state, "revitalize", ALICE, "hand");
+		const forest = spawnPermanent(state, "forest", ALICE);
+		const white = spawnPermanent(state, "test-white-source", ALICE);
+		tapForMana(state, ALICE, [
+			{ id: forest.id, ability: forestMana },
+			{ id: white.id, ability: whiteMana },
+		]);
+		const startingLife = state.players[ALICE].life;
+		const startingHand = state.players[ALICE].hand.length;
+		const startingLibrary = state.players[ALICE].library.length;
+
+		const caster = new ScriptedAgent([], [], [castAction(revitalize.id)]);
+		settlePriority(state, [caster, new ScriptedAgent()]);
+		expectScriptConsumed(caster);
+
+		// Revitalize: "You gain 3 life. Draw a card."
+		expect(state.players[ALICE].life).toBe(startingLife + 3);
+		expect(state.players[ALICE].library).toHaveLength(startingLibrary - 1);
+		// The spell left hand and the draw replaced it, so the count is unchanged.
+		expect(state.players[ALICE].hand).toHaveLength(startingHand);
+
+		// CR 608.2m: the card goes to its owner's graveyard, not the battlefield.
+		expect(state.stack).toHaveLength(0);
+		expect(state.battlefield.map((id) => state.objects.get(id))).toHaveLength(
+			2,
+		);
+		const graveyard = state.players[ALICE].graveyard.map((id) =>
+			state.objects.get(id),
+		);
+		expect(graveyard).toHaveLength(1);
+		expect(graveyard[0]).toMatchObject({
+			kind: "card",
+			zone: "graveyard",
+			owner: ALICE,
+		});
+	});
+
+	test("the spell is still on the stack while its own effects resolve", () => {
+		const state = setupMain();
+		spawnPermanent(state, "chains-of-mephistopheles", ALICE);
+		const revitalize = spawnCard(state, "revitalize", ALICE, "hand");
+		const forest = spawnPermanent(state, "forest", ALICE);
+		const white = spawnPermanent(state, "test-white-source", ALICE);
+		tapForMana(state, ALICE, [
+			{ id: forest.id, ability: forestMana },
+			{ id: white.id, ability: whiteMana },
+		]);
+
+		/**
+		 * Chains of Mephistopheles replaces Revitalize's draw with a discard,
+		 * which asks the caster to pick a card. That question is asked partway
+		 * through Revitalize's own effects, so the view handed to the agent is a
+		 * direct observation of the game mid-resolution.
+		 */
+		const stackDuringOwnEffects: number[] = [];
+		class ObservingAgent extends ScriptedAgent {
+			override choose(
+				view: Parameters<ScriptedAgent["choose"]>[0],
+				request: Parameters<ScriptedAgent["choose"]>[1],
+			) {
+				if (request.kind === "ownHand")
+					stackDuringOwnEffects.push(view.stack.length);
+				return super.choose(view, request);
+			}
+		}
+		const caster = new ObservingAgent([], [], [castAction(revitalize.id)]);
+		settlePriority(state, [caster, new ScriptedAgent()]);
+		expectScriptConsumed(caster);
+
+		// CR 608.2m: the card is put into the graveyard only as the last step of
+		// resolution, so it is still on the stack while its instructions run.
+		expect(stackDuringOwnEffects).toEqual([1]);
+		expect(state.stack).toHaveLength(0);
+		expect(state.players[ALICE].graveyard).not.toHaveLength(0);
+	});
+
+	test("an instant resolves during the opponent's turn", () => {
+		const state = newGame();
+		seedLibraries(state);
+		advanceUntil(state, passingAgents(), (next) => {
+			const location = turnLocation(next);
+			return location?.kind === "mainPhase" && location.role === "precombat";
+		});
+		// Alice is active on turn one, so Bob casting here proves an instant is
+		// not bound by sorcery timing (CR 601.3).
+		const revitalize = spawnCard(state, "revitalize", BOB, "hand");
+		const forest = spawnPermanent(state, "forest", BOB);
+		const white = spawnPermanent(state, "test-white-source", BOB);
+		tapForMana(state, BOB, [
+			{ id: forest.id, ability: forestMana },
+			{ id: white.id, ability: whiteMana },
+		]);
+		const startingLife = state.players[BOB].life;
+
+		const caster = new ScriptedAgent([], [], [castAction(revitalize.id)]);
+		settlePriority(state, [new ScriptedAgent(), caster]);
+		expectScriptConsumed(caster);
+
+		expect(state.players[BOB].life).toBe(startingLife + 3);
+		expect(state.players[BOB].graveyard).toHaveLength(1);
+	});
+});

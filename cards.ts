@@ -863,7 +863,7 @@ export const REVITALIZE = registerCard({
 	id: "revitalize",
 	name: "Revitalize",
 	types: ["instant"],
-	colors: [],
+	colors: ["w"],
 	manaCost: {
 		c: 1,
 		w: 1,

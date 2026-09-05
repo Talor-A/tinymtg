@@ -4837,49 +4837,65 @@ function putPendingTriggersOnStack(
 	state.pendingTriggers.length = 0;
 }
 
+/**
+ * Resolves the top object of a non-empty stack (CR 608). The caller decides
+ * *whether* anything resolves — this only resolves what it is given.
+ *
+ * A spell and an ability leave the stack by different means, so each kind
+ * resolves on its own terms below.
+ */
 function resolveTopOfStack(
 	state: GameState,
 	choices: AnyChoiceController,
 ): void {
-	const entry = state.stack.pop();
-	if (entry === undefined) return;
+	const entry = state.stack[state.stack.length - 1];
+	assertDefined(entry, "nothing on the stack to resolve");
 	if (entry.kind === "spell") {
-		const object = maybeObject(state, entry.objectId);
-		assertDefined(object, `no spell object ${entry.objectId}`);
-		assert(
-			object.kind === "spell",
-			`stack entry ${entry.objectId} is not a spell`,
-		);
+		resolveSpell(state, choices, entry);
+	} else {
+		resolveStackAbility(state, choices, entry);
+	}
+}
 
-		// A copy of a spell has no card to read a spell ability from; its
-		// instructions would have to come from the copy snapshot instead. Nothing
-		// creates one yet, so this is unreachable rather than unimplemented.
-		assert(
-			object.representation.kind === "card",
-			"resolving a copied spell is not supported",
-		);
+/**
+ * CR 608.3 / CR 608.2m for a spell.
+ *
+ * The entry is never popped: a spell leaves the stack by changing zones, and
+ * moveObject removes its entry as part of that move. That is also what keeps
+ * an instant or sorcery visible to its own effects while they resolve.
+ */
+function resolveSpell(
+	state: GameState,
+	choices: AnyChoiceController,
+	entry: SpellStackEntry,
+): void {
+	const object = maybeObject(state, entry.objectId);
+	assertDefined(object, `no spell object ${entry.objectId}`);
+	assert(
+		object.kind === "spell",
+		`stack entry ${entry.objectId} is not a spell`,
+	);
 
-		const read = createReadContext(state);
-		const snapshot = readObject(read, object.id);
-		assert(snapshot.kind === "spell");
-		const characteristics = snapshot.currentCharacteristics;
+	// A copy of a spell has no card to read a spell ability from; its
+	// instructions would have to come from the copy snapshot instead. Nothing
+	// creates one yet, so this is unreachable rather than unimplemented.
+	assert(
+		object.representation.kind === "card",
+		"resolving a copied spell is not supported",
+	);
 
-		// CR 608.3: a resolving permanent spell becomes a permanent, entering
-		// under its controller. Instants and sorceries take the CR 608.2m path
-		// instead, which needs effect resolution the engine does not have yet.
-		const isPermanentSpell = characteristics.types.some((type) =>
-			includes(PERMANENT_CARD_TYPES, type),
-		);
-		if (!isPermanentSpell) {
-			throw new Error(
-				"resolving instant and sorcery spells is not implemented",
-			);
-		}
+	const read = createReadContext(state);
+	const snapshot = readObject(read, object.id);
+	assert(snapshot.kind === "spell", "a spell object read back as another kind");
+	const characteristics = snapshot.currentCharacteristics;
 
-		log(state, `  [resolve] ${characteristics.name}#${object.id}`);
-		// moveObject removes the spell from the stack itself, so restore the entry
-		// it was popped from before handing the movement to the event pipeline.
-		state.stack.push(entry);
+	log(state, `  [resolve] ${characteristics.name}#${object.id}`);
+
+	// CR 608.3: a resolving permanent spell becomes a permanent, entering under
+	// its controller.
+	if (
+		characteristics.types.some((type) => includes(PERMANENT_CARD_TYPES, type))
+	) {
 		performIn(
 			state,
 			{
@@ -4896,18 +4912,83 @@ function resolveTopOfStack(
 		);
 		return;
 	}
-	const item = entry;
 
-	log(state, `  [resolve] ${item.text}`);
+	// CR 608.2m: an instant or sorcery follows its own instructions and is then
+	// put into its owner's graveyard as the last step of resolution.
+	const definition = card(object.representation.cardId).spell;
+	assertDefined(
+		definition,
+		`${characteristics.name} has no spell ability to resolve`,
+	);
+	assert(
+		definition.targets.length === 0,
+		`targeted spells are not implemented: ${characteristics.name}`,
+	);
+	/** Share a scope so facts can pass through the complete effect sequence. */
+	resolveEffects(
+		state,
+		choices,
+		{ controller: object.controller, source: object.id, ability: null },
+		definition.effects,
+		newScope(),
+	);
+	performIn(
+		state,
+		{
+			kind: "change zone",
+			object: object.id,
+			from: "stack",
+			to: "graveyard",
+			cause: "resolve",
+			toController: object.controller,
+		},
+		choices,
+		newScope(),
+		0,
+	);
+}
+
+/**
+ * CR 608.2m for an ability: unlike a spell it moves to no zone, it simply
+ * ceases to exist. Nothing else will take it off the stack, so it is popped
+ * here before its effects run.
+ */
+function resolveStackAbility(
+	state: GameState,
+	choices: AnyChoiceController,
+	entry: AbilityStackItem,
+): void {
+	const removed = state.stack.pop();
+	assert(removed === entry, "the stack changed while resolving its top entry");
+
+	log(state, `  [resolve] ${entry.text}`);
 
 	/** Share a scope so facts can pass through the complete effect sequence. */
-	resolveEffects(state, choices, item, item.effects, newScope());
+	resolveEffects(
+		state,
+		choices,
+		{ controller: entry.controller, source: entry.source, ability: entry },
+		entry.effects,
+		newScope(),
+	);
+}
+
+/**
+ * What a resolving object contributes to its own effects: the two fields every
+ * effect reads, plus the stack item itself when the resolving object is an
+ * ability. A resolving instant or sorcery has no stack item — it has no
+ * ability id and no trigger — so `ability` is null for one.
+ */
+interface ResolutionSource {
+	controller: PlayerId;
+	source: ObjectId;
+	ability: AbilityStackItem | null;
 }
 
 function resolveEffects(
 	state: GameState,
 	choices: AnyChoiceController,
-	item: AbilityStackItem,
+	item: ResolutionSource,
 	effects: EffectDef[],
 	scope: Scope,
 ): void {
@@ -4917,7 +4998,15 @@ function resolveEffects(
 				effect.decider === "you"
 					? item.controller
 					: ((1 - item.controller) as PlayerId);
-			if (choices.chooseOptional(state, item, decider))
+			// chooseOptional puts the whole stack item in its choice request, so
+			// only an ability can ask this today. No spell the compiler accepts
+			// has an optional effect, making this unreachable rather than a
+			// missing feature.
+			assertDefined(
+				item.ability,
+				"optional effects on a resolving spell are not implemented",
+			);
+			if (choices.chooseOptional(state, item.ability, decider))
 				resolveEffects(state, choices, item, effect.effects, scope);
 			continue;
 		}
