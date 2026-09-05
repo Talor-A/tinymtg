@@ -10,14 +10,14 @@ import {
 	registerCard,
 	spawnPermanent,
 	view,
-} from "./index.ts";
+} from "../index.ts";
 import {
 	compileForgeCard,
 	parseCard,
 	parseCardDetailed,
 	parseForgeCard,
 	validateForgeCardIR,
-} from "./parser.ts";
+} from "../parser.ts";
 
 function* walkCards(dir: string): Generator<string> {
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {

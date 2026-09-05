@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { ScriptedAgent } from "./agents.ts";
-import "./cards.ts";
+import { ScriptedAgent } from "../agents.ts";
+import "../cards.ts";
 import type {
 	ActivateAbilityAction,
 	Agent,
 	GameState,
 	ObjectId,
 	PlayerId,
-} from "./index.ts";
+} from "../index.ts";
 import {
 	abilityId,
 	advance,
@@ -18,17 +18,16 @@ import {
 	newGame,
 	registerCard,
 	settlePriority,
-	spawnCard,
 	spawnPermanent,
-	turnLocation,
-} from "./index.ts";
+} from "../index.ts";
 import {
 	ALICE,
-	advanceUntil,
 	BOB,
 	beginFirstTurn,
 	passingAgents,
-} from "./test/engine-helpers.ts";
+	seedLibraries,
+	setupMain,
+} from "./utils/engine-helpers.ts";
 
 registerCard({
 	id: "test-nonmana-ability",
@@ -52,23 +51,6 @@ const forestMana = abilityId("activated", "forest", 0);
 
 function manaAction(source: ObjectId): ActivateAbilityAction {
 	return { kind: "activate ability", source, ability: forestMana };
-}
-
-function seedLibraries(state: GameState): void {
-	for (let i = 0; i < 3; i++) {
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
-	}
-}
-
-function setupMain(): GameState {
-	const state = newGame();
-	seedLibraries(state);
-	advanceUntil(state, passingAgents(), (next) => {
-		const location = turnLocation(next);
-		return location?.kind === "mainPhase" && location.role === "precombat";
-	});
-	return state;
 }
 
 describe("priority-time mana abilities", () => {

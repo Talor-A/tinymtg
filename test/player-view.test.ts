@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { ScriptedAgent } from "./agents.ts";
-import "./cards.ts";
+import { ScriptedAgent } from "../agents.ts";
+import "../cards.ts";
 import {
   abilityId,
   buildPlayerView,
@@ -15,7 +15,7 @@ import {
   type StackItemId,
   spawnCard,
   spawnPermanent,
-} from "./index.ts";
+} from "../index.ts";
 
 function assertExactPlayerViewTypes(
   hand: PlayerHandObjectView,

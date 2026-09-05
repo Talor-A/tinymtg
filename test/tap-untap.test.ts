@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { ScriptedAgent } from "./agents.ts";
-import "./cards.ts";
+import { ScriptedAgent } from "../agents.ts";
+import "../cards.ts";
 import type {
 	ChoiceAnswer,
 	ChoiceRequest,
 	PlayerId,
 	SyncAgent,
-} from "./index.ts";
+} from "../index.ts";
 import {
 	activePlayer,
 	advanceWithReplay,
@@ -17,8 +17,8 @@ import {
 	settlePriority,
 	spawnPermanent,
 	turnLocation,
-} from "./index.ts";
-import { beginFirstTurn } from "./test/engine-helpers.ts";
+} from "../index.ts";
+import { beginFirstTurn } from "./utils/engine-helpers.ts";
 
 const ALICE = 0 as PlayerId;
 const BOB = 1 as PlayerId;

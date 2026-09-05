@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { ScriptedAgent } from "./agents.ts";
-import "./cards.ts"; // side effect: registers the card database
+import { ScriptedAgent } from "../agents.ts";
+import "../cards.ts"; // side effect: registers the card database
 import type {
 	CharacteristicsSnapshot,
 	GameState,
 	ObjectId,
 	PlayerId,
 	ReadContext,
-} from "./index.ts";
+} from "../index.ts";
 import {
 	abilityId,
 	advanceWithReplay,
@@ -22,7 +22,7 @@ import {
 	spawnPermanent,
 	spawnToken,
 	view,
-} from "./index.ts";
+} from "../index.ts";
 
 const P1 = 0 as PlayerId;
 const agents: [ScriptedAgent, ScriptedAgent] = [

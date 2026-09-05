@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { FuzzAgent } from "./test/fuzz-agent.ts";
-import "./cards.ts";
+import { FuzzAgent } from "./utils/fuzz-agent.ts";
+import "../cards.ts";
 import {
 	advance,
 	ChoiceController,
@@ -10,7 +10,7 @@ import {
 	type SyncAgent,
 	spawnCard,
 	spawnPermanent,
-} from "./index.ts";
+} from "../index.ts";
 
 const LIBRARY_CARDS = [
 	"forest",

@@ -33,13 +33,13 @@ import {
 	parseForgeScalarSVarExpression,
 	printForgeCardScript,
 	projectForgeDocument,
-} from "./forge-ast.ts";
+} from "../forge-ast.ts";
 
 /* ------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* ------------------------------------------------------------------------- */
 
-const CORPUS_ROOT = join(import.meta.dir, "cards", "cardsfolder");
+const CORPUS_ROOT = join(import.meta.dir, "..", "cards", "cardsfolder");
 
 function card(name: string): string {
 	const first = name[0] ?? "_";

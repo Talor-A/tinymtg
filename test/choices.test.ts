@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ScriptedAgent } from "./agents.ts";
-import "./cards.ts";
-import { blockAssignmentOptionId, priorityOptionId } from "./choices.ts";
+import { ScriptedAgent } from "../agents.ts";
+import "../cards.ts";
+import { blockAssignmentOptionId, priorityOptionId } from "../choices.ts";
 import {
   type Agent,
   abilityId,
@@ -25,7 +25,7 @@ import {
   spawnCard,
   spawnPermanent,
   spawnToken,
-} from "./index.ts";
+} from "../index.ts";
 
 function agents(first = new ScriptedAgent()): [SyncAgent, SyncAgent] {
   return [first, new ScriptedAgent()];

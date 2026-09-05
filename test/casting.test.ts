@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { ScriptedAgent } from "./agents.ts";
-import "./cards.ts";
+import { ScriptedAgent } from "../agents.ts";
+import "../cards.ts";
 import type {
 	CastAction,
 	GameState,
 	ObjectId,
 	PlayerId,
 	PriorityAction,
-} from "./index.ts";
+} from "../index.ts";
 import {
 	abilityId,
 	advance,
@@ -21,14 +21,14 @@ import {
 	spawnCard,
 	spawnPermanent,
 	turnLocation,
-} from "./index.ts";
+} from "../index.ts";
 import {
 	ALICE,
 	advanceUntil,
 	BOB,
 	expectScriptConsumed,
 	passingAgents,
-} from "./test/engine-helpers.ts";
+} from "./utils/engine-helpers.ts";
 
 /**
  * Forest is the only basic in the card set, so a white source is defined here

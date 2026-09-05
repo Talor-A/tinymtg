@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { ScriptedAgent } from "./agents.ts";
-import "./cards.ts";
-import { priorityOptionId } from "./choices.ts";
+import { ScriptedAgent } from "../agents.ts";
+import "../cards.ts";
+import { priorityOptionId } from "../choices.ts";
 import {
 	type Agent,
 	abilityId,
@@ -26,9 +25,12 @@ import {
 	spawnPermanent,
 	type TargetDef,
 	turnLocation,
-} from "./index.ts";
-import { parseCard } from "./parser.ts";
-import { advanceUntil } from "./test/engine-helpers.ts";
+} from "../index.ts";
+import {
+	advanceUntil,
+	passingAgents,
+	registerCardFixture,
+} from "./utils/engine-helpers.ts";
 
 for (const file of [
 	"m/murder",
@@ -37,11 +39,7 @@ for (const file of [
 	"s/swamp",
 	"s/sorins_thirst",
 ]) {
-	const definition = parseCard(
-		readFileSync(`cards/cardsfolder/${file}.txt`, "utf8"),
-	);
-	if (!definition) throw new Error(`unsupported fixture ${file}`);
-	registerCard(definition);
+	registerCardFixture(file);
 }
 
 const creatureTarget: TargetDef = {
@@ -50,10 +48,6 @@ const creatureTarget: TargetDef = {
 	max: 1,
 	legal: { kind: "permanent", selector: { kind: "type", type: "creature" } },
 };
-
-function passingAgents(): [ScriptedAgent, ScriptedAgent] {
-	return [new ScriptedAgent(), new ScriptedAgent()];
-}
 
 describe("target bindings and choices", () => {
 	test("zone movement installs detached bindings visible to both players", () => {

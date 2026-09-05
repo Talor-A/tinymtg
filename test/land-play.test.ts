@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { ScriptedAgent } from "./agents.ts";
-import "./cards.ts";
+import { ScriptedAgent } from "../agents.ts";
+import "../cards.ts";
 import type {
   Agent,
   GameState,
@@ -9,7 +9,7 @@ import type {
   PriorityAction,
   StackItemId,
   SyncAgent,
-} from "./index.ts";
+} from "../index.ts";
 import {
   abilityId,
   advanceWithReplay,
@@ -22,14 +22,17 @@ import {
   spawnCard,
   spawnPermanent,
   turnLocation,
-} from "./index.ts";
+} from "../index.ts";
 import {
   type SyncAgents as Agents,
   ALICE,
   advanceUntil,
+  atMain,
   BOB,
   passingAgents,
-} from "./test/engine-helpers.ts";
+  seedLibraries,
+  setupMain,
+} from "./utils/engine-helpers.ts";
 
 registerCard({
   id: "test-etb-land",
@@ -51,25 +54,6 @@ registerCard({
     },
   ],
 });
-
-function seedLibraries(state: GameState): void {
-  for (let i = 0; i < 3; i++) {
-    spawnCard(state, "forest", ALICE, "library");
-    spawnCard(state, "forest", BOB, "library");
-  }
-}
-
-function atMain(state: GameState, role: "precombat" | "postcombat"): boolean {
-  const location = turnLocation(state);
-  return location?.kind === "mainPhase" && location.role === role;
-}
-
-function setupMain(role: "precombat" | "postcombat" = "precombat"): GameState {
-  const state = newGame();
-  seedLibraries(state);
-  advanceUntil(state, passingAgents(), (next) => atMain(next, role));
-  return state;
-}
 
 function landAction(card: ObjectId): PriorityAction {
   return { kind: "play land", card };

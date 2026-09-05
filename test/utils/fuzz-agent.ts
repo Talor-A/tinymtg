@@ -3,7 +3,7 @@ import type {
 	ChoiceRequest,
 	PlayerView,
 	SyncAgent,
-} from "../index.ts";
+} from "../../index.ts";
 
 /** Deterministic PRNG so fuzz choices and failures are reproducible. */
 function mulberry32(seed: number): () => number {
