@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ScriptedAgent } from "../../agents.ts";
+import { importForgeCard } from "../../forge-import.ts";
 import type {
 	GameState,
 	ObjectId,
@@ -8,7 +9,6 @@ import type {
 	StepKind,
 	SyncAgent,
 } from "../../index.ts";
-import { importForgeCard } from "../../forge-import.ts";
 import {
 	advance,
 	gameOver,
@@ -71,6 +71,23 @@ export function advanceUntil(
  */
 export function beginFirstTurn(state: GameState, agents: SyncAgents): void {
 	advanceUntil(state, agents, (next) => isTurnStep(next, "upkeep"));
+}
+
+/**
+ * Consumes the CR 103 pre-game without entering the first turn, leaving the
+ * next advance() to be the one that installs the turn and its untap step.
+ *
+ * `startGame()` stops one transition later, inside the turn. Use this instead
+ * when the untap transition itself is what a test is exercising.
+ */
+export function completePreGame(state: GameState, agents: SyncAgents): void {
+	advanceUntil(
+		state,
+		agents,
+		(next) =>
+			next.turnScheduler.progress.kind === "pregame" &&
+			next.turnScheduler.remainingPregameSteps.length === 0,
+	);
 }
 
 /** Reports whether the game is currently at `expected`, where "main" is either main phase. */
@@ -153,7 +170,8 @@ export function registerCardFixture(cardsfolderPath: string): void {
 		"utf8",
 	);
 	const filename = cardsfolderPath.split("/").at(-1);
-	if (!filename) throw new Error(`invalid card fixture path ${cardsfolderPath}`);
+	if (!filename)
+		throw new Error(`invalid card fixture path ${cardsfolderPath}`);
 	const id = filename.replaceAll("_", "-");
 	const result = importForgeCard(text, { id });
 	if (!result.ok)

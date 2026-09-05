@@ -27,6 +27,7 @@ import {
 	ALICE,
 	BOB,
 	beginFirstTurn,
+	completePreGame,
 	passingAgents,
 	registerCardFixture,
 	seedLibraries,
@@ -136,6 +137,8 @@ describe("priority-time mana abilities", () => {
 				return answer;
 			},
 		};
+		completePreGame(checkpoint, [new ScriptedAgent(), new ScriptedAgent()]);
+
 		let attempts = 1;
 		for (let count = 0; count < 4; count++) {
 			const before = structuredClone(checkpoint);

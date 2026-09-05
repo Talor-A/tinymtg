@@ -18,7 +18,7 @@ import {
 	spawnPermanent,
 	turnLocation,
 } from "../index.ts";
-import { beginFirstTurn } from "./utils/engine-helpers.ts";
+import { beginFirstTurn, completePreGame } from "./utils/engine-helpers.ts";
 
 const ALICE = 0 as PlayerId;
 const BOB = 1 as PlayerId;
@@ -249,6 +249,8 @@ describe("tap and untap occurrences", () => {
 		const observer = spawnPermanent(checkpoint, TAP_OBSERVER, ALICE, {
 			tapped: true,
 		});
+
+		completePreGame(checkpoint, passingAgents);
 
 		const untap = await advanceWithReplay(checkpoint, passingAgents);
 		expect(turnLocation(untap.state)).toMatchObject({

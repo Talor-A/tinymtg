@@ -122,6 +122,15 @@ interface StepOccurrence {
   kind: StepKind;
 }
 
+const PRE_GAME_STEPS = [
+  "shuffle",
+  "opening hand",
+  "mulligan",
+  "opening hand actions",
+] as const;
+
+type PreGameStepKind = (typeof PRE_GAME_STEPS)[number];
+
 interface TurnOccurrence {
   id: TurnId;
   player: PlayerId;
@@ -144,6 +153,7 @@ export type TurnLocation =
 
 export type GameProgress =
   | { kind: "notStarted" }
+  | { kind: "pregame"; step: PreGameStepKind }
   | {
       kind: "inTurn";
       turn: TurnOccurrence;
@@ -156,6 +166,8 @@ export type GameProgress =
     };
 
 type SchedulerCommand =
+  | { kind: "advancePreGameStep" }
+  | { kind: "finishPreGameStep" }
   | { kind: "advanceTurn" }
   | { kind: "advancePhase"; turn: TurnOccurrence }
   | {
@@ -176,6 +188,9 @@ interface TurnScheduler {
   /** Used to lazily create the next ordinary turn when the queue is empty. */
   nextRegularPlayer: PlayerId;
   remainingSteps: StepOccurrence[];
+  // TODO: I think we could do some better type structuring vs jamming
+  // this guy in at the end.
+  remainingPregameSteps: PreGameStepKind[];
   nextId: number;
 }
 
@@ -2102,11 +2117,12 @@ export function newGame(): GameState {
     blockAssignments: [],
     completedTurns: 0,
     turnScheduler: {
-      command: { kind: "advanceTurn" },
+      command: { kind: "advancePreGameStep" },
       progress: { kind: "notStarted" },
       pendingTurns: [],
       nextRegularPlayer: 0 as PlayerId,
       remainingSteps: [],
+      remainingPregameSteps: [...PRE_GAME_STEPS],
       nextId: 0,
     },
     nextObjectId: 0,
@@ -6055,7 +6071,21 @@ function priority(state: GameState, choices: AnyChoiceController) {
 /* ------------------------------------------------------------------ *
  * Turn progression
  * ------------------------------------------------------------------ */
-
+function performPreGameActions(
+  state: GameState,
+  choices: AnyChoiceController,
+  step: PreGameStepKind,
+): void {
+  switch (step) {
+    case "shuffle": // increment 1: seeded shuffle
+    case "opening hand": // increment 2: deal 7 through the draw path
+    case "mulligan": // increment 7
+    case "opening hand actions": // increment 8: Leyline
+      break;
+    default:
+      assertNever(step);
+  }
+}
 /** CR 703 actions, dispatched only after the corresponding step began. */
 function performTurnBasedActions(
   state: GameState,
@@ -6338,6 +6368,25 @@ export async function advanceWithReplay(
   }
 }
 
+/**
+ * Advances through the CR 103 pre-game and stops at the first rules-defined
+ * location inside the first turn.
+ *
+ * Each pre-game step is its own scheduler transition, so reaching a turn takes
+ * several calls to {@link advance}. No player receives priority before the
+ * first turn begins, so nothing is decided by stopping in between: this
+ * consumes every pre-game transition in one call.
+ */
+export function startGame(state: GameState, source: ChoiceSource): void {
+  const choices = asChoiceController(source);
+  // One transition per pre-game step, plus the one that installs the turn.
+  for (let call = 0; call <= PRE_GAME_STEPS.length + 1; call++) {
+    if (state.turnScheduler.progress.kind === "inTurn") return;
+    advanceIn(state, choices);
+  }
+  throw new Error("the pre-game did not reach the first turn");
+}
+
 export function advance(state: GameState, source: ChoiceSource): void {
   advanceIn(state, asChoiceController(source));
 }
@@ -6353,6 +6402,27 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
     const command = scheduler.command;
 
     switch (command.kind) {
+      case "advancePreGameStep": {
+        const step = scheduler.remainingPregameSteps.shift();
+        if (!step) {
+          scheduler.command = { kind: "advanceTurn" };
+          continue;
+        }
+        scheduler.progress = { kind: "pregame", step };
+        performPreGameActions(state, choices, step);
+        scheduler.command = { kind: "finishPreGameStep" };
+        // A pre-game step is a rules-defined location, exactly like a turn's
+        // step. Unlike one, CR 103 opens no priority window, so there is no
+        // priority() call before returning.
+        return;
+      }
+
+      case "finishPreGameStep": {
+        assert(scheduler.progress.kind === "pregame");
+        scheduler.command = { kind: "advancePreGameStep" };
+        continue;
+      }
+
       case "advanceTurn": {
         const turn = takeNextTurn(state);
         const result = performIn(

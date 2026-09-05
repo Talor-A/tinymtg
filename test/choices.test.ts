@@ -25,6 +25,7 @@ import {
   spawnCard,
   spawnPermanent,
   spawnToken,
+  startGame,
 } from "../index.ts";
 
 function agents(first = new ScriptedAgent()): [SyncAgent, SyncAgent] {
@@ -204,7 +205,7 @@ describe("choice transcripts", () => {
   test("advanceWithReplay completes synchronous agents in one attempt", async () => {
     const checkpoint = newGame();
     spawnPermanent(checkpoint, "ajanis-mantra", 0);
-    advance(checkpoint, agents());
+    startGame(checkpoint, agents());
     const snapshot = structuredClone(checkpoint);
 
     const result = await advanceWithReplay(checkpoint, agents());
@@ -224,7 +225,7 @@ describe("choice transcripts", () => {
     const checkpoint = newGame();
     spawnPermanent(checkpoint, "ajanis-mantra", 0);
     const setupAgents = agents();
-    advance(checkpoint, setupAgents);
+    startGame(checkpoint, setupAgents);
     const snapshot = structuredClone(checkpoint);
 
     let priorityCalls = 0;
@@ -274,7 +275,7 @@ describe("choice transcripts", () => {
     const checkpoint = newGame();
     spawnPermanent(checkpoint, "ajanis-mantra", 0);
     const setupAgents = agents();
-    advance(checkpoint, setupAgents);
+    startGame(checkpoint, setupAgents);
     const snapshot = structuredClone(checkpoint);
     const failure = new Error("agent unavailable");
     const rejecting: Agent = {
@@ -333,7 +334,7 @@ describe("choice transcripts", () => {
   test("rejects an invalid fulfilled answer without mutating the checkpoint", async () => {
     const checkpoint = newGame();
     spawnPermanent(checkpoint, "ajanis-mantra", 0);
-    advance(checkpoint, agents());
+    startGame(checkpoint, agents());
     const snapshot = structuredClone(checkpoint);
     const invalid: Agent = {
       choose: () => Promise.resolve({ optionId: "not-an-option" }),

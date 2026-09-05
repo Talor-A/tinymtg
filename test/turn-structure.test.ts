@@ -34,6 +34,18 @@ describe("turn progress", () => {
 
 		expect(state.turnScheduler.progress).toEqual({ kind: "notStarted" });
 
+		// CR 103 runs before the first turn, one step per advance().
+		for (const step of [
+			"shuffle",
+			"opening hand",
+			"mulligan",
+			"opening hand actions",
+		] as const) {
+			advance(state, agents);
+			expect(state.turnScheduler.progress).toEqual({ kind: "pregame", step });
+		}
+
+		// Once a turn is installed the game never leaves inTurn.
 		for (let i = 0; i < 30; i++) {
 			advance(state, agents);
 			expect(state.turnScheduler.progress.kind).toBe("inTurn");
@@ -50,6 +62,14 @@ describe("turn progress", () => {
 		expect(() => settlePriority(state, agents)).toThrow(
 			"no player receives priority outside a turn",
 		);
+
+		// The pre-game is not a turn, so it does not answer "whose turn is it"
+		// either -- the whole of CR 103 passes with no active player.
+		for (let i = 0; i < 4; i++) {
+			advance(state, agents);
+			expect(state.turnScheduler.progress.kind).toBe("pregame");
+			expect(activePlayer(state)).toBe(null);
+		}
 
 		advance(state, agents);
 		expect(activePlayer(state)).toBe(ALICE);
