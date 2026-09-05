@@ -8,6 +8,7 @@ import {
   type ChoiceTranscript,
 } from "./choices.ts";
 import * as EFFECTS from "./effects";
+import { includes } from "./lib/array.ts";
 
 export {
   type Agent,
@@ -26,13 +27,6 @@ export {
 } from "./choices.ts";
 
 import { assert, assertDefined, assertNever } from "./lib/assert";
-
-function includes<T extends U, U>(
-  arr: ReadonlyArray<T>,
-  searchElement: U,
-): searchElement is T {
-  return arr.includes(searchElement as T);
-}
 
 /** helper type to prevent accidentally assigning one type of ID to another */
 declare const BRAND: unique symbol;
@@ -5176,7 +5170,10 @@ function effectToEvent(
         amount: effect.amount,
       };
     case "discard": {
-      assert(effect.amount === 1, "discarding multiple cards is not implemented");
+      assert(
+        effect.amount === 1,
+        "discarding multiple cards is not implemented",
+      );
       if (effect.selector === "any") {
         return {
           kind: "discard",
