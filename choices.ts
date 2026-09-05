@@ -3,6 +3,7 @@ import type {
 	AbilityStackItem,
 	BlockAssignment,
 	BoundReplacement,
+	EntityRef,
 	GameEvent,
 	GameState,
 	ObjectId,
@@ -10,6 +11,7 @@ import type {
 	PlayerId,
 	PlayerView,
 	PriorityAction,
+	TargetDef,
 	TurnLocation,
 } from "./index.ts";
 import { activePlayer, buildPlayerView, name, turnLocation } from "./index.ts";
@@ -56,6 +58,11 @@ export interface PriorityActionChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
+export interface TargetChoiceRequest extends ChoiceRequestBase {
+	kind: "target";
+	context: { card: ObjectId; definition: TargetDef };
+}
+
 export interface TriggerOrderChoiceRequest extends ChoiceRequestBase {
 	kind: "triggerOrder";
 	context: {
@@ -96,6 +103,7 @@ export interface DeclareBlockersChoiceRequest extends ChoiceRequestBase {
 }
 
 export type ChoiceRequest =
+	| TargetChoiceRequest
 	| ReplacementChoiceRequest
 	| OwnHandChoiceRequest
 	| OptionalChoiceRequest
@@ -164,6 +172,7 @@ export class ChoicePendingError extends Error {
 }
 
 type RequestInput =
+	| Omit<TargetChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<ReplacementChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OwnHandChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OptionalChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
@@ -618,6 +627,32 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		return values;
 	}
 
+	chooseTarget(
+		state: GameState,
+		player: PlayerId,
+		card: ObjectId,
+		definition: TargetDef,
+		targets: EntityRef[],
+	): EntityRef {
+		const candidates = targets.map((target) => ({
+			id: targetOptionId(target),
+			value: target,
+		}));
+		const request = this.request({
+			kind: "target",
+			player,
+			context: { card, definition },
+			options: targets.map((target) => ({
+				id: targetOptionId(target),
+				label:
+					target.type === "player"
+						? `Player ${target.player}`
+						: `${objectLabel(state, target.id)}#${target.id}`,
+			})),
+		});
+		return this.choose(state, request, candidates);
+	}
+
 	chooseReplacement(
 		state: GameState,
 		player: PlayerId,
@@ -810,4 +845,10 @@ export function asChoiceController(
 	return source instanceof ChoiceController
 		? source
 		: ChoiceController.record(source);
+}
+
+export function targetOptionId(target: EntityRef): string {
+	return target.type === "player"
+		? `player:${target.player}`
+		: `permanent:${target.id}`;
 }

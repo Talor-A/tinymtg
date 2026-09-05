@@ -1,9 +1,14 @@
 import { readSync } from "node:fs";
-import { blockAssignmentOptionId, priorityOptionId } from "./choices.ts";
+import {
+	blockAssignmentOptionId,
+	priorityOptionId,
+	targetOptionId,
+} from "./choices.ts";
 import type {
 	BlockAssignment,
 	ChoiceAnswer,
 	ChoiceRequest,
+	EntityRef,
 	ObjectId,
 	PlayerView,
 	PriorityAction,
@@ -43,6 +48,7 @@ export class ScriptedAgent implements SyncAgent {
 		public priorityActions: PriorityAction[] = [],
 		public attackerChoices: ObjectId[][] = [],
 		public blockerChoices: BlockAssignment[][] = [],
+		public targetChoices: EntityRef[] = [],
 	) {}
 
 	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
@@ -55,6 +61,13 @@ export class ScriptedAgent implements SyncAgent {
 					if (option) return { optionId: option.id };
 				}
 				return firstOption(request);
+
+			case "target": {
+				const target = this.targetChoices.shift();
+				return target
+					? { optionId: targetOptionId(target) }
+					: firstOption(request);
+			}
 
 			case "ownHand":
 				return firstOption(request);
@@ -116,6 +129,7 @@ export class RandomAgent implements SyncAgent {
 						.map(({ option }) => option.id),
 				};
 			case "replacement":
+			case "target":
 			case "ownHand":
 			case "optional":
 			case "priorityAction":
@@ -131,6 +145,11 @@ export class KeyboardAgent implements SyncAgent {
 		switch (request.kind) {
 			case "replacement":
 				console.log(`\n[Replacement choice for ${request.context.event.kind}]`);
+				break;
+			case "target":
+				console.log(
+					`\n[Player ${request.player}: choose target for spell #${request.context.card}]`,
+				);
 				break;
 			case "ownHand":
 				console.log(`\n[Player ${request.player}: choose a card to discard]`);

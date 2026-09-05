@@ -299,7 +299,7 @@ export type CounterBag = Partial<Record<CounterNames, number>>;
  * Used for referencing entities in events.
  * TODO: this might be insufficient
  */
-type EntityRef =
+export type EntityRef =
 	| { type: "player"; player: PlayerId }
 	| { type: "permanent"; id: ObjectId };
 
@@ -433,6 +433,8 @@ interface RegenerateEvent extends EventCommon {
 }
 
 interface ZoneChangeEvent extends EventCommon {
+	/** Choices installed atomically when this movement creates a spell. */
+	spellTargets?: SpellTargets;
 	kind: "change zone";
 	object: ObjectId;
 	from: Zone;
@@ -735,6 +737,7 @@ interface CardSnapshot extends SnapshotBase {
 }
 
 interface SpellSnapshot extends SnapshotBase {
+	targets: SpellTargets;
 	kind: "spell";
 	zone: "stack";
 	controller: PlayerId;
@@ -1099,8 +1102,13 @@ function buildFilteredGameView(
 					currentCharacteristics: current,
 				});
 				break;
-			case "spell":
+			case "spell": {
+				const entry = state.stack.find(
+					(entry) => entry.kind === "spell" && entry.objectId === object.id,
+				);
+				assert(entry?.kind === "spell", "spell has no stack entry");
 				snapshots.set(object.id, {
+					targets: structuredClone(entry.targets) as SpellTargets,
 					kind: "spell",
 					objectId: object.id,
 					owner: object.owner,
@@ -1119,6 +1127,7 @@ function buildFilteredGameView(
 					currentCharacteristics: current,
 				});
 				break;
+			}
 			case "permanent":
 				snapshots.set(object.id, {
 					kind: "permanent",
@@ -1231,7 +1240,11 @@ export interface AbilityStackItem {
 	effects: EffectDef[];
 }
 
+/** The runtime supports either no targets or one required target slot. */
+export type SpellTargets = [] | [{ slot: string; target: EntityRef }];
+
 export interface SpellStackEntry {
+	targets: SpellTargets;
 	kind: "spell";
 	objectId: ObjectId;
 }
@@ -3469,6 +3482,7 @@ function moveObject(
 		counters?: CounterBag;
 		copiableOverride?: CharacteristicsSnapshot;
 		toBottom?: boolean;
+		spellTargets?: SpellTargets;
 	},
 ): ObjectId {
 	const old = maybeObject(state, id);
@@ -3567,7 +3581,11 @@ function moveObject(
 			fresh.kind === "spell",
 			"only spells can enter the stack as objects",
 		);
-		state.stack.push({ kind: "spell", objectId: fresh.id });
+		state.stack.push({
+			kind: "spell",
+			objectId: fresh.id,
+			targets: structuredClone(opts.spellTargets ?? []),
+		});
 	} else {
 		const dst = mutableZoneList(state, to, fresh.owner);
 		if (to === "library" && opts.toBottom) dst.unshift(fresh.id);
@@ -4494,6 +4512,7 @@ function executeIn(
 				counters: ev.entersWithCounters,
 				copiableOverride: ev.copiableOverride,
 				toBottom: ev.toBottom,
+				spellTargets: ev.spellTargets,
 			});
 			created.push(newId);
 			break;
