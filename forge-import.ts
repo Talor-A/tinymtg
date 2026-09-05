@@ -14,6 +14,17 @@
  * This module accounts for every root rule (`A`, `T`, `R`, `S`, `K`) on a card
  * or rejects the whole card; it does not claim full Magic rules coverage. Only
  * the concrete subset documented in the acceptance matrix in README.md lowers.
+ *
+ * Deferred / explicitly unsupported (each rejects rather than approximating):
+ * temporary P/T effects; random or multi-card discard; targeted activated
+ * abilities; alternate/additional costs on spells or activations other than
+ * a bare tap-self; X/hybrid/Phyrexian/snow mana and dynamic amounts; target
+ * selectors other than `Any`/`Player`/bare creature-type; more than one spell
+ * ability, or a spell ability on a permanent card; conditions, alternate
+ * "unless" costs, or new target declarations on a `SubAbility`/`Execute`
+ * continuation; alternate/specialize faces, `Variant:` patches, and `Draft:`
+ * actions; and any `Card.Self`-containing selector inside a global
+ * (`ActiveZones$`) replacement (see `lowerReplacement`).
  */
 import type {
   ForgeAbilityRecord,
@@ -499,10 +510,43 @@ function lowerStatic(
   };
 }
 
+function selectorContainsSelf(selector: TargetSelectorDef): boolean {
+  switch (selector.kind) {
+    case "self":
+      return true;
+    case "all":
+    case "any":
+      return selector.selectors.some(selectorContainsSelf);
+    case "not":
+      return selectorContainsSelf(selector.selector);
+    default:
+      return false;
+  }
+}
+
+type ReplacementLowering = { kind: "self-entry" } | { kind: "global"; def: ReplacementDef };
+
+/**
+ * Two canonical enters-tapped shapes share `Event$ Moved | ... | ReplaceWith$`:
+ *
+ * - The self form (Charcoal Diamond, Diregraf Ghoul) has no `ActiveZones$`,
+ *   `ValidCard$ Card.Self`, and its body reads `Defined$ Self`. It lowers
+ *   directly to `CardDefInput.entersTapped`; `defineCard` then synthesizes
+ *   one ordinary self-scoped replacement from that (see
+ *   `printedEntryReplacements`). No `K:` keyword expresses this rule.
+ * - The global form (Root Maze, Blind Obedience) has `ActiveZones$
+ *   Battlefield`, a supported `ValidCard$` selector, and its body reads
+ *   `Defined$ ReplacedCard`. Per CR 614.12, a general effect (one that would
+ *   affect a subset of objects rather than only its own source) never applies
+ *   to its own source's entry, which is why the engine's callback below gates
+ *   on the source already being on the battlefield. Self-containing selectors
+ *   with explicit `ActiveZones$` are outside this importer's subset and are
+ *   rejected.
+ */
 function lowerReplacement(
   face: ForgeFaceAst,
   record: ForgeAbilityRecord | { params: ForgeParamList; source: { nodeId: string; line: number } },
-): ReplacementDef | ImportIssue {
+): ReplacementLowering | ImportIssue {
   const params = record.params;
   const where = { nodeId: record.source.nodeId, line: record.source.line };
   const badParams = checkParams(
@@ -522,13 +566,12 @@ function lowerReplacement(
   if (
     getForgeParam(params, "Event") !== "Moved" ||
     getForgeParam(params, "Destination") !== "Battlefield" ||
-    getForgeParam(params, "ReplacementResult") !== "Updated" ||
-    getForgeParam(params, "ActiveZones") !== "Battlefield"
+    getForgeParam(params, "ReplacementResult") !== "Updated"
   )
     return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
   const validCard = getForgeParam(params, "ValidCard");
-  const selector = validCard ? parseSelector(validCard) : null;
-  if (!selector) return issue("UNSUPPORTED_TARGET", "unsupported ValidCard selector", where);
+  if (validCard === undefined)
+    return issue("UNSUPPORTED_PARAMETER", "ValidCard$ is required", where);
   const replaceWith = getForgeParam(params, "ReplaceWith");
   if (replaceWith === undefined)
     return issue("UNSUPPORTED_REFERENCE", "missing ReplaceWith$", where);
@@ -544,19 +587,40 @@ function lowerReplacement(
   const effectWhere = { nodeId: effectSVar.source.nodeId, line: effectSVar.source.line };
   const effectBad = checkParams(effectParams, new Set(["db", "etb", "defined"]), effectWhere);
   if (effectBad) return effectBad;
-  if (
-    getForgeParam(effectParams, "DB") !== "Tap" ||
-    getForgeParam(effectParams, "ETB") !== "True" ||
-    getForgeParam(effectParams, "Defined") !== "ReplacedCard"
-  )
+  if (getForgeParam(effectParams, "DB") !== "Tap" || getForgeParam(effectParams, "ETB") !== "True")
     return issue("UNSUPPORTED_EFFECT", "unsupported ReplaceWith effect body", effectWhere);
+
+  const activeZones = getForgeParam(params, "ActiveZones");
+  const isSelfForm =
+    (validCard === "Card.Self" || validCard === "Self") && activeZones === undefined;
+  if (isSelfForm) {
+    if (getForgeParam(effectParams, "Defined") !== "Self")
+      return issue("UNSUPPORTED_EFFECT", "unsupported self ReplaceWith effect body", effectWhere);
+    return { kind: "self-entry" };
+  }
+
+  if (activeZones !== "Battlefield")
+    return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
+  if (getForgeParam(effectParams, "Defined") !== "ReplacedCard")
+    return issue("UNSUPPORTED_EFFECT", "unsupported ReplaceWith effect body", effectWhere);
+  const selector = parseSelector(validCard);
+  if (!selector || selectorContainsSelf(selector))
+    return issue("UNSUPPORTED_TARGET", "unsupported ValidCard selector", where);
   const description = getForgeParam(params, "Description") ?? "Enters tapped.";
-  return {
+  const def: ReplacementDef = {
     label: `import:${where.nodeId}`,
     text: description,
     layer: "other",
     functionsFrom: "any",
     applies(ev, ctx) {
+      // CR 614.12: a replacement affecting a general subset that happens to
+      // include its own source (rather than affecting only that source)
+      // does not apply to that source's own entry. The source must already
+      // be on the battlefield; it is never let through as the very object
+      // entering in `ev`, even if some other effect would make it match
+      // `selector` (e.g. Root Maze made into an artifact by something else
+      // while it enters stays untapped, absent a *different* copy already
+      // on the battlefield).
       if (
         ctx.self?.zone !== "battlefield" ||
         ev.kind !== "change zone" ||
@@ -569,6 +633,7 @@ function lowerReplacement(
     replace: (ev: GameEvent) =>
       ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
   };
+  return { kind: "global", def };
 }
 
 /* ------------------------------------------------------------------------- */
@@ -998,10 +1063,23 @@ export function lowerForgeCard(ast: ForgeCardAst, options: { id: string }): Impo
   }
 
   const replacements: ReplacementDef[] = [];
+  let entersTappedFromReplacement = false;
   for (const record of face.replacements) {
     const lowered = lowerReplacement(face, record);
     if ("code" in lowered) return reject(lowered);
-    replacements.push(lowered);
+    if (lowered.kind === "self-entry") {
+      if (entersTappedFromReplacement) {
+        return reject(
+          issue("UNSUPPORTED_KEYWORD", "duplicate enters-tapped rule", {
+            nodeId: record.source.nodeId,
+            line: record.source.line,
+          }),
+        );
+      }
+      entersTappedFromReplacement = true;
+    } else {
+      replacements.push(lowered.def);
+    }
     const replaceWith = getForgeParam(record.params, "ReplaceWith");
     if (replaceWith) usedSVarNames.add(replaceWith.toLowerCase());
   }
@@ -1223,6 +1301,7 @@ export function lowerForgeCard(ast: ForgeCardAst, options: { id: string }): Impo
     ...(power !== undefined ? { power } : {}),
     ...(toughness !== undefined ? { toughness } : {}),
     ...(keywords.length > 0 ? { keywords } : {}),
+    ...(entersTappedFromReplacement ? { entersTapped: true } : {}),
     ...(Object.keys(entersWith).length > 0 ? { entersWith } : {}),
     ...(spell ? { spell } : {}),
     ...(statics.length > 0 ? { statics } : {}),

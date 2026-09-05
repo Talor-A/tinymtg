@@ -61,7 +61,52 @@ registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
 registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
+registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerCardFixture("d/darksteel_relic");
+
+/**
+ * Synthetic: a static that makes every permanent an artifact, purely to
+ * exercise the CR 614.12 own-entry guard on Root Maze's imported global
+ * enters-tapped replacement (a general "artifacts and lands enter tapped"
+ * effect does not apply to its own source's entry, even if some other effect
+ * would make that source match). Not a stand-in for any real card's rules.
+ */
+registerCard({
+	id: "rt-test-all-permanents-artifacts",
+	name: "Test: All Permanents Are Artifacts",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	statics: [
+		{
+			layer: "4-type-changing",
+			text: "Synthetic: all permanents are artifacts.",
+			applies: () => true,
+			modify: (v) => {
+				if (!v.types.includes("artifact")) v.types = [...v.types, "artifact"];
+			},
+		},
+	],
+});
+
+/**
+ * Synthetic: an optional upkeep trigger whose effect sequence has two steps
+ * (gain life, then draw), to prove the whole sequence is offered and applied
+ * as one choice rather than per-effect.
+ */
+{
+	const text = `Name:Test Optional Multi
+ManaCost:1 W
+Types:Enchantment
+T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigA | OptionalDecider$ You | TriggerDescription$ x
+SVar:TrigA:DB$ GainLife | Defined$ You | LifeAmount$ 3 | SubAbility$ TrigB
+SVar:TrigB:DB$ Draw | Defined$ You | NumCards$ 1
+Oracle:
+`;
+	const result = importForgeCard(text, { id: "rt-test-optional-multi" });
+	if (!result.ok) throw new Error("expected synthetic optional-multi fixture to import");
+	registerCard(result.card);
+}
 
 function atUpkeepOf(state: GameState, player: PlayerId): boolean {
 	return isTurnStep(state, "upkeep") && activePlayer(state) === player;
@@ -134,6 +179,32 @@ describe("forge-import runtime: triggers", () => {
 		advanceUntil(decline, declineAgents, (next) => atUpkeepOf(next, ALICE));
 		expect(decline.players[ALICE].life, "declined the optional gain").toBe(20);
 	});
+
+	test("an optional trigger's whole multi-effect sequence is accepted or declined as one choice", () => {
+		const accept = newGame();
+		const acceptAgents: SyncAgents = [
+			new ScriptedAgent([], [true]),
+			new ScriptedAgent(),
+		];
+		spawnPermanent(accept, "rt-test-optional-multi", ALICE);
+		stockLibraries(accept);
+		const handBefore = accept.players[ALICE].hand.length;
+		advanceUntil(accept, acceptAgents, (next) => atUpkeepOf(next, ALICE));
+		expect(accept.players[ALICE].life, "both effects applied together").toBe(23);
+		expect(accept.players[ALICE].hand.length).toBe(handBefore + 1);
+
+		const decline = newGame();
+		const declineAgents: SyncAgents = [
+			new ScriptedAgent([], [false]),
+			new ScriptedAgent(),
+		];
+		spawnPermanent(decline, "rt-test-optional-multi", ALICE);
+		stockLibraries(decline);
+		const declineHandBefore = decline.players[ALICE].hand.length;
+		advanceUntil(decline, declineAgents, (next) => atUpkeepOf(next, ALICE));
+		expect(decline.players[ALICE].life, "neither effect applied").toBe(20);
+		expect(decline.players[ALICE].hand.length).toBe(declineHandBefore);
+	});
 });
 
 describe("forge-import runtime: statics and replacements", () => {
@@ -156,8 +227,29 @@ describe("forge-import runtime: statics and replacements", () => {
 		const relic = enterFromHand(state, "darksteel-relic", ALICE, agents);
 		expect(permanent(state, relic).tapped, "artifact enters tapped").toBe(true);
 
+		const forest = enterFromHand(state, "forest", ALICE, agents);
+		expect(permanent(state, forest).tapped, "land enters tapped").toBe(true);
+
 		const bear = enterFromHand(state, "rt-grizzly-bears", ALICE, agents);
 		expect(permanent(state, bear).tapped, "creature is unaffected").toBe(false);
+	});
+
+	test("Root Maze's imported replacement matches an incoming object's derived type, not just its printed one", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+		spawnPermanent(state, "rt-root-maze", ALICE);
+		spawnPermanent(state, "rt-test-all-permanents-artifacts", ALICE);
+
+		// Grizzly Bears is a creature by its printed characteristics, but the
+		// synthetic static above adds "artifact" to every permanent's derived
+		// type. Root Maze's replacement previews the *incoming* object through
+		// that same static (etbPreview), so it must see "artifact" here too.
+		const bear = enterFromHand(state, "rt-grizzly-bears", ALICE, agents);
+		expect(
+			permanent(state, bear).tapped,
+			"Root Maze sees the previewed, derived type of the entering object",
+		).toBe(true);
 	});
 
 	test("Faithful Watchdog's imported entersWith replacement grants its printed counters", () => {
@@ -172,6 +264,33 @@ describe("forge-import runtime: statics and replacements", () => {
 			toughness: 3,
 			keywords: ["vigilance"],
 		});
+	});
+
+	test("Charcoal Diamond's imported canonical self-entry form enters tapped", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+
+		const diamond = enterFromHand(state, "rt-charcoal-diamond", ALICE, agents);
+		expect(permanent(state, diamond).tapped).toBe(true);
+	});
+
+	test("Root Maze's imported global replacement does not tap its own entry, even if another effect would make it match (CR 614.12)", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+		spawnPermanent(state, "rt-test-all-permanents-artifacts", ALICE);
+
+		const rootMaze = enterFromHand(state, "rt-root-maze", ALICE, agents);
+		expect(
+			permanent(state, rootMaze).tapped,
+			"a general effect matching its own source's entry does not apply to that entry",
+		).toBe(false);
+
+		// Sanity check: the same effect *does* still tap an unrelated artifact
+		// entering afterward, proving Root Maze itself is still working.
+		const relic = enterFromHand(state, "darksteel-relic", ALICE, agents);
+		expect(permanent(state, relic).tapped).toBe(true);
 	});
 });
 

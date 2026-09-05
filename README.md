@@ -79,19 +79,23 @@ accepted. A recognized keyword is never silently dropped: every root `A`, `T`,
 
 The current subset covers: literal characteristics (name, mana cost, types,
 colors, P/T); the keywords Flying, Lifelink, Indestructible, and Vigilance;
-literal `entersTapped`/entry-counter shorthand, with basic-land mana
-abilities synthesized from subtype (Forge omits explicit `A:` lines for
-those); fixed-color tap-for-mana abilities; targetless tap-self activated
-abilities with life/draw/discard-one-chosen-card effects; single required-target
-spells (`Any`/`Player`/creature-type selectors) with damage, destroy, and
-sequenced life/draw effects; simple self-entry, upkeep, and self-attack
-triggers, including one optional (`may`) wrapper around a trigger's whole
-effect sequence; and fixed controlled-creature P/T statics plus a global
-artifact/land enters-tapped replacement. See the acceptance matrix in
-`test/forge-import.test.ts` for the exact fixtures this is checked against,
-and the deferred-support notes at the top of `forge-import.ts` for what is
-intentionally out of scope (temporary P/T, random/multi-card discard, targeted
-activated abilities, dynamic/X amounts, alternate costs, and more).
+literal entry-counter shorthand and both canonical enters-tapped `R:` forms —
+the self form (`ValidCard$ Card.Self`, e.g. Charcoal Diamond) lowers directly
+to `CardDefInput.entersTapped`, and the global form (a supported selector
+scoped by `ActiveZones$ Battlefield`, e.g. Root Maze) lowers to a registered
+replacement, honoring CR 614.12's own-entry guard; basic-land mana abilities
+are synthesized from subtype (Forge omits explicit `A:` lines for those);
+fixed-color tap-for-mana abilities; targetless tap-self activated abilities
+with life/draw/discard-one-chosen-card effects; single required-target spells
+(`Any`/`Player`/creature-type selectors) with damage, destroy, and sequenced
+life/draw effects; simple self-entry, upkeep, and self-attack triggers,
+including one optional (`may`) wrapper around a trigger's whole (possibly
+multi-step) effect sequence; and fixed controlled-creature P/T statics. See
+the acceptance matrix in `test/forge-import.test.ts` for the exact fixtures
+this is checked against, and the "Deferred / explicitly unsupported" list at
+the top of `forge-import.ts` for what is intentionally out of scope (temporary
+P/T, random/multi-card discard, targeted activated abilities, dynamic/X
+amounts, alternate costs, and more).
 
 `test/utils/engine-helpers.ts`'s `registerCardFixture(cardsfolderPath)` reads
 a real card from `cards/cardsfolder`, imports it through this bridge, and

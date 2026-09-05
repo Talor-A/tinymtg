@@ -42,6 +42,8 @@ const POSITIVE_FIXTURES = [
 	"h/herald_of_faith",
 	"g/glorious_anthem",
 	"r/root_maze",
+	"c/charcoal_diamond",
+	"d/diregraf_ghoul",
 	"f/faithful_watchdog",
 	"s/soulmender",
 	"m/merfolk_looter",
@@ -222,6 +224,21 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.abilityDefinitions.replacement).toHaveLength(1);
 		expect(result.card.abilityDefinitions.replacement[0]?.layer).toBe("other");
+	});
+
+	test("Charcoal Diamond and Diregraf Ghoul lower the canonical self-entry form to entersTapped", () => {
+		for (const fixture of ["c/charcoal_diamond", "d/diregraf_ghoul"]) {
+			const result = importFixture(fixture);
+			if (!result.ok) throw new Error(`expected ${fixture} to import`);
+			expect(result.card.entersTapped).toBe(true);
+			// `defineCard` synthesizes the one entry replacement from `entersTapped`
+			// itself (see `printedEntryReplacements`); the bridge does not also
+			// register a second, separately-authored replacement definition.
+			expect(result.card.abilityDefinitions.replacement).toHaveLength(1);
+			expect(result.card.abilityDefinitions.replacement[0]?.label).toContain(
+				"enters-tapped",
+			);
+		}
 	});
 
 	test("Faithful Watchdog keeps Vigilance and literal entry counters", () => {
@@ -526,6 +543,106 @@ describe("lowerForgeCard: hardening regressions", () => {
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_KEYWORD");
+	});
+
+	test("rejects a Card.Self-containing selector in a global (ActiveZones$) replacement", () => {
+		const result = importText(
+			[
+				"Name:Bad",
+				"ManaCost:1",
+				"Types:Enchantment",
+				"R:Event$ Moved | ValidCard$ Card.Self,Artifact | Destination$ Battlefield | ReplacementResult$ Updated | ReplaceWith$ ETBTapped | ActiveZones$ Battlefield",
+				"SVar:ETBTapped:DB$ Tap | ETB$ True | Defined$ ReplacedCard",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_TARGET");
+	});
+
+	test("rejects multi-card and random discard on a spell", () => {
+		const multi = importText(
+			"Name:Bad\nManaCost:1 U\nTypes:Sorcery\nA:SP$ Discard | Defined$ You | Mode$ TgtChoose | NumCards$ 2 | SpellDescription$ x.\nOracle:\n",
+		);
+		expect(multi.ok).toBe(false);
+		if (!multi.ok) expect(multi.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+
+		const random = importText(
+			"Name:Bad\nManaCost:1 U\nTypes:Sorcery\nA:SP$ Discard | Defined$ You | Mode$ Random | NumCards$ 1 | SpellDescription$ x.\nOracle:\n",
+		);
+		expect(random.ok).toBe(false);
+		if (!random.ok) expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("rejects multi-card and random discard on a trigger", () => {
+		const multi = importText(
+			[
+				"Name:Bad",
+				"ManaCost:1 U",
+				"Types:Enchantment",
+				"T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ Trig | TriggerDescription$ x",
+				"SVar:Trig:DB$ Discard | Defined$ You | Mode$ TgtChoose | NumCards$ 2",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(multi.ok).toBe(false);
+		if (!multi.ok) expect(multi.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+
+		const random = importText(
+			[
+				"Name:Bad",
+				"ManaCost:1 U",
+				"Types:Enchantment",
+				"T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ Trig | TriggerDescription$ x",
+				"SVar:Trig:DB$ Discard | Defined$ You | Mode$ Random | NumCards$ 1",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(random.ok).toBe(false);
+		if (!random.ok) expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("rejects an unresolved SubAbility reference", () => {
+		const result = importText(
+			"Name:Bad\nManaCost:1 W\nTypes:Instant\nA:SP$ GainLife | Defined$ You | LifeAmount$ 3 | SubAbility$ NoSuchThing | SpellDescription$ x.\nOracle:\n",
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_REFERENCE");
+	});
+
+	test("an explicit multi-mana ability does not suppress the intrinsic one-mana basic-land grant", () => {
+		const result = importText(
+			"Name:Test Land\nManaCost:no cost\nTypes:Basic Land Forest\nA:AB$ Mana | Cost$ T | Produced$ G | Amount$ 2 | SpellDescription$ Add GG.\nOracle:\n",
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			expect.objectContaining({
+				id: "activated-1",
+				effects: [
+					{
+						kind: "add-mana",
+						player: "you",
+						mana: expect.objectContaining({ g: 2 }),
+					},
+				],
+			}),
+			expect.objectContaining({
+				id: "intrinsic-mana-g",
+				effects: [
+					{
+						kind: "add-mana",
+						player: "you",
+						mana: expect.objectContaining({ g: 1 }),
+					},
+				],
+			}),
+		]);
 	});
 });
 
