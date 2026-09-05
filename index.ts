@@ -348,7 +348,11 @@ interface DeclareBlockersEvent extends EventCommon {
 	 *  blocker may not be assigned to multiple attackers. */
 	blockers: BlockAssignment[];
 }
-
+interface DrawCardsEvent extends EventCommon {
+	kind: "draw cards";
+	player: PlayerId;
+	amount: number;
+}
 interface DrawEvent extends EventCommon {
 	kind: "draw";
 	player: PlayerId;
@@ -560,6 +564,7 @@ interface WinGameEvent extends EventCommon {
 export type GameEvent =
 	| DeclareAttackersEvent
 	| DeclareBlockersEvent
+	| DrawCardsEvent
 	| DrawEvent
 	| MillEvent
 	| DiscardEvent
@@ -3176,6 +3181,7 @@ export function affectedPlayer(
 ): PlayerId {
 	switch (ev.kind) {
 		case "draw":
+		case "draw cards":
 		case "mill":
 		case "discard":
 		case "begin turn":
@@ -3577,6 +3583,8 @@ function moveObject(
 /** Convenience for logs/tests. */
 export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 	switch (ev.kind) {
+		case "draw cards":
+			return `draw cards(P${ev.player}, ${ev.amount})`;
 		case "draw":
 			return `draw(P${ev.player})`;
 		case "mill":
@@ -4224,6 +4232,29 @@ function executeIn(
 	const childResults: PerformResult[] = [];
 
 	switch (ev.kind) {
+		case "draw cards": {
+			// Should this be >= 0? could a replacement effect alter this legally?
+			assert(
+				ev.amount >= 1,
+				`draw cards amount must be at least 1, got ${ev.amount}`,
+			);
+			for (let i = 0; i < ev.amount; i++) {
+				childResults.push(
+					performIn(
+						state,
+						{
+							kind: "draw",
+							player: ev.player,
+						},
+						choices,
+						scope,
+						depth,
+					),
+				);
+			}
+			break;
+		}
+
 		case "draw": {
 			const p = state.players[ev.player];
 			const top = p.library[p.library.length - 1];
@@ -5034,11 +5065,11 @@ function effectToEvent(
 				amount: effect.amount,
 			};
 		case "draw":
-			if (effect.amount !== 1)
-				throw new Error(
-					"drawing multiple cards as one effect is not implemented",
-				);
-			return { kind: "draw", player: player(effect.player) };
+			return {
+				kind: "draw cards",
+				player: player(effect.player),
+				amount: effect.amount,
+			};
 		case "damage":
 		case "destroy":
 		case "modify-pt":
