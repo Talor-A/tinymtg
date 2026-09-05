@@ -2480,6 +2480,17 @@ export function name(state: ReadonlyGameState, id: ObjectId): string {
 /* ------------------------------------------------------------------ *
  * Continuous effects
  * ------------------------------------------------------------------ */
+/**
+ * Planned subset boundary: reject effects whose selection or calculation
+ * reads properties that other effects can change in the same layer/sublayer.
+ * Also exclude interactions that change another effect's text or existence
+ * (CR 613.8a). Dependency ordering is deliberately deferred.
+ *
+ * These callbacks are opaque, so this boundary is not mechanically enforced
+ * yet. Supported definitions must be reviewed against it. Independent effects
+ * still require timestamp order unless their operations commute (CR 613.7);
+ * absence of dependencies does not make arbitrary ordering correct.
+ */
 export interface ContinuousEffect {
 	text: string;
 	layer: ContinuousEffectLayer;
