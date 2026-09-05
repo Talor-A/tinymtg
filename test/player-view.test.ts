@@ -145,7 +145,7 @@ describe("player views", () => {
       { w: 0, u: 1, b: 0, r: 0, g: 0, c: 0 },
     ]);
     expect(view.stack).toEqual([
-      expect.objectContaining({ id: stackId, kind: "ability" }),
+      expect.objectContaining({ id: stackId, kind: "triggered ability" }),
     ]);
   });
 

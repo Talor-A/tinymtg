@@ -76,6 +76,10 @@ function isRuntimeTriggerEffect(effect: EffectDef): boolean {
 				effect.effects.length > 0 &&
 				effect.effects.every(isRuntimeTriggerEffect)
 			);
+		case "discard":
+			// `effectToEvent` builds a discard event for "any" and throws for
+			// "random", so only "any" may reach a compiled trigger.
+			return effect.selector === "any";
 		case "damage":
 		case "destroy":
 		case "modify-pt":

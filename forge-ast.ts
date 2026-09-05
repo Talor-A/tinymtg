@@ -773,7 +773,7 @@ export type ForgeAbilityKind =
   | "unknown";
 
 export interface ForgeAbilityRecord {
-  kind: "triggered ability";
+  kind: "ability";
   id: string;
   origin: ForgeRecordOrigin;
   source: ForgeDirectiveRef;
@@ -2429,7 +2429,7 @@ function classifyAbility(
       nodeId: source.nodeId,
     });
     return {
-      kind: "triggered ability",
+      kind: "ability",
       id,
       origin,
       source,
@@ -2472,7 +2472,7 @@ function classifyAbility(
   }
 
   return {
-    kind: "triggered ability",
+    kind: "ability",
     id,
     origin,
     source,
@@ -3216,7 +3216,7 @@ function contextOf(
   record: ForgeClassifiedRecord | undefined,
 ): ForgeAmountContext {
   if (record === undefined) return { isAbility: false };
-  if (record.kind === "triggered ability") {
+  if (record.kind === "ability") {
     return { isAbility: true, api: record.effectName };
   }
   if (record.kind === "static") {
@@ -3271,7 +3271,7 @@ function buildGraph(
       record: ForgeClassifiedRecord,
       line: number,
     ): void => {
-      if (record.kind !== "triggered ability") return;
+      if (record.kind !== "ability") return;
       for (const entry of record.params.entries) {
         const spec = lookupForgeRuntimeWrite(entry.key, record.effectName);
         if (spec === undefined || entry.value === "") continue;
