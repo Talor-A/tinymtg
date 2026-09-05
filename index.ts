@@ -27,6 +27,13 @@ export {
 
 import { assert, assertDefined, assertNever } from "./lib/assert";
 
+function includes<T extends U, U>(
+	arr: ReadonlyArray<T>,
+	searchElement: U,
+): searchElement is T {
+	return arr.includes(searchElement as T);
+}
+
 /** helper type to prevent accidentally assigning one type of ID to another */
 declare const BRAND: unique symbol;
 type Brand<T, K extends string> = T & { readonly [BRAND]: K };
@@ -68,14 +75,24 @@ type ManaAmount = Partial<ManaPool>;
 
 export type Supertype = "legendary" | "basic" | "snow";
 
+/**
+ * CR 110.4a: the permanent card types. A resolving spell of one of these
+ * becomes a permanent; anything else finishes resolving and is put into its
+ * owner's graveyard.
+ */
+const PERMANENT_CARD_TYPES = [
+	"artifact",
+	"creature",
+	"enchantment",
+	"land",
+	"planeswalker",
+] as const;
+
+const SPELL_CARD_TYPES = ["instant", "sorcery"] as const;
+
 export type CardType =
-	| "creature"
-	| "artifact"
-	| "enchantment"
-	| "land"
-	| "instant"
-	| "sorcery"
-	| "planeswalker";
+	| (typeof PERMANENT_CARD_TYPES)[number]
+	| (typeof SPELL_CARD_TYPES)[number];
 
 /* ------------------------------------------------------------------ *
  * Turns
@@ -4816,7 +4833,57 @@ function resolveTopOfStack(
 	const entry = state.stack.pop();
 	if (entry === undefined) return;
 	if (entry.kind === "spell") {
-		throw new Error("spell resolution is not implemented");
+		const object = maybeObject(state, entry.objectId);
+		assertDefined(object, `no spell object ${entry.objectId}`);
+		assert(
+			object.kind === "spell",
+			`stack entry ${entry.objectId} is not a spell`,
+		);
+
+		// A copy of a spell has no card to read a spell ability from; its
+		// instructions would have to come from the copy snapshot instead. Nothing
+		// creates one yet, so this is unreachable rather than unimplemented.
+		assert(
+			object.representation.kind === "card",
+			"resolving a copied spell is not supported",
+		);
+
+		const read = createReadContext(state);
+		const snapshot = readObject(read, object.id);
+		assert(snapshot.kind === "spell");
+		const characteristics = snapshot.currentCharacteristics;
+
+		// CR 608.3: a resolving permanent spell becomes a permanent, entering
+		// under its controller. Instants and sorceries take the CR 608.2m path
+		// instead, which needs effect resolution the engine does not have yet.
+		const isPermanentSpell = characteristics.types.some((type) =>
+			includes(PERMANENT_CARD_TYPES, type),
+		);
+		if (!isPermanentSpell) {
+			throw new Error(
+				"resolving instant and sorcery spells is not implemented",
+			);
+		}
+
+		log(state, `  [resolve] ${characteristics.name}#${object.id}`);
+		// moveObject removes the spell from the stack itself, so restore the entry
+		// it was popped from before handing the movement to the event pipeline.
+		state.stack.push(entry);
+		performIn(
+			state,
+			{
+				kind: "change zone",
+				object: object.id,
+				from: "stack",
+				to: "battlefield",
+				cause: "resolve",
+				toController: object.controller,
+			},
+			choices,
+			newScope(),
+			0,
+		);
+		return;
 	}
 	const item = entry;
 
@@ -5287,7 +5354,9 @@ function castSpellIn(
 	const pv = flattenSnapshot(readObject(read, action.card));
 
 	if (pv.manaCost === "none") {
-		throw new IllegalCastError(`${pv.name} has no mana cost and cannot be cast`);
+		throw new IllegalCastError(
+			`${pv.name} has no mana cost and cannot be cast`,
+		);
 	}
 	if (pv.types.includes("land")) {
 		throw new IllegalCastError(`${pv.name} is a land and is played, not cast`);
@@ -5323,11 +5392,13 @@ function castSpellIn(
 	state.revision++;
 	log(
 		state,
-		`  [cast] P${priorityPlayer} pays ${MANA_TYPES.map((type) =>
-			payment[type] ? `${payment[type]}${type.toUpperCase()}` : "",
-		)
-			.filter(Boolean)
-			.join(" ") || "nothing"} for ${pv.name}`,
+		`  [cast] P${priorityPlayer} pays ${
+			MANA_TYPES.map((type) =>
+				payment[type] ? `${payment[type]}${type.toUpperCase()}` : "",
+			)
+				.filter(Boolean)
+				.join(" ") || "nothing"
+		} for ${pv.name}`,
 	);
 
 	performIn(
@@ -5507,7 +5578,7 @@ function settlePriorityIn(
 			continue;
 		}
 		if (action.kind !== "pass") {
-			throw new Error(`priority action "${action.kind}" is not implemented`);
+			assertNever(action);
 		}
 		if (lastWasPass) {
 			if (state.stack.length === 0) return;
