@@ -5176,6 +5176,7 @@ function effectToEvent(
         amount: effect.amount,
       };
     case "discard": {
+      assert(effect.amount === 1, "discarding multiple cards is not implemented");
       if (effect.selector === "any") {
         return {
           kind: "discard",
@@ -5506,7 +5507,7 @@ function canPlayOrdinaryLand(state: GameState, player: PlayerId): boolean {
   );
 }
 
-function manaAbilityActions(
+function activatedAbilityActions(
   state: GameState,
   player: PlayerId,
   read: ReadContext,
@@ -5525,16 +5526,18 @@ function manaAbilityActions(
       return [];
     const snapshot = readObject(read, id);
     if (snapshot.kind !== "permanent") return [];
-    return snapshot.currentCharacteristics.abilities.activated.flatMap(
-      (ability): ActivateAbilityAction[] => {
-        const definition = getAbilityDefinition("activated", ability);
-        return definition.kind === "mana" &&
-          definition.costs.length === 1 &&
-          definition.costs[0]?.kind === "tap-self"
-          ? [{ kind: "activate ability", source: id, ability }]
-          : [];
-      },
-    );
+    const actions: ActivateAbilityAction[] = [];
+    for (const ability of snapshot.currentCharacteristics.abilities.activated) {
+      const definition = getAbilityDefinition("activated", ability);
+      if (
+        definition.costs.length === 1 &&
+        definition.costs[0]?.kind === "tap-self" &&
+        (definition.kind === "mana" || definition.targets.length === 0)
+      ) {
+        actions.push({ kind: "activate ability", source: id, ability });
+      }
+    }
+    return actions;
   });
 }
 
@@ -5558,15 +5561,15 @@ export function getObservableActions(
       }
     }
   }
-  actions.push(...manaAbilityActions(state, player, read));
+  actions.push(...activatedAbilityActions(state, player, read));
   actions.push(...castableSpells(state, read, player));
   return actions;
 }
 
 /**
- * Executes a currently possessed fixed-cost mana ability without using the
- * stack. The priority holder is supplied by the scheduler and all legality is
- * rechecked before the tap cost mutates canonical state.
+ * Executes a currently possessed fixed-cost activated ability. The priority
+ * holder is supplied by the scheduler and all legality is rechecked before the
+ * tap cost mutates canonical state.
  */
 export function executeAbilityAction(
   state: GameState,
@@ -5628,41 +5631,69 @@ function activateAbilityIn(
     );
   }
   const ability = getAbilityDefinition("activated", action.ability);
-  if (ability.kind !== "mana") {
-    throw new IllegalAbilityActivationError(
-      `ability ${action.ability} is not a mana ability`,
+  if (ability.kind === "activated") {
+    assert(
+      ability.targets.length === 0,
+      "targeted activated abilities are not implemented",
     );
   }
   if (ability.costs.length !== 1 || ability.costs[0]?.kind !== "tap-self") {
     throw new IllegalAbilityActivationError(
-      `mana ability ${action.ability} does not have the supported tap-self cost`,
+      `ability ${action.ability} does not have the supported tap-self cost`,
     );
   }
 
   const context = { source: object.id, controller: priorityPlayer };
-  const events = ability.effects.map((effect) => {
-    if (effect.kind !== "add-mana") {
-      throw new IllegalAbilityActivationError(
-        "only fixed mana production is supported for mana abilities",
-      );
-    }
-    let total = 0;
-    for (const type of COLORS) {
-      const amount = effect.mana[type] ?? 0;
-      if (!Number.isSafeInteger(amount) || amount < 0) {
+  const events =
+    ability.kind === "mana"
+      ? ability.effects.map((effect) => {
+          if (effect.kind !== "add-mana") {
+            throw new IllegalAbilityActivationError(
+              "only fixed mana production is supported for mana abilities",
+            );
+          }
+          let total = 0;
+          for (const type of COLORS) {
+            const amount = effect.mana[type] ?? 0;
+            if (!Number.isSafeInteger(amount) || amount < 0) {
+              throw new IllegalAbilityActivationError(
+                `mana ability ${action.ability} produces an invalid quantity`,
+              );
+            }
+            total += amount;
+          }
+          if (total <= 0) {
+            throw new IllegalAbilityActivationError(
+              `mana ability ${action.ability} produces no mana`,
+            );
+          }
+          return effectToEvent(state, context, effect);
+        })
+      : [];
+  if (ability.kind === "activated") {
+    for (const effect of ability.effects) {
+      if (
+        effect.kind === "draw" ||
+        effect.kind === "gain-life" ||
+        effect.kind === "lose-life"
+      ) {
+        continue;
+      }
+      if (effect.kind === "discard") {
+        assert(
+          effect.amount === 1,
+          "discarding multiple cards is not implemented",
+        );
+        if (effect.selector === "any") continue;
         throw new IllegalAbilityActivationError(
-          `mana ability ${action.ability} produces an invalid quantity`,
+          "discarding at random is not supported for activated abilities",
         );
       }
-      total += amount;
-    }
-    if (total <= 0) {
       throw new IllegalAbilityActivationError(
-        `mana ability ${action.ability} produces no mana`,
+        `effect ${effect.kind} is not supported for activated abilities`,
       );
     }
-    return effectToEvent(state, context, effect);
-  });
+  }
   const scope = newScope();
   const payment = performIn(
     state,
@@ -5683,8 +5714,23 @@ function activateAbilityIn(
       `the tap cost for ability ${action.ability} was not paid`,
     );
   }
-  log(state, `  [mana ability] ${ability.text}`);
-  for (const event of events) performIn(state, event, choices, scope, 0);
+  if (ability.kind === "mana") {
+    log(state, `  [mana ability] ${ability.text}`);
+    for (const event of events) performIn(state, event, choices, scope, 0);
+  } else {
+    const item: ActivatedAbilityStackItem = {
+      id: state.nextStackItemId++ as StackItemId,
+      kind: "activated ability",
+      source: object.id,
+      abilityId: action.ability,
+      controller: priorityPlayer,
+      text: ability.text,
+      effects: structuredClone(ability.effects),
+    };
+    state.stack.push(item);
+    state.revision++;
+    log(state, `  [stack] ${item.text}`);
+  }
 }
 
 /**
@@ -5975,7 +6021,8 @@ function settlePriorityIn(
     }
     if (action.kind === "activate ability") {
       activateAbilityIn(state, priority, action, choices);
-      // Activating a mana ability is immediate and retains priority.
+      // CR 117.3c: the activating player receives priority again. Mana
+      // abilities resolve immediately; other activated abilities are stacked.
       lastWasPass = false;
       continue;
     }

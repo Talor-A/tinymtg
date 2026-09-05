@@ -360,6 +360,28 @@ function parseEffect(
 			const amount = positiveInteger(fields.get("NumCards"), 1);
 			return who && amount ? { kind: "draw", player: who, amount } : null;
 		}
+		case "Discard": {
+			if (
+				!only(fields, [
+					"SP",
+					"AB",
+					"DB",
+					"Defined",
+					"Mode",
+					"NumCards",
+					"SpellDescription",
+					"SubAbility",
+					"Cost",
+				]) ||
+				fields.get("Mode") !== "TgtChoose"
+			)
+				return null;
+			const who = player(fields.get("Defined"));
+			const amount = positiveInteger(fields.get("NumCards"), 1);
+			return who && amount === 1
+				? { kind: "discard", selector: "any", amount, player: who }
+				: null;
+		}
 		case "DealDamage": {
 			if (
 				!only(fields, [

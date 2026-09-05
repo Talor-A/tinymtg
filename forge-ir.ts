@@ -334,6 +334,14 @@ export function validateForgeCardIR(value: unknown): ForgeResult<ForgeCardIR> {
 					error(`${path}.player`, "expected you or opponent");
 				integer(o.amount, `${path}.amount`, 1);
 				return true;
+			case "discard":
+				exact(o, path, ["kind", "selector", "amount", "player"]);
+				if (o.selector !== "any" && o.selector !== "random")
+					error(`${path}.selector`, "expected any or random");
+				integer(o.amount, `${path}.amount`, 1);
+				if (o.player !== "you" && o.player !== "opponent")
+					error(`${path}.player`, "expected you or opponent");
+				return true;
 			case "damage":
 				exact(o, path, ["kind", "target", "amount"]);
 				string(o.target, `${path}.target`);

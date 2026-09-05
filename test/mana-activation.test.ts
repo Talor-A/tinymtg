@@ -7,6 +7,7 @@ import type {
 	GameState,
 	ObjectId,
 	PlayerId,
+	SyncAgent,
 } from "../index.ts";
 import {
 	abilityId,
@@ -16,8 +17,10 @@ import {
 	getObservableActions,
 	IllegalAbilityActivationError,
 	newGame,
+	perform,
 	registerCard,
 	settlePriority,
+	spawnCard,
 	spawnPermanent,
 } from "../index.ts";
 import {
@@ -30,19 +33,55 @@ import {
 } from "./utils/engine-helpers.ts";
 
 registerCard({
-	id: "test-nonmana-ability",
-	name: "Test Nonmana Ability",
+	id: "merfolk-looter",
+	name: "Merfolk Looter",
+	types: ["creature"],
+	subtypes: ["Merfolk", "Rogue"],
+	colors: ["u"],
+	manaCost: { c: 1, u: 1 },
+	power: 1,
+	toughness: 1,
+	activatedAbilities: [
+		{
+			kind: "activated",
+			id: "loot",
+			text: "{T}: Draw a card, then discard a card.",
+			costs: [{ kind: "tap-self" }],
+			targets: [],
+			effects: [
+				{ kind: "draw", player: "you", amount: 1 },
+				{
+					kind: "discard",
+					selector: "any",
+					amount: 1,
+					player: "you",
+				},
+			],
+		},
+	],
+});
+
+registerCard({
+	id: "test-unsupported-activated-ability",
+	name: "Test Unsupported Activated Ability",
 	types: ["artifact"],
 	colors: [],
 	manaCost: "zero",
 	activatedAbilities: [
 		{
 			kind: "activated",
-			id: "draw",
-			text: "{T}: Draw a card.",
+			id: "discard-two",
+			text: "{T}: Discard two cards.",
 			costs: [{ kind: "tap-self" }],
 			targets: [],
-			effects: [{ kind: "draw", player: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "discard",
+					selector: "any",
+					amount: 2,
+					player: "you",
+				},
+			],
 		},
 	],
 });
@@ -143,7 +182,7 @@ describe("priority-time mana abilities", () => {
 	});
 });
 
-describe("authoritative mana-ability rejection", () => {
+describe("authoritative ability rejection", () => {
 	function expectAtomicRejection(
 		state: GameState,
 		player: PlayerId,
@@ -156,7 +195,7 @@ describe("authoritative mana-ability rejection", () => {
 		expect(state).toEqual(before);
 	}
 
-	test("rejects tapped, opposing, stale, absent, and nonmana abilities", () => {
+	test("rejects tapped, opposing, stale, and absent abilities", () => {
 		const tapped = setupMain();
 		const tappedForest = spawnPermanent(tapped, "forest", ALICE, {
 			tapped: true,
@@ -171,19 +210,162 @@ describe("authoritative mana-ability rejection", () => {
 		expectAtomicRejection(stale, ALICE, manaAction(999 as ObjectId));
 
 		const absent = setupMain();
-		const artifact = spawnPermanent(absent, "test-nonmana-ability", ALICE);
+		const artifact = spawnPermanent(absent, "merfolk-looter", ALICE);
 		expectAtomicRejection(absent, ALICE, manaAction(artifact.id));
-		expectAtomicRejection(absent, ALICE, {
-			kind: "activate ability",
-			source: artifact.id,
-			ability: abilityId("activated", "test-nonmana-ability", 0),
-		});
+	});
+
+	test("validates the supported effect subset before paying the tap cost", () => {
+		const state = setupMain();
+		const source = spawnPermanent(
+			state,
+			"test-unsupported-activated-ability",
+			ALICE,
+		);
+		const before = structuredClone(state);
+
+		expect(() =>
+			executeAbilityAction(
+				state,
+				ALICE,
+				{
+					kind: "activate ability",
+					source: source.id,
+					ability: abilityId(
+						"activated",
+						"test-unsupported-activated-ability",
+						0,
+					),
+				},
+				passingAgents(),
+			),
+		).toThrow("discarding multiple cards is not implemented");
+		expect(state).toEqual(before);
 	});
 
 	test("rejects activation outside a turn", () => {
 		const state = newGame();
 		const forest = spawnPermanent(state, "forest", ALICE);
 		expectAtomicRejection(state, ALICE, manaAction(forest.id));
+	});
+});
+
+describe("targetless activated abilities", () => {
+	const looterAbility = abilityId("activated", "merfolk-looter", 0);
+
+	function looterAction(source: ObjectId): ActivateAbilityAction {
+		return { kind: "activate ability", source, ability: looterAbility };
+	}
+
+	test("taps and captures instructions, then resolves after its source leaves", () => {
+		const state = setupMain();
+		const looter = spawnPermanent(state, "merfolk-looter", ALICE);
+		const oldHandCard = spawnCard(state, "forest", ALICE, "hand");
+		const handBefore = [...state.players[ALICE].hand];
+
+		expect(getObservableActions(state, ALICE)).toContainEqual(
+			looterAction(looter.id),
+		);
+		executeAbilityAction(
+			state,
+			ALICE,
+			looterAction(looter.id),
+			passingAgents(),
+		);
+
+		expect(state.objects.get(looter.id)).toMatchObject({ tapped: true });
+		expect(state.players[ALICE].hand).toEqual(handBefore);
+		expect(state.stack).toMatchObject([
+			{
+				kind: "activated ability",
+				source: looter.id,
+				abilityId: looterAbility,
+				controller: ALICE,
+				effects: [
+					{ kind: "draw", amount: 1 },
+					{ kind: "discard", amount: 1 },
+				],
+			},
+		]);
+
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: looter.id,
+				from: "battlefield",
+				to: "graveyard",
+				cause: "destroy",
+				toController: ALICE,
+			},
+			passingAgents(),
+		);
+		const graveyardSizeBeforeResolution = state.players[ALICE].graveyard.length;
+
+		let discardOptions = 0;
+		const choosingAgent: SyncAgent = {
+			choose(_view, request) {
+				const first = request.options[0];
+				if (!first) throw new Error("expected a choice option");
+				if (request.kind === "ownHand") {
+					discardOptions = request.options.length;
+					const oldCard = request.options.find(
+						(option) => option.id === String(oldHandCard.id),
+					);
+					if (!oldCard) throw new Error("old hand card was not offered");
+					return { optionId: oldCard.id };
+				}
+				return { optionId: first.id };
+			},
+		};
+		settlePriority(state, [choosingAgent, new ScriptedAgent()]);
+
+		expect(discardOptions).toBe(handBefore.length + 1);
+		expect(state.stack).toHaveLength(0);
+		expect(state.players[ALICE].hand).toHaveLength(handBefore.length);
+		expect(state.players[ALICE].graveyard).toHaveLength(
+			graveyardSizeBeforeResolution + 1,
+		);
+		expect(state.objects.has(oldHandCard.id)).toBe(false);
+		expect(state.objects.has(looter.id)).toBe(false);
+	});
+
+	test("replays an async discard choice from the post-draw hand", async () => {
+		const checkpoint = setupMain();
+		const looter = spawnPermanent(checkpoint, "merfolk-looter", ALICE);
+		spawnCard(checkpoint, "forest", ALICE, "hand");
+		executeAbilityAction(
+			checkpoint,
+			ALICE,
+			looterAction(looter.id),
+			passingAgents(),
+		);
+		const handSizeBeforeResolution = checkpoint.players[ALICE].hand.length;
+		const before = structuredClone(checkpoint);
+		let suspended = false;
+		const asyncDiscard: Agent = {
+			choose(_view, request) {
+				const first = request.options[0];
+				if (!first) throw new Error("expected a choice option");
+				const answer = { optionId: first.id };
+				if (request.kind === "ownHand" && !suspended) {
+					suspended = true;
+					return Promise.resolve(answer);
+				}
+				return answer;
+			},
+		};
+
+		const result = await advanceWithReplay(checkpoint, [
+			asyncDiscard,
+			new ScriptedAgent(),
+		]);
+
+		expect(checkpoint).toEqual(before);
+		expect(result.attempts).toBe(2);
+		expect(result.state.stack).toHaveLength(0);
+		expect(result.state.players[ALICE].hand).toHaveLength(
+			handSizeBeforeResolution,
+		);
 	});
 });
 

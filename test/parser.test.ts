@@ -456,6 +456,24 @@ describe("structured Forge pipeline", () => {
 		});
 	});
 
+	test("parses Merfolk Looter's targetless draw-discard ability", () => {
+		const looter = parseCard(fixture("merfolk_looter"));
+		expect(looter?.abilityDefinitions.activated?.[0]).toMatchObject({
+			kind: "activated",
+			costs: [{ kind: "tap-self" }],
+			targets: [],
+			effects: [
+				{ kind: "draw", player: "you", amount: 1 },
+				{
+					kind: "discard",
+					selector: "any",
+					amount: 1,
+					player: "you",
+				},
+			],
+		});
+	});
+
 	test("compiles simple permanent statics into callbacks", () => {
 		const parsed = parseForgeCard(fixture("glorious_anthem"));
 		expect(parsed.ok).toBe(true);
