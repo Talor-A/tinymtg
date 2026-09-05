@@ -1,0 +1,696 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { parseForgeCardScript } from "../forge-ast.ts";
+import { importForgeCard, lowerForgeCard } from "../forge-import.ts";
+import { name, newGame, spawnCard } from "../index.ts";
+
+const CORPUS_ROOT = join(import.meta.dir, "..", "cards", "cardsfolder");
+
+function cardText(path: string): string {
+	return readFileSync(join(CORPUS_ROOT, `${path}.txt`), "utf8");
+}
+
+function idFor(path: string): string {
+	const filename = path.split("/").at(-1);
+	if (!filename) throw new Error(`bad path ${path}`);
+	return filename.replaceAll("_", "-");
+}
+
+function importFixture(path: string) {
+	return importForgeCard(cardText(path), { id: idFor(path) });
+}
+
+/* ------------------------------------------------------------------------- */
+/* The required positive matrix (plan "Concrete acceptance matrix")          */
+/* ------------------------------------------------------------------------- */
+
+const POSITIVE_FIXTURES = [
+	"g/grizzly_bears",
+	"f/forest",
+	"s/swamp",
+	"l/llanowar_elves",
+	"d/darksteel_relic",
+	"d/darksteel_myr",
+	"r/rhox_war_monk",
+	"l/lightning_bolt",
+	"m/murder",
+	"r/revitalize",
+	"s/sorins_thirst",
+	"a/arashin_cleric",
+	"a/ajanis_mantra",
+	"h/herald_of_faith",
+	"g/glorious_anthem",
+	"r/root_maze",
+	"f/faithful_watchdog",
+	"s/soulmender",
+	"m/merfolk_looter",
+];
+
+describe("lowerForgeCard: positive acceptance matrix", () => {
+	for (const fixture of POSITIVE_FIXTURES) {
+		test(`imports ${fixture}`, () => {
+			const result = importFixture(fixture);
+			expect(result.ok, JSON.stringify(!result.ok && result.diagnostics)).toBe(
+				true,
+			);
+			if (!result.ok) return;
+			expect(result.card.id).toBe(idFor(fixture));
+		});
+	}
+
+	test("Grizzly Bears has literal characteristics and no rules", () => {
+		const result = importFixture("g/grizzly_bears");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card).toMatchObject({
+			name: "Grizzly Bears",
+			types: ["creature"],
+			subtypes: ["Bear"],
+			manaCost: { c: 1, g: 1 },
+			power: 2,
+			toughness: 2,
+		});
+		expect(result.card.abilityDefinitions.activated).toHaveLength(0);
+		expect(result.card.abilityDefinitions.triggered).toHaveLength(0);
+	});
+
+	test("Forest and Swamp synthesize their basic-land mana ability", () => {
+		for (const [fixture, color] of [
+			["f/forest", "g"],
+			["s/swamp", "b"],
+		] as const) {
+			const result = importFixture(fixture);
+			if (!result.ok) throw new Error("expected ok");
+			expect(result.card.manaCost).toBe("none");
+			expect(result.card.abilityDefinitions.activated).toEqual([
+				{
+					kind: "mana",
+					id: expect.stringContaining("intrinsic-mana"),
+					text: expect.any(String),
+					costs: [{ kind: "tap-self" }],
+					effects: [
+						{
+							kind: "add-mana",
+							player: "you",
+							mana: expect.objectContaining({ [color]: 1 }),
+						},
+					],
+				},
+			]);
+		}
+	});
+
+	test("Llanowar Elves lowers to an immediate tap-for-G mana ability", () => {
+		const result = importFixture("l/llanowar_elves");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "mana",
+				id: "activated-1",
+				text: expect.any(String),
+				costs: [{ kind: "tap-self" }],
+				effects: [
+					{
+						kind: "add-mana",
+						player: "you",
+						mana: expect.objectContaining({ g: 1 }),
+					},
+				],
+			},
+		]);
+	});
+
+	test("Lightning Bolt and Murder lower a single required target slot", () => {
+		const bolt = importFixture("l/lightning_bolt");
+		if (!bolt.ok) throw new Error("expected ok");
+		expect(bolt.card.spell).toMatchObject({
+			targets: [{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } }],
+			effects: [{ kind: "damage", target: "target-1", amount: 3 }],
+		});
+
+		const murder = importFixture("m/murder");
+		if (!murder.ok) throw new Error("expected ok");
+		expect(murder.card.spell).toMatchObject({
+			targets: [
+				{
+					id: "target-1",
+					min: 1,
+					max: 1,
+					legal: { kind: "permanent", selector: { kind: "type", type: "creature" } },
+				},
+			],
+			effects: [{ kind: "destroy", target: "target-1" }],
+		});
+	});
+
+	test("Revitalize sequences gain-life then draw, defaulting the missing draw count to one", () => {
+		const result = importFixture("r/revitalize");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.spell?.effects).toEqual([
+			{ kind: "gain-life", player: "you", amount: 3 },
+			{ kind: "draw", player: "you", amount: 1 },
+		]);
+	});
+
+	test("Sorin's Thirst sequences damage then life gain in one target slot", () => {
+		const result = importFixture("s/sorins_thirst");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.spell?.targets).toHaveLength(1);
+		expect(result.card.spell?.effects).toEqual([
+			{ kind: "damage", target: "target-1", amount: 2 },
+			{ kind: "gain-life", player: "you", amount: 2 },
+		]);
+	});
+
+	test("Arashin Cleric's self-entry trigger implicitly targets you", () => {
+		const result = importFixture("a/arashin_cleric");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigGainLife",
+				text: expect.any(String),
+				condition: { kind: "change zone", from: "any", to: "battlefield", selector: "self" },
+				effects: [{ kind: "gain-life", player: "you", amount: 3 }],
+			},
+		]);
+	});
+
+	test("Ajani's Mantra wraps its whole effect sequence in one optional choice", () => {
+		const result = importFixture("a/ajanis_mantra");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigGainLife",
+				text: expect.any(String),
+				condition: { kind: "begin step", player: "you", step: "upkeep" },
+				effects: [
+					{
+						kind: "may",
+						decider: "you",
+						effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+					},
+				],
+			},
+		]);
+	});
+
+	test("Herald of Faith keeps Flying and its attack trigger", () => {
+		const result = importFixture("h/herald_of_faith");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.keywords).toEqual(["flying"]);
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigGainLife",
+				text: expect.any(String),
+				condition: { kind: "declare attackers", selector: "self" },
+				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
+			},
+		]);
+	});
+
+	test("Glorious Anthem is a controlled-creature +1/+1 static", () => {
+		const result = importFixture("g/glorious_anthem");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.static).toHaveLength(1);
+		expect(result.card.abilityDefinitions.static[0]?.layer).toBe(
+			"7c-modify-power-toughness",
+		);
+	});
+
+	test("Root Maze lowers an artifact/land enters-tapped replacement", () => {
+		const result = importFixture("r/root_maze");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.replacement).toHaveLength(1);
+		expect(result.card.abilityDefinitions.replacement[0]?.layer).toBe("other");
+	});
+
+	test("Faithful Watchdog keeps Vigilance and literal entry counters", () => {
+		const result = importFixture("f/faithful_watchdog");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.keywords).toEqual(["vigilance"]);
+		expect(result.card.entersWith).toEqual({ "+1/+1": 3 });
+	});
+
+	test("Soulmender lowers to a targetless tap-for-life-gain activated ability", () => {
+		const result = importFixture("s/soulmender");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: expect.any(String),
+				costs: [{ kind: "tap-self" }],
+				targets: [],
+				effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
+	test("Merfolk Looter lowers to draw-then-discard-one, targetless", () => {
+		const result = importFixture("m/merfolk_looter");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: expect.any(String),
+				costs: [{ kind: "tap-self" }],
+				targets: [],
+				effects: [
+					{ kind: "draw", player: "you", amount: 1 },
+					{ kind: "discard", selector: "any", amount: 1, player: "you" },
+				],
+			},
+		]);
+	});
+});
+
+/* ------------------------------------------------------------------------- */
+/* The required negative matrix                                              */
+/* ------------------------------------------------------------------------- */
+
+const NEGATIVE_FIXTURES = [
+	"d/doom_blade",
+	"g/giant_growth",
+	"p/prodigal_sorcerer",
+	"b/blind_obedience",
+	"w/walking_ballista",
+	"r/rest_in_peace",
+	"c/clone",
+	"i/into_the_maw_of_hell",
+	"e/eye_of_vecna",
+	"r/reckless_abandon",
+];
+
+describe("lowerForgeCard: required negative fixtures", () => {
+	for (const fixture of NEGATIVE_FIXTURES) {
+		test(`rejects ${fixture}`, () => {
+			const result = importFixture(fixture);
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics.length).toBeGreaterThan(0);
+		});
+	}
+});
+
+/* ------------------------------------------------------------------------- */
+/* Mutation-based negative tests (implementation order, step 1 gate)         */
+/* ------------------------------------------------------------------------- */
+
+const BOLT = `Name:Lightning Bolt
+ManaCost:R
+Types:Instant
+A:SP$ DealDamage | ValidTgts$ Any | NumDmg$ 3 | SpellDescription$ CARDNAME deals 3 damage to any target.
+Oracle:Lightning Bolt deals 3 damage to any target.
+`;
+
+const REVITALIZE = `Name:Revitalize
+ManaCost:1 W
+Types:Instant
+A:SP$ GainLife | Defined$ You | LifeAmount$ 3 | SubAbility$ DBDraw | SpellDescription$ You gain 3 life.
+SVar:DBDraw:DB$ Draw | Defined$ You | SpellDescription$ Draw a card.
+Oracle:You gain 3 life. Draw a card.
+`;
+
+const BEARS = `Name:Grizzly Bears
+ManaCost:1 G
+Types:Creature Bear
+PT:2/2
+Oracle:
+`;
+
+function importText(text: string) {
+	return importForgeCard(text, { id: "mutation-test" });
+}
+
+describe("lowerForgeCard: required negative mutations", () => {
+	test("accepts the unmodified baseline (control)", () => {
+		expect(importText(BOLT).ok).toBe(true);
+		expect(importText(REVITALIZE).ok).toBe(true);
+		expect(importText(BEARS).ok).toBe(true);
+	});
+
+	test("rejects a supported spell plus an unknown keyword", () => {
+		const result = importText(`${BOLT}K:Foobar\n`);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_KEYWORD");
+	});
+
+	test("rejects an unknown semantic parameter", () => {
+		const result = importText(
+			BOLT.replace("SpellDescription$", "Foo$ Bar | SpellDescription$"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects a duplicate semantic parameter", () => {
+		const result = importText(BOLT.replace("NumDmg$ 3 |", "NumDmg$ 3 | NumDmg$ 3 |"));
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects a malformed parameter fragment", () => {
+		const result = importText(BOLT.replace("ValidTgts$ Any |", "ValidTgts$ Any | Weird |"));
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects an unsupported mana symbol", () => {
+		const result = importText(BOLT.replace("ManaCost:R", "ManaCost:1 R X"));
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_COST");
+	});
+
+	test("rejects an extra face", () => {
+		const result = importText(
+			`${BOLT}ALTERNATE\nName:Other\nManaCost:R\nTypes:Instant\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_FACE");
+	});
+
+	test("rejects an unknown directive", () => {
+		const result = importText(`${BOLT}Foo:Bar\n`);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_KEYWORD");
+	});
+
+	test("rejects a sub-ability that declares its own cost or target", () => {
+		const cost = importText(
+			REVITALIZE.replace("DB$ Draw | Defined$ You |", "DB$ Draw | Defined$ You | Cost$ 2 |"),
+		);
+		expect(cost.ok).toBe(false);
+		if (!cost.ok) expect(cost.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+
+		const target = importText(
+			REVITALIZE.replace(
+				"DB$ Draw | Defined$ You |",
+				"DB$ Draw | Defined$ You | ValidTgts$ Any |",
+			),
+		);
+		expect(target.ok).toBe(false);
+		if (!target.ok) expect(target.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("rejects a dynamic (non-literal) amount", () => {
+		const result = importText(BOLT.replace("NumDmg$ 3", "NumDmg$ X"));
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects the whole card when a later rule is unsupported, after an otherwise-supported first rule", () => {
+		const result = importText(`${BEARS}A:AB$ Foo | Cost$ T | SpellDescription$ x.\n`);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("rejects a spell ability on a permanent card (never resolved by the engine)", () => {
+		const result = importText(
+			`${BEARS}A:SP$ GainLife | Defined$ You | LifeAmount$ 1 | SpellDescription$ x.\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("rejects an instant with no spell ability", () => {
+		const result = importText(`Name:Empty Instant\nManaCost:R\nTypes:Instant\nOracle:\n`);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("rejects Destroy targeting a non-permanent slot", () => {
+		const result = importText(
+			`Name:Bad Destroy\nManaCost:1 B\nTypes:Instant\nA:SP$ Destroy | ValidTgts$ Player | SpellDescription$ x.\n`,
+		);
+		expect(result.ok).toBe(false);
+	});
+
+	test("rejects an unused SVar", () => {
+		const result = importText(`${BEARS}SVar:Unused:TRUE\n`);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_REFERENCE");
+	});
+
+	test("rejects a planeswalker (Loyalty is unsupported)", () => {
+		const result = importText(
+			`Name:Test Walker\nManaCost:2 W\nTypes:Planeswalker\nLoyalty:3\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+	});
+
+	test("rejects a target union that cannot be represented faithfully (Player,Planeswalker)", () => {
+		const result = importText(
+			"Name:Bad Target\nManaCost:R\nTypes:Instant\nA:SP$ DealDamage | ValidTgts$ Player,Planeswalker | NumDmg$ 1 | SpellDescription$ x.\nOracle:\n",
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_TARGET");
+	});
+
+	test("Dryad Arbor grants its intrinsic mana ability despite not being a basic land", () => {
+		const result = importFixture("d/dryad_arbor");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.activated).toContainEqual({
+			kind: "mana",
+			id: "intrinsic-mana-g",
+			text: "Add {G}.",
+			costs: [{ kind: "tap-self" }],
+			effects: [
+				{
+					kind: "add-mana",
+					player: "you",
+					mana: { w: 0, u: 0, b: 0, r: 0, g: 1, c: 0 },
+				},
+			],
+		});
+	});
+});
+
+/* ------------------------------------------------------------------------- */
+/* Regressions for specific reviewed defects                                 */
+/* ------------------------------------------------------------------------- */
+
+describe("lowerForgeCard: hardening regressions", () => {
+	const artifactProbe = `Name:Probe\nManaCost:1\nTypes:Artifact\nOracle:\n`;
+
+	test("a keyword literally named 'constructor' is data, not Object.prototype.constructor", () => {
+		const result = importText(`${artifactProbe}K:constructor\n`);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_KEYWORD");
+	});
+
+	test("a Colors$ value literally named 'constructor' is data, not Object.prototype.constructor", () => {
+		const result = importText(`${artifactProbe}Colors:constructor\n`);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects mixed permanent and spell card types", () => {
+		const result = importText(
+			`Name:Probe\nManaCost:1\nTypes:Artifact Instant\nA:SP$ GainLife | Defined$ You | LifeAmount$ 2 | SpellDescription$ gain\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects two spell types together (Instant Sorcery)", () => {
+		const result = importText(
+			`Name:Probe\nManaCost:1\nTypes:Instant Sorcery\nA:SP$ GainLife | Defined$ You | LifeAmount$ 2 | SpellDescription$ gain\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects a summed entry-counter count that overflows safe-integer range", () => {
+		const result = importText(
+			`Name:Probe\nManaCost:1\nTypes:Creature\nPT:0/0\nK:etbCounter:P1P1:9007199254740991\nK:etbCounter:P1P1:1\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_KEYWORD");
+	});
+});
+
+/* ------------------------------------------------------------------------- */
+/* SubAbility/Execute chain traversal: cycles, sharing, and depth            */
+/* ------------------------------------------------------------------------- */
+
+describe("lowerForgeCard: chain traversal", () => {
+	test("rejects a cyclic SubAbility chain", () => {
+		const result = importText(
+			[
+				"Name:Cyclic",
+				"ManaCost:1",
+				"Types:Artifact",
+				"A:AB$ GainLife | Cost$ T | Defined$ You | LifeAmount$ 1 | SubAbility$ Loop1 | SpellDescription$ x.",
+				"SVar:Loop1:DB$ GainLife | Defined$ You | LifeAmount$ 1 | SubAbility$ Loop2",
+				"SVar:Loop2:DB$ GainLife | Defined$ You | LifeAmount$ 1 | SubAbility$ Loop1",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_REFERENCE");
+	});
+
+	test("rejects ambiguous case-variant duplicate SVar names", () => {
+		const result = importText(
+			[
+				"Name:Dup",
+				"ManaCost:1",
+				"Types:Artifact",
+				"A:AB$ GainLife | Cost$ T | Defined$ You | LifeAmount$ 1 | SubAbility$ Foo | SpellDescription$ x.",
+				"SVar:Foo:DB$ GainLife | Defined$ You | LifeAmount$ 1",
+				"SVar:foo:DB$ GainLife | Defined$ You | LifeAmount$ 2",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_REFERENCE");
+	});
+
+	test("rejects a SubAbility chain deeper than the supported bound", () => {
+		const lines = [
+			"Name:Deep",
+			"ManaCost:1",
+			"Types:Artifact",
+			"A:AB$ GainLife | Cost$ T | Defined$ You | LifeAmount$ 1 | SubAbility$ L0 | SpellDescription$ x.",
+		];
+		for (let i = 0; i < 35; i++) {
+			const next = i < 34 ? ` | SubAbility$ L${i + 1}` : "";
+			lines.push(`SVar:L${i}:DB$ GainLife | Defined$ You | LifeAmount$ 1${next}`);
+		}
+		lines.push("Oracle:", "");
+		const result = importText(lines.join("\n"));
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_REFERENCE");
+	});
+
+	test("a sub-ability shared by two different triggers lowers separately in each caller context", () => {
+		const result = importText(
+			[
+				"Name:Shared",
+				"ManaCost:1",
+				"Types:Enchantment",
+				"T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigA | TriggerDescription$ a",
+				"T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigB | TriggerDescription$ b",
+				"SVar:TrigA:DB$ GainLife | Defined$ You | LifeAmount$ 1 | SubAbility$ Shared",
+				"SVar:TrigB:DB$ GainLife | Defined$ You | LifeAmount$ 2 | SubAbility$ Shared",
+				"SVar:Shared:DB$ Draw | Defined$ You | NumCards$ 1",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigA",
+				text: "a",
+				condition: { kind: "begin step", player: "you", step: "upkeep" },
+				effects: [
+					{ kind: "gain-life", player: "you", amount: 1 },
+					{ kind: "draw", player: "you", amount: 1 },
+				],
+			},
+			{
+				id: "TrigB",
+				text: "b",
+				condition: { kind: "change zone", from: "any", to: "battlefield", selector: "self" },
+				effects: [
+					{ kind: "gain-life", player: "you", amount: 2 },
+					{ kind: "draw", player: "you", amount: 1 },
+				],
+			},
+		]);
+	});
+});
+
+/* ------------------------------------------------------------------------- */
+/* Bridge contract properties                                                */
+/* ------------------------------------------------------------------------- */
+
+describe("lowerForgeCard: bridge contract", () => {
+	test("never returns a partially-usable card on rejection", () => {
+		const result = importText(`${BOLT}K:Foobar\n`);
+		expect(result.ok).toBe(false);
+		expect(Object.keys(result)).toEqual(["ok", "diagnostics"]);
+	});
+
+	test("mutating the source AST after lowering does not affect the already-built card", () => {
+		const { card: ast } = parseForgeCardScript(BEARS);
+		const first = lowerForgeCard(ast, { id: "bears-1" });
+		if (!first.ok) throw new Error("expected ok");
+		const originalName = first.card.name;
+
+		const face = ast.faces[0];
+		if (!face?.characteristics.name) throw new Error("expected a name node");
+		face.characteristics.name.value = "MUTATED";
+
+		expect(first.card.name).toBe(originalName);
+	});
+
+	test("a static's callback closes over its own validated constant, not the mutable AST", () => {
+		const anthemText = cardText("g/glorious_anthem");
+		const { card: ast } = parseForgeCardScript(anthemText);
+		const first = lowerForgeCard(ast, { id: "anthem-1" });
+		if (!first.ok) throw new Error("expected ok");
+		const effect = first.card.abilityDefinitions.static[0];
+		if (!effect) throw new Error("expected a static effect");
+
+		// Find and mutate the AddPower$/AddToughness$ param entries in the AST
+		// after lowering: if `modify` closed over the AST node instead of a
+		// validated copy, this would change the already-built callback's output.
+		const face = ast.faces[0];
+		const staticRecord = face?.statics[0];
+		if (!staticRecord) throw new Error("expected a static record");
+		for (const entry of staticRecord.params.entries) {
+			if (entry.key === "AddPower" || entry.key === "AddToughness") {
+				entry.value = "999";
+			}
+		}
+
+		const rawView = { power: 2, toughness: 2 };
+		const view = rawView as unknown as Parameters<typeof effect.modify>[0];
+		effect.modify(view, {} as never, {} as never);
+		expect(rawView).toEqual({ power: 3, toughness: 3 });
+	});
+
+	test("importing the same source under two distinct ids yields independent registry entries", () => {
+		const a = importText(BEARS);
+		const b = importForgeCard(BEARS, { id: "mutation-test-2" });
+		if (!a.ok || !b.ok) throw new Error("expected both to succeed");
+		expect(a.card.id).not.toBe(b.card.id);
+		expect(a.card).not.toBe(b.card);
+	});
+
+	test("importing never registers the card: it stays unknown to the engine", () => {
+		const result = importForgeCard(BEARS, { id: "unregistered-bears-probe" });
+		expect(result.ok).toBe(true);
+		const state = newGame();
+		const obj = spawnCard(state, "unregistered-bears-probe", 0, "hand");
+		expect(() => name(state, obj.id)).toThrow(/unknown card/);
+	});
+});

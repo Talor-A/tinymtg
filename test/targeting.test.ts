@@ -35,7 +35,6 @@ import {
 for (const file of [
 	"m/murder",
 	"l/lightning_bolt",
-	"g/giant_growth",
 	"s/swamp",
 	"s/sorins_thirst",
 ]) {
@@ -140,6 +139,32 @@ registerCard({
 			},
 		],
 		effects: [{ kind: "destroy", target: "target-1" }],
+	},
+});
+// Synthetic: reproduces Giant Growth's shape (a targeted temporary P/T spell
+// effect) to check the engine's own pre-payment defense in
+// spellTargetDefinition. The importer rejects Giant Growth's real definition
+// outright (see test/forge-import.test.ts); this is not a claim that Giant
+// Growth is supported.
+registerCard({
+	id: "target-test-deferred-pt",
+	name: "Test Deferred P/T",
+	types: ["instant"],
+	colors: ["g"],
+	manaCost: { g: 1 },
+	spell: {
+		id: "spell",
+		text: "Target creature gets +3/+3 until end of turn.",
+		targets: [creatureTarget],
+		effects: [
+			{
+				kind: "modify-pt",
+				target: "target-1",
+				power: 3,
+				toughness: 3,
+				duration: "until-end-of-turn",
+			},
+		],
 	},
 });
 // Synthetic fixture isolates a layer-4 change without adding another card mechanic.
@@ -251,7 +276,7 @@ describe("single-target spell casting", () => {
 	});
 
 	test("deferred selectors and P/T effects fail before payment", () => {
-		for (const cardId of ["target-test-doom-blade", "giant-growth"]) {
+		for (const cardId of ["target-test-doom-blade", "target-test-deferred-pt"]) {
 			const { state, spell } = setupCast(cardId);
 			spawnPermanent(state, "grizzly-bears", 1);
 			const before = structuredClone(state);

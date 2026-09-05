@@ -39,35 +39,64 @@ Low-level callers handling `ChoicePendingError` themselves must discard the spec
 
 ## Forge card import
 
-Card import is deliberately split into two boundaries:
+Forge card text and its AST (`forge-ast.ts`) are external, Forge-owned input.
+`forge-import.ts` is the one strict bridge from that input to engine-owned,
+executable `CardDef`s:
 
 ```text
-raw Forge .txt -> ForgeCardIR v2 (static JSON) -> OracleCardDef / CardDef
+external Forge text
+  -> parseForgeCardScript(text).card       Forge-owned syntax and references
+  -> lowerForgeCard(ast, { id })           supported semantic subset
+  -> CardDefInput -> defineCard(input)     engine-owned definitions
+  -> registerCard(definition)              explicit caller action
 ```
 
-- `parseForgeCard(text)` parses and normalizes Forge syntax into a versioned,
-  callback-free representation with rigid discriminated unions.
-- `validateForgeCardIR(value)` strictly validates data read back from JSON,
-  including unknown properties.
-- `compileForgeCard(ir)` lowers validated data into engine definitions and
-  creates callbacks for supported continuous and replacement effects.
-- `parseCardDetailed(text)` returns both representations and structured
-  diagnostics; `parseCard(text)` remains the compatibility API and returns
-  `null` for unsupported input.
+- `importForgeCard(text, { id })` composes parsing and lowering.
+- `lowerForgeCard(ast, { id })` lowers an already-parsed `ForgeCardAst`.
 
-The initial subset covers characteristics, the existing keywords and triggers,
-fixed enters-tapped/counter rules, fixed P/T continuous effects, simple
-life/draw effects, single-target damage/destroy/P/T effects, tap abilities, and
-fixed colored tap-for-mana abilities. Card definitions, imported IR, stack
-items, and resolution share one canonical serializable effect model; optional
-simple sequences are represented by one `may` effect containing its children. Basic-land mana abilities are synthesized
-from their subtype because Forge omits explicit `A:` lines for them.
+Both return an `ImportResult`: either `{ ok: true, card, diagnostics }` or
+`{ ok: false, diagnostics }`. Neither function registers a card or touches game
+state, and a rejected card exposes no partially-usable `CardDef` — `ok: false`
+carries only diagnostics (stable codes such as `UNSUPPORTED_FACE`,
+`UNSUPPORTED_PARAMETER`, `UNSUPPORTED_COST`, `UNSUPPORTED_TARGET`,
+`UNSUPPORTED_EFFECT`, `UNSUPPORTED_KEYWORD`, `UNSUPPORTED_REFERENCE`). The
+caller supplies the registry id explicitly; the bridge never guesses identity
+from a card's display name.
 
-Card definitions retain targeted spells, activated abilities, and mana production.
-Runtime support covers fixed tap-for-mana abilities, casting from hand, and the
-single-target spell subset described below. Other imported definitions can
-require runtime features that the engine does not support.
-The importer rejects unsupported or dynamic Forge syntax.
+`CardDef` is a runtime registry object whose statics/replacements close over
+validated, normalized data (selectors, constants) rather than the source AST
+or a live game object — see `test/forge-import.test.ts` for a callback
+independence check. It is not a serializable persistence format: reconstruct
+the same registry when restoring a game, and preserve card ids, definition
+ordering, and importer/corpus revision together with any external snapshot.
+
+Forge is an external superset of what this engine implements. A successful
+import means every gameplay instruction on that card is accounted for within
+this engine's declared rules subset — not full Magic rules compliance, and not
+a claim that every Forge card, construct, or syntactically valid input is
+accepted. A recognized keyword is never silently dropped: every root `A`, `T`,
+`R`, `S`, and `K` rule on a card either lowers or the whole card is rejected.
+
+The current subset covers: literal characteristics (name, mana cost, types,
+colors, P/T); the keywords Flying, Lifelink, Indestructible, and Vigilance;
+literal `entersTapped`/entry-counter shorthand, with basic-land mana
+abilities synthesized from subtype (Forge omits explicit `A:` lines for
+those); fixed-color tap-for-mana abilities; targetless tap-self activated
+abilities with life/draw/discard-one-chosen-card effects; single required-target
+spells (`Any`/`Player`/creature-type selectors) with damage, destroy, and
+sequenced life/draw effects; simple self-entry, upkeep, and self-attack
+triggers, including one optional (`may`) wrapper around a trigger's whole
+effect sequence; and fixed controlled-creature P/T statics plus a global
+artifact/land enters-tapped replacement. See the acceptance matrix in
+`test/forge-import.test.ts` for the exact fixtures this is checked against,
+and the deferred-support notes at the top of `forge-import.ts` for what is
+intentionally out of scope (temporary P/T, random/multi-card discard, targeted
+activated abilities, dynamic/X amounts, alternate costs, and more).
+
+`test/utils/engine-helpers.ts`'s `registerCardFixture(cardsfolderPath)` reads
+a real card from `cards/cardsfolder`, imports it through this bridge, and
+registers the result — so a card whose printed definition no longer lowers
+fails the tests that depend on it, rather than silently drifting.
 
 ## Current gameplay boundary
 

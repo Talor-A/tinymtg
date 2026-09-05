@@ -28,38 +28,12 @@ import {
 	BOB,
 	beginFirstTurn,
 	passingAgents,
+	registerCardFixture,
 	seedLibraries,
 	setupMain,
 } from "./utils/engine-helpers.ts";
 
-registerCard({
-	id: "merfolk-looter",
-	name: "Merfolk Looter",
-	types: ["creature"],
-	subtypes: ["Merfolk", "Rogue"],
-	colors: ["u"],
-	manaCost: { c: 1, u: 1 },
-	power: 1,
-	toughness: 1,
-	activatedAbilities: [
-		{
-			kind: "activated",
-			id: "loot",
-			text: "{T}: Draw a card, then discard a card.",
-			costs: [{ kind: "tap-self" }],
-			targets: [],
-			effects: [
-				{ kind: "draw", player: "you", amount: 1 },
-				{
-					kind: "discard",
-					selector: "any",
-					amount: 1,
-					player: "you",
-				},
-			],
-		},
-	],
-});
+registerCardFixture("m/merfolk_looter");
 
 registerCard({
 	id: "test-unsupported-activated-ability",
