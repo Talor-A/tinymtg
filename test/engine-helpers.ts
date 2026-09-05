@@ -10,6 +10,24 @@ export function passingAgents(): SyncAgents {
 	return [new ScriptedAgent(), new ScriptedAgent()];
 }
 
+/**
+ * Asserts a scripted agent used every action it was given.
+ *
+ * `ScriptedAgent` falls back to the first offered option whenever its next
+ * scripted action is not on the menu, and the first option is always "pass".
+ * That fallback is what makes `passingAgents()` work, but it also means a test
+ * whose scripted action stopped being offered keeps passing while silently
+ * doing nothing. Calling this after the engine runs turns that into a failure.
+ */
+export function expectScriptConsumed(agent: ScriptedAgent): void {
+	if (agent.priorityActions.length === 0) return;
+	throw new Error(
+		`scripted agent did not use ${agent.priorityActions.length} action(s): ` +
+			`${agent.priorityActions.map((action) => action.kind).join(", ")} — ` +
+			"the engine never offered them",
+	);
+}
+
 export function advanceUntil(
 	state: GameState,
 	agents: SyncAgents,

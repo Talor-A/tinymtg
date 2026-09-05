@@ -1776,7 +1776,7 @@ export interface ManaAbilityDef extends ActivatedAbilityDefBase {
 /** Every ability definition possessed through an activated-ability reference. */
 export type AnyActivatedAbilityDef = ActivatedAbilityDef | ManaAbilityDef;
 
-type CardDefManaCost =
+export type CardDefManaCost =
 	| {
 			w?: number;
 			u?: number;
@@ -5033,7 +5033,7 @@ function manaCostBreakdown(cost: CardDefManaCost): ManaCostBreakdown | null {
  * assignment would have made, because after the colored requirements are met
  * every remaining unit of mana is interchangeable for generic.
  */
-function planManaPayment(
+export function planManaPayment(
 	pool: DeepReadOnly<ManaPool>,
 	cost: CardDefManaCost,
 ): ManaAmount | null {

@@ -202,6 +202,20 @@ export const WALKING_BALLISTA = registerCard({
 	entersWith: { "+1/+1": 2 },
 });
 
+/**
+ * A genuinely zero-cost card: `{0}`, not "no mana cost". It can be cast from
+ * hand with an empty mana pool, which is what separates `"zero"` from
+ * `"none"` at the casting boundary.
+ */
+export const DARKSTEEL_RELIC = registerCard({
+	id: "darksteel-relic",
+	name: "Darksteel Relic",
+	types: ["artifact"],
+	colors: [],
+	manaCost: "zero",
+	keywords: ["indestructible"],
+});
+
 export const GRIZZLY_BEARS = registerCard({
 	id: "grizzly-bears",
 	name: "Grizzly Bears",
