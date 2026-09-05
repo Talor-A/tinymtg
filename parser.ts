@@ -964,7 +964,8 @@ export function parseForgeCard(text: string): ForgeResult<ForgeCardIR> {
 				(rule) =>
 					rule.kind === "mana" &&
 					rule.effects.some(
-						(effect) => effect.kind === "add-mana" && effect.mana[color] > 0,
+						(effect) =>
+							effect.kind === "add-mana" && (effect.mana[color] ?? 0) > 0,
 					),
 			);
 			if (alreadyPresent) continue;
