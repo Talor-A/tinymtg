@@ -126,7 +126,9 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		const bolt = importFixture("l/lightning_bolt");
 		if (!bolt.ok) throw new Error("expected ok");
 		expect(bolt.card.spell).toMatchObject({
-			targets: [{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } }],
+			targets: [
+				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
+			],
 			effects: [{ kind: "damage", target: "target-1", amount: 3 }],
 		});
 
@@ -138,7 +140,10 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					id: "target-1",
 					min: 1,
 					max: 1,
-					legal: { kind: "permanent", selector: { kind: "type", type: "creature" } },
+					legal: {
+						kind: "permanent",
+						selector: { kind: "type", type: "creature" },
+					},
 				},
 			],
 			effects: [{ kind: "destroy", target: "target-1" }],
@@ -171,7 +176,12 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			{
 				id: "TrigGainLife",
 				text: expect.any(String),
-				condition: { kind: "change zone", from: "any", to: "battlefield", selector: "self" },
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: "self",
+				},
 				effects: [{ kind: "gain-life", player: "you", amount: 3 }],
 			},
 		]);
@@ -364,14 +374,18 @@ describe("lowerForgeCard: required negative mutations", () => {
 	});
 
 	test("rejects a duplicate semantic parameter", () => {
-		const result = importText(BOLT.replace("NumDmg$ 3 |", "NumDmg$ 3 | NumDmg$ 3 |"));
+		const result = importText(
+			BOLT.replace("NumDmg$ 3 |", "NumDmg$ 3 | NumDmg$ 3 |"),
+		);
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
 	});
 
 	test("rejects a malformed parameter fragment", () => {
-		const result = importText(BOLT.replace("ValidTgts$ Any |", "ValidTgts$ Any | Weird |"));
+		const result = importText(
+			BOLT.replace("ValidTgts$ Any |", "ValidTgts$ Any | Weird |"),
+		);
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
@@ -402,7 +416,10 @@ describe("lowerForgeCard: required negative mutations", () => {
 
 	test("rejects a sub-ability that declares its own cost or target", () => {
 		const cost = importText(
-			REVITALIZE.replace("DB$ Draw | Defined$ You |", "DB$ Draw | Defined$ You | Cost$ 2 |"),
+			REVITALIZE.replace(
+				"DB$ Draw | Defined$ You |",
+				"DB$ Draw | Defined$ You | Cost$ 2 |",
+			),
 		);
 		expect(cost.ok).toBe(false);
 		if (!cost.ok) expect(cost.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
@@ -414,7 +431,8 @@ describe("lowerForgeCard: required negative mutations", () => {
 			),
 		);
 		expect(target.ok).toBe(false);
-		if (!target.ok) expect(target.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		if (!target.ok)
+			expect(target.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 	});
 
 	test("rejects a dynamic (non-literal) amount", () => {
@@ -425,7 +443,9 @@ describe("lowerForgeCard: required negative mutations", () => {
 	});
 
 	test("rejects the whole card when a later rule is unsupported, after an otherwise-supported first rule", () => {
-		const result = importText(`${BEARS}A:AB$ Foo | Cost$ T | SpellDescription$ x.\n`);
+		const result = importText(
+			`${BEARS}A:AB$ Foo | Cost$ T | SpellDescription$ x.\n`,
+		);
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
@@ -441,7 +461,9 @@ describe("lowerForgeCard: required negative mutations", () => {
 	});
 
 	test("rejects an instant with no spell ability", () => {
-		const result = importText(`Name:Empty Instant\nManaCost:R\nTypes:Instant\nOracle:\n`);
+		const result = importText(
+			`Name:Empty Instant\nManaCost:R\nTypes:Instant\nOracle:\n`,
+		);
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
@@ -567,13 +589,15 @@ describe("lowerForgeCard: hardening regressions", () => {
 			"Name:Bad\nManaCost:1 U\nTypes:Sorcery\nA:SP$ Discard | Defined$ You | Mode$ TgtChoose | NumCards$ 2 | SpellDescription$ x.\nOracle:\n",
 		);
 		expect(multi.ok).toBe(false);
-		if (!multi.ok) expect(multi.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		if (!multi.ok)
+			expect(multi.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 
 		const random = importText(
 			"Name:Bad\nManaCost:1 U\nTypes:Sorcery\nA:SP$ Discard | Defined$ You | Mode$ Random | NumCards$ 1 | SpellDescription$ x.\nOracle:\n",
 		);
 		expect(random.ok).toBe(false);
-		if (!random.ok) expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		if (!random.ok)
+			expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 	});
 
 	test("rejects multi-card and random discard on a trigger", () => {
@@ -589,7 +613,8 @@ describe("lowerForgeCard: hardening regressions", () => {
 			].join("\n"),
 		);
 		expect(multi.ok).toBe(false);
-		if (!multi.ok) expect(multi.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		if (!multi.ok)
+			expect(multi.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 
 		const random = importText(
 			[
@@ -603,7 +628,8 @@ describe("lowerForgeCard: hardening regressions", () => {
 			].join("\n"),
 		);
 		expect(random.ok).toBe(false);
-		if (!random.ok) expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		if (!random.ok)
+			expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 	});
 
 	test("rejects an unresolved SubAbility reference", () => {
@@ -696,7 +722,9 @@ describe("lowerForgeCard: chain traversal", () => {
 		];
 		for (let i = 0; i < 35; i++) {
 			const next = i < 34 ? ` | SubAbility$ L${i + 1}` : "";
-			lines.push(`SVar:L${i}:DB$ GainLife | Defined$ You | LifeAmount$ 1${next}`);
+			lines.push(
+				`SVar:L${i}:DB$ GainLife | Defined$ You | LifeAmount$ 1${next}`,
+			);
 		}
 		lines.push("Oracle:", "");
 		const result = importText(lines.join("\n"));
@@ -735,7 +763,12 @@ describe("lowerForgeCard: chain traversal", () => {
 			{
 				id: "TrigB",
 				text: "b",
-				condition: { kind: "change zone", from: "any", to: "battlefield", selector: "self" },
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: "self",
+				},
 				effects: [
 					{ kind: "gain-life", player: "you", amount: 2 },
 					{ kind: "draw", player: "you", amount: 1 },

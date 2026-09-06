@@ -1,29 +1,29 @@
 import {
-  type AgentPair,
-  type AnyChoiceController,
-  asChoiceController,
-  ChoiceController,
-  ChoicePendingError,
-  type ChoiceSource,
-  type ChoiceTranscript,
+	type AgentPair,
+	type AnyChoiceController,
+	asChoiceController,
+	ChoiceController,
+	ChoicePendingError,
+	type ChoiceSource,
+	type ChoiceTranscript,
 } from "./choices.ts";
 import * as EFFECTS from "./effects";
 import { includes } from "./lib/array.ts";
 
 export {
-  type Agent,
-  type AgentPair,
-  type ChoiceAnswer,
-  ChoiceController,
-  ChoicePendingError,
-  ChoiceReplayMismatchError,
-  type ChoiceRequest,
-  type ChoiceSource,
-  type ChoiceTranscript,
-  InvalidChoiceAnswerError,
-  type RecordedChoice,
-  type SyncAgent,
-  type SyncAgentPair,
+	type Agent,
+	type AgentPair,
+	type ChoiceAnswer,
+	ChoiceController,
+	ChoicePendingError,
+	ChoiceReplayMismatchError,
+	type ChoiceRequest,
+	type ChoiceSource,
+	type ChoiceTranscript,
+	InvalidChoiceAnswerError,
+	type RecordedChoice,
+	type SyncAgent,
+	type SyncAgentPair,
 } from "./choices.ts";
 
 import { assert, assertDefined, assertNever } from "./lib/assert";
@@ -42,12 +42,12 @@ export type PlayerId = 0 | 1;
 /** no command zone or sideboard yet. */
 
 const ALL_ZONES = [
-  "library",
-  "hand",
-  "battlefield",
-  "graveyard",
-  "exile",
-  "stack",
+	"library",
+	"hand",
+	"battlefield",
+	"graveyard",
+	"exile",
+	"stack",
 ] as const;
 
 export type Zone = (typeof ALL_ZONES)[number];
@@ -75,18 +75,18 @@ export type Supertype = "legendary" | "basic" | "snow";
  * owner's graveyard.
  */
 const PERMANENT_CARD_TYPES = [
-  "artifact",
-  "creature",
-  "enchantment",
-  "land",
-  "planeswalker",
+	"artifact",
+	"creature",
+	"enchantment",
+	"land",
+	"planeswalker",
 ] as const;
 
 const SPELL_CARD_TYPES = ["instant", "sorcery"] as const;
 
 export type CardType =
-  | (typeof PERMANENT_CARD_TYPES)[number]
-  | (typeof SPELL_CARD_TYPES)[number];
+	| (typeof PERMANENT_CARD_TYPES)[number]
+	| (typeof SPELL_CARD_TYPES)[number];
 
 /* ------------------------------------------------------------------ *
  * Turns
@@ -98,197 +98,197 @@ export type StepId = Brand<number, "StepId">;
 type PhaseKind = "beginning" | "main" | "combat" | "ending";
 export type MainPhaseRole = "precombat" | "postcombat";
 export type StepKind =
-  | "untap"
-  | "upkeep"
-  | "draw"
-  | "begin combat"
-  | "declare attackers"
-  | "declare blockers"
-  | "combat damage"
-  | "end combat"
-  | "end"
-  | "cleanup";
+	| "untap"
+	| "upkeep"
+	| "draw"
+	| "begin combat"
+	| "declare attackers"
+	| "declare blockers"
+	| "combat damage"
+	| "end combat"
+	| "end"
+	| "cleanup";
 
 interface PhaseOccurrence {
-  id: PhaseId;
-  turnId: TurnId;
-  kind: PhaseKind;
+	id: PhaseId;
+	turnId: TurnId;
+	kind: PhaseKind;
 }
 
 interface StepOccurrence {
-  id: StepId;
-  turnId: TurnId;
-  phaseId: PhaseId;
-  kind: StepKind;
+	id: StepId;
+	turnId: TurnId;
+	phaseId: PhaseId;
+	kind: StepKind;
 }
 
 const PRE_GAME_STEPS = [
-  "shuffle",
-  "opening hand",
-  "mulligan",
-  "opening hand actions",
+	"shuffle",
+	"opening hand",
+	"mulligan",
+	"opening hand actions",
 ] as const;
 
 type PreGameStepKind = (typeof PRE_GAME_STEPS)[number];
 
 interface TurnOccurrence {
-  id: TurnId;
-  player: PlayerId;
-  isExtra: boolean;
-  mainPhasesBegun: number;
-  remainingPhases: PhaseOccurrence[];
+	id: TurnId;
+	player: PlayerId;
+	isExtra: boolean;
+	mainPhasesBegun: number;
+	remainingPhases: PhaseOccurrence[];
 }
 
 export type TurnLocation =
-  | {
-      kind: "mainPhase";
-      phase: PhaseOccurrence;
-      role: MainPhaseRole;
-    }
-  | {
-      kind: "step";
-      phase: PhaseOccurrence;
-      step: StepOccurrence;
-    };
+	| {
+			kind: "mainPhase";
+			phase: PhaseOccurrence;
+			role: MainPhaseRole;
+	  }
+	| {
+			kind: "step";
+			phase: PhaseOccurrence;
+			step: StepOccurrence;
+	  };
 
 export type GameProgress =
-  | { kind: "notStarted" }
-  | { kind: "pregame"; step: PreGameStepKind }
-  | {
-      kind: "inTurn";
-      turn: TurnOccurrence;
-      /**
-       * Null between the moment a turn begins and the moment its first
-       * phase begins: the turn is current, but no rules-defined location
-       * inside it is yet.
-       */
-      location: TurnLocation | null;
-    };
+	| { kind: "notStarted" }
+	| { kind: "pregame"; step: PreGameStepKind }
+	| {
+			kind: "inTurn";
+			turn: TurnOccurrence;
+			/**
+			 * Null between the moment a turn begins and the moment its first
+			 * phase begins: the turn is current, but no rules-defined location
+			 * inside it is yet.
+			 */
+			location: TurnLocation | null;
+	  };
 
 type SchedulerCommand =
-  | { kind: "advancePreGameStep" }
-  | { kind: "finishPreGameStep" }
-  | { kind: "advanceTurn" }
-  | { kind: "advancePhase"; turn: TurnOccurrence }
-  | {
-      kind: "advanceStep";
-      turn: TurnOccurrence;
-      phase: PhaseOccurrence;
-    }
-  | { kind: "finishStep" }
-  | { kind: "finishPhase" };
+	| { kind: "advancePreGameStep" }
+	| { kind: "finishPreGameStep" }
+	| { kind: "advanceTurn" }
+	| { kind: "advancePhase"; turn: TurnOccurrence }
+	| {
+			kind: "advanceStep";
+			turn: TurnOccurrence;
+			phase: PhaseOccurrence;
+	  }
+	| { kind: "finishStep" }
+	| { kind: "finishPhase" };
 
 interface TurnScheduler {
-  /** The next serializable unit of scheduler control flow. */
-  command: SchedulerCommand;
-  /** The only externally observable turn locations. */
-  progress: GameProgress;
-  /** Only exceptional turns are queued. The front is taken next. */
-  pendingTurns: TurnOccurrence[];
-  /** Used to lazily create the next ordinary turn when the queue is empty. */
-  nextRegularPlayer: PlayerId;
-  remainingSteps: StepOccurrence[];
-  // TODO: I think we could do some better type structuring vs jamming
-  // this guy in at the end.
-  remainingPregameSteps: PreGameStepKind[];
-  nextId: number;
+	/** The next serializable unit of scheduler control flow. */
+	command: SchedulerCommand;
+	/** The only externally observable turn locations. */
+	progress: GameProgress;
+	/** Only exceptional turns are queued. The front is taken next. */
+	pendingTurns: TurnOccurrence[];
+	/** Used to lazily create the next ordinary turn when the queue is empty. */
+	nextRegularPlayer: PlayerId;
+	remainingSteps: StepOccurrence[];
+	// TODO: I think we could do some better type structuring vs jamming
+	// this guy in at the end.
+	remainingPregameSteps: PreGameStepKind[];
+	nextId: number;
 }
 
 /** The current rules-defined turn location, or null before the game starts. */
 export function turnLocation(state: ReadonlyGameState): TurnLocation | null {
-  const progress = state.turnScheduler.progress;
-  return progress.kind === "inTurn" ? progress.location : null;
+	const progress = state.turnScheduler.progress;
+	return progress.kind === "inTurn" ? progress.location : null;
 }
 
 /** Whose turn it is, or null before the first turn of the game begins. */
 export function activePlayer(state: ReadonlyGameState): PlayerId | null {
-  const progress = state.turnScheduler.progress;
-  return progress.kind === "inTurn" ? progress.turn.player : null;
+	const progress = state.turnScheduler.progress;
+	return progress.kind === "inTurn" ? progress.turn.player : null;
 }
 
 export function isTurnStep(state: GameState, step: StepKind): boolean {
-  const location = turnLocation(state);
-  return location?.kind === "step" && location.step.kind === step;
+	const location = turnLocation(state);
+	return location?.kind === "step" && location.step.kind === step;
 }
 
 function currentStepKind(state: ReadonlyGameState): StepKind | null {
-  const location = turnLocation(state);
-  return location?.kind === "step" ? location.step.kind : null;
+	const location = turnLocation(state);
+	return location?.kind === "step" ? location.step.kind : null;
 }
 
 function nextScheduleId(state: GameState): number {
-  return state.turnScheduler.nextId++;
+	return state.turnScheduler.nextId++;
 }
 
 function makePhase(
-  state: GameState,
-  turnId: TurnId,
-  kind: PhaseKind,
+	state: GameState,
+	turnId: TurnId,
+	kind: PhaseKind,
 ): PhaseOccurrence {
-  return { id: nextScheduleId(state) as PhaseId, turnId, kind };
+	return { id: nextScheduleId(state) as PhaseId, turnId, kind };
 }
 
 function makeTurn(
-  state: GameState,
-  player: PlayerId,
-  isExtra: boolean,
+	state: GameState,
+	player: PlayerId,
+	isExtra: boolean,
 ): TurnOccurrence {
-  const id = nextScheduleId(state) as TurnId;
-  return {
-    id,
-    player,
-    isExtra,
-    mainPhasesBegun: 0,
-    remainingPhases: [
-      makePhase(state, id, "beginning"),
-      makePhase(state, id, "main"),
-      makePhase(state, id, "combat"),
-      makePhase(state, id, "main"),
-      makePhase(state, id, "ending"),
-    ],
-  };
+	const id = nextScheduleId(state) as TurnId;
+	return {
+		id,
+		player,
+		isExtra,
+		mainPhasesBegun: 0,
+		remainingPhases: [
+			makePhase(state, id, "beginning"),
+			makePhase(state, id, "main"),
+			makePhase(state, id, "combat"),
+			makePhase(state, id, "main"),
+			makePhase(state, id, "ending"),
+		],
+	};
 }
 
 /** Exceptional turns are queued; ordinary turn order is generated lazily. */
 function takeNextTurn(state: GameState): TurnOccurrence {
-  const queued = state.turnScheduler.pendingTurns.shift();
-  if (queued) return queued;
+	const queued = state.turnScheduler.pendingTurns.shift();
+	if (queued) return queued;
 
-  const player = state.turnScheduler.nextRegularPlayer;
-  state.turnScheduler.nextRegularPlayer = (1 - player) as PlayerId;
-  return makeTurn(state, player, false);
+	const player = state.turnScheduler.nextRegularPlayer;
+	state.turnScheduler.nextRegularPlayer = (1 - player) as PlayerId;
+	return makeTurn(state, player, false);
 }
 
 function makeSteps(state: GameState, phase: PhaseOccurrence): StepOccurrence[] {
-  let kinds: StepKind[];
-  switch (phase.kind) {
-    case "beginning":
-      kinds = ["untap", "upkeep", "draw"];
-      break;
-    case "main":
-      kinds = [];
-      break;
-    case "combat":
-      kinds = [
-        "begin combat",
-        "declare attackers",
-        "declare blockers",
-        "combat damage",
-        "end combat",
-      ];
-      break;
-    case "ending":
-      kinds = ["end", "cleanup"];
-      break;
-    default:
-      assertNever(phase.kind);
-  }
-  return kinds.map((kind) => ({
-    id: nextScheduleId(state) as StepId,
-    turnId: phase.turnId,
-    phaseId: phase.id,
-    kind,
-  }));
+	let kinds: StepKind[];
+	switch (phase.kind) {
+		case "beginning":
+			kinds = ["untap", "upkeep", "draw"];
+			break;
+		case "main":
+			kinds = [];
+			break;
+		case "combat":
+			kinds = [
+				"begin combat",
+				"declare attackers",
+				"declare blockers",
+				"combat damage",
+				"end combat",
+			];
+			break;
+		case "ending":
+			kinds = ["end", "cleanup"];
+			break;
+		default:
+			assertNever(phase.kind);
+	}
+	return kinds.map((kind) => ({
+		id: nextScheduleId(state) as StepId,
+		turnId: phase.turnId,
+		phaseId: phase.id,
+		kind,
+	}));
 }
 
 /* ------------------------------------------------------------------ *
@@ -309,110 +309,110 @@ export type CounterBag = Partial<Record<CounterNames, number>>;
  * TODO: this might be insufficient
  */
 export type EntityRef =
-  | { type: "player"; player: PlayerId }
-  | { type: "permanent"; id: ObjectId };
+	| { type: "player"; player: PlayerId }
+	| { type: "permanent"; id: ObjectId };
 
 interface EventCommon {
-  /**
-   * Conditional execution ("if you do..."). The event only executes if this fact
-   * was recorded earlier in the same bundle.
-   */
-  guard?: string;
-  /**
-   * Inverse of `guard`: the event only executes if this fact was not recorded
-   * earlier in the same bundle.
-   */
-  unless?: string;
-  /**
-   * the id that matches to `guard` / `unless`.
-   * TODO: can we use a generic event id here or something
-   */
-  fact?: string;
+	/**
+	 * Conditional execution ("if you do..."). The event only executes if this fact
+	 * was recorded earlier in the same bundle.
+	 */
+	guard?: string;
+	/**
+	 * Inverse of `guard`: the event only executes if this fact was not recorded
+	 * earlier in the same bundle.
+	 */
+	unless?: string;
+	/**
+	 * the id that matches to `guard` / `unless`.
+	 * TODO: can we use a generic event id here or something
+	 */
+	fact?: string;
 }
 
 interface DeclareAttackersEvent extends EventCommon {
-  kind: "declare attackers";
-  player: PlayerId;
-  /**
-   * The opponent is implicit: this is deliberately a two-player-only engine.
-   *
-   * TODO: support attacking planeswalkers
-   */
-  attackers: ObjectId[];
+	kind: "declare attackers";
+	player: PlayerId;
+	/**
+	 * The opponent is implicit: this is deliberately a two-player-only engine.
+	 *
+	 * TODO: support attacking planeswalkers
+	 */
+	attackers: ObjectId[];
 }
 
 /**
  * One blocker-to-attacker assignment.
  */
 export interface BlockAssignment {
-  blocker: ObjectId;
-  attacker: ObjectId;
+	blocker: ObjectId;
+	attacker: ObjectId;
 }
 
 interface DeclareBlockersEvent extends EventCommon {
-  kind: "declare blockers";
-  player: PlayerId;
-  /** Each pair names one blocker and the attacker it blocks. Multiple
-   *  blockers may be assigned to the same attacker (multi-blocking); a single
-   *  blocker may not be assigned to multiple attackers. */
-  blockers: BlockAssignment[];
+	kind: "declare blockers";
+	player: PlayerId;
+	/** Each pair names one blocker and the attacker it blocks. Multiple
+	 *  blockers may be assigned to the same attacker (multi-blocking); a single
+	 *  blocker may not be assigned to multiple attackers. */
+	blockers: BlockAssignment[];
 }
 interface DrawCardsEvent extends EventCommon {
-  kind: "draw cards";
-  player: PlayerId;
-  amount: number;
+	kind: "draw cards";
+	player: PlayerId;
+	amount: number;
 }
 interface DrawEvent extends EventCommon {
-  kind: "draw";
-  player: PlayerId;
+	kind: "draw";
+	player: PlayerId;
 }
 
 interface MillEvent extends EventCommon {
-  kind: "mill";
-  player: PlayerId;
-  amount: number;
+	kind: "mill";
+	player: PlayerId;
+	amount: number;
 }
 
 interface DiscardEvent extends EventCommon {
-  kind: "discard";
-  player: PlayerId;
-  cards:
-    | {
-        /** an instruction to discard to the player's max hand size. */
-        kind: "hand-size";
-      }
-    | {
-        /**
-         * the player must discard the specified card.
-         * TODO: support card: ObjectId[]
-         */
-        kind: "specific";
-        card: ObjectId;
-      }
-    | {
-        /**
-         * the player can choose any card to discard.
-         * TODO: support discarding multiple cards
-         */
-        kind: "any";
-      };
+	kind: "discard";
+	player: PlayerId;
+	cards:
+		| {
+				/** an instruction to discard to the player's max hand size. */
+				kind: "hand-size";
+		  }
+		| {
+				/**
+				 * the player must discard the specified card.
+				 * TODO: support card: ObjectId[]
+				 */
+				kind: "specific";
+				card: ObjectId;
+		  }
+		| {
+				/**
+				 * the player can choose any card to discard.
+				 * TODO: support discarding multiple cards
+				 */
+				kind: "any";
+		  };
 }
 
 interface DamageEvent extends EventCommon {
-  kind: "damage";
-  source: ObjectId;
-  sourceController: PlayerId;
-  sourceColors: Color[];
-  target: EntityRef;
-  amount: number;
-  combat: boolean;
-  deathtouch: boolean;
-  lifelink: boolean;
-  /**
-   * CR 615.12
-   * "can't be prevented" skips prevention effects but not other replacements.
-   */
-  unpreventable: boolean;
+	kind: "damage";
+	source: ObjectId;
+	sourceController: PlayerId;
+	sourceColors: Color[];
+	target: EntityRef;
+	amount: number;
+	combat: boolean;
+	deathtouch: boolean;
+	lifelink: boolean;
+	/**
+	 * CR 615.12
+	 * "can't be prevented" skips prevention effects but not other replacements.
+	 */
+	unpreventable: boolean;
 }
 
 /**
@@ -429,173 +429,173 @@ interface DamageEvent extends EventCommon {
  * after replacements.
  */
 interface DestroyEvent extends EventCommon {
-  kind: "destroy";
-  object: ObjectId;
-  noRegen: boolean;
-  source?: ObjectId;
+	kind: "destroy";
+	object: ObjectId;
+	noRegen: boolean;
+	source?: ObjectId;
 }
 
 /** The compound "instead" half of a regeneration shield (CR 701.19). */
 interface RegenerateEvent extends EventCommon {
-  kind: "regenerate";
-  object: ObjectId;
+	kind: "regenerate";
+	object: ObjectId;
 }
 
 interface ZoneChangeEvent extends EventCommon {
-  /** Choices installed atomically when this movement creates a spell. */
-  spellTargets?: SpellTargets;
-  kind: "change zone";
-  object: ObjectId;
-  from: Zone;
-  to: Zone;
-  cause: MoveCause;
-  /** Who it will be controlled by if `to === 'battlefield'`. Drives CR 616.1's chooser. */
-  toController: PlayerId;
-  // --- fields only meaningful when entering the battlefield (CR 614.1c-d) ---
-  entersTapped?: boolean;
-  entersWithCounters?: CounterBag;
-  /**
-   * Serializable copiable-values override set by copy-tier replacements
-   * (CR 616.1c). It carries the copied object's ability *references*, which is
-   * all the rest of the event needs: nothing has to look up "which card was
-   * this a copy of" to find the copied abilities' implementations.
-   */
-  copiableOverride?: CharacteristicsSnapshot;
-  toBottom?: boolean;
+	/** Choices installed atomically when this movement creates a spell. */
+	spellTargets?: SpellTargets;
+	kind: "change zone";
+	object: ObjectId;
+	from: Zone;
+	to: Zone;
+	cause: MoveCause;
+	/** Who it will be controlled by if `to === 'battlefield'`. Drives CR 616.1's chooser. */
+	toController: PlayerId;
+	// --- fields only meaningful when entering the battlefield (CR 614.1c-d) ---
+	entersTapped?: boolean;
+	entersWithCounters?: CounterBag;
+	/**
+	 * Serializable copiable-values override set by copy-tier replacements
+	 * (CR 616.1c). It carries the copied object's ability *references*, which is
+	 * all the rest of the event needs: nothing has to look up "which card was
+	 * this a copy of" to find the copied abilities' implementations.
+	 */
+	copiableOverride?: CharacteristicsSnapshot;
+	toBottom?: boolean;
 }
 
 type MoveCause =
-  | "cast"
-  | "draw"
-  | "play land"
-  | "discard"
-  | "mill"
-  | "destroy"
-  | "sacrifice"
-  | "sba"
-  | "cast"
-  | "illegal target"
-  | "resolve"
-  | "effect"
-  | "return"
-  | "put";
+	| "cast"
+	| "draw"
+	| "play land"
+	| "discard"
+	| "mill"
+	| "destroy"
+	| "sacrifice"
+	| "sba"
+	| "cast"
+	| "illegal target"
+	| "resolve"
+	| "effect"
+	| "return"
+	| "put";
 
 interface AddCountersEvent extends EventCommon {
-  kind: "add counters";
-  target: EntityRef;
-  counter: CounterNames;
-  amount: number;
-  source?: ObjectId;
+	kind: "add counters";
+	target: EntityRef;
+	counter: CounterNames;
+	amount: number;
+	source?: ObjectId;
 }
 
 interface RemoveCountersEvent extends EventCommon {
-  kind: "remove counters";
-  target: EntityRef;
-  counters: "all" | Partial<Record<CounterNames, number | "all">>;
-  source?: ObjectId;
+	kind: "remove counters";
+	target: EntityRef;
+	counters: "all" | Partial<Record<CounterNames, number | "all">>;
+	source?: ObjectId;
 }
 
 interface GainLifeEvent extends EventCommon {
-  kind: "gain life";
-  player: PlayerId;
-  amount: number;
-  source?: ObjectId;
+	kind: "gain life";
+	player: PlayerId;
+	amount: number;
+	source?: ObjectId;
 }
 interface LoseLifeEvent extends EventCommon {
-  kind: "lose life";
-  player: PlayerId;
-  amount: number;
-  source?: ObjectId;
+	kind: "lose life";
+	player: PlayerId;
+	amount: number;
+	source?: ObjectId;
 }
 
 interface AddManaEvent extends EventCommon {
-  kind: "add mana";
-  player: PlayerId;
-  source: ObjectId;
-  mana: ManaAmount;
+	kind: "add mana";
+	player: PlayerId;
+	source: ObjectId;
+	mana: ManaAmount;
 }
 
 interface TapEvent extends EventCommon {
-  kind: "tap" | "untap";
-  ref:
-    | {
-        kind: "object";
-        object: ObjectId;
-      }
-    | {
-        kind: "all";
-        player: PlayerId;
-      };
+	kind: "tap" | "untap";
+	ref:
+		| {
+				kind: "object";
+				object: ObjectId;
+		  }
+		| {
+				kind: "all";
+				player: PlayerId;
+		  };
 }
 
 interface BeginTurnEvent extends EventCommon {
-  kind: "begin turn";
-  turnId: TurnId;
-  player: PlayerId;
-  isExtra: boolean;
+	kind: "begin turn";
+	turnId: TurnId;
+	player: PlayerId;
+	isExtra: boolean;
 }
 
 interface BeginPhaseEvent extends EventCommon {
-  kind: "begin phase";
-  turnId: TurnId;
-  phaseId: PhaseId;
-  player: PlayerId;
-  phase: PhaseKind;
-  mainRole?: MainPhaseRole;
+	kind: "begin phase";
+	turnId: TurnId;
+	phaseId: PhaseId;
+	player: PlayerId;
+	phase: PhaseKind;
+	mainRole?: MainPhaseRole;
 }
 
 interface BeginStepEvent extends EventCommon {
-  kind: "begin step";
-  turnId: TurnId;
-  phaseId: PhaseId;
-  stepId: StepId;
-  player: PlayerId;
-  step: StepKind;
+	kind: "begin step";
+	turnId: TurnId;
+	phaseId: PhaseId;
+	stepId: StepId;
+	player: PlayerId;
+	step: StepKind;
 }
 
 interface CreateTokenEvent extends EventCommon {
-  kind: "create token";
-  controller: PlayerId;
-  /** Registry definition used to construct the token's characteristic snapshot. */
-  tokenDefinitionId: string;
-  amount: number;
+	kind: "create token";
+	controller: PlayerId;
+	/** Registry definition used to construct the token's characteristic snapshot. */
+	tokenDefinitionId: string;
+	amount: number;
 }
 
 interface LoseGameEvent extends EventCommon {
-  kind: "lose game";
-  player: PlayerId;
-  reason: string;
+	kind: "lose game";
+	player: PlayerId;
+	reason: string;
 }
 
 interface WinGameEvent extends EventCommon {
-  kind: "win game";
-  player: PlayerId;
-  reason: string;
+	kind: "win game";
+	player: PlayerId;
+	reason: string;
 }
 
 export type GameEvent =
-  | DeclareAttackersEvent
-  | DeclareBlockersEvent
-  | DrawCardsEvent
-  | DrawEvent
-  | MillEvent
-  | DiscardEvent
-  | DamageEvent
-  | DestroyEvent
-  | RegenerateEvent
-  | ZoneChangeEvent
-  | AddCountersEvent
-  | RemoveCountersEvent
-  | GainLifeEvent
-  | LoseLifeEvent
-  | AddManaEvent
-  | TapEvent
-  | BeginTurnEvent
-  | BeginStepEvent
-  | CreateTokenEvent
-  | LoseGameEvent
-  | WinGameEvent
-  | BeginPhaseEvent;
+	| DeclareAttackersEvent
+	| DeclareBlockersEvent
+	| DrawCardsEvent
+	| DrawEvent
+	| MillEvent
+	| DiscardEvent
+	| DamageEvent
+	| DestroyEvent
+	| RegenerateEvent
+	| ZoneChangeEvent
+	| AddCountersEvent
+	| RemoveCountersEvent
+	| GainLifeEvent
+	| LoseLifeEvent
+	| AddManaEvent
+	| TapEvent
+	| BeginTurnEvent
+	| BeginStepEvent
+	| CreateTokenEvent
+	| LoseGameEvent
+	| WinGameEvent
+	| BeginPhaseEvent;
 
 /* ------------------------------------------------------------------ *
  * Game state
@@ -611,11 +611,11 @@ export type GameEvent =
  * grants an activated ability to other creatures.
  */
 export const ABILITY_CATEGORIES = [
-  "static",
-  "activated",
-  "triggered",
-  "replacement",
-  "prohibition",
+	"static",
+	"activated",
+	"triggered",
+	"replacement",
+	"prohibition",
 ] as const;
 export type AbilityCategory = (typeof ABILITY_CATEGORIES)[number];
 
@@ -626,8 +626,8 @@ export type AbilityCategory = (typeof ABILITY_CATEGORIES)[number];
  * assignable to a `AbilityId<"activated">` even though both erase to `string`.
  */
 export type AbilityId<C extends AbilityCategory> = Brand<
-  string,
-  `${C}AbilityId`
+	string,
+	`${C}AbilityId`
 >;
 
 export type StaticAbilityId = AbilityId<"static">;
@@ -644,37 +644,37 @@ export type ProhibitionAbilityId = AbilityId<"prohibition">;
 type AbilityDef<C extends AbilityCategory> = AbilityDefinitions[C][number];
 
 export function abilityId<C extends AbilityCategory>(
-  category: C,
-  cardId: string,
-  index: number,
+	category: C,
+	cardId: string,
+	index: number,
 ): AbilityId<C> {
-  assert(
-    Number.isSafeInteger(index) && index >= 0,
-    `invalid ${category} ability index`,
-  );
-  return `${cardId}:${index}` as AbilityId<C>;
+	assert(
+		Number.isSafeInteger(index) && index >= 0,
+		`invalid ${category} ability index`,
+	);
+	return `${cardId}:${index}` as AbilityId<C>;
 }
 
 export function getAbilityDefinition<C extends AbilityCategory>(
-  category: C,
-  id: AbilityId<C>,
+	category: C,
+	id: AbilityId<C>,
 ): AbilityDef<C> {
-  /**
-   * Card ids may themselves contain colons (`card:id:with:colons`), so the index
-   * is always the segment after the *last* colon.
-   */
-  const separator = id.lastIndexOf(":");
-  assert(separator > 0, `invalid ${category} ability id: ${id}`);
-  const indexText = id.slice(separator + 1);
-  assert(/^\d+$/.test(indexText), `invalid ${category} ability id: ${id}`);
-  const cardId = id.slice(0, separator);
-  const index = Number(indexText);
+	/**
+	 * Card ids may themselves contain colons (`card:id:with:colons`), so the index
+	 * is always the segment after the *last* colon.
+	 */
+	const separator = id.lastIndexOf(":");
+	assert(separator > 0, `invalid ${category} ability id: ${id}`);
+	const indexText = id.slice(separator + 1);
+	assert(/^\d+$/.test(indexText), `invalid ${category} ability id: ${id}`);
+	const cardId = id.slice(0, separator);
+	const index = Number(indexText);
 
-  const definitions: AbilityDef<C>[] =
-    card(cardId).abilityDefinitions[category];
-  const definition = definitions[index];
-  assertDefined(definition, `unknown ${category} ability: ${id}`);
-  return definition;
+	const definitions: AbilityDef<C>[] =
+		card(cardId).abilityDefinitions[category];
+	const definition = definitions[index];
+	assertDefined(definition, `unknown ${category} ability: ${id}`);
+	return definition;
 }
 
 /**
@@ -683,11 +683,11 @@ export function getAbilityDefinition<C extends AbilityCategory>(
  * executable definitions behind it.
  */
 export interface AbilityReferences {
-  static: StaticAbilityId[];
-  activated: ActivatedAbilityId[];
-  triggered: TriggeredAbilityId[];
-  replacement: ReplacementAbilityId[];
-  prohibition: ProhibitionAbilityId[];
+	static: StaticAbilityId[];
+	activated: ActivatedAbilityId[];
+	triggered: TriggeredAbilityId[];
+	replacement: ReplacementAbilityId[];
+	prohibition: ProhibitionAbilityId[];
 }
 
 /**
@@ -699,145 +699,145 @@ export interface AbilityReferences {
  * containing object snapshot rather than here.
  */
 interface BaseCharacteristicsSnapshot {
-  name: string;
-  manaCost: CardDefManaCost;
-  colors: Color[];
-  supertypes: Supertype[];
-  types: CardType[];
-  subtypes: string[];
-  keywords: Keyword[];
-  /** Current possession, as registry references. Never executable definitions. */
-  abilities: AbilityReferences;
+	name: string;
+	manaCost: CardDefManaCost;
+	colors: Color[];
+	supertypes: Supertype[];
+	types: CardType[];
+	subtypes: string[];
+	keywords: Keyword[];
+	/** Current possession, as registry references. Never executable definitions. */
+	abilities: AbilityReferences;
 }
 
 interface CreatureCharacteristicsSnapshot extends BaseCharacteristicsSnapshot {
-  kind: "creature";
-  power: number;
-  toughness: number;
+	kind: "creature";
+	power: number;
+	toughness: number;
 }
 
 interface NonCreatureCharacteristicsSnapshot
-  extends BaseCharacteristicsSnapshot {
-  kind: "non-creature";
+	extends BaseCharacteristicsSnapshot {
+	kind: "non-creature";
 }
 
 export type CharacteristicsSnapshot =
-  | NonCreatureCharacteristicsSnapshot
-  | CreatureCharacteristicsSnapshot;
+	| NonCreatureCharacteristicsSnapshot
+	| CreatureCharacteristicsSnapshot;
 
 interface SnapshotBase {
-  objectId: ObjectId;
-  owner: PlayerId;
+	objectId: ObjectId;
+	owner: PlayerId;
 }
 
 interface CardSnapshot extends SnapshotBase {
-  kind: "card";
-  zone: "library" | "hand" | "graveyard" | "exile";
-  /** Stable printed identity; characteristics remain exclusively derived below. */
-  cardId: string;
+	kind: "card";
+	zone: "library" | "hand" | "graveyard" | "exile";
+	/** Stable printed identity; characteristics remain exclusively derived below. */
+	cardId: string;
 
-  copiableValues: CharacteristicsSnapshot;
-  currentCharacteristics: CharacteristicsSnapshot;
+	copiableValues: CharacteristicsSnapshot;
+	currentCharacteristics: CharacteristicsSnapshot;
 
-  /**
-   * cards in these zones have no controller.
-   * owner is implicit based on whose zone we're in.
-   */
-  controller: null;
+	/**
+	 * cards in these zones have no controller.
+	 * owner is implicit based on whose zone we're in.
+	 */
+	controller: null;
 }
 
 interface SpellSnapshot extends SnapshotBase {
-  targets: SpellTargets;
-  kind: "spell";
-  zone: "stack";
-  controller: PlayerId;
+	targets: SpellTargets;
+	kind: "spell";
+	zone: "stack";
+	controller: PlayerId;
 
-  copiableValues: CharacteristicsSnapshot;
-  currentCharacteristics: CharacteristicsSnapshot;
+	copiableValues: CharacteristicsSnapshot;
+	currentCharacteristics: CharacteristicsSnapshot;
 
-  representation:
-    | {
-        kind: "card";
-        cardId: string;
-      }
-    | {
-        kind: "copy";
-        copyEffect: CharacteristicsSnapshot;
-      };
+	representation:
+		| {
+				kind: "card";
+				cardId: string;
+		  }
+		| {
+				kind: "copy";
+				copyEffect: CharacteristicsSnapshot;
+		  };
 }
 
 interface PermanentSnapshot extends SnapshotBase {
-  kind: "permanent";
-  zone: "battlefield";
-  controller: PlayerId;
+	kind: "permanent";
+	zone: "battlefield";
+	controller: PlayerId;
 
-  copiableValues: CharacteristicsSnapshot;
-  currentCharacteristics: CharacteristicsSnapshot;
+	copiableValues: CharacteristicsSnapshot;
+	currentCharacteristics: CharacteristicsSnapshot;
 
-  representation:
-    | {
-        kind: "card";
-        cardId: string;
-      }
-    | {
-        kind: "token";
-      };
+	representation:
+		| {
+				kind: "card";
+				cardId: string;
+		  }
+		| {
+				kind: "token";
+		  };
 
-  tapped: boolean;
-  attacking: boolean;
-  blocking: boolean;
-  damage: number;
-  counters: CounterBag;
-  attributes: {
-    deathtouched?: boolean;
-  };
+	tapped: boolean;
+	attacking: boolean;
+	blocking: boolean;
+	damage: number;
+	counters: CounterBag;
+	attributes: {
+		deathtouched?: boolean;
+	};
 }
 
 interface NonbattlefieldTokenSnapshot extends SnapshotBase {
-  kind: "nonbattlefield-token";
-  zone: "library" | "hand" | "graveyard" | "exile";
-  controller: null;
+	kind: "nonbattlefield-token";
+	zone: "library" | "hand" | "graveyard" | "exile";
+	controller: null;
 
-  copiableValues: CharacteristicsSnapshot;
-  currentCharacteristics: CharacteristicsSnapshot;
+	copiableValues: CharacteristicsSnapshot;
+	currentCharacteristics: CharacteristicsSnapshot;
 }
 
 export type GameObjectSnapshot =
-  | CardSnapshot
-  | SpellSnapshot
-  | PermanentSnapshot
-  | NonbattlefieldTokenSnapshot;
+	| CardSnapshot
+	| SpellSnapshot
+	| PermanentSnapshot
+	| NonbattlefieldTokenSnapshot;
 
 /** A detached, serializable object exposed to one player. */
 export type PlayerObjectView = DeepReadOnly<GameObjectSnapshot>;
 
 type PlayerNonbattlefieldObjectView<
-  ZoneName extends "hand" | "graveyard" | "exile",
+	ZoneName extends "hand" | "graveyard" | "exile",
 > =
-  | (DeepReadOnly<CardSnapshot> & { readonly zone: ZoneName })
-  | (DeepReadOnly<NonbattlefieldTokenSnapshot> & { readonly zone: ZoneName });
+	| (DeepReadOnly<CardSnapshot> & { readonly zone: ZoneName })
+	| (DeepReadOnly<NonbattlefieldTokenSnapshot> & { readonly zone: ZoneName });
 
 export type PlayerHandObjectView = PlayerNonbattlefieldObjectView<"hand">;
 export type PlayerGraveyardObjectView =
-  PlayerNonbattlefieldObjectView<"graveyard">;
+	PlayerNonbattlefieldObjectView<"graveyard">;
 export type PlayerExileObjectView = PlayerNonbattlefieldObjectView<"exile">;
 export type PlayerBattlefieldObjectView = DeepReadOnly<PermanentSnapshot>;
 
 /** Stack entries are either spell snapshots or declarative ability items. */
 export type PlayerStackView = DeepReadOnly<
-  SpellSnapshot | TriggeredAbilityStackItem | ActivatedAbilityStackItem
+	SpellSnapshot | TriggeredAbilityStackItem | ActivatedAbilityStackItem
 >;
 
 function cloneAbilityReferences(
-  refs: DeepReadOnly<AbilityReferences>,
+	refs: DeepReadOnly<AbilityReferences>,
 ): AbilityReferences {
-  return {
-    static: [...refs.static],
-    activated: [...refs.activated],
-    triggered: [...refs.triggered],
-    replacement: [...refs.replacement],
-    prohibition: [...refs.prohibition],
-  };
+	return {
+		static: [...refs.static],
+		activated: [...refs.activated],
+		triggered: [...refs.triggered],
+		replacement: [...refs.replacement],
+		prohibition: [...refs.prohibition],
+	};
 }
 
 const PRINTED_CHARACTERISTICS = new WeakMap<CardDef, CharacteristicsSnapshot>();
@@ -847,35 +847,35 @@ const PRINTED_CHARACTERISTICS = new WeakMap<CardDef, CharacteristicsSnapshot>();
  * the result as immutable; use {@link characteristicsFromCardDef} for a copy.
  */
 function printedCharacteristics(
-  def: CardDef,
+	def: CardDef,
 ): DeepReadOnly<CharacteristicsSnapshot> {
-  const cached = PRINTED_CHARACTERISTICS.get(def);
-  if (cached) return cached;
-  const base = {
-    name: def.name,
-    manaCost: def.manaCost,
-    colors: [...def.colors],
-    supertypes: [...(def.supertypes ?? [])],
-    types: [...def.types],
-    subtypes: [...(def.subtypes ?? [])],
-    keywords: [...(def.keywords ?? [])],
-    abilities: cloneAbilityReferences(def.printedAbilities),
-  };
+	const cached = PRINTED_CHARACTERISTICS.get(def);
+	if (cached) return cached;
+	const base = {
+		name: def.name,
+		manaCost: def.manaCost,
+		colors: [...def.colors],
+		supertypes: [...(def.supertypes ?? [])],
+		types: [...def.types],
+		subtypes: [...(def.subtypes ?? [])],
+		keywords: [...(def.keywords ?? [])],
+		abilities: cloneAbilityReferences(def.printedAbilities),
+	};
 
-  const values: CharacteristicsSnapshot = def.types.includes("creature")
-    ? {
-        ...base,
-        kind: "creature",
-        power: def.power ?? 0,
-        toughness: def.toughness ?? 0,
-      }
-    : { ...base, kind: "non-creature" };
-  PRINTED_CHARACTERISTICS.set(def, values);
-  return values;
+	const values: CharacteristicsSnapshot = def.types.includes("creature")
+		? {
+				...base,
+				kind: "creature",
+				power: def.power ?? 0,
+				toughness: def.toughness ?? 0,
+			}
+		: { ...base, kind: "non-creature" };
+	PRINTED_CHARACTERISTICS.set(def, values);
+	return values;
 }
 
 function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
-  return cloneCharacteristics(printedCharacteristics(def));
+	return cloneCharacteristics(printedCharacteristics(def));
 }
 
 /**
@@ -887,79 +887,79 @@ function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
  * The result is shared: never mutate it.
  */
 function baseCharacteristics(
-  object: DeepReadOnly<GameObject>,
+	object: DeepReadOnly<GameObject>,
 ): DeepReadOnly<CharacteristicsSnapshot> {
-  switch (object.kind) {
-    case "card":
-      return printedCharacteristics(card(object.cardId));
+	switch (object.kind) {
+		case "card":
+			return printedCharacteristics(card(object.cardId));
 
-    case "spell":
-      return object.representation.kind === "copy"
-        ? object.representation.copyEffect
-        : printedCharacteristics(card(object.representation.cardId));
+		case "spell":
+			return object.representation.kind === "copy"
+				? object.representation.copyEffect
+				: printedCharacteristics(card(object.representation.cardId));
 
-    case "permanent":
-      if (object.copiableOverride) return object.copiableOverride;
-      return object.representation.kind === "token"
-        ? object.representation.createdValues
-        : printedCharacteristics(card(object.representation.cardId));
+		case "permanent":
+			if (object.copiableOverride) return object.copiableOverride;
+			return object.representation.kind === "token"
+				? object.representation.createdValues
+				: printedCharacteristics(card(object.representation.cardId));
 
-    case "nonbattlefield-token":
-      return object.createdValues;
+		case "nonbattlefield-token":
+			return object.createdValues;
 
-    default:
-      return assertNever(object);
-  }
+		default:
+			return assertNever(object);
+	}
 }
 
 function initialCharacteristics(
-  object: DeepReadOnly<GameObject>,
+	object: DeepReadOnly<GameObject>,
 ): CharacteristicsSnapshot {
-  return cloneCharacteristics(baseCharacteristics(object));
+	return cloneCharacteristics(baseCharacteristics(object));
 }
 
 export function cloneCharacteristics(
-  values: DeepReadOnly<CharacteristicsSnapshot>,
+	values: DeepReadOnly<CharacteristicsSnapshot>,
 ): CharacteristicsSnapshot {
-  const base = {
-    name: values.name,
-    manaCost:
-      typeof values.manaCost === "object"
-        ? { ...values.manaCost }
-        : values.manaCost,
-    colors: [...values.colors],
-    supertypes: [...values.supertypes],
-    types: [...values.types],
-    subtypes: [...values.subtypes],
-    keywords: [...values.keywords],
-    abilities: cloneAbilityReferences(values.abilities),
-  };
-  return values.kind === "creature"
-    ? {
-        ...base,
-        kind: "creature",
-        power: values.power,
-        toughness: values.toughness,
-      }
-    : { ...base, kind: "non-creature" };
+	const base = {
+		name: values.name,
+		manaCost:
+			typeof values.manaCost === "object"
+				? { ...values.manaCost }
+				: values.manaCost,
+		colors: [...values.colors],
+		supertypes: [...values.supertypes],
+		types: [...values.types],
+		subtypes: [...values.subtypes],
+		keywords: [...values.keywords],
+		abilities: cloneAbilityReferences(values.abilities),
+	};
+	return values.kind === "creature"
+		? {
+				...base,
+				kind: "creature",
+				power: values.power,
+				toughness: values.toughness,
+			}
+		: { ...base, kind: "non-creature" };
 }
 
 export interface GameView {
-  readonly objects: ReadonlyMap<ObjectId, GameObjectSnapshot>;
+	readonly objects: ReadonlyMap<ObjectId, GameObjectSnapshot>;
 }
 
 export interface PlayerPublicView {
-  readonly id: PlayerId;
-  readonly life: number;
-  readonly counters: DeepReadOnly<CounterBag>;
-  readonly manaPool: DeepReadOnly<ManaPool>;
-  readonly handCount: number;
-  readonly libraryCount: number;
-  readonly graveyard: readonly PlayerGraveyardObjectView[];
-  readonly exile: readonly PlayerExileObjectView[];
-  readonly landsPlayed: number;
-  readonly lost: boolean;
-  readonly won: boolean;
+	readonly id: PlayerId;
+	readonly life: number;
+	readonly counters: DeepReadOnly<CounterBag>;
+	readonly manaPool: DeepReadOnly<ManaPool>;
+	readonly handCount: number;
+	readonly libraryCount: number;
+	readonly graveyard: readonly PlayerGraveyardObjectView[];
+	readonly exile: readonly PlayerExileObjectView[];
+	readonly landsPlayed: number;
+	readonly lost: boolean;
+	readonly won: boolean;
 }
 
 /**
@@ -969,24 +969,24 @@ export interface PlayerPublicView {
  * viewer's cards, while both libraries and the opponent's hand are counts.
  */
 export interface PlayerView {
-  readonly version: 1;
-  readonly revision: number;
-  readonly viewer: PlayerId;
-  readonly turn: {
-    readonly completedTurns: number;
-    readonly activePlayer: PlayerId | null;
-    readonly location: DeepReadOnly<TurnLocation> | null;
-  };
-  readonly players: readonly [PlayerPublicView, PlayerPublicView];
-  readonly hand: readonly PlayerHandObjectView[];
-  readonly battlefield: readonly PlayerBattlefieldObjectView[];
-  readonly stack: readonly PlayerStackView[];
+	readonly version: 1;
+	readonly revision: number;
+	readonly viewer: PlayerId;
+	readonly turn: {
+		readonly completedTurns: number;
+		readonly activePlayer: PlayerId | null;
+		readonly location: DeepReadOnly<TurnLocation> | null;
+	};
+	readonly players: readonly [PlayerPublicView, PlayerPublicView];
+	readonly hand: readonly PlayerHandObjectView[];
+	readonly battlefield: readonly PlayerBattlefieldObjectView[];
+	readonly stack: readonly PlayerStackView[];
 }
 
 export interface ReadContext {
-  readonly state: ReadonlyGameState;
-  readonly revision: number;
-  readonly view: GameView;
+	readonly state: ReadonlyGameState;
+	readonly revision: number;
+	readonly view: GameView;
 }
 
 /**
@@ -994,7 +994,7 @@ export interface ReadContext {
  * Callers must discard this view as soon as they mutate `state`.
  */
 export function buildGameView(state: ReadonlyGameState): GameView {
-  return buildFilteredGameView(state);
+	return buildFilteredGameView(state);
 }
 
 /**
@@ -1002,182 +1002,182 @@ export function buildGameView(state: ReadonlyGameState): GameView {
  * 7c, so `buildFilteredGameView` calls this from within the layer walk.
  */
 function applyCounters(
-  state: ReadonlyGameState,
-  characteristics: Map<ObjectId, CharacteristicsSnapshot>,
+	state: ReadonlyGameState,
+	characteristics: Map<ObjectId, CharacteristicsSnapshot>,
 ): void {
-  for (const object of state.objects.values()) {
-    if (object.kind !== "permanent") continue;
-    const current = characteristics.get(object.id);
-    if (!current) continue;
-    if (current.kind !== "creature") continue;
-    const delta =
-      (object.counters["+1/+1"] ?? 0) - (object.counters["-1/-1"] ?? 0);
-    current.power += delta;
-    current.toughness += delta;
-  }
+	for (const object of state.objects.values()) {
+		if (object.kind !== "permanent") continue;
+		const current = characteristics.get(object.id);
+		if (!current) continue;
+		if (current.kind !== "creature") continue;
+		const delta =
+			(object.counters["+1/+1"] ?? 0) - (object.counters["-1/-1"] ?? 0);
+		current.power += delta;
+		current.toughness += delta;
+	}
 }
 
 function buildFilteredGameView(
-  state: ReadonlyGameState,
-  included?: ReadonlySet<ObjectId>,
+	state: ReadonlyGameState,
+	included?: ReadonlySet<ObjectId>,
 ): GameView {
-  const copiable = new Map<ObjectId, CharacteristicsSnapshot>();
-  const characteristics = new Map<ObjectId, CharacteristicsSnapshot>();
-  const abilities: Partial<
-    Record<
-      ContinuousEffectLayer,
-      [effect: ContinuousEffect, source: DeepReadOnly<GameObject>][]
-    >
-  > = {};
+	const copiable = new Map<ObjectId, CharacteristicsSnapshot>();
+	const characteristics = new Map<ObjectId, CharacteristicsSnapshot>();
+	const abilities: Partial<
+		Record<
+			ContinuousEffectLayer,
+			[effect: ContinuousEffect, source: DeepReadOnly<GameObject>][]
+		>
+	> = {};
 
-  for (const object of state.objects.values()) {
-    const initial = initialCharacteristics(object);
-    if (!included || included.has(object.id)) {
-      // `initial` is already a fresh clone, and layer 1a replaces rather than
-      // mutates its map entry, so it can serve as the copiable values directly.
-      copiable.set(object.id, initial);
-      characteristics.set(object.id, cloneCharacteristics(initial));
-    }
+	for (const object of state.objects.values()) {
+		const initial = initialCharacteristics(object);
+		if (!included || included.has(object.id)) {
+			// `initial` is already a fresh clone, and layer 1a replaces rather than
+			// mutates its map entry, so it can serve as the copiable values directly.
+			copiable.set(object.id, initial);
+			characteristics.set(object.id, cloneCharacteristics(initial));
+		}
 
-    for (const id of initial.abilities.static) {
-      const ability = getAbilityDefinition("static", id);
-      if (!functionsHere(ability.functionsFrom, object.zone)) continue;
-      let layerAbilities = abilities[ability.layer];
-      if (!layerAbilities) {
-        layerAbilities = [];
-        abilities[ability.layer] = layerAbilities;
-      }
-      layerAbilities.push([ability, object]);
-    }
-  }
+		for (const id of initial.abilities.static) {
+			const ability = getAbilityDefinition("static", id);
+			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
+			let layerAbilities = abilities[ability.layer];
+			if (!layerAbilities) {
+				layerAbilities = [];
+				abilities[ability.layer] = layerAbilities;
+			}
+			layerAbilities.push([ability, object]);
+		}
+	}
 
-  for (const layer of CONTINUOUS_EFFECT_LAYERS) {
-    for (const [ability, source] of abilities[layer] ?? []) {
-      const zones: readonly Zone[] =
-        ability.affects === "any"
-          ? ALL_ZONES
-          : (ability.affects ?? ["battlefield"]);
+	for (const layer of CONTINUOUS_EFFECT_LAYERS) {
+		for (const [ability, source] of abilities[layer] ?? []) {
+			const zones: readonly Zone[] =
+				ability.affects === "any"
+					? ALL_ZONES
+					: (ability.affects ?? ["battlefield"]);
 
-      for (const zone of zones) {
-        for (const objectId of zoneList(state, zone, "any")) {
-          if (!characteristics.has(objectId)) continue;
-          const subject = state.objects.get(objectId);
-          assertDefined(subject, "subject object not found");
-          if (layer === "1a-copiable-values") {
-            const current = copiable.get(objectId);
-            assertDefined(current, "copiable values not found");
-            if (
-              !ability.applies(evaluationView(subject, current), state, source)
-            )
-              continue;
-            const next = cloneCharacteristics(current);
-            ability.modify(next, state, source);
-            copiable.set(objectId, next);
-            characteristics.set(objectId, cloneCharacteristics(next));
-            continue;
-          }
+			for (const zone of zones) {
+				for (const objectId of zoneList(state, zone, "any")) {
+					if (!characteristics.has(objectId)) continue;
+					const subject = state.objects.get(objectId);
+					assertDefined(subject, "subject object not found");
+					if (layer === "1a-copiable-values") {
+						const current = copiable.get(objectId);
+						assertDefined(current, "copiable values not found");
+						if (
+							!ability.applies(evaluationView(subject, current), state, source)
+						)
+							continue;
+						const next = cloneCharacteristics(current);
+						ability.modify(next, state, source);
+						copiable.set(objectId, next);
+						characteristics.set(objectId, cloneCharacteristics(next));
+						continue;
+					}
 
-          const current = characteristics.get(objectId);
-          assertDefined(current, "characteristics not found");
-          if (!ability.applies(evaluationView(subject, current), state, source))
-            continue;
-          const next = cloneCharacteristics(current);
-          ability.modify(next, state, source);
-          characteristics.set(objectId, next);
-        }
-      }
-    }
+					const current = characteristics.get(objectId);
+					assertDefined(current, "characteristics not found");
+					if (!ability.applies(evaluationView(subject, current), state, source))
+						continue;
+					const next = cloneCharacteristics(current);
+					ability.modify(next, state, source);
+					characteristics.set(objectId, next);
+				}
+			}
+		}
 
-    // CR 613.4: +1/+1 and -1/-1 counters apply in layer 7c, so they are
-    // scheduled by the layer list like everything else -- notably before the
-    // 7d swap.
-    if (layer === "7c-modify-power-toughness")
-      applyCounters(state, characteristics);
-  }
+		// CR 613.4: +1/+1 and -1/-1 counters apply in layer 7c, so they are
+		// scheduled by the layer list like everything else -- notably before the
+		// 7d swap.
+		if (layer === "7c-modify-power-toughness")
+			applyCounters(state, characteristics);
+	}
 
-  const snapshots = new Map<ObjectId, GameObjectSnapshot>();
-  for (const object of state.objects.values()) {
-    const copy = copiable.get(object.id);
-    const current = characteristics.get(object.id);
-    if (!copy || !current) continue;
+	const snapshots = new Map<ObjectId, GameObjectSnapshot>();
+	for (const object of state.objects.values()) {
+		const copy = copiable.get(object.id);
+		const current = characteristics.get(object.id);
+		if (!copy || !current) continue;
 
-    switch (object.kind) {
-      case "card":
-        snapshots.set(object.id, {
-          kind: "card",
-          objectId: object.id,
-          owner: object.owner,
-          controller: null,
-          zone: object.zone,
-          cardId: object.cardId,
-          copiableValues: copy,
-          currentCharacteristics: current,
-        });
-        break;
-      case "spell": {
-        const entry = state.stack.find(
-          (entry) => entry.kind === "spell" && entry.objectId === object.id,
-        );
-        assert(entry?.kind === "spell", "spell has no stack entry");
-        snapshots.set(object.id, {
-          targets: structuredClone(entry.targets) as SpellTargets,
-          kind: "spell",
-          objectId: object.id,
-          owner: object.owner,
-          controller: object.controller,
-          zone: "stack",
-          representation:
-            object.representation.kind === "card"
-              ? { ...object.representation }
-              : {
-                  kind: "copy",
-                  copyEffect: cloneCharacteristics(
-                    object.representation.copyEffect,
-                  ),
-                },
-          copiableValues: copy,
-          currentCharacteristics: current,
-        });
-        break;
-      }
-      case "permanent":
-        snapshots.set(object.id, {
-          kind: "permanent",
-          objectId: object.id,
-          owner: object.owner,
-          controller: object.controller,
-          zone: "battlefield",
-          representation:
-            object.representation.kind === "card"
-              ? { ...object.representation }
-              : { kind: "token" },
-          copiableValues: copy,
-          currentCharacteristics: current,
-          tapped: object.tapped,
-          attacking: object.attacking,
-          blocking: object.blocking,
-          damage: object.damage,
-          counters: { ...object.counters },
-          attributes: { ...object.attributes },
-        });
-        break;
-      case "nonbattlefield-token":
-        snapshots.set(object.id, {
-          kind: "nonbattlefield-token",
-          objectId: object.id,
-          owner: object.owner,
-          controller: null,
-          zone: object.zone,
-          copiableValues: copy,
-          currentCharacteristics: current,
-        });
-        break;
-      default:
-        assertNever(object);
-    }
-  }
+		switch (object.kind) {
+			case "card":
+				snapshots.set(object.id, {
+					kind: "card",
+					objectId: object.id,
+					owner: object.owner,
+					controller: null,
+					zone: object.zone,
+					cardId: object.cardId,
+					copiableValues: copy,
+					currentCharacteristics: current,
+				});
+				break;
+			case "spell": {
+				const entry = state.stack.find(
+					(entry) => entry.kind === "spell" && entry.objectId === object.id,
+				);
+				assert(entry?.kind === "spell", "spell has no stack entry");
+				snapshots.set(object.id, {
+					targets: structuredClone(entry.targets) as SpellTargets,
+					kind: "spell",
+					objectId: object.id,
+					owner: object.owner,
+					controller: object.controller,
+					zone: "stack",
+					representation:
+						object.representation.kind === "card"
+							? { ...object.representation }
+							: {
+									kind: "copy",
+									copyEffect: cloneCharacteristics(
+										object.representation.copyEffect,
+									),
+								},
+					copiableValues: copy,
+					currentCharacteristics: current,
+				});
+				break;
+			}
+			case "permanent":
+				snapshots.set(object.id, {
+					kind: "permanent",
+					objectId: object.id,
+					owner: object.owner,
+					controller: object.controller,
+					zone: "battlefield",
+					representation:
+						object.representation.kind === "card"
+							? { ...object.representation }
+							: { kind: "token" },
+					copiableValues: copy,
+					currentCharacteristics: current,
+					tapped: object.tapped,
+					attacking: object.attacking,
+					blocking: object.blocking,
+					damage: object.damage,
+					counters: { ...object.counters },
+					attributes: { ...object.attributes },
+				});
+				break;
+			case "nonbattlefield-token":
+				snapshots.set(object.id, {
+					kind: "nonbattlefield-token",
+					objectId: object.id,
+					owner: object.owner,
+					controller: null,
+					zone: object.zone,
+					copiableValues: copy,
+					currentCharacteristics: current,
+				});
+				break;
+			default:
+				assertNever(object);
+		}
+	}
 
-  return { objects: snapshots };
+	return { objects: snapshots };
 }
 
 /**
@@ -1188,213 +1188,213 @@ function buildFilteredGameView(
 type EffectId = Brand<string, "EffectId">;
 
 function eid(id: string): EffectId {
-  return id as EffectId;
+	return id as EffectId;
 }
 
 export interface PendingTrigger {
-  source: ObjectId;
-  triggerId: TriggeredAbilityId;
-  controller: PlayerId;
-  text: string;
-  effects: EffectDef[];
+	source: ObjectId;
+	triggerId: TriggeredAbilityId;
+	controller: PlayerId;
+	text: string;
+	effects: EffectDef[];
 }
 
 interface PlayerState {
-  id: PlayerId;
-  life: number;
-  library: ObjectId[];
-  hand: ObjectId[];
-  graveyard: ObjectId[];
-  exile: ObjectId[];
-  counters: CounterBag;
-  /** Turn-scoped counters, e.g. cards drawn in the draw step (Chains of Mephistopheles). */
-  drawnInDrawStep: number;
-  /** Set when the player has attempted to draw from an empty library since the last SBA check (CR 704.5b). */
-  drewFromEmptyLibrary: boolean;
-  manaPool: ManaPool;
-  landsPlayed: number;
-  lost: boolean;
-  won: boolean;
+	id: PlayerId;
+	life: number;
+	library: ObjectId[];
+	hand: ObjectId[];
+	graveyard: ObjectId[];
+	exile: ObjectId[];
+	counters: CounterBag;
+	/** Turn-scoped counters, e.g. cards drawn in the draw step (Chains of Mephistopheles). */
+	drawnInDrawStep: number;
+	/** Set when the player has attempted to draw from an empty library since the last SBA check (CR 704.5b). */
+	drewFromEmptyLibrary: boolean;
+	manaPool: ManaPool;
+	landsPlayed: number;
+	lost: boolean;
+	won: boolean;
 }
 
 export interface PassAction {
-  kind: "pass";
+	kind: "pass";
 }
 /** Casts one identified card from the caster's hand. */
 export interface CastAction {
-  kind: "cast";
-  card: ObjectId;
+	kind: "cast";
+	card: ObjectId;
 }
 /** Activates one currently possessed ability on a concrete source. */
 export interface ActivateAbilityAction {
-  kind: "activate ability";
-  source: ObjectId;
-  ability: ActivatedAbilityId;
+	kind: "activate ability";
+	source: ObjectId;
+	ability: ActivatedAbilityId;
 }
 /** The ordinary special action of playing one identified land from hand. */
 export interface PlayLandAction {
-  kind: "play land";
-  card: ObjectId;
+	kind: "play land";
+	card: ObjectId;
 }
 export type PriorityAction =
-  | PassAction
-  | CastAction
-  | ActivateAbilityAction
-  | PlayLandAction;
+	| PassAction
+	| CastAction
+	| ActivateAbilityAction
+	| PlayLandAction;
 
 export interface TriggeredAbilityStackItem {
-  id: StackItemId;
-  kind: "triggered ability";
-  source: ObjectId;
-  triggerId: TriggeredAbilityId;
-  controller: PlayerId;
-  text: string;
-  effects: EffectDef[];
+	id: StackItemId;
+	kind: "triggered ability";
+	source: ObjectId;
+	triggerId: TriggeredAbilityId;
+	controller: PlayerId;
+	text: string;
+	effects: EffectDef[];
 }
 
 export interface ActivatedAbilityStackItem {
-  id: StackItemId;
-  kind: "activated ability";
-  source: ObjectId;
-  abilityId: ActivatedAbilityId;
-  controller: PlayerId;
-  text: string;
-  effects: EffectDef[];
+	id: StackItemId;
+	kind: "activated ability";
+	source: ObjectId;
+	abilityId: ActivatedAbilityId;
+	controller: PlayerId;
+	text: string;
+	effects: EffectDef[];
 }
 
 /** The runtime supports either no targets or one required target slot. */
 export type SpellTargets = [] | [{ slot: string; target: EntityRef }];
 
 export interface SpellStackEntry {
-  targets: SpellTargets;
-  kind: "spell";
-  objectId: ObjectId;
+	targets: SpellTargets;
+	kind: "spell";
+	objectId: ObjectId;
 }
 
 /** Canonical, serializable ordering of spells and abilities on the stack. */
 export type StackEntry =
-  | SpellStackEntry
-  | TriggeredAbilityStackItem
-  | ActivatedAbilityStackItem;
+	| SpellStackEntry
+	| TriggeredAbilityStackItem
+	| ActivatedAbilityStackItem;
 
 export interface GameState {
-  /** Incremented whenever canonical state changes and used to reject stale views. */
-  revision: number;
-  objects: Map<ObjectId, GameObject>;
-  players: [PlayerState, PlayerState];
-  battlefield: ObjectId[];
-  stack: StackEntry[];
-  /** Trigger occurrences waiting for the next time a player would receive priority. */
-  pendingTriggers: PendingTrigger[];
-  floating: FloatingEffect[];
-  /** Block declarations for the current combat, in damage-assignment order. */
-  blockAssignments: BlockAssignment[];
-  /** Turns whose phases have all been consumed; 0 during the first turn. */
-  completedTurns: number;
-  turnScheduler: TurnScheduler;
-  nextObjectId: number;
-  nextStackItemId: number;
-  /** Monotonic tag source for guard facts (e.g. Chains of Mephistopheles). */
-  nextTag: number;
-  log: string[];
-  rngState: RngState;
+	/** Incremented whenever canonical state changes and used to reject stale views. */
+	revision: number;
+	objects: Map<ObjectId, GameObject>;
+	players: [PlayerState, PlayerState];
+	battlefield: ObjectId[];
+	stack: StackEntry[];
+	/** Trigger occurrences waiting for the next time a player would receive priority. */
+	pendingTriggers: PendingTrigger[];
+	floating: FloatingEffect[];
+	/** Block declarations for the current combat, in damage-assignment order. */
+	blockAssignments: BlockAssignment[];
+	/** Turns whose phases have all been consumed; 0 during the first turn. */
+	completedTurns: number;
+	turnScheduler: TurnScheduler;
+	nextObjectId: number;
+	nextStackItemId: number;
+	/** Monotonic tag source for guard facts (e.g. Chains of Mephistopheles). */
+	nextTag: number;
+	log: string[];
+	rngState: RngState;
 }
 export type ReadonlyGameState = DeepReadOnly<GameState>;
 
 export type DeepReadOnly<T> = T extends
-  | string
-  | number
-  | boolean
-  | bigint
-  | symbol
-  | null
-  | undefined
-  ? T
-  : T extends (...args: never[]) => unknown
-    ? T
-    : T extends Map<infer MapKey, infer MapValue>
-      ? ReadonlyMap<DeepReadOnly<MapKey>, DeepReadOnly<MapValue>>
-      : T extends Set<infer SetValue>
-        ? ReadonlySet<DeepReadOnly<SetValue>>
-        : T extends readonly [unknown, ...unknown[]]
-          ? { readonly [Index in keyof T]: DeepReadOnly<T[Index]> }
-          : T extends ReadonlyArray<infer ArrayValue>
-            ? ReadonlyArray<DeepReadOnly<ArrayValue>>
-            : T extends object
-              ? { readonly [Key in keyof T]: DeepReadOnly<T[Key]> }
-              : T;
+	| string
+	| number
+	| boolean
+	| bigint
+	| symbol
+	| null
+	| undefined
+	? T
+	: T extends (...args: never[]) => unknown
+		? T
+		: T extends Map<infer MapKey, infer MapValue>
+			? ReadonlyMap<DeepReadOnly<MapKey>, DeepReadOnly<MapValue>>
+			: T extends Set<infer SetValue>
+				? ReadonlySet<DeepReadOnly<SetValue>>
+				: T extends readonly [unknown, ...unknown[]]
+					? { readonly [Index in keyof T]: DeepReadOnly<T[Index]> }
+					: T extends ReadonlyArray<infer ArrayValue>
+						? ReadonlyArray<DeepReadOnly<ArrayValue>>
+						: T extends object
+							? { readonly [Key in keyof T]: DeepReadOnly<T[Key]> }
+							: T;
 
 /* ------------------------------------------------------------------ *
  * Game Objects
  * ------------------------------------------------------------------ */
 
 export type GameObject =
-  | CardObject
-  | SpellObject
-  | PermanentObject
-  | NonbattlefieldTokenObject;
+	| CardObject
+	| SpellObject
+	| PermanentObject
+	| NonbattlefieldTokenObject;
 
 interface ObjectBase {
-  id: ObjectId;
-  owner: PlayerId;
-  effectData: Record<string, Record<string, number>>;
+	id: ObjectId;
+	owner: PlayerId;
+	effectData: Record<string, Record<string, number>>;
 }
 
 interface CardObject extends ObjectBase {
-  kind: "card";
-  zone: "library" | "hand" | "graveyard" | "exile";
-  controller?: never;
+	kind: "card";
+	zone: "library" | "hand" | "graveyard" | "exile";
+	controller?: never;
 
-  /** The card's underlying definition, unaffected by temporary copying.
-   */
-  cardId: string;
+	/** The card's underlying definition, unaffected by temporary copying.
+	 */
+	cardId: string;
 }
 
 interface SpellObject extends ObjectBase {
-  kind: "spell";
-  zone: "stack";
-  controller: PlayerId;
+	kind: "spell";
+	zone: "stack";
+	controller: PlayerId;
 
-  representation:
-    | { kind: "card"; cardId: string }
-    | {
-        kind: "copy";
-        copyEffect: CharacteristicsSnapshot;
-      };
+	representation:
+		| { kind: "card"; cardId: string }
+		| {
+				kind: "copy";
+				copyEffect: CharacteristicsSnapshot;
+		  };
 }
 
 export interface PermanentObject extends ObjectBase {
-  kind: "permanent";
-  zone: "battlefield";
-  controller: PlayerId;
+	kind: "permanent";
+	zone: "battlefield";
+	controller: PlayerId;
 
-  representation:
-    | { kind: "card"; cardId: string }
-    | {
-        kind: "token";
-        createdValues: CharacteristicsSnapshot;
-      };
+	representation:
+		| { kind: "card"; cardId: string }
+		| {
+				kind: "token";
+				createdValues: CharacteristicsSnapshot;
+		  };
 
-  /** Owned layer-1 override captured by a copy effect. */
-  copiableOverride?: CharacteristicsSnapshot;
+	/** Owned layer-1 override captured by a copy effect. */
+	copiableOverride?: CharacteristicsSnapshot;
 
-  tapped: boolean;
-  counters: CounterBag;
-  damage: number;
-  attacking: boolean;
-  blocking: boolean;
-  /** Compatibility discriminator; representation is canonical. */
-  readonly token: boolean;
-  attributes: {
-    deathtouched?: boolean;
-  };
+	tapped: boolean;
+	counters: CounterBag;
+	damage: number;
+	attacking: boolean;
+	blocking: boolean;
+	/** Compatibility discriminator; representation is canonical. */
+	readonly token: boolean;
+	attributes: {
+		deathtouched?: boolean;
+	};
 }
 
 interface NonbattlefieldTokenObject extends ObjectBase {
-  kind: "nonbattlefield-token";
-  zone: "hand" | "graveyard" | "library" | "exile";
+	kind: "nonbattlefield-token";
+	zone: "hand" | "graveyard" | "library" | "exile";
 
-  createdValues: CharacteristicsSnapshot;
+	createdValues: CharacteristicsSnapshot;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1435,118 +1435,118 @@ interface NonbattlefieldTokenObject extends ObjectBase {
  */
 
 const REPLACEMENT_EFFECT_ORDER = [
-  /**
-   * 616.1a. If any of the replacement and/or prevention effects are
-   * self-replacement effects (see rule 614.15), one of them must be chosen.
-   * If not, proceed to rule 616.1b.
-   *
-   * 614.15. Some replacement effects are not continuous effects. Rather, they
-   * are an effect of a resolving spell or ability that replace part or all of
-   * that spell or ability's own effect(s). Such effects are called
-   * self-replacement effects. The text creating a self-replacement effect is
-   * usually part of the ability whose effect is being replaced, but the text
-   * can be a separate ability, particularly when preceded by an ability word.
-   *
-   * When applying replacement effects to an event, self-replacement effects
-   * are applied before other replacement effects.
-   * @example
-   * ```
-   * Remand: {1}{u}
-   * Counter target spell. If that spell is countered this way, put it into its
-   * owner's hand instead of into that player's graveyard. Draw a card.
-   * ```
-   * "If that spell is countered, do X" is a self-replacement effect.
-   *
-   * @example
-   * ```
-   * This land enters the battlefield tapped.
-   * ```
-   * This is NOT a self-replacement effect. It applies in `other` order.
-   */
-  "self",
-  /**
-   * 616.1b. If any of the replacement and/or prevention effects would modify
-   * under whose control an object would enter the battlefield, one of them must
-   * be chosen. If not, proceed to rule 616.1c.
-   */
-  "control",
-  /**
-   * 616.1c. If any of the replacement and/or prevention effects would cause an
-   * object to become a copy of another object as it enters the battlefield, one
-   * of them must be chosen. If not, proceed to rule 616.1d.
-   */
-  "copy",
-  /**
-   * 616.1d. If any of the replacement and/or prevention effects would cause a
-   * card to enter the battlefield with its back face up, one of them must be
-   * chosen (See rule 701.27, "Transform," and rule 701.28, "Convert."). If not,
-   * proceed to 616.1e.
-   *
-   * we don't support tranformed cards yet.
-   */
-  // "transform-face",
-  /**
-   * 616.1e. Any of the applicable replacement and/or prevention effects may be
-   * chosen.
-   */
-  "other",
+	/**
+	 * 616.1a. If any of the replacement and/or prevention effects are
+	 * self-replacement effects (see rule 614.15), one of them must be chosen.
+	 * If not, proceed to rule 616.1b.
+	 *
+	 * 614.15. Some replacement effects are not continuous effects. Rather, they
+	 * are an effect of a resolving spell or ability that replace part or all of
+	 * that spell or ability's own effect(s). Such effects are called
+	 * self-replacement effects. The text creating a self-replacement effect is
+	 * usually part of the ability whose effect is being replaced, but the text
+	 * can be a separate ability, particularly when preceded by an ability word.
+	 *
+	 * When applying replacement effects to an event, self-replacement effects
+	 * are applied before other replacement effects.
+	 * @example
+	 * ```
+	 * Remand: {1}{u}
+	 * Counter target spell. If that spell is countered this way, put it into its
+	 * owner's hand instead of into that player's graveyard. Draw a card.
+	 * ```
+	 * "If that spell is countered, do X" is a self-replacement effect.
+	 *
+	 * @example
+	 * ```
+	 * This land enters the battlefield tapped.
+	 * ```
+	 * This is NOT a self-replacement effect. It applies in `other` order.
+	 */
+	"self",
+	/**
+	 * 616.1b. If any of the replacement and/or prevention effects would modify
+	 * under whose control an object would enter the battlefield, one of them must
+	 * be chosen. If not, proceed to rule 616.1c.
+	 */
+	"control",
+	/**
+	 * 616.1c. If any of the replacement and/or prevention effects would cause an
+	 * object to become a copy of another object as it enters the battlefield, one
+	 * of them must be chosen. If not, proceed to rule 616.1d.
+	 */
+	"copy",
+	/**
+	 * 616.1d. If any of the replacement and/or prevention effects would cause a
+	 * card to enter the battlefield with its back face up, one of them must be
+	 * chosen (See rule 701.27, "Transform," and rule 701.28, "Convert."). If not,
+	 * proceed to 616.1e.
+	 *
+	 * we don't support tranformed cards yet.
+	 */
+	// "transform-face",
+	/**
+	 * 616.1e. Any of the applicable replacement and/or prevention effects may be
+	 * chosen.
+	 */
+	"other",
 ] as const;
 
 export type ReplacementLayer = (typeof REPLACEMENT_EFFECT_ORDER)[number];
 
 export interface EffectCtx {
-  state: ReadonlyGameState;
-  /** Stable derived view for this replacement-evaluation window. */
-  read: ReadContext;
-  /** The readonly object generating the effect; null for floating/rule effects. */
-  self: DeepReadOnly<GameObject> | null;
-  controller: PlayerId;
-  /** Mutable per-effect scratch (floating shields). */
-  data: Record<string, number>;
-  rc: ReplacementRun;
+	state: ReadonlyGameState;
+	/** Stable derived view for this replacement-evaluation window. */
+	read: ReadContext;
+	/** The readonly object generating the effect; null for floating/rule effects. */
+	self: DeepReadOnly<GameObject> | null;
+	controller: PlayerId;
+	/** Mutable per-effect scratch (floating shields). */
+	data: Record<string, number>;
+	rc: ReplacementRun;
 }
 
 /** A set of zones. 'any' == every zone (CR 113.6). */
 type ZoneScope = Zone[] | "any";
 function functionsHere(
-  scopes: ZoneScope = ["battlefield"],
-  zone: Zone,
+	scopes: ZoneScope = ["battlefield"],
+	zone: Zone,
 ): boolean {
-  if (scopes === "any") return true;
-  return scopes.includes(zone);
+	if (scopes === "any") return true;
+	return scopes.includes(zone);
 }
 
 export interface ReplacementDef {
-  /** Stable label used to identify this effect on its source. */
-  label: string;
-  text: string;
-  layer: ReplacementLayer;
-  /** is this an effect that prevents something from happening? */
-  isPreventionEffect?: boolean;
-  /**
-   * pre-filter applies, based on where the source of the event is located.
-   * most effects apply on the battlefield.
-   * @default ['battlefield']. */
-  functionsFrom?: ZoneScope;
-  /** further scope the rule, after applying functionsFrom above. */
-  applies(ev: GameEvent, ctx: EffectCtx): boolean;
-  replace(ev: GameEvent, ctx: EffectCtx): GameEvent[];
-  /**
-   * Consume shields / decrement counters here.
-   *
-   * TODO: is this an antipattern/smell?
-   */
-  onApplied?(ev: GameEvent, ctx: EffectCtx): void;
+	/** Stable label used to identify this effect on its source. */
+	label: string;
+	text: string;
+	layer: ReplacementLayer;
+	/** is this an effect that prevents something from happening? */
+	isPreventionEffect?: boolean;
+	/**
+	 * pre-filter applies, based on where the source of the event is located.
+	 * most effects apply on the battlefield.
+	 * @default ['battlefield']. */
+	functionsFrom?: ZoneScope;
+	/** further scope the rule, after applying functionsFrom above. */
+	applies(ev: GameEvent, ctx: EffectCtx): boolean;
+	replace(ev: GameEvent, ctx: EffectCtx): GameEvent[];
+	/**
+	 * Consume shields / decrement counters here.
+	 *
+	 * TODO: is this an antipattern/smell?
+	 */
+	onApplied?(ev: GameEvent, ctx: EffectCtx): void;
 }
 
 /** A ReplacementDef bound to a concrete source. This is what the loop sees. */
 export interface BoundReplacement {
-  id: EffectId;
-  def: ReplacementDef;
-  source: DeepReadOnly<GameObject> | null;
-  controller: PlayerId;
-  data: Record<string, number>;
-  label: string;
+	id: EffectId;
+	def: ReplacementDef;
+	source: DeepReadOnly<GameObject> | null;
+	controller: PlayerId;
+	data: Record<string, number>;
+	label: string;
 }
 
 /**
@@ -1565,9 +1565,9 @@ export interface BoundReplacement {
  * ReplacementRun records that a replacement effect has been applied.
  */
 export interface ReplacementRun {
-  applied: Set<EffectId>;
-  /** implementation detail. we use this to keep track of recursion depth. */
-  depth: number;
+	applied: Set<EffectId>;
+	/** implementation detail. we use this to keep track of recursion depth. */
+	depth: number;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1579,11 +1579,11 @@ export interface ReplacementRun {
  * ------------------------------------------------------------------ */
 
 interface ProhibitionCtx {
-  state: ReadonlyGameState;
-  read: ReadContext;
-  /** The object generating the effect; null for rule effects. */
-  self: DeepReadOnly<GameObject> | null;
-  controller: PlayerId;
+	state: ReadonlyGameState;
+	read: ReadContext;
+	/** The object generating the effect; null for rule effects. */
+	self: DeepReadOnly<GameObject> | null;
+	controller: PlayerId;
 }
 
 /**
@@ -1592,22 +1592,22 @@ interface ProhibitionCtx {
  * effects.
  */
 export interface ProhibitionDef {
-  label: string;
-  text: string;
-  /** @default ['battlefield'] */
-  functionsFrom?: ZoneScope;
-  applies(ev: GameEvent, ctx: ProhibitionCtx): boolean;
+	label: string;
+	text: string;
+	/** @default ['battlefield'] */
+	functionsFrom?: ZoneScope;
+	applies(ev: GameEvent, ctx: ProhibitionCtx): boolean;
 }
 
 /**
  * @see {ReplacementDef}.
  */
 export interface BoundProhibition {
-  id: EffectId;
-  def: ProhibitionDef;
-  source: DeepReadOnly<GameObject> | null;
-  controller: PlayerId;
-  label: string;
+	id: EffectId;
+	def: ProhibitionDef;
+	source: DeepReadOnly<GameObject> | null;
+	controller: PlayerId;
+	label: string;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1621,34 +1621,34 @@ export interface BoundProhibition {
  * ------------------------------------------------------------------ */
 
 interface FloatingEffect {
-  id: EffectId;
-  controller: PlayerId;
-  expires: "endOfTurn" | "never";
-  /** Consumed shields set this; expired effects are swept out of the registry. */
-  expired: boolean;
-  factory: keyof typeof EFFECTS;
-  params: Record<string, number | string>;
-  /** Mutable scratch space for shields ("prevent the next N damage"). */
-  data: Record<string, number>;
+	id: EffectId;
+	controller: PlayerId;
+	expires: "endOfTurn" | "never";
+	/** Consumed shields set this; expired effects are swept out of the registry. */
+	expired: boolean;
+	factory: keyof typeof EFFECTS;
+	params: Record<string, number | string>;
+	/** Mutable scratch space for shields ("prevent the next N damage"). */
+	data: Record<string, number>;
 }
 
 export function addFloating(
-  state: GameState,
-  controller: PlayerId,
-  factory: keyof typeof EFFECTS,
-  params: Record<string, number | string> = {},
-  opts: { expires?: "endOfTurn" | "never"; data?: Record<string, number> } = {},
+	state: GameState,
+	controller: PlayerId,
+	factory: keyof typeof EFFECTS,
+	params: Record<string, number | string> = {},
+	opts: { expires?: "endOfTurn" | "never"; data?: Record<string, number> } = {},
 ): void {
-  state.revision++;
-  state.floating.push({
-    id: eid(`floating:${state.nextObjectId++}`),
-    controller,
-    expires: opts.expires ?? "endOfTurn",
-    expired: false,
-    factory,
-    params,
-    data: opts.data ?? {},
-  });
+	state.revision++;
+	state.floating.push({
+		id: eid(`floating:${state.nextObjectId++}`),
+		controller,
+		expires: opts.expires ?? "endOfTurn",
+		expired: false,
+		factory,
+		params,
+		data: opts.data ?? {},
+	});
 }
 
 /* ------------------------------------------------------------------ *
@@ -1660,37 +1660,37 @@ export function addFloating(
  * ------------------------------------------------------------------ */
 
 export type EffectDef =
-  | {
-      kind: "gain-life" | "lose-life" | "draw";
-      player: "you" | "opponent";
-      amount: number;
-    }
-  | {
-      kind: "discard";
-      selector: "any" | "random";
-      amount: number;
-      player: "you" | "opponent";
-    }
-  /** Definition-time targets are slot ids until casting binds them. */
-  | { kind: "damage"; target: EntityRef | string; amount: number }
-  | { kind: "destroy"; target: EntityRef | string }
-  | {
-      kind: "modify-pt";
-      target: string;
-      power: number;
-      toughness: number;
-      duration: "until-end-of-turn";
-    }
-  | {
-      kind: "add-mana";
-      player: "you";
-      mana: ManaAmount;
-    }
-  | {
-      kind: "may";
-      decider: "you" | "opponent";
-      effects: EffectDef[];
-    };
+	| {
+			kind: "gain-life" | "lose-life" | "draw";
+			player: "you" | "opponent";
+			amount: number;
+	  }
+	| {
+			kind: "discard";
+			selector: "any" | "random";
+			amount: number;
+			player: "you" | "opponent";
+	  }
+	/** Definition-time targets are slot ids until casting binds them. */
+	| { kind: "damage"; target: EntityRef | string; amount: number }
+	| { kind: "destroy"; target: EntityRef | string }
+	| {
+			kind: "modify-pt";
+			target: string;
+			power: number;
+			toughness: number;
+			duration: "until-end-of-turn";
+	  }
+	| {
+			kind: "add-mana";
+			player: "you";
+			mana: ManaAmount;
+	  }
+	| {
+			kind: "may";
+			decider: "you" | "opponent";
+			effects: EffectDef[];
+	  };
 
 /* ------------------------------------------------------------------ *
  * Triggers
@@ -1702,72 +1702,72 @@ export type EffectDef =
 type ValidPlayer = "you" | "opponent" | "either";
 
 type TriggerSelector =
-  | "self"
-  | { non?: true; type: CardType }
-  | { non?: true; subtype: string }
-  | { non?: true; supertype: string }
-  | { controller: "you" | "opponent" }
-  | { owner: "you" | "opponent" }
-  | { non?: true; color: Color };
+	| "self"
+	| { non?: true; type: CardType }
+	| { non?: true; subtype: string }
+	| { non?: true; supertype: string }
+	| { controller: "you" | "opponent" }
+	| { owner: "you" | "opponent" }
+	| { non?: true; color: Color };
 
 interface GainLifeTriggerCondition {
-  kind: "gain life" | "lose life";
-  /** Which player gained or lost life. */
-  player: ValidPlayer;
+	kind: "gain life" | "lose life";
+	/** Which player gained or lost life. */
+	player: ValidPlayer;
 }
 
 interface DrawTriggerCondition {
-  kind: "draw";
-  player: ValidPlayer;
+	kind: "draw";
+	player: ValidPlayer;
 }
 
 /** Matches the player declaring attackers and/or each matching attacker. */
 interface DeclareAttackersTriggerCondition {
-  kind: "declare attackers";
-  attacker?: ValidPlayer;
-  selector?: TriggerSelector | TriggerSelector[];
+	kind: "declare attackers";
+	attacker?: ValidPlayer;
+	selector?: TriggerSelector | TriggerSelector[];
 }
 
 interface BeginStepTriggerCondition {
-  kind: "begin step";
-  player: ValidPlayer;
-  step: StepKind | "postcombat main" | "precombat main";
+	kind: "begin step";
+	player: ValidPlayer;
+	step: StepKind | "postcombat main" | "precombat main";
 }
 
 // TODO: this needs a way to refer to last known info.
 interface ZoneChangeTriggerCondition {
-  kind: "change zone";
-  from: Zone | "any";
-  to: Zone | "any";
-  /** If array, the object must match every selector. */
-  selector: TriggerSelector | TriggerSelector[];
+	kind: "change zone";
+	from: Zone | "any";
+	to: Zone | "any";
+	/** If array, the object must match every selector. */
+	selector: TriggerSelector | TriggerSelector[];
 }
 
 /** Matches a permanent becoming tapped or untapped. */
 interface TapTriggerCondition {
-  kind: "untap" | "tap";
-  selector: TriggerSelector | TriggerSelector[];
+	kind: "untap" | "tap";
+	selector: TriggerSelector | TriggerSelector[];
 }
 
 type TriggerCondition =
-  | GainLifeTriggerCondition
-  | DrawTriggerCondition
-  | DeclareAttackersTriggerCondition
-  | BeginStepTriggerCondition
-  | ZoneChangeTriggerCondition
-  | TapTriggerCondition;
+	| GainLifeTriggerCondition
+	| DrawTriggerCondition
+	| DeclareAttackersTriggerCondition
+	| BeginStepTriggerCondition
+	| ZoneChangeTriggerCondition
+	| TapTriggerCondition;
 
 export interface TriggerDef {
-  id: string;
-  text: string;
-  condition: TriggerCondition;
-  /**
-   * Zones the source must be in for this trigger to function.
-   *
-   * Defaults to `["battlefield"]`.
-   */
-  functionsFrom?: [Zone];
-  effects: EffectDef[];
+	id: string;
+	text: string;
+	condition: TriggerCondition;
+	/**
+	 * Zones the source must be in for this trigger to function.
+	 *
+	 * Defaults to `["battlefield"]`.
+	 */
+	functionsFrom?: [Zone];
+	effects: EffectDef[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -1778,86 +1778,86 @@ export type Keyword = "indestructible" | "lifelink" | "flying" | "vigilance";
 
 /** Importer-neutral selectors; runtime targeting currently supports creature type only. */
 export type TargetSelectorDef =
-  | { kind: "self" }
-  | { kind: "type"; type: CardType }
-  | { kind: "supertype"; supertype: Supertype }
-  | { kind: "subtype"; subtype: string }
-  | { kind: "color"; color: Color }
-  | { kind: "controller"; player: "you" | "opponent" }
-  | { kind: "all" | "any"; selectors: TargetSelectorDef[] }
-  | { kind: "not"; selector: TargetSelectorDef };
+	| { kind: "self" }
+	| { kind: "type"; type: CardType }
+	| { kind: "supertype"; supertype: Supertype }
+	| { kind: "subtype"; subtype: string }
+	| { kind: "color"; color: Color }
+	| { kind: "controller"; player: "you" | "opponent" }
+	| { kind: "all" | "any"; selectors: TargetSelectorDef[] }
+	| { kind: "not"; selector: TargetSelectorDef };
 
 /** Declarative targeting; runtime casting supports one required target. */
 export interface TargetDef {
-  id: string;
-  min: number;
-  max: number;
-  legal:
-    | { kind: "player" }
-    | { kind: "permanent"; selector: TargetSelectorDef }
-    | { kind: "any-target" };
+	id: string;
+	min: number;
+	max: number;
+	legal:
+		| { kind: "player" }
+		| { kind: "permanent"; selector: TargetSelectorDef }
+		| { kind: "any-target" };
 }
 
 export interface SpellAbilityDef {
-  id: string;
-  text: string;
-  targets: TargetDef[];
-  effects: EffectDef[];
+	id: string;
+	text: string;
+	targets: TargetDef[];
+	effects: EffectDef[];
 }
 
 interface ActivatedAbilityDefBase {
-  id: string;
-  text: string;
-  costs: { kind: "tap-self" }[];
-  effects: EffectDef[];
+	id: string;
+	text: string;
+	costs: { kind: "tap-self" }[];
+	effects: EffectDef[];
 }
 
 export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
-  kind: "activated";
-  targets: TargetDef[];
+	kind: "activated";
+	targets: TargetDef[];
 }
 
 /** CR 605.1a mana abilities cannot require targets. */
 export interface ManaAbilityDef extends ActivatedAbilityDefBase {
-  kind: "mana";
+	kind: "mana";
 }
 
 /** Every ability definition possessed through an activated-ability reference. */
 export type AnyActivatedAbilityDef = ActivatedAbilityDef | ManaAbilityDef;
 
 export type CardDefManaCost =
-  | {
-      w?: number;
-      u?: number;
-      b?: number;
-      r?: number;
-      g?: number;
-      /** generic */
-      c?: number;
-    }
-  /**
-   * Some cards have zero mana cost.
-   *
-   * @example
-   * darksteel relic costs 0, and can be cast from hand like any
-   * other spell. It resolves via the stack.
-   */
-  | "zero"
-  /**
-   * Some cards have no mana cost.  These cannot be cast from hand.
-   *
-   * @example
-   * generic tokens have no mana cost, and their mana value is zero.
-   *
-   * @example
-   * crashing footfalls is a sorcery with no mana cost, and cannot be cast
-   * from the hand. it must be suspended, which later causes a triggered
-   * ability allowing it to be cast from exile.
-   *
-   * token copies of a card *do* have a mana cost, equal to that of the
-   * original card.
-   */
-  | "none";
+	| {
+			w?: number;
+			u?: number;
+			b?: number;
+			r?: number;
+			g?: number;
+			/** generic */
+			c?: number;
+	  }
+	/**
+	 * Some cards have zero mana cost.
+	 *
+	 * @example
+	 * darksteel relic costs 0, and can be cast from hand like any
+	 * other spell. It resolves via the stack.
+	 */
+	| "zero"
+	/**
+	 * Some cards have no mana cost.  These cannot be cast from hand.
+	 *
+	 * @example
+	 * generic tokens have no mana cost, and their mana value is zero.
+	 *
+	 * @example
+	 * crashing footfalls is a sorcery with no mana cost, and cannot be cast
+	 * from the hand. it must be suspended, which later causes a triggered
+	 * ability allowing it to be cast from exile.
+	 *
+	 * token copies of a card *do* have a mana cost, equal to that of the
+	 * original card.
+	 */
+	| "none";
 
 /**
  * Executable ability implementations owned by the registry.
@@ -1868,11 +1868,11 @@ export type CardDefManaCost =
  * actually has is {@link CardDef.printedAbilities}.
  */
 export interface AbilityDefinitions {
-  static: ContinuousEffect[];
-  activated: AnyActivatedAbilityDef[];
-  triggered: TriggerDef[];
-  replacement: ReplacementDef[];
-  prohibition: ProhibitionDef[];
+	static: ContinuousEffect[];
+	activated: AnyActivatedAbilityDef[];
+	triggered: TriggerDef[];
+	replacement: ReplacementDef[];
+	prohibition: ProhibitionDef[];
 }
 
 /**
@@ -1883,29 +1883,29 @@ export interface AbilityDefinitions {
 export type PrintedAbilities = AbilityReferences;
 
 interface CardDefBase {
-  id: string;
-  name: string;
-  supertypes?: Supertype[];
-  types: CardType[];
-  subtypes?: string[];
-  colors: Color[];
-  manaCost: CardDefManaCost;
-  power?: number;
-  toughness?: number;
-  keywords?: Keyword[];
-  /** Printed "enters tapped" — compiled into a replacement. */
-  entersTapped?: boolean;
-  /** Printed "enters with N counters" — also a replacement. */
-  entersWith?: CounterBag;
-  /** Canonical declarative spell definition, including targets. */
-  spell?: SpellAbilityDef;
+	id: string;
+	name: string;
+	supertypes?: Supertype[];
+	types: CardType[];
+	subtypes?: string[];
+	colors: Color[];
+	manaCost: CardDefManaCost;
+	power?: number;
+	toughness?: number;
+	keywords?: Keyword[];
+	/** Printed "enters tapped" — compiled into a replacement. */
+	entersTapped?: boolean;
+	/** Printed "enters with N counters" — also a replacement. */
+	entersWith?: CounterBag;
+	/** Canonical declarative spell definition, including targets. */
+	spell?: SpellAbilityDef;
 }
 
 export interface CardDef extends CardDefBase {
-  /** Registry-owned implementations. Not a statement of possession. */
-  abilityDefinitions: AbilityDefinitions;
-  /** Intrinsic possession, as `cardId:index` references. */
-  printedAbilities: PrintedAbilities;
+	/** Registry-owned implementations. Not a statement of possession. */
+	abilityDefinitions: AbilityDefinitions;
+	/** Intrinsic possession, as `cardId:index` references. */
+	printedAbilities: PrintedAbilities;
 }
 
 /**
@@ -1913,39 +1913,39 @@ export interface CardDef extends CardDefBase {
  * the card's definitions; by default the card prints all of them.
  */
 export interface CardDefInput extends CardDefBase {
-  statics?: ContinuousEffect[];
-  activatedAbilities?: AnyActivatedAbilityDef[];
-  triggers?: TriggerDef[];
-  replacements?: ReplacementDef[];
-  prohibitions?: ProhibitionDef[];
-  /**
-   * Which definition *indices* the card actually prints, per kind. Omit a kind
-   * to print all of its definitions (the normal case). Supply `[]` for a card
-   * that only hosts an implementation — e.g. an anthem whose layer-6 effect
-   * grants an ability the anthem itself doesn't have.
-   */
-  printed?: Partial<Record<AbilityCategory, readonly number[]>>;
+	statics?: ContinuousEffect[];
+	activatedAbilities?: AnyActivatedAbilityDef[];
+	triggers?: TriggerDef[];
+	replacements?: ReplacementDef[];
+	prohibitions?: ProhibitionDef[];
+	/**
+	 * Which definition *indices* the card actually prints, per kind. Omit a kind
+	 * to print all of its definitions (the normal case). Supply `[]` for a card
+	 * that only hosts an implementation — e.g. an anthem whose layer-6 effect
+	 * grants an ability the anthem itself doesn't have.
+	 */
+	printed?: Partial<Record<AbilityCategory, readonly number[]>>;
 }
 
 function printedRefsFor(
-  id: string,
-  definitions: AbilityDefinitions,
-  printed: CardDefInput["printed"],
+	id: string,
+	definitions: AbilityDefinitions,
+	printed: CardDefInput["printed"],
 ): PrintedAbilities {
-  const refs = {} as Record<AbilityCategory, string[]>;
-  for (const category of ABILITY_CATEGORIES) {
-    const count = definitions[category].length;
-    const indices =
-      printed?.[category] ?? definitions[category].map((_, i) => i);
-    refs[category] = indices.map((index) => {
-      assert(
-        Number.isSafeInteger(index) && index >= 0 && index < count,
-        `${id}: printed ${category} ability index ${index} has no definition`,
-      );
-      return abilityId(category, id, index);
-    });
-  }
-  return refs as PrintedAbilities;
+	const refs = {} as Record<AbilityCategory, string[]>;
+	for (const category of ABILITY_CATEGORIES) {
+		const count = definitions[category].length;
+		const indices =
+			printed?.[category] ?? definitions[category].map((_, i) => i);
+		refs[category] = indices.map((index) => {
+			assert(
+				Number.isSafeInteger(index) && index >= 0 && index < count,
+				`${id}: printed ${category} ability index ${index} has no definition`,
+			);
+			return abilityId(category, id, index);
+		});
+	}
+	return refs as PrintedAbilities;
 }
 
 /**
@@ -1964,44 +1964,44 @@ function printedRefsFor(
  * leaving when they apply, and they are self-scoped to the object entering.
  */
 function printedEntryReplacements(def: CardDefBase): ReplacementDef[] {
-  const out: ReplacementDef[] = [];
-  const entersSelf = (ev: GameEvent, ctx: EffectCtx): boolean =>
-    ev.kind === "change zone" &&
-    ev.to === "battlefield" &&
-    ctx.self !== null &&
-    ev.object === ctx.self.id;
+	const out: ReplacementDef[] = [];
+	const entersSelf = (ev: GameEvent, ctx: EffectCtx): boolean =>
+		ev.kind === "change zone" &&
+		ev.to === "battlefield" &&
+		ctx.self !== null &&
+		ev.object === ctx.self.id;
 
-  if (def.entersTapped) {
-    out.push({
-      label: `${def.id}:enters-tapped`,
-      text: `${def.name} enters tapped.`,
-      layer: "other",
-      functionsFrom: "any",
-      applies: (ev, ctx) =>
-        entersSelf(ev, ctx) && ev.kind === "change zone" && !ev.entersTapped,
-      replace: (ev) =>
-        ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
-    });
-  }
+	if (def.entersTapped) {
+		out.push({
+			label: `${def.id}:enters-tapped`,
+			text: `${def.name} enters tapped.`,
+			layer: "other",
+			functionsFrom: "any",
+			applies: (ev, ctx) =>
+				entersSelf(ev, ctx) && ev.kind === "change zone" && !ev.entersTapped,
+			replace: (ev) =>
+				ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
+		});
+	}
 
-  const entersWith = def.entersWith;
-  if (entersWith && Object.keys(entersWith).length > 0) {
-    out.push({
-      label: `${def.id}:enters-with`,
-      text: `${def.name} enters with counters.`,
-      layer: "other",
-      functionsFrom: "any",
-      applies: (ev, ctx) =>
-        entersSelf(ev, ctx) &&
-        ev.kind === "change zone" &&
-        ev.entersWithCounters === undefined,
-      replace: (ev) =>
-        ev.kind === "change zone"
-          ? [{ ...ev, entersWithCounters: { ...entersWith } }]
-          : [ev],
-    });
-  }
-  return out;
+	const entersWith = def.entersWith;
+	if (entersWith && Object.keys(entersWith).length > 0) {
+		out.push({
+			label: `${def.id}:enters-with`,
+			text: `${def.name} enters with counters.`,
+			layer: "other",
+			functionsFrom: "any",
+			applies: (ev, ctx) =>
+				entersSelf(ev, ctx) &&
+				ev.kind === "change zone" &&
+				ev.entersWithCounters === undefined,
+			replace: (ev) =>
+				ev.kind === "change zone"
+					? [{ ...ev, entersWithCounters: { ...entersWith } }]
+					: [ev],
+		});
+	}
+	return out;
 }
 
 /**
@@ -2010,42 +2010,42 @@ function printedEntryReplacements(def: CardDefBase): ReplacementDef[] {
  * with its definition object identities intact.
  */
 export function defineCard(input: CardDefInput | CardDef): CardDef {
-  if ("abilityDefinitions" in input) return input;
-  const {
-    statics,
-    activatedAbilities,
-    triggers,
-    replacements,
-    prohibitions,
-    printed,
-    ...base
-  } = input;
-  const abilityDefinitions: AbilityDefinitions = {
-    static: statics ?? [],
-    activated: activatedAbilities ?? [],
-    triggered: triggers ?? [],
-    replacement: [...(replacements ?? [])],
-    prohibition: prohibitions ?? [],
-  };
-  // Author-declared indices are resolved first so that an explicit `printed`
-  // list keeps meaning what it said; the entry shorthands are appended after,
-  // and are always printed.
-  const printedAbilities = printedRefsFor(
-    input.id,
-    abilityDefinitions,
-    printed,
-  );
-  for (const entry of printedEntryReplacements(input)) {
-    printedAbilities.replacement.push(
-      abilityId("replacement", input.id, abilityDefinitions.replacement.length),
-    );
-    abilityDefinitions.replacement.push(entry);
-  }
-  return {
-    ...base,
-    abilityDefinitions,
-    printedAbilities,
-  };
+	if ("abilityDefinitions" in input) return input;
+	const {
+		statics,
+		activatedAbilities,
+		triggers,
+		replacements,
+		prohibitions,
+		printed,
+		...base
+	} = input;
+	const abilityDefinitions: AbilityDefinitions = {
+		static: statics ?? [],
+		activated: activatedAbilities ?? [],
+		triggered: triggers ?? [],
+		replacement: [...(replacements ?? [])],
+		prohibition: prohibitions ?? [],
+	};
+	// Author-declared indices are resolved first so that an explicit `printed`
+	// list keeps meaning what it said; the entry shorthands are appended after,
+	// and are always printed.
+	const printedAbilities = printedRefsFor(
+		input.id,
+		abilityDefinitions,
+		printed,
+	);
+	for (const entry of printedEntryReplacements(input)) {
+		printedAbilities.replacement.push(
+			abilityId("replacement", input.id, abilityDefinitions.replacement.length),
+		);
+		abilityDefinitions.replacement.push(entry);
+	}
+	return {
+		...base,
+		abilityDefinitions,
+		printedAbilities,
+	};
 }
 
 /** Name used at the source/compiler boundary; identical to the engine CardDef. */
@@ -2059,15 +2059,15 @@ export type OracleCardDef = CardDef;
 const DB: Record<string, CardDef> = {};
 
 export function registerCard(input: CardDefInput | CardDef): CardDef {
-  const def = defineCard(input);
-  DB[def.id] = def;
-  return def;
+	const def = defineCard(input);
+	DB[def.id] = def;
+	return def;
 }
 
 function card(id: string): CardDef {
-  const def = DB[id];
-  if (!def) throw new Error(`unknown card: ${id}`);
-  return def;
+	const def = DB[id];
+	if (!def) throw new Error(`unknown card: ${id}`);
+	return def;
 }
 
 /* ------------------------------------------------------------------ *
@@ -2105,18 +2105,18 @@ type RngState = [a: number, b: number, c: number, d: number];
  * bitwise operators produce *signed* int32, and callers want 0..2^32-1.
  */
 function advanceRng(rng: RngState): number {
-  let [a, b, c, d] = rng;
-  const output = (((a + b) | 0) + d) | 0;
-  d = (d + 1) | 0; // the counter: the sole guarantor of the minimum period
-  a = b ^ (b >>> 9); // xorshift: folds b's high bits down into its low bits
-  b = (c + (c << 3)) | 0; // c * 9, cheaply: spreads low bits upward
-  c = (c << 21) | (c >>> 11); // barrel rotate: no bit is lost, unlike a shift
-  c = (c + output) | 0; // feed the output back so the three words stay coupled
-  rng[0] = a;
-  rng[1] = b;
-  rng[2] = c;
-  rng[3] = d;
-  return output >>> 0;
+	let [a, b, c, d] = rng;
+	const output = (((a + b) | 0) + d) | 0;
+	d = (d + 1) | 0; // the counter: the sole guarantor of the minimum period
+	a = b ^ (b >>> 9); // xorshift: folds b's high bits down into its low bits
+	b = (c + (c << 3)) | 0; // c * 9, cheaply: spreads low bits upward
+	c = (c << 21) | (c >>> 11); // barrel rotate: no bit is lost, unlike a shift
+	c = (c + output) | 0; // feed the output back so the three words stay coupled
+	rng[0] = a;
+	rng[1] = b;
+	rng[2] = c;
+	rng[3] = d;
+	return output >>> 0;
 }
 
 /**
@@ -2129,9 +2129,9 @@ function advanceRng(rng: RngState): number {
  * outputs — which would show up here as similar opening shuffles.
  */
 function seedRng(seed: number): RngState {
-  const rng: RngState = [0x9e3779b9, seed | 0, seed | 0, 1];
-  for (let round = 0; round < 15; round++) advanceRng(rng);
-  return rng;
+	const rng: RngState = [0x9e3779b9, seed | 0, seed | 0, 1];
+	for (let round = 0; round < 15; round++) advanceRng(rng);
+	return rng;
 }
 
 const RNG_RANGE = 0x100000000; // 2^32, the size of the generator's output space
@@ -2146,18 +2146,18 @@ const RNG_RANGE = 0x100000000; // 2^32, the size of the generator's output space
  * extra round on average.
  */
 function randomBelow(state: GameState, bound: number): number {
-  assert(
-    Number.isSafeInteger(bound) && bound > 0,
-    `random bound must be a positive integer, got ${bound}`,
-  );
-  const unbiasedLimit = Math.floor(RNG_RANGE / bound) * bound;
-  // A runaway guard, not a rules limit: for any plausible bound the loop
-  // exits on its first round with probability better than 1 - 1e-7.
-  for (let attempt = 0; attempt < 64; attempt++) {
-    const value = advanceRng(state.rngState);
-    if (value < unbiasedLimit) return value % bound;
-  }
-  throw new Error("rejection sampling failed to terminate");
+	assert(
+		Number.isSafeInteger(bound) && bound > 0,
+		`random bound must be a positive integer, got ${bound}`,
+	);
+	const unbiasedLimit = Math.floor(RNG_RANGE / bound) * bound;
+	// A runaway guard, not a rules limit: for any plausible bound the loop
+	// exits on its first round with probability better than 1 - 1e-7.
+	for (let attempt = 0; attempt < 64; attempt++) {
+		const value = advanceRng(state.rngState);
+		if (value < unbiasedLimit) return value % bound;
+	}
+	throw new Error("rejection sampling failed to terminate");
 }
 
 /**
@@ -2169,18 +2169,18 @@ function randomBelow(state: GameState, bound: number): number {
  * convention matters to anything that inspects the result.
  */
 function shuffleLibrary(state: GameState, player: PlayerId): void {
-  const library = state.players[player].library;
-  for (let i = library.length - 1; i > 0; i--) {
-    const j = randomBelow(state, i + 1);
-    const chosen = library[j];
-    const displaced = library[i];
-    assertDefined(chosen, "shuffle read past the end of the library");
-    assertDefined(displaced, "shuffle read past the end of the library");
-    library[i] = chosen;
-    library[j] = displaced;
-  }
-  state.revision++;
-  log(state, `  P${player} shuffles their library`);
+	const library = state.players[player].library;
+	for (let i = library.length - 1; i > 0; i--) {
+		const j = randomBelow(state, i + 1);
+		const chosen = library[j];
+		const displaced = library[i];
+		assertDefined(chosen, "shuffle read past the end of the library");
+		assertDefined(displaced, "shuffle read past the end of the library");
+		library[i] = chosen;
+		library[j] = displaced;
+	}
+	state.revision++;
+	log(state, `  P${player} shuffles their library`);
 }
 
 /* ------------------------------------------------------------------ *
@@ -2188,34 +2188,34 @@ function shuffleLibrary(state: GameState, player: PlayerId): void {
  * ------------------------------------------------------------------ */
 
 const newPlayerState = (id: PlayerId): PlayerState => ({
-  id,
-  life: 20,
-  library: [],
-  hand: [],
-  graveyard: [],
-  exile: [],
-  drawnInDrawStep: 0,
-  drewFromEmptyLibrary: false,
-  manaPool: { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 },
-  landsPlayed: 0,
-  lost: false,
-  won: false,
-  counters: {},
+	id,
+	life: 20,
+	library: [],
+	hand: [],
+	graveyard: [],
+	exile: [],
+	drawnInDrawStep: 0,
+	drewFromEmptyLibrary: false,
+	manaPool: { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 },
+	landsPlayed: 0,
+	lost: false,
+	won: false,
+	counters: {},
 });
 
 function emptyManaPools(state: GameState): void {
-  let changed = false;
-  for (const player of state.players) {
-    for (const type of MANA_TYPES) {
-      if (player.manaPool[type] === 0) continue;
-      player.manaPool[type] = 0;
-      changed = true;
-    }
-  }
-  if (changed) {
-    state.revision++;
-    log(state, "  mana pools empty");
-  }
+	let changed = false;
+	for (const player of state.players) {
+		for (const type of MANA_TYPES) {
+			if (player.manaPool[type] === 0) continue;
+			player.manaPool[type] = 0;
+			changed = true;
+		}
+	}
+	if (changed) {
+		state.revision++;
+		log(state, "  mana pools empty");
+	}
 }
 
 /**
@@ -2227,31 +2227,31 @@ function emptyManaPools(state: GameState): void {
  * Callers that want a different game each run pass their own seed.
  */
 export function newGame(seed = 0): GameState {
-  return {
-    revision: 0,
-    objects: new Map(),
-    players: [newPlayerState(0), newPlayerState(1)],
-    battlefield: [],
-    stack: [],
-    pendingTriggers: [],
-    floating: [],
-    blockAssignments: [],
-    completedTurns: 0,
-    turnScheduler: {
-      command: { kind: "advancePreGameStep" },
-      progress: { kind: "notStarted" },
-      pendingTurns: [],
-      nextRegularPlayer: 0 as PlayerId,
-      remainingSteps: [],
-      remainingPregameSteps: [...PRE_GAME_STEPS],
-      nextId: 0,
-    },
-    nextObjectId: 0,
-    nextStackItemId: 0,
-    nextTag: 0,
-    log: [],
-    rngState: seedRng(seed),
-  };
+	return {
+		revision: 0,
+		objects: new Map(),
+		players: [newPlayerState(0), newPlayerState(1)],
+		battlefield: [],
+		stack: [],
+		pendingTriggers: [],
+		floating: [],
+		blockAssignments: [],
+		completedTurns: 0,
+		turnScheduler: {
+			command: { kind: "advancePreGameStep" },
+			progress: { kind: "notStarted" },
+			pendingTurns: [],
+			nextRegularPlayer: 0 as PlayerId,
+			remainingSteps: [],
+			remainingPregameSteps: [...PRE_GAME_STEPS],
+			nextId: 0,
+		},
+		nextObjectId: 0,
+		nextStackItemId: 0,
+		nextTag: 0,
+		log: [],
+		rngState: seedRng(seed),
+	};
 }
 
 /* ------------------------------------------------------------------ *
@@ -2259,97 +2259,97 @@ export function newGame(seed = 0): GameState {
  * ------------------------------------------------------------------ */
 
 function _defaultVisibility(
-  zone: Zone,
-  to: PlayerId,
-  owner: PlayerId,
+	zone: Zone,
+	to: PlayerId,
+	owner: PlayerId,
 ): boolean {
-  switch (zone) {
-    case "stack":
-    case "battlefield":
-    case "graveyard":
-    case "exile":
-      return true;
-    case "hand":
-      return to === owner;
-    case "library":
-      return false;
-    default:
-      assertNever(zone);
-  }
+	switch (zone) {
+		case "stack":
+		case "battlefield":
+		case "graveyard":
+		case "exile":
+			return true;
+		case "hand":
+			return to === owner;
+		case "library":
+			return false;
+		default:
+			assertNever(zone);
+	}
 }
 
 export function spawnCard(
-  state: GameState,
-  cardId: string,
-  owner: PlayerId,
-  zone: "library" | "hand" | "graveyard" | "exile",
+	state: GameState,
+	cardId: string,
+	owner: PlayerId,
+	zone: "library" | "hand" | "graveyard" | "exile",
 ): CardObject {
-  const obj: CardObject = {
-    kind: "card",
-    id: state.nextObjectId++ as ObjectId,
-    cardId,
-    owner,
+	const obj: CardObject = {
+		kind: "card",
+		id: state.nextObjectId++ as ObjectId,
+		cardId,
+		owner,
 
-    zone,
-    effectData: {},
-  };
-  state.objects.set(obj.id, obj);
-  mutableZoneList(state, zone, owner).push(obj.id);
-  state.revision++;
-  return obj;
+		zone,
+		effectData: {},
+	};
+	state.objects.set(obj.id, obj);
+	mutableZoneList(state, zone, owner).push(obj.id);
+	state.revision++;
+	return obj;
 }
 
 function spawnOnBattlefield(
-  state: GameState,
-  owner: PlayerId,
-  representation: PermanentObject["representation"],
-  opts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
+	state: GameState,
+	owner: PlayerId,
+	representation: PermanentObject["representation"],
+	opts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
 ): PermanentObject {
-  const obj: PermanentObject = {
-    kind: "permanent",
-    representation,
-    zone: "battlefield",
-    id: state.nextObjectId++ as ObjectId,
+	const obj: PermanentObject = {
+		kind: "permanent",
+		representation,
+		zone: "battlefield",
+		id: state.nextObjectId++ as ObjectId,
 
-    owner,
-    controller: owner,
+		owner,
+		controller: owner,
 
-    tapped: opts.tapped ?? false,
-    counters: { ...opts.counters },
-    effectData: {},
-    damage: 0,
-    attacking: false,
-    blocking: false,
-    token: opts.token ?? representation.kind === "token",
-    attributes: {},
-  };
-  state.objects.set(obj.id, obj);
-  mutableZoneList(state, "battlefield", owner).push(obj.id);
-  state.revision++;
-  return obj;
+		tapped: opts.tapped ?? false,
+		counters: { ...opts.counters },
+		effectData: {},
+		damage: 0,
+		attacking: false,
+		blocking: false,
+		token: opts.token ?? representation.kind === "token",
+		attributes: {},
+	};
+	state.objects.set(obj.id, obj);
+	mutableZoneList(state, "battlefield", owner).push(obj.id);
+	state.revision++;
+	return obj;
 }
 
 export function spawnPermanent(
-  state: GameState,
-  cardId: string,
-  owner: PlayerId,
-  opts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
+	state: GameState,
+	cardId: string,
+	owner: PlayerId,
+	opts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
 ): PermanentObject {
-  const representation: PermanentObject["representation"] = opts.token
-    ? { kind: "token", createdValues: characteristicsFromCardDef(card(cardId)) }
-    : { kind: "card", cardId };
-  return spawnOnBattlefield(state, owner, representation, opts);
+	const representation: PermanentObject["representation"] = opts.token
+		? { kind: "token", createdValues: characteristicsFromCardDef(card(cardId)) }
+		: { kind: "card", cardId };
+	return spawnOnBattlefield(state, owner, representation, opts);
 }
 
 export function spawnToken(
-  state: GameState,
-  owner: PlayerId,
-  attributes: CharacteristicsSnapshot,
+	state: GameState,
+	owner: PlayerId,
+	attributes: CharacteristicsSnapshot,
 ): PermanentObject {
-  return spawnOnBattlefield(state, owner, {
-    kind: "token",
-    createdValues: attributes,
-  });
+	return spawnOnBattlefield(state, owner, {
+		kind: "token",
+		createdValues: attributes,
+	});
 }
 
 /* ------------------------------------------------------------------ *
@@ -2358,178 +2358,178 @@ export function spawnToken(
 
 export function permanent(state: GameState, id: ObjectId): PermanentObject;
 export function permanent(
-  state: ReadonlyGameState,
-  id: ObjectId,
+	state: ReadonlyGameState,
+	id: ObjectId,
 ): DeepReadOnly<PermanentObject>;
 export function permanent(
-  state: ReadonlyGameState,
-  id: ObjectId,
+	state: ReadonlyGameState,
+	id: ObjectId,
 ): DeepReadOnly<PermanentObject> {
-  const o = maybeObject(state, id);
-  if (!o) throw new Error(`no object ${id}`);
-  assert(o.kind === "permanent");
-  return o;
+	const o = maybeObject(state, id);
+	if (!o) throw new Error(`no object ${id}`);
+	assert(o.kind === "permanent");
+	return o;
 }
 
 export function maybePermanent(
-  state: GameState,
-  id: ObjectId,
+	state: GameState,
+	id: ObjectId,
 ): PermanentObject | null;
 export function maybePermanent(
-  state: ReadonlyGameState,
-  id: ObjectId,
+	state: ReadonlyGameState,
+	id: ObjectId,
 ): DeepReadOnly<PermanentObject> | null;
 export function maybePermanent(
-  state: ReadonlyGameState,
-  id: ObjectId,
+	state: ReadonlyGameState,
+	id: ObjectId,
 ): DeepReadOnly<PermanentObject> | null {
-  const o = maybeObject(state, id);
-  if (!o) return null;
-  assert(o.kind === "permanent");
-  return o;
+	const o = maybeObject(state, id);
+	if (!o) return null;
+	assert(o.kind === "permanent");
+	return o;
 }
 
 export function maybeObject(state: GameState, id: ObjectId): GameObject | null;
 export function maybeObject(
-  state: ReadonlyGameState,
-  id: ObjectId,
+	state: ReadonlyGameState,
+	id: ObjectId,
 ): DeepReadOnly<GameObject> | null;
 export function maybeObject(
-  state: ReadonlyGameState,
-  id: ObjectId,
+	state: ReadonlyGameState,
+	id: ObjectId,
 ): DeepReadOnly<GameObject> | null {
-  return state.objects.get(id) ?? null;
+	return state.objects.get(id) ?? null;
 }
 
 /** The physical card represented by an object, unaffected by copy effects. */
 export function physicalCardId(
-  object: DeepReadOnly<GameObject>,
+	object: DeepReadOnly<GameObject>,
 ): string | null {
-  switch (object.kind) {
-    case "card":
-      return object.cardId;
-    case "spell":
-      return object.representation.kind === "card"
-        ? object.representation.cardId
-        : null;
-    case "permanent":
-      return object.representation.kind === "card"
-        ? object.representation.cardId
-        : null;
-    case "nonbattlefield-token":
-      return null;
-    default:
-      return assertNever(object);
-  }
+	switch (object.kind) {
+		case "card":
+			return object.cardId;
+		case "spell":
+			return object.representation.kind === "card"
+				? object.representation.cardId
+				: null;
+		case "permanent":
+			return object.representation.kind === "card"
+				? object.representation.cardId
+				: null;
+		case "nonbattlefield-token":
+			return null;
+		default:
+			return assertNever(object);
+	}
 }
 
 export function controllerOf(
-  object: DeepReadOnly<GameObject>,
+	object: DeepReadOnly<GameObject>,
 ): PlayerId | null {
-  return object.kind === "spell" || object.kind === "permanent"
-    ? object.controller
-    : null;
+	return object.kind === "spell" || object.kind === "permanent"
+		? object.controller
+		: null;
 }
 
 export function isTokenObject(
-  object: DeepReadOnly<GameObject>,
+	object: DeepReadOnly<GameObject>,
 ): object is DeepReadOnly<
-  | NonbattlefieldTokenObject
-  | (PermanentObject & {
-      representation: { kind: "token"; createdValues: CharacteristicsSnapshot };
-    })
+	| NonbattlefieldTokenObject
+	| (PermanentObject & {
+			representation: { kind: "token"; createdValues: CharacteristicsSnapshot };
+	  })
 > {
-  return (
-    object.kind === "nonbattlefield-token" ||
-    (object.kind === "permanent" && object.representation.kind === "token")
-  );
+	return (
+		object.kind === "nonbattlefield-token" ||
+		(object.kind === "permanent" && object.representation.kind === "token")
+	);
 }
 
 function creaturesControlledBy(
-  read: ReadContext,
-  player: PlayerId,
+	read: ReadContext,
+	player: PlayerId,
 ): DeepReadOnly<PermanentObject>[] {
-  return read.state.battlefield.flatMap((id) => {
-    const object = read.state.objects.get(id);
-    const snapshot = read.view.objects.get(id);
-    return object?.kind === "permanent" &&
-      object.controller === player &&
-      snapshot?.kind === "permanent" &&
-      snapshot.currentCharacteristics.types.includes("creature")
-      ? [object]
-      : [];
-  });
+	return read.state.battlefield.flatMap((id) => {
+		const object = read.state.objects.get(id);
+		const snapshot = read.view.objects.get(id);
+		return object?.kind === "permanent" &&
+			object.controller === player &&
+			snapshot?.kind === "permanent" &&
+			snapshot.currentCharacteristics.types.includes("creature")
+			? [object]
+			: [];
+	});
 }
 
 function stackObjectIds(state: ReadonlyGameState): ObjectId[] {
-  return state.stack.flatMap((entry) =>
-    entry.kind === "spell" ? [entry.objectId] : [],
-  );
+	return state.stack.flatMap((entry) =>
+		entry.kind === "spell" ? [entry.objectId] : [],
+	);
 }
 
 export function zoneList(
-  state: ReadonlyGameState,
-  zone: Zone,
-  owner: PlayerId | "any",
+	state: ReadonlyGameState,
+	zone: Zone,
+	owner: PlayerId | "any",
 ): readonly ObjectId[] {
-  if (
-    owner === "any" &&
-    (zone === "library" ||
-      zone === "hand" ||
-      zone === "graveyard" ||
-      zone === "exile")
-  ) {
-    return [...state.players[0][zone], ...state.players[1][zone]];
-  }
-  switch (zone) {
-    case "battlefield":
-      return state.battlefield;
-    case "stack":
-      return stackObjectIds(state);
-    case "library":
-      assert(owner !== "any");
-      return state.players[owner].library;
-    case "hand":
-      assert(owner !== "any");
+	if (
+		owner === "any" &&
+		(zone === "library" ||
+			zone === "hand" ||
+			zone === "graveyard" ||
+			zone === "exile")
+	) {
+		return [...state.players[0][zone], ...state.players[1][zone]];
+	}
+	switch (zone) {
+		case "battlefield":
+			return state.battlefield;
+		case "stack":
+			return stackObjectIds(state);
+		case "library":
+			assert(owner !== "any");
+			return state.players[owner].library;
+		case "hand":
+			assert(owner !== "any");
 
-      return state.players[owner].hand;
-    case "graveyard":
-      assert(owner !== "any");
+			return state.players[owner].hand;
+		case "graveyard":
+			assert(owner !== "any");
 
-      return state.players[owner].graveyard;
-    case "exile":
-      assert(owner !== "any");
+			return state.players[owner].graveyard;
+		case "exile":
+			assert(owner !== "any");
 
-      return state.players[owner].exile;
-  }
+			return state.players[owner].exile;
+	}
 }
 
 function mutableZoneList(
-  state: GameState,
-  zone: Exclude<Zone, "stack">,
-  owner: PlayerId,
+	state: GameState,
+	zone: Exclude<Zone, "stack">,
+	owner: PlayerId,
 ): ObjectId[] {
-  switch (zone) {
-    case "battlefield":
-      return state.battlefield;
-    case "library":
-    case "hand":
-    case "graveyard":
-    case "exile":
-      return state.players[owner][zone];
-    default:
-      return assertNever(zone);
-  }
+	switch (zone) {
+		case "battlefield":
+			return state.battlefield;
+		case "library":
+		case "hand":
+		case "graveyard":
+		case "exile":
+			return state.players[owner][zone];
+		default:
+			return assertNever(zone);
+	}
 }
 
 export function permanentsInPlay(state: GameState): PermanentObject[];
 export function permanentsInPlay(
-  state: ReadonlyGameState,
+	state: ReadonlyGameState,
 ): DeepReadOnly<PermanentObject>[];
 export function permanentsInPlay(
-  state: ReadonlyGameState,
+	state: ReadonlyGameState,
 ): DeepReadOnly<PermanentObject>[] {
-  return state.battlefield.map((id) => permanent(state, id));
+	return state.battlefield.map((id) => permanent(state, id));
 }
 
 /**
@@ -2540,30 +2540,30 @@ export function permanentsInPlay(
  * Battlefield order is preserved.
  */
 export function eligibleAttackers(
-  state: ReadonlyGameState,
-  player: PlayerId,
+	state: ReadonlyGameState,
+	player: PlayerId,
 ): ObjectId[] {
-  const read = createReadContext(state);
-  return state.battlefield.filter((id) => {
-    const object = state.objects.get(id);
-    const snapshot = read.view.objects.get(id);
-    return (
-      object?.kind === "permanent" &&
-      object.controller === player &&
-      !object.tapped &&
-      snapshot?.kind === "permanent" &&
-      snapshot.currentCharacteristics.types.includes("creature")
-    );
-  });
+	const read = createReadContext(state);
+	return state.battlefield.filter((id) => {
+		const object = state.objects.get(id);
+		const snapshot = read.view.objects.get(id);
+		return (
+			object?.kind === "permanent" &&
+			object.controller === player &&
+			!object.tapped &&
+			snapshot?.kind === "permanent" &&
+			snapshot.currentCharacteristics.types.includes("creature")
+		);
+	});
 }
 
 /** Thrown when a "declare attackers" event fails validation. Nothing is
  * mutated: the whole event is rejected atomically. */
 export class IllegalAttackDeclarationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "IllegalAttackDeclarationError";
-  }
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalAttackDeclarationError";
+	}
 }
 
 /**
@@ -2573,60 +2573,60 @@ export class IllegalAttackDeclarationError extends Error {
  * Battlefield order is preserved.
  */
 export function eligibleBlockers(
-  state: ReadonlyGameState,
-  player: PlayerId,
+	state: ReadonlyGameState,
+	player: PlayerId,
 ): ObjectId[] {
-  const read = createReadContext(state);
-  return state.battlefield.filter((id) => {
-    const object = state.objects.get(id);
-    const snapshot = read.view.objects.get(id);
-    return (
-      object?.kind === "permanent" &&
-      object.controller === player &&
-      !object.tapped &&
-      snapshot?.kind === "permanent" &&
-      snapshot.currentCharacteristics.types.includes("creature")
-    );
-  });
+	const read = createReadContext(state);
+	return state.battlefield.filter((id) => {
+		const object = state.objects.get(id);
+		const snapshot = read.view.objects.get(id);
+		return (
+			object?.kind === "permanent" &&
+			object.controller === player &&
+			!object.tapped &&
+			snapshot?.kind === "permanent" &&
+			snapshot.currentCharacteristics.types.includes("creature")
+		);
+	});
 }
 
 /** Thrown when a "declare blockers" event fails validation. Nothing is
  * mutated: the whole event is rejected atomically. */
 export class IllegalBlockDeclarationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "IllegalBlockDeclarationError";
-  }
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalBlockDeclarationError";
+	}
 }
 
 export class IllegalLandPlayError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "IllegalLandPlayError";
-  }
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalLandPlayError";
+	}
 }
 
 export class IllegalAbilityActivationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "IllegalAbilityActivationError";
-  }
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalAbilityActivationError";
+	}
 }
 
 export class IllegalCastError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "IllegalCastError";
-  }
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalCastError";
+	}
 }
 
 export function log(state: GameState, line: string): void {
-  state.log.push(line);
+	state.log.push(line);
 }
 
 export function name(state: ReadonlyGameState, id: ObjectId): string {
-  const object = maybeObject(state, id);
-  return object ? initialCharacteristics(object).name : `<gone#${id}>`;
+	const object = maybeObject(state, id);
+	return object ? initialCharacteristics(object).name : `<gone#${id}>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -2644,55 +2644,55 @@ export function name(state: ReadonlyGameState, id: ObjectId): string {
  * absence of dependencies does not make arbitrary ordering correct.
  */
 export interface ContinuousEffect {
-  text: string;
-  layer: ContinuousEffectLayer;
-  /**
-   * Where the *source* must be for this effect to exist at all.
-   *
-   * @default ['battlefield']
-   */
-  functionsFrom?: ZoneScope;
-  /**
-   * Which objects this effect may modify. `applies()` still filters within
-   * this set; this only bounds which objects are offered to it. Independent of
-   * `functionsFrom`: a graveyard-sourced anthem functions from the graveyard
-   * but affects the battlefield.
-   *
-   * @default ['battlefield']
-   */
-  affects?: ZoneScope;
+	text: string;
+	layer: ContinuousEffectLayer;
+	/**
+	 * Where the *source* must be for this effect to exist at all.
+	 *
+	 * @default ['battlefield']
+	 */
+	functionsFrom?: ZoneScope;
+	/**
+	 * Which objects this effect may modify. `applies()` still filters within
+	 * this set; this only bounds which objects are offered to it. Independent of
+	 * `functionsFrom`: a graveyard-sourced anthem functions from the graveyard
+	 * but affects the battlefield.
+	 *
+	 * @default ['battlefield']
+	 */
+	affects?: ZoneScope;
 
-  /** `source` is the concrete object granting the effect. */
-  applies(
-    view: PermanentView,
-    state: ReadonlyGameState,
-    source: DeepReadOnly<GameObject>,
-  ): boolean;
-  modify(
-    view: CharacteristicsSnapshot,
-    state: ReadonlyGameState,
-    source: DeepReadOnly<GameObject>,
-  ): void;
+	/** `source` is the concrete object granting the effect. */
+	applies(
+		view: PermanentView,
+		state: ReadonlyGameState,
+		source: DeepReadOnly<GameObject>,
+	): boolean;
+	modify(
+		view: CharacteristicsSnapshot,
+		state: ReadonlyGameState,
+		source: DeepReadOnly<GameObject>,
+	): void;
 }
 
 interface EvaluationContext {
-  state: GameState;
+	state: GameState;
 }
 
 interface ContinuousEffectInstance {
-  id: EffectId;
-  source: ObjectId | null;
-  // timestamp: Timestamp;
+	id: EffectId;
+	source: ObjectId | null;
+	// timestamp: Timestamp;
 
-  parts: ContinuousEffectPart[];
+	parts: ContinuousEffectPart[];
 }
 
 interface ContinuousEffectPart {
-  layer: ContinuousEffectLayer;
+	layer: ContinuousEffectLayer;
 
-  appliesTo(subject: ObjectId, ctx: EvaluationContext): boolean;
+	appliesTo(subject: ObjectId, ctx: EvaluationContext): boolean;
 
-  apply(subject: ObjectId, ctx: EvaluationContext): void;
+	apply(subject: ObjectId, ctx: EvaluationContext): void;
 }
 /**
  * 613. Interaction of Continuous Effects
@@ -2704,52 +2704,52 @@ interface ContinuousEffectPart {
  * series of layers in the following order:
  */
 export const CONTINUOUS_EFFECT_LAYERS = [
-  /**
-   * 613.1a.
-   * Layer 1: Rules and effects that modify copiable values are applied.
-   * after applying layer 1, the object's "copyable characteristics" are
-   * finalized.
-   *
-   */
-  "1a-copiable-values",
-  // "1b-facedown-characteristics",
-  //
-  /**
-   * 613.1b.
-   * Layer 2: Control-changing effects are applied.
-   */
-  "2-control-changing",
-  /**
-   * 613.1c.
-   * Layer 3: Text-changing effects are applied.
-   * See rule 612, "Text-Changing Effects."
-   */
-  "3-text-changing",
-  /**
-   * 613.1d.
-   * Layer 4: Type-changing effects are applied.
-   * These include effects that change an object's card type, subtype,
-   * and/or supertype.
-   */
-  "4-type-changing",
-  /**
-   * 613.1e.
-   * Layer 5: Color-changing effects are applied.
-   */
-  "5-color-changing",
-  /**
-   * 613.1f.
-   * Layer 6: Ability-adding effects, keyword counters, ability-removing
-   * effects, and effects that say an object can't have an ability are applied.
-   */
-  "6-ability-changing",
+	/**
+	 * 613.1a.
+	 * Layer 1: Rules and effects that modify copiable values are applied.
+	 * after applying layer 1, the object's "copyable characteristics" are
+	 * finalized.
+	 *
+	 */
+	"1a-copiable-values",
+	// "1b-facedown-characteristics",
+	//
+	/**
+	 * 613.1b.
+	 * Layer 2: Control-changing effects are applied.
+	 */
+	"2-control-changing",
+	/**
+	 * 613.1c.
+	 * Layer 3: Text-changing effects are applied.
+	 * See rule 612, "Text-Changing Effects."
+	 */
+	"3-text-changing",
+	/**
+	 * 613.1d.
+	 * Layer 4: Type-changing effects are applied.
+	 * These include effects that change an object's card type, subtype,
+	 * and/or supertype.
+	 */
+	"4-type-changing",
+	/**
+	 * 613.1e.
+	 * Layer 5: Color-changing effects are applied.
+	 */
+	"5-color-changing",
+	/**
+	 * 613.1f.
+	 * Layer 6: Ability-adding effects, keyword counters, ability-removing
+	 * effects, and effects that say an object can't have an ability are applied.
+	 */
+	"6-ability-changing",
 
-  /**  613.1g. Layer 7: Power- and/or toughness-changing effects are applied. */
+	/**  613.1g. Layer 7: Power- and/or toughness-changing effects are applied. */
 
-  "7a-power-toughness-defining",
-  "7b-set-specific-power-toughness",
-  "7c-modify-power-toughness",
-  "7d-swap-power-toughness",
+	"7a-power-toughness-defining",
+	"7b-set-specific-power-toughness",
+	"7c-modify-power-toughness",
+	"7d-swap-power-toughness",
 ] as const;
 export type ContinuousEffectLayer = (typeof CONTINUOUS_EFFECT_LAYERS)[number];
 
@@ -2760,230 +2760,230 @@ export type ContinuousEffectLayer = (typeof CONTINUOUS_EFFECT_LAYERS)[number];
  * a card that Mycosynth Lattice has turned into an artifact.
  */
 export function etbPreview(
-  state: ReadonlyGameState,
-  ev: ZoneChangeEvent,
+	state: ReadonlyGameState,
+	ev: ZoneChangeEvent,
 ): PermanentView {
-  const source = maybeObject(state, ev.object);
-  assertDefined(source);
-  // Clone only mutable state containers; card definitions contain callbacks and
-  // therefore cannot pass through structuredClone.
-  const preview: GameState = {
-    ...(state as GameState),
-    objects: new Map(
-      [...state.objects].map(([id, object]) => [
-        id,
-        structuredClone(object) as GameObject,
-      ]),
-    ),
-    players: state.players.map((player) => ({
-      ...player,
-      library: [...player.library],
-      hand: [...player.hand],
-      graveyard: [...player.graveyard],
-      exile: [...player.exile],
-      counters: { ...player.counters },
-      manaPool: { ...player.manaPool },
-    })) as [PlayerState, PlayerState],
-    battlefield: [...state.battlefield],
-    stack: structuredClone(state.stack) as StackEntry[],
-    pendingTriggers: state.pendingTriggers.map(
-      (trigger) => structuredClone(trigger) as PendingTrigger,
-    ),
-    floating: [...state.floating] as FloatingEffect[],
-    log: [],
-  };
-  moveObject(preview, ev.object, ev.from, "battlefield", {
-    toController: ev.toController,
-    tapped: ev.entersTapped,
-    counters: ev.entersWithCounters,
-    copiableOverride: ev.copiableOverride,
-  });
-  const id = preview.battlefield[preview.battlefield.length - 1];
-  assertDefined(id);
-  const snapshot = readObject(createReadContext(preview), id);
-  assert(snapshot.kind === "permanent");
-  return flattenSnapshot(snapshot);
+	const source = maybeObject(state, ev.object);
+	assertDefined(source);
+	// Clone only mutable state containers; card definitions contain callbacks and
+	// therefore cannot pass through structuredClone.
+	const preview: GameState = {
+		...(state as GameState),
+		objects: new Map(
+			[...state.objects].map(([id, object]) => [
+				id,
+				structuredClone(object) as GameObject,
+			]),
+		),
+		players: state.players.map((player) => ({
+			...player,
+			library: [...player.library],
+			hand: [...player.hand],
+			graveyard: [...player.graveyard],
+			exile: [...player.exile],
+			counters: { ...player.counters },
+			manaPool: { ...player.manaPool },
+		})) as [PlayerState, PlayerState],
+		battlefield: [...state.battlefield],
+		stack: structuredClone(state.stack) as StackEntry[],
+		pendingTriggers: state.pendingTriggers.map(
+			(trigger) => structuredClone(trigger) as PendingTrigger,
+		),
+		floating: [...state.floating] as FloatingEffect[],
+		log: [],
+	};
+	moveObject(preview, ev.object, ev.from, "battlefield", {
+		toController: ev.toController,
+		tapped: ev.entersTapped,
+		counters: ev.entersWithCounters,
+		copiableOverride: ev.copiableOverride,
+	});
+	const id = preview.battlefield[preview.battlefield.length - 1];
+	assertDefined(id);
+	const snapshot = readObject(createReadContext(preview), id);
+	assert(snapshot.kind === "permanent");
+	return flattenSnapshot(snapshot);
 }
 
 const GAME_VIEW_CACHE = new WeakMap<
-  object,
-  { revision: number; view: GameView }
+	object,
+	{ revision: number; view: GameView }
 >();
 
 function cachedGameView(state: ReadonlyGameState, revision: number): GameView {
-  const cached = GAME_VIEW_CACHE.get(state);
-  if (cached?.revision === revision) return cached.view;
-  const view = buildGameView(state);
-  GAME_VIEW_CACHE.set(state, { revision, view });
-  return view;
+	const cached = GAME_VIEW_CACHE.get(state);
+	if (cached?.revision === revision) return cached.view;
+	const view = buildGameView(state);
+	GAME_VIEW_CACHE.set(state, { revision, view });
+	return view;
 }
 
 export function createReadContext(state: ReadonlyGameState): ReadContext {
-  let derived: GameView | undefined;
-  const revision = state.revision;
-  return {
-    state,
-    revision,
-    get view() {
-      if (state.revision !== revision)
-        throw new Error("attempted to use a stale ReadContext");
-      if (!derived) derived = cachedGameView(state, revision);
-      return derived;
-    },
-  };
+	let derived: GameView | undefined;
+	const revision = state.revision;
+	return {
+		state,
+		revision,
+		get view() {
+			if (state.revision !== revision)
+				throw new Error("attempted to use a stale ReadContext");
+			if (!derived) derived = cachedGameView(state, revision);
+			return derived;
+		},
+	};
 }
 
 export function readObject(
-  read: ReadContext,
-  id: ObjectId,
+	read: ReadContext,
+	id: ObjectId,
 ): GameObjectSnapshot {
-  if (read.state.revision !== read.revision)
-    throw new Error("attempted to use a stale ReadContext");
-  const snapshot = read.view.objects.get(id);
-  if (!snapshot) throw new Error(`no derived view for object ${id}`);
-  return snapshot;
+	if (read.state.revision !== read.revision)
+		throw new Error("attempted to use a stale ReadContext");
+	const snapshot = read.view.objects.get(id);
+	if (!snapshot) throw new Error(`no derived view for object ${id}`);
+	return snapshot;
 }
 
 const PLAYER_VIEW_CACHE = new WeakMap<
-  object,
-  {
-    revision: number;
-    views: [PlayerView | undefined, PlayerView | undefined];
-  }
+	object,
+	{
+		revision: number;
+		views: [PlayerView | undefined, PlayerView | undefined];
+	}
 >();
 
 const PLAYER_GAME_VIEW_CACHE = new WeakMap<
-  object,
-  { revision: number; view: GameView }
+	object,
+	{ revision: number; view: GameView }
 >();
 
 function cachedPlayerGameView(
-  state: ReadonlyGameState,
-  revision: number,
+	state: ReadonlyGameState,
+	revision: number,
 ): GameView {
-  const complete = GAME_VIEW_CACHE.get(state);
-  if (complete?.revision === revision) return complete.view;
-  const cached = PLAYER_GAME_VIEW_CACHE.get(state);
-  if (cached?.revision === revision) return cached.view;
+	const complete = GAME_VIEW_CACHE.get(state);
+	if (complete?.revision === revision) return complete.view;
+	const cached = PLAYER_GAME_VIEW_CACHE.get(state);
+	if (cached?.revision === revision) return cached.view;
 
-  // Libraries expose counts only, so deriving snapshots for every card there
-  // would add substantial work to each agent decision without adding data.
-  const visibleObjects = new Set<ObjectId>();
-  for (const object of state.objects.values()) {
-    if (object.zone !== "library") visibleObjects.add(object.id);
-  }
-  const view = buildFilteredGameView(state, visibleObjects);
-  PLAYER_GAME_VIEW_CACHE.set(state, { revision, view });
-  return view;
+	// Libraries expose counts only, so deriving snapshots for every card there
+	// would add substantial work to each agent decision without adding data.
+	const visibleObjects = new Set<ObjectId>();
+	for (const object of state.objects.values()) {
+		if (object.zone !== "library") visibleObjects.add(object.id);
+	}
+	const view = buildFilteredGameView(state, visibleObjects);
+	PLAYER_GAME_VIEW_CACHE.set(state, { revision, view });
+	return view;
 }
 
 function deepFreeze<T>(value: T): DeepReadOnly<T> {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
-    return value as DeepReadOnly<T>;
-  }
-  for (const nested of Object.values(value)) deepFreeze(nested);
-  return Object.freeze(value) as DeepReadOnly<T>;
+	if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
+		return value as DeepReadOnly<T>;
+	}
+	for (const nested of Object.values(value)) deepFreeze(nested);
+	return Object.freeze(value) as DeepReadOnly<T>;
 }
 
 /** Build a detached player-specific projection from one stable read window. */
 export function buildPlayerView(
-  state: ReadonlyGameState,
-  viewer: PlayerId,
+	state: ReadonlyGameState,
+	viewer: PlayerId,
 ): PlayerView {
-  let cached = PLAYER_VIEW_CACHE.get(state);
-  if (cached?.revision === state.revision) {
-    const existing = cached.views[viewer];
-    if (existing) return existing;
-  } else {
-    cached = { revision: state.revision, views: [undefined, undefined] };
-    PLAYER_VIEW_CACHE.set(state, cached);
-  }
-  const revision = state.revision;
-  const read: ReadContext = {
-    state,
-    revision,
-    view: cachedPlayerGameView(state, revision),
-  };
-  const objectSnapshot = (id: ObjectId): PlayerObjectView => {
-    const snapshot = read.view.objects.get(id);
-    assertDefined(snapshot, `no derived view for object ${id}`);
-    return snapshot;
-  };
-  const nonbattlefieldSnapshot = <
-    ZoneName extends "hand" | "graveyard" | "exile",
-  >(
-    id: ObjectId,
-    zone: ZoneName,
-  ): PlayerNonbattlefieldObjectView<ZoneName> => {
-    const snapshot = objectSnapshot(id);
-    assert(
-      snapshot.kind === "card" || snapshot.kind === "nonbattlefield-token",
-      `${zone} contains non-card object ${id}`,
-    );
-    assert(snapshot.zone === zone, `object ${id} is not in ${zone}`);
-    return { ...snapshot, zone };
-  };
-  const battlefieldSnapshot = (id: ObjectId): PlayerBattlefieldObjectView => {
-    const snapshot = objectSnapshot(id);
-    assert(
-      snapshot.kind === "permanent",
-      `battlefield contains nonpermanent ${id}`,
-    );
-    return snapshot;
-  };
-  const publicPlayer = (id: PlayerId): PlayerPublicView => {
-    const player = state.players[id];
-    return {
-      id,
-      life: player.life,
-      counters: { ...player.counters },
-      manaPool: { ...player.manaPool },
-      handCount: player.hand.length,
-      libraryCount: player.library.length,
-      graveyard: player.graveyard.map((objectId) =>
-        nonbattlefieldSnapshot(objectId, "graveyard"),
-      ),
-      exile: player.exile.map((objectId) =>
-        nonbattlefieldSnapshot(objectId, "exile"),
-      ),
-      landsPlayed: player.landsPlayed,
-      lost: player.lost,
-      won: player.won,
-    };
-  };
-  const stack = state.stack.map((entry): PlayerStackView => {
-    if (entry.kind === "triggered ability") return structuredClone(entry);
-    if (entry.kind === "activated ability") return structuredClone(entry);
-    const snapshot = read.view.objects.get(entry.objectId);
-    assertDefined(snapshot, `no spell object ${entry.objectId}`);
-    assert(
-      snapshot.kind === "spell",
-      `stack object ${entry.objectId} is not a spell`,
-    );
-    return snapshot;
-  });
-  const view: PlayerView = {
-    version: 1,
-    revision: read.revision,
-    viewer,
-    turn: {
-      completedTurns: state.completedTurns,
-      activePlayer: activePlayer(state),
-      location: structuredClone(turnLocation(state)),
-    },
-    players: [publicPlayer(0), publicPlayer(1)],
-    hand: state.players[viewer].hand.map((objectId) =>
-      nonbattlefieldSnapshot(objectId, "hand"),
-    ),
-    battlefield: state.battlefield.map(battlefieldSnapshot),
-    stack,
-  };
+	let cached = PLAYER_VIEW_CACHE.get(state);
+	if (cached?.revision === state.revision) {
+		const existing = cached.views[viewer];
+		if (existing) return existing;
+	} else {
+		cached = { revision: state.revision, views: [undefined, undefined] };
+		PLAYER_VIEW_CACHE.set(state, cached);
+	}
+	const revision = state.revision;
+	const read: ReadContext = {
+		state,
+		revision,
+		view: cachedPlayerGameView(state, revision),
+	};
+	const objectSnapshot = (id: ObjectId): PlayerObjectView => {
+		const snapshot = read.view.objects.get(id);
+		assertDefined(snapshot, `no derived view for object ${id}`);
+		return snapshot;
+	};
+	const nonbattlefieldSnapshot = <
+		ZoneName extends "hand" | "graveyard" | "exile",
+	>(
+		id: ObjectId,
+		zone: ZoneName,
+	): PlayerNonbattlefieldObjectView<ZoneName> => {
+		const snapshot = objectSnapshot(id);
+		assert(
+			snapshot.kind === "card" || snapshot.kind === "nonbattlefield-token",
+			`${zone} contains non-card object ${id}`,
+		);
+		assert(snapshot.zone === zone, `object ${id} is not in ${zone}`);
+		return { ...snapshot, zone };
+	};
+	const battlefieldSnapshot = (id: ObjectId): PlayerBattlefieldObjectView => {
+		const snapshot = objectSnapshot(id);
+		assert(
+			snapshot.kind === "permanent",
+			`battlefield contains nonpermanent ${id}`,
+		);
+		return snapshot;
+	};
+	const publicPlayer = (id: PlayerId): PlayerPublicView => {
+		const player = state.players[id];
+		return {
+			id,
+			life: player.life,
+			counters: { ...player.counters },
+			manaPool: { ...player.manaPool },
+			handCount: player.hand.length,
+			libraryCount: player.library.length,
+			graveyard: player.graveyard.map((objectId) =>
+				nonbattlefieldSnapshot(objectId, "graveyard"),
+			),
+			exile: player.exile.map((objectId) =>
+				nonbattlefieldSnapshot(objectId, "exile"),
+			),
+			landsPlayed: player.landsPlayed,
+			lost: player.lost,
+			won: player.won,
+		};
+	};
+	const stack = state.stack.map((entry): PlayerStackView => {
+		if (entry.kind === "triggered ability") return structuredClone(entry);
+		if (entry.kind === "activated ability") return structuredClone(entry);
+		const snapshot = read.view.objects.get(entry.objectId);
+		assertDefined(snapshot, `no spell object ${entry.objectId}`);
+		assert(
+			snapshot.kind === "spell",
+			`stack object ${entry.objectId} is not a spell`,
+		);
+		return snapshot;
+	});
+	const view: PlayerView = {
+		version: 1,
+		revision: read.revision,
+		viewer,
+		turn: {
+			completedTurns: state.completedTurns,
+			activePlayer: activePlayer(state),
+			location: structuredClone(turnLocation(state)),
+		},
+		players: [publicPlayer(0), publicPlayer(1)],
+		hand: state.players[viewer].hand.map((objectId) =>
+			nonbattlefieldSnapshot(objectId, "hand"),
+		),
+		battlefield: state.battlefield.map(battlefieldSnapshot),
+		stack,
+	};
 
-  // Selected GameView snapshots are detached from canonical state. Freezing
-  // them makes sharing the revision cache safe for local agents as well as RPC.
-  const frozen = deepFreeze(view) as PlayerView;
-  cached.views[viewer] = frozen;
-  return frozen;
+	// Selected GameView snapshots are detached from canonical state. Freezing
+	// them makes sharing the revision cache safe for local agents as well as RPC.
+	const frozen = deepFreeze(view) as PlayerView;
+	cached.views[viewer] = frozen;
+	return frozen;
 }
 
 /**
@@ -2994,101 +2994,101 @@ export function buildPlayerView(
  * not leak into the copy.
  */
 export function effectiveCharacteristics(
-  read: ReadContext,
-  object: DeepReadOnly<GameObject>,
+	read: ReadContext,
+	object: DeepReadOnly<GameObject>,
 ): DeepReadOnly<CharacteristicsSnapshot> {
-  const snapshot = readObject(read, object.id);
-  return snapshot.currentCharacteristics;
+	const snapshot = readObject(read, object.id);
+	return snapshot.currentCharacteristics;
 }
 
 export interface PermanentView {
-  readonly name: string;
-  readonly manaCost: CardDefManaCost;
-  readonly colors: readonly Color[];
-  readonly supertypes: readonly Supertype[];
-  readonly types: readonly CardType[];
-  readonly subtypes: readonly string[];
-  readonly keywords: readonly Keyword[];
-  readonly abilities: DeepReadOnly<BaseCharacteristicsSnapshot["abilities"]>;
-  readonly id: ObjectId;
-  readonly cardId: string | null;
-  readonly owner: PlayerId;
-  readonly controller: PlayerId | null;
-  readonly zone: Zone;
-  readonly counters: CounterBag;
-  readonly tapped: boolean;
-  /** Noncreatures expose zero for compatibility; use types to narrow rules logic. */
-  readonly power: number;
-  readonly toughness: number;
+	readonly name: string;
+	readonly manaCost: CardDefManaCost;
+	readonly colors: readonly Color[];
+	readonly supertypes: readonly Supertype[];
+	readonly types: readonly CardType[];
+	readonly subtypes: readonly string[];
+	readonly keywords: readonly Keyword[];
+	readonly abilities: DeepReadOnly<BaseCharacteristicsSnapshot["abilities"]>;
+	readonly id: ObjectId;
+	readonly cardId: string | null;
+	readonly owner: PlayerId;
+	readonly controller: PlayerId | null;
+	readonly zone: Zone;
+	readonly counters: CounterBag;
+	readonly tapped: boolean;
+	/** Noncreatures expose zero for compatibility; use types to narrow rules logic. */
+	readonly power: number;
+	readonly toughness: number;
 }
 export type ObjectView = PermanentView;
 
 function evaluationView(
-  object: DeepReadOnly<GameObject>,
-  characteristics: DeepReadOnly<CharacteristicsSnapshot>,
+	object: DeepReadOnly<GameObject>,
+	characteristics: DeepReadOnly<CharacteristicsSnapshot>,
 ): PermanentView {
-  const cardId = physicalCardId(object);
-  return {
-    ...characteristics,
-    id: object.id,
-    cardId,
-    owner: object.owner,
-    controller: controllerOf(object),
-    zone: object.zone,
-    counters: object.kind === "permanent" ? { ...object.counters } : {},
-    tapped: object.kind === "permanent" ? object.tapped : false,
-    power: "power" in characteristics ? characteristics.power : 0,
-    toughness: "toughness" in characteristics ? characteristics.toughness : 0,
-  };
+	const cardId = physicalCardId(object);
+	return {
+		...characteristics,
+		id: object.id,
+		cardId,
+		owner: object.owner,
+		controller: controllerOf(object),
+		zone: object.zone,
+		counters: object.kind === "permanent" ? { ...object.counters } : {},
+		tapped: object.kind === "permanent" ? object.tapped : false,
+		power: "power" in characteristics ? characteristics.power : 0,
+		toughness: "toughness" in characteristics ? characteristics.toughness : 0,
+	};
 }
 
 function flattenSnapshot(snapshot: GameObjectSnapshot): PermanentView {
-  const cardId =
-    snapshot.kind === "card"
-      ? snapshot.cardId
-      : snapshot.kind === "spell" && snapshot.representation.kind === "card"
-        ? snapshot.representation.cardId
-        : snapshot.kind === "permanent" &&
-            snapshot.representation.kind === "card"
-          ? snapshot.representation.cardId
-          : null;
-  const characteristics = snapshot.currentCharacteristics;
-  return {
-    ...characteristics,
-    id: snapshot.objectId,
-    cardId,
-    owner: snapshot.owner,
-    controller: snapshot.controller,
-    zone: snapshot.zone,
-    counters: snapshot.kind === "permanent" ? { ...snapshot.counters } : {},
-    tapped: snapshot.kind === "permanent" ? snapshot.tapped : false,
-    power: characteristics.kind === "creature" ? characteristics.power : 0,
-    toughness:
-      characteristics.kind === "creature" ? characteristics.toughness : 0,
-  };
+	const cardId =
+		snapshot.kind === "card"
+			? snapshot.cardId
+			: snapshot.kind === "spell" && snapshot.representation.kind === "card"
+				? snapshot.representation.cardId
+				: snapshot.kind === "permanent" &&
+						snapshot.representation.kind === "card"
+					? snapshot.representation.cardId
+					: null;
+	const characteristics = snapshot.currentCharacteristics;
+	return {
+		...characteristics,
+		id: snapshot.objectId,
+		cardId,
+		owner: snapshot.owner,
+		controller: snapshot.controller,
+		zone: snapshot.zone,
+		counters: snapshot.kind === "permanent" ? { ...snapshot.counters } : {},
+		tapped: snapshot.kind === "permanent" ? snapshot.tapped : false,
+		power: characteristics.kind === "creature" ? characteristics.power : 0,
+		toughness:
+			characteristics.kind === "creature" ? characteristics.toughness : 0,
+	};
 }
 
 export function lethalDamage(read: ReadContext, id: ObjectId): boolean;
 export function lethalDamage(state: ReadonlyGameState, id: ObjectId): boolean;
 export function lethalDamage(
-  stateOrRead: ReadonlyGameState | ReadContext,
-  id: ObjectId,
+	stateOrRead: ReadonlyGameState | ReadContext,
+	id: ObjectId,
 ): boolean {
-  const read =
-    "view" in stateOrRead ? stateOrRead : createReadContext(stateOrRead);
-  const o = read.state.objects.get(id);
-  assertDefined(o);
-  assert(o.kind === "permanent");
-  const snapshot = readObject(read, id);
-  assert(snapshot.kind === "permanent");
-  const characteristics = snapshot.currentCharacteristics;
-  if (characteristics.kind !== "creature") return false;
-  return characteristics.toughness > 0 && o.damage >= characteristics.toughness;
+	const read =
+		"view" in stateOrRead ? stateOrRead : createReadContext(stateOrRead);
+	const o = read.state.objects.get(id);
+	assertDefined(o);
+	assert(o.kind === "permanent");
+	const snapshot = readObject(read, id);
+	assert(snapshot.kind === "permanent");
+	const characteristics = snapshot.currentCharacteristics;
+	if (characteristics.kind !== "creature") return false;
+	return characteristics.toughness > 0 && o.damage >= characteristics.toughness;
 }
 
 /** Compatibility boundary: build a fresh explicit view for one read. */
 export function view(state: ReadonlyGameState, id: ObjectId): ObjectView {
-  return flattenSnapshot(readObject(createReadContext(state), id));
+	return flattenSnapshot(readObject(createReadContext(state), id));
 }
 
 /* ------------------------------------------------------------------ *
@@ -3103,12 +3103,12 @@ export function view(state: ReadonlyGameState, id: ObjectId): ObjectView {
  * own printed card may know nothing about.
  */
 function abilityReferencesOf(
-  view: GameView,
-  object: DeepReadOnly<GameObject>,
+	view: GameView,
+	object: DeepReadOnly<GameObject>,
 ): DeepReadOnly<AbilityReferences> {
-  const snapshot = view.objects.get(object.id);
-  assertDefined(snapshot, `no derived view for object ${object.id}`);
-  return snapshot.currentCharacteristics.abilities;
+	const snapshot = view.objects.get(object.id);
+	assertDefined(snapshot, `no derived view for object ${object.id}`);
+	return snapshot.currentCharacteristics.abilities;
 }
 
 /**
@@ -3123,15 +3123,6 @@ const CHARACTERISTIC_CHANGING_LAYERS = [
 	"7c-modify-power-toughness",
 	"7d-swap-power-toughness",
 ] satisfies readonly ContinuousEffectLayer[];
-const CHARACTERISTIC_CHANGING_LAYERS: readonly ContinuousEffectLayer[] = [
-	"1a-copiable-values",
-	"4-type-changing",
-	"7a-power-toughness-defining",
-	"7b-set-specific-power-toughness",
-	"7c-modify-power-toughness",
-	"7d-swap-power-toughness",
-];
-
 /**
  * Cheap prefilter: does any object in the game *possess* a static ability
  * matching `predicate`?
@@ -3141,22 +3132,22 @@ const CHARACTERISTIC_CHANGING_LAYERS: readonly ContinuousEffectLayer[] = [
  * implementation it never prints must not count.
  */
 function anyPossessedStatic(
-  state: ReadonlyGameState,
-  predicate: (effect: ContinuousEffect) => boolean,
+	state: ReadonlyGameState,
+	predicate: (effect: ContinuousEffect) => boolean,
 ): boolean {
-  for (const object of state.objects.values()) {
-    for (const id of baseCharacteristics(object).abilities.static) {
-      if (predicate(getAbilityDefinition("static", id))) return true;
-    }
-  }
-  return false;
+	for (const object of state.objects.values()) {
+		for (const id of baseCharacteristics(object).abilities.static) {
+			if (predicate(getAbilityDefinition("static", id))) return true;
+		}
+	}
+	return false;
 }
 
 /** Effect-label name for logs, taken from the view rather than re-derived. */
 function viewName(view: GameView, id: ObjectId): string {
-  const snapshot = view.objects.get(id);
-  assertDefined(snapshot, `no derived view for object ${id}`);
-  return snapshot.currentCharacteristics.name;
+	const snapshot = view.objects.get(id);
+	assertDefined(snapshot, `no derived view for object ${id}`);
+	return snapshot.currentCharacteristics.name;
 }
 
 /**
@@ -3169,57 +3160,57 @@ function viewName(view: GameView, id: ObjectId): string {
  * identity across a copy.
  */
 function replacementsOf(
-  view: GameView,
-  object: DeepReadOnly<GameObject>,
+	view: GameView,
+	object: DeepReadOnly<GameObject>,
 ): { id: ReplacementAbilityId; def: ReplacementDef }[] {
-  return abilityReferencesOf(view, object).replacement.map((id) => ({
-    id,
-    def: getAbilityDefinition("replacement", id),
-  }));
+	return abilityReferencesOf(view, object).replacement.map((id) => ({
+		id,
+		def: getAbilityDefinition("replacement", id),
+	}));
 }
 
 /** Per-effect mutable scratch, addressed by the ability's registry reference. */
 function effectDataFor(
-  object: DeepReadOnly<GameObject>,
-  key: string,
+	object: DeepReadOnly<GameObject>,
+	key: string,
 ): Record<string, number> {
-  const existing = object.effectData[key];
-  if (existing) return existing as Record<string, number>;
-  // `effectData` is never an input to a derived characteristic, so filling a
-  // missing slot cannot invalidate a view or a live ReadContext. This is the
-  // path an entering *copied* replacement takes: its reference only becomes
-  // known once the copy tier has modified the event, long after
-  // `prepareEffectData` ran, and the object it binds to is still a card in the
-  // zone it is leaving — there is no permanent to hang scratch on yet.
-  const fresh: Record<string, number> = {};
-  (object as GameObject).effectData[key] = fresh;
-  return fresh;
+	const existing = object.effectData[key];
+	if (existing) return existing as Record<string, number>;
+	// `effectData` is never an input to a derived characteristic, so filling a
+	// missing slot cannot invalidate a view or a live ReadContext. This is the
+	// path an entering *copied* replacement takes: its reference only becomes
+	// known once the copy tier has modified the event, long after
+	// `prepareEffectData` ran, and the object it binds to is still a card in the
+	// zone it is leaving — there is no permanent to hang scratch on yet.
+	const fresh: Record<string, number> = {};
+	(object as GameObject).effectData[key] = fresh;
+	return fresh;
 }
 
 export function prepareEffectData(state: GameState): void {
-  // Which replacements an object has is a derived fact, so the view has to be
-  // built before anything is written back.
-  const view = cachedGameView(state, state.revision);
-  const pending: [object: GameObject, key: string][] = [];
-  for (const object of state.objects.values()) {
-    for (const { id } of replacementsOf(view, object)) {
-      if (object.effectData[id] === undefined) pending.push([object, id]);
-    }
-  }
-  if (pending.length === 0) return;
-  for (const [object, key] of pending) object.effectData[key] = {};
-  state.revision++;
-  // `effectData` is per-effect mutable scratch and is not an input to any
-  // derived characteristic, so the view stays accurate across this bump. Any
-  // ReadContext taken before the bump still goes stale, as it must.
-  GAME_VIEW_CACHE.set(state, { revision: state.revision, view });
+	// Which replacements an object has is a derived fact, so the view has to be
+	// built before anything is written back.
+	const view = cachedGameView(state, state.revision);
+	const pending: [object: GameObject, key: string][] = [];
+	for (const object of state.objects.values()) {
+		for (const { id } of replacementsOf(view, object)) {
+			if (object.effectData[id] === undefined) pending.push([object, id]);
+		}
+	}
+	if (pending.length === 0) return;
+	for (const [object, key] of pending) object.effectData[key] = {};
+	state.revision++;
+	// `effectData` is per-effect mutable scratch and is not an input to any
+	// derived characteristic, so the view stays accurate across this bump. Any
+	// ReadContext taken before the bump still goes stale, as it must.
+	GAME_VIEW_CACHE.set(state, { revision: state.revision, view });
 }
 
 /** The object this event is about to put onto the battlefield, if any. */
 function enteringObject(ev: GameEvent | undefined): ObjectId | null {
-  return ev?.kind === "change zone" && ev.to === "battlefield"
-    ? ev.object
-    : null;
+	return ev?.kind === "change zone" && ev.to === "battlefield"
+		? ev.object
+		: null;
 }
 
 /**
@@ -3239,13 +3230,13 @@ function enteringObject(ev: GameEvent | undefined): ObjectId | null {
  * never mutated to discover candidates.
  */
 function incomingReplacementRefs(
-  view: GameView,
-  object: DeepReadOnly<GameObject>,
-  ev: ZoneChangeEvent,
+	view: GameView,
+	object: DeepReadOnly<GameObject>,
+	ev: ZoneChangeEvent,
 ): readonly ReplacementAbilityId[] {
-  return ev.copiableOverride
-    ? ev.copiableOverride.abilities.replacement
-    : abilityReferencesOf(view, object).replacement;
+	return ev.copiableOverride
+		? ev.copiableOverride.abilities.replacement
+		: abilityReferencesOf(view, object).replacement;
 }
 
 /**
@@ -3256,84 +3247,84 @@ function incomingReplacementRefs(
  * event-independent sweep.
  */
 export function collectReplacements(
-  state: ReadonlyGameState,
-  ev?: GameEvent,
+	state: ReadonlyGameState,
+	ev?: GameEvent,
 ): BoundReplacement[] {
-  const out: BoundReplacement[] = [];
-  const view = cachedGameView(state, state.revision);
-  const entering = enteringObject(ev);
+	const out: BoundReplacement[] = [];
+	const view = cachedGameView(state, state.revision);
+	const entering = enteringObject(ev);
 
-  for (const zone of ALL_ZONES) {
-    const ids =
-      zone === "battlefield"
-        ? state.battlefield
-        : zone === "stack"
-          ? stackObjectIds(state)
-          : state.players.flatMap((p) => zoneList(state, zone, p.id));
+	for (const zone of ALL_ZONES) {
+		const ids =
+			zone === "battlefield"
+				? state.battlefield
+				: zone === "stack"
+					? stackObjectIds(state)
+					: state.players.flatMap((p) => zoneList(state, zone, p.id));
 
-    for (const id of ids) {
-      // The object this event is putting onto the battlefield is collected
-      // below instead, from what it would have rather than what it has.
-      if (id === entering) continue;
-      const o = maybeObject(state, id);
-      if (!o) continue;
-      for (const { id: abilityId, def } of replacementsOf(view, o)) {
-        if (!functionsHere(def.functionsFrom, zone)) continue;
-        const data: Record<string, number> | undefined =
-          o.effectData[abilityId];
-        assertDefined(data, `effect data was not prepared for ${abilityId}`);
-        out.push({
-          id: `${o.id}:${abilityId}` as EffectId,
-          def,
-          source: o,
-          controller: controllerOf(o) ?? o.owner,
-          data,
-          label: `${viewName(view, o.id)}#${o.id} — ${def.text}`,
-        });
-      }
-    }
-  }
+		for (const id of ids) {
+			// The object this event is putting onto the battlefield is collected
+			// below instead, from what it would have rather than what it has.
+			if (id === entering) continue;
+			const o = maybeObject(state, id);
+			if (!o) continue;
+			for (const { id: abilityId, def } of replacementsOf(view, o)) {
+				if (!functionsHere(def.functionsFrom, zone)) continue;
+				const data: Record<string, number> | undefined =
+					o.effectData[abilityId];
+				assertDefined(data, `effect data was not prepared for ${abilityId}`);
+				out.push({
+					id: `${o.id}:${abilityId}` as EffectId,
+					def,
+					source: o,
+					controller: controllerOf(o) ?? o.owner,
+					data,
+					label: `${viewName(view, o.id)}#${o.id} — ${def.text}`,
+				});
+			}
+		}
+	}
 
-  if (entering !== null && ev?.kind === "change zone") {
-    const o = maybeObject(state, entering);
-    // The would-be permanent is evaluated in the zone it is entering, so an
-    // ETB replacement written with the ordinary battlefield default works
-    // whether the object gets there on its own or as a copy.
-    if (o) {
-      const displayName = ev.copiableOverride?.name ?? viewName(view, o.id);
-      for (const id of incomingReplacementRefs(view, o, ev)) {
-        const def = getAbilityDefinition("replacement", id);
-        if (!functionsHere(def.functionsFrom, "battlefield")) continue;
-        out.push({
-          id: `${o.id}:${id}` as EffectId,
-          def,
-          source: o,
-          // CR 616.1b has already settled who it enters under.
-          controller: ev.toController,
-          data: effectDataFor(o, id),
-          label: `${displayName}#${o.id} — ${def.text}`,
-        });
-      }
-    }
-  }
+	if (entering !== null && ev?.kind === "change zone") {
+		const o = maybeObject(state, entering);
+		// The would-be permanent is evaluated in the zone it is entering, so an
+		// ETB replacement written with the ordinary battlefield default works
+		// whether the object gets there on its own or as a copy.
+		if (o) {
+			const displayName = ev.copiableOverride?.name ?? viewName(view, o.id);
+			for (const id of incomingReplacementRefs(view, o, ev)) {
+				const def = getAbilityDefinition("replacement", id);
+				if (!functionsHere(def.functionsFrom, "battlefield")) continue;
+				out.push({
+					id: `${o.id}:${id}` as EffectId,
+					def,
+					source: o,
+					// CR 616.1b has already settled who it enters under.
+					controller: ev.toController,
+					data: effectDataFor(o, id),
+					label: `${displayName}#${o.id} — ${def.text}`,
+				});
+			}
+		}
+	}
 
-  for (const fx of state.floating) {
-    if (fx.expired) continue;
-    const factory = EFFECTS[fx.factory];
-    if (!factory)
-      throw new Error(`unknown floating effect factory: ${fx.factory}`);
-    const def = factory(fx.params);
-    out.push({
-      id: fx.id,
-      def,
-      source: null,
-      controller: fx.controller,
-      data: fx.data,
-      label: `(floating) ${def.text}`,
-    });
-  }
+	for (const fx of state.floating) {
+		if (fx.expired) continue;
+		const factory = EFFECTS[fx.factory];
+		if (!factory)
+			throw new Error(`unknown floating effect factory: ${fx.factory}`);
+		const def = factory(fx.params);
+		out.push({
+			id: fx.id,
+			def,
+			source: null,
+			controller: fx.controller,
+			data: fx.data,
+			label: `(floating) ${def.text}`,
+		});
+	}
 
-  return out;
+	return out;
 }
 
 /* ------------------------------------------------------------------ *
@@ -3349,12 +3340,12 @@ export function collectReplacements(
  * event never affected.
  */
 function affectedObjectPlayer(
-  state: ReadonlyGameState,
-  id: ObjectId,
+	state: ReadonlyGameState,
+	id: ObjectId,
 ): PlayerId {
-  const object = maybeObject(state, id);
-  assertDefined(object, `no object ${id} to choose a replacement for`);
-  return controllerOf(object) ?? object.owner;
+	const object = maybeObject(state, id);
+	assertDefined(object, `no object ${id} to choose a replacement for`);
+	return controllerOf(object) ?? object.owner;
 }
 
 /**
@@ -3362,163 +3353,163 @@ function affectedObjectPlayer(
  * affected player chooses one to apply."
  */
 export function affectedPlayer(
-  state: ReadonlyGameState,
-  ev: GameEvent,
+	state: ReadonlyGameState,
+	ev: GameEvent,
 ): PlayerId {
-  switch (ev.kind) {
-    case "draw":
-    case "draw cards":
-    case "mill":
-    case "discard":
-    case "begin turn":
-    case "begin step":
-    case "begin phase":
-    case "gain life":
-    case "lose life":
-    case "add mana":
-      return ev.player;
-    case "declare attackers":
-    case "declare blockers":
-      return ev.player;
+	switch (ev.kind) {
+		case "draw":
+		case "draw cards":
+		case "mill":
+		case "discard":
+		case "begin turn":
+		case "begin step":
+		case "begin phase":
+		case "gain life":
+		case "lose life":
+		case "add mana":
+			return ev.player;
+		case "declare attackers":
+		case "declare blockers":
+			return ev.player;
 
-    case "damage":
-      return ev.target.type === "player"
-        ? ev.target.player
-        : affectedObjectPlayer(state, ev.target.id);
+		case "damage":
+			return ev.target.type === "player"
+				? ev.target.player
+				: affectedObjectPlayer(state, ev.target.id);
 
-    case "destroy":
-    case "regenerate":
-      return affectedObjectPlayer(state, ev.object);
-    case "tap":
-    case "untap":
-      if (ev.ref.kind === "all") return ev.ref.player;
-      return affectedObjectPlayer(state, ev.ref.object);
+		case "destroy":
+		case "regenerate":
+			return affectedObjectPlayer(state, ev.object);
+		case "tap":
+		case "untap":
+			if (ev.ref.kind === "all") return ev.ref.player;
+			return affectedObjectPlayer(state, ev.ref.object);
 
-    case "add counters":
-      return ev.target.type === "player"
-        ? ev.target.player
-        : affectedObjectPlayer(state, ev.target.id);
+		case "add counters":
+			return ev.target.type === "player"
+				? ev.target.player
+				: affectedObjectPlayer(state, ev.target.id);
 
-    case "remove counters":
-      return ev.target.type === "player"
-        ? ev.target.player
-        : affectedObjectPlayer(state, ev.target.id);
+		case "remove counters":
+			return ev.target.type === "player"
+				? ev.target.player
+				: affectedObjectPlayer(state, ev.target.id);
 
-    case "create token":
-      return ev.controller;
+		case "create token":
+			return ev.controller;
 
-    case "lose game":
-    case "win game":
-      return ev.player;
+		case "lose game":
+		case "win game":
+			return ev.player;
 
-    case "change zone": {
-      const o = maybeObject(state, ev.object);
-      assertDefined(o);
-      if (ev.from === "battlefield") return controllerOf(o) ?? o.owner;
-      if (ev.to === "stack") return ev.toController;
+		case "change zone": {
+			const o = maybeObject(state, ev.object);
+			assertDefined(o);
+			if (ev.from === "battlefield") return controllerOf(o) ?? o.owner;
+			if (ev.to === "stack") return ev.toController;
 
-      // Objects on the battlefield / stack have a controller; cards elsewhere
-      // don't, so their owner chooses. For a card entering the battlefield we
-      // use the would-be controller, which is what players expect at the table.
+			// Objects on the battlefield / stack have a controller; cards elsewhere
+			// don't, so their owner chooses. For a card entering the battlefield we
+			// use the would-be controller, which is what players expect at the table.
 
-      return o.owner;
-    }
-    default:
-      assertNever(ev);
-  }
+			return o.owner;
+		}
+		default:
+			assertNever(ev);
+	}
 }
 
 function ctxFor(
-  read: ReadContext,
-  r: BoundReplacement,
-  run: ReplacementRun,
+	read: ReadContext,
+	r: BoundReplacement,
+	run: ReplacementRun,
 ): EffectCtx {
-  return {
-    state: read.state,
-    read,
-    self: r.source,
-    controller: r.controller,
-    data: r.data,
-    rc: run,
-  };
+	return {
+		state: read.state,
+		read,
+		self: r.source,
+		controller: r.controller,
+		data: r.data,
+		rc: run,
+	};
 }
 
 function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
-  const out: BoundProhibition[] = [];
-  const abilityCanChangeKeywords = anyPossessedStatic(
-    read.state,
-    (effect) => effect.layer === "6-ability-changing",
-  );
-  for (const object of read.state.objects.values()) {
-    const mightBeIndestructible =
-      object.kind === "permanent" &&
-      (baseCharacteristics(object).keywords.includes("indestructible") ||
-        abilityCanChangeKeywords);
-    const snapshot = mightBeIndestructible
-      ? read.view.objects.get(object.id)
-      : undefined;
-    const indestructible =
-      object.kind === "permanent" &&
-      snapshot?.kind === "permanent" &&
-      snapshot.currentCharacteristics.keywords.includes("indestructible");
-    const definitions: ProhibitionDef[] = [
-      ...(indestructible
-        ? [
-            {
-              label: "keyword:indestructible",
-              text: "This permanent can't be destroyed.",
-              applies: (event: GameEvent, ctx: ProhibitionCtx) =>
-                event.kind === "destroy" && event.object === ctx.self?.id,
-            },
-          ]
-        : []),
-      ...abilityReferencesOf(read.view, object).prohibition.map((id) =>
-        getAbilityDefinition("prohibition", id),
-      ),
-    ];
-    for (const def of definitions) {
-      if (!functionsHere(def.functionsFrom, object.zone)) continue;
-      const controller = controllerOf(object) ?? object.owner;
-      if (
-        !def.applies(ev, { state: read.state, read, self: object, controller })
-      )
-        continue;
-      out.push({
-        id: `${object.id}:${def.label}` as EffectId,
-        def,
-        source: object,
-        controller,
-        label: `${viewName(read.view, object.id)}#${object.id} — ${def.text}`,
-      });
-    }
-  }
-  return out;
+	const out: BoundProhibition[] = [];
+	const abilityCanChangeKeywords = anyPossessedStatic(
+		read.state,
+		(effect) => effect.layer === "6-ability-changing",
+	);
+	for (const object of read.state.objects.values()) {
+		const mightBeIndestructible =
+			object.kind === "permanent" &&
+			(baseCharacteristics(object).keywords.includes("indestructible") ||
+				abilityCanChangeKeywords);
+		const snapshot = mightBeIndestructible
+			? read.view.objects.get(object.id)
+			: undefined;
+		const indestructible =
+			object.kind === "permanent" &&
+			snapshot?.kind === "permanent" &&
+			snapshot.currentCharacteristics.keywords.includes("indestructible");
+		const definitions: ProhibitionDef[] = [
+			...(indestructible
+				? [
+						{
+							label: "keyword:indestructible",
+							text: "This permanent can't be destroyed.",
+							applies: (event: GameEvent, ctx: ProhibitionCtx) =>
+								event.kind === "destroy" && event.object === ctx.self?.id,
+						},
+					]
+				: []),
+			...abilityReferencesOf(read.view, object).prohibition.map((id) =>
+				getAbilityDefinition("prohibition", id),
+			),
+		];
+		for (const def of definitions) {
+			if (!functionsHere(def.functionsFrom, object.zone)) continue;
+			const controller = controllerOf(object) ?? object.owner;
+			if (
+				!def.applies(ev, { state: read.state, read, self: object, controller })
+			)
+				continue;
+			out.push({
+				id: `${object.id}:${def.label}` as EffectId,
+				def,
+				source: object,
+				controller,
+				label: `${viewName(read.view, object.id)}#${object.id} — ${def.text}`,
+			});
+		}
+	}
+	return out;
 }
 
 function applicable(
-  read: ReadContext,
-  ev: GameEvent,
-  run: ReplacementRun,
+	read: ReadContext,
+	ev: GameEvent,
+	run: ReplacementRun,
 ): BoundReplacement[] {
-  return collectReplacements(read.state, ev).filter((r) => {
-    // CR 614.5 — a replacement effect applies at most once to a given event.
-    if (run.applied.has(r.id)) return false;
-    /**
-     * 615.12
-     * Some effects state that damage "can't be prevented." If unpreventable
-     * damage would be dealt, any applicable prevention effects are still
-     * applied to it. Those effects won't prevent any damage, but any
-     * additional effects they have will take place. Existing damage prevention
-     *  shields won't be reduced by damage that can't be prevented.
-     */
-    if (r.def.isPreventionEffect && ev.kind === "damage" && ev.unpreventable)
-      return false;
-    return r.def.applies(ev, ctxFor(read, r, run));
-  });
+	return collectReplacements(read.state, ev).filter((r) => {
+		// CR 614.5 — a replacement effect applies at most once to a given event.
+		if (run.applied.has(r.id)) return false;
+		/**
+		 * 615.12
+		 * Some effects state that damage "can't be prevented." If unpreventable
+		 * damage would be dealt, any applicable prevention effects are still
+		 * applied to it. Those effects won't prevent any damage, but any
+		 * additional effects they have will take place. Existing damage prevention
+		 *  shields won't be reduced by damage that can't be prevented.
+		 */
+		if (r.def.isPreventionEffect && ev.kind === "damage" && ev.unpreventable)
+			return false;
+		return r.def.applies(ev, ctxFor(read, r, run));
+	});
 }
 
 export function newRun(): ReplacementRun {
-  return { applied: new Set(), depth: 0 };
+	return { applied: new Set(), depth: 0 };
 }
 
 const MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH = 64;
@@ -3530,113 +3521,113 @@ const MAX_REPLACEMENT_EFFECT_CHOICES = 64;
  * draw step" or full damage prevention).
  */
 function resolveReplacements(
-  read: ReadContext,
-  event: GameEvent,
-  choices: AnyChoiceController,
-  run: ReplacementRun = newRun(),
+	read: ReadContext,
+	event: GameEvent,
+	choices: AnyChoiceController,
+	run: ReplacementRun = newRun(),
 ): GameEvent[] {
-  if (run.depth > MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH) {
-    throw new Error(
-      `replacement recursion exceeded ${MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH} — probable rules loop`,
-    );
-  }
+	if (run.depth > MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH) {
+		throw new Error(
+			`replacement recursion exceeded ${MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH} — probable rules loop`,
+		);
+	}
 
-  let current = event;
+	let current = event;
 
-  for (let iter = 0; iter < MAX_REPLACEMENT_EFFECT_CHOICES; iter++) {
-    const allCandidates = applicable(read, current, run);
-    const selfCandidates = allCandidates.filter(
-      (candidate) => candidate.def.layer === "self",
-    );
+	for (let iter = 0; iter < MAX_REPLACEMENT_EFFECT_CHOICES; iter++) {
+		const allCandidates = applicable(read, current, run);
+		const selfCandidates = allCandidates.filter(
+			(candidate) => candidate.def.layer === "self",
+		);
 
-    /**
-     * 614.17c. If an event can't happen, it can only be replaced by a
-     * self-replacement effect (see rule 614.15). Other replacement and/or
-     * prevention effects can't modify or replace it.
-     *
-     * Consequently, prohibition is a gate after the self-replacement tier,
-     * not itself a replacement-effect layer. Apply an available self-replacement
-     * first and restart the loop; only when none applies do we ask whether the
-     * resulting event can happen.
-     */
-    const prohibitions = prohibitionsFor(read, current);
-    if (selfCandidates.length === 0 && prohibitions.length > 0) {
-      for (const prohibition of prohibitions) {
-        log(read.state as GameState, `  [prohibit] ${prohibition.label}`);
-      }
-      return [];
-    }
+		/**
+		 * 614.17c. If an event can't happen, it can only be replaced by a
+		 * self-replacement effect (see rule 614.15). Other replacement and/or
+		 * prevention effects can't modify or replace it.
+		 *
+		 * Consequently, prohibition is a gate after the self-replacement tier,
+		 * not itself a replacement-effect layer. Apply an available self-replacement
+		 * first and restart the loop; only when none applies do we ask whether the
+		 * resulting event can happen.
+		 */
+		const prohibitions = prohibitionsFor(read, current);
+		if (selfCandidates.length === 0 && prohibitions.length > 0) {
+			for (const prohibition of prohibitions) {
+				log(read.state as GameState, `  [prohibit] ${prohibition.label}`);
+			}
+			return [];
+		}
 
-    const candidates =
-      selfCandidates.length > 0 ? selfCandidates : allCandidates;
-    if (candidates.length === 0) return [current];
+		const candidates =
+			selfCandidates.length > 0 ? selfCandidates : allCandidates;
+		if (candidates.length === 0) return [current];
 
-    /** find the highest priority tier that has at least one candidate. */
-    const tier = REPLACEMENT_EFFECT_ORDER.find((l) =>
-      candidates.some((c) => c.def.layer === l),
-    );
-    assert(tier, "no tier found");
+		/** find the highest priority tier that has at least one candidate. */
+		const tier = REPLACEMENT_EFFECT_ORDER.find((l) =>
+			candidates.some((c) => c.def.layer === l),
+		);
+		assert(tier, "no tier found");
 
-    const tiered = candidates.filter((c) => c.def.layer === tier);
+		const tiered = candidates.filter((c) => c.def.layer === tier);
 
-    const chooser = affectedPlayer(read.state, current);
+		const chooser = affectedPlayer(read.state, current);
 
-    const chosen =
-      tiered.length === 1
-        ? tiered[0]
-        : /**
-           * 616.1. If two or more replacement and/or prevention effects are attempting
-           * to modify the way an event affects an object or player, the affected
-           * object's controller (or its owner if it has no controller) or the affected
-           * player chooses one to apply, following the steps listed below. If two or
-           * more players have to make these choices at the same time, choices are made
-           * in APNAP order.
-           */
-          choices.chooseReplacement(
-            read.state as GameState,
-            chooser,
-            current,
-            tiered,
-          );
+		const chosen =
+			tiered.length === 1
+				? tiered[0]
+				: /**
+					 * 616.1. If two or more replacement and/or prevention effects are attempting
+					 * to modify the way an event affects an object or player, the affected
+					 * object's controller (or its owner if it has no controller) or the affected
+					 * player chooses one to apply, following the steps listed below. If two or
+					 * more players have to make these choices at the same time, choices are made
+					 * in APNAP order.
+					 */
+					choices.chooseReplacement(
+						read.state as GameState,
+						chooser,
+						current,
+						tiered,
+					);
 
-    assertDefined(chosen);
-    run.applied.add(chosen.id);
-    const ctx = ctxFor(read, chosen, run);
-    const produced = chosen.def.replace(current, ctx);
-    chosen.def.onApplied?.(current, ctx);
+		assertDefined(chosen);
+		run.applied.add(chosen.id);
+		const ctx = ctxFor(read, chosen, run);
+		const produced = chosen.def.replace(current, ctx);
+		chosen.def.onApplied?.(current, ctx);
 
-    log(
-      read.state as GameState,
-      `  [replace] ${chosen.label}` +
-        (tiered.length > 1 ? ` (P${chooser} chose from ${tiered.length})` : ""),
-    );
+		log(
+			read.state as GameState,
+			`  [replace] ${chosen.label}` +
+				(tiered.length > 1 ? ` (P${chooser} chose from ${tiered.length})` : ""),
+		);
 
-    // A single same-kind result is a *modification*: keep iterating on it so
-    // further effects (and the once-only rule) see one continuous event.
-    const onlyProduced = produced[0];
-    if (produced.length === 1 && onlyProduced?.kind === current.kind) {
-      current = onlyProduced;
-      continue;
-    }
+		// A single same-kind result is a *modification*: keep iterating on it so
+		// further effects (and the once-only rule) see one continuous event.
+		const onlyProduced = produced[0];
+		if (produced.length === 1 && onlyProduced?.kind === current.kind) {
+			current = onlyProduced;
+			continue;
+		}
 
-    // Zero, several, or a different kind: each resulting event re-enters the
-    // pipeline, inheriting the applied-set (CR 614.5 across the chain).
-    return produced.flatMap((e) =>
-      resolveReplacements(read, e, choices, {
-        /**
-         * the applied-set is *inherited* by events produced from a
-         * replacement. That's what makes Chains of Mephistopheles terminate:
-         * the draw that Chains hands back can't be replaced by Chains again.
-         *
-         * TODO: is there a more clear example to use than chains?
-         */
-        applied: new Set(run.applied),
-        depth: run.depth + 1,
-      }),
-    );
-  }
+		// Zero, several, or a different kind: each resulting event re-enters the
+		// pipeline, inheriting the applied-set (CR 614.5 across the chain).
+		return produced.flatMap((e) =>
+			resolveReplacements(read, e, choices, {
+				/**
+				 * the applied-set is *inherited* by events produced from a
+				 * replacement. That's what makes Chains of Mephistopheles terminate:
+				 * the draw that Chains hands back can't be replaced by Chains again.
+				 *
+				 * TODO: is there a more clear example to use than chains?
+				 */
+				applied: new Set(run.applied),
+				depth: run.depth + 1,
+			}),
+		);
+	}
 
-  throw new Error("replacement loop failed to converge");
+	throw new Error("replacement loop failed to converge");
 }
 
 /* ------------------------------------------------------------------ *
@@ -3645,229 +3636,229 @@ function resolveReplacements(
  * ------------------------------------------------------------------ */
 
 function moveObject(
-  state: GameState,
-  id: ObjectId,
-  from: Zone,
-  to: Zone,
-  opts: {
-    toController: PlayerId;
-    tapped?: boolean;
-    counters?: CounterBag;
-    copiableOverride?: CharacteristicsSnapshot;
-    toBottom?: boolean;
-    spellTargets?: SpellTargets;
-  },
+	state: GameState,
+	id: ObjectId,
+	from: Zone,
+	to: Zone,
+	opts: {
+		toController: PlayerId;
+		tapped?: boolean;
+		counters?: CounterBag;
+		copiableOverride?: CharacteristicsSnapshot;
+		toBottom?: boolean;
+		spellTargets?: SpellTargets;
+	},
 ): ObjectId {
-  const old = maybeObject(state, id);
-  assert(old, `cannot move missing object ${id}`);
-  assert(
-    old.zone === from,
-    `cannot move object ${id} from ${from}: it is in ${old.zone}`,
-  );
-  if (from === "stack") {
-    const index = state.stack.findIndex(
-      (entry) => entry.kind === "spell" && entry.objectId === id,
-    );
-    assert(index !== -1, `spell ${id} is missing from the stack`);
-    state.stack.splice(index, 1);
-  } else {
-    const src = mutableZoneList(state, from, old.owner);
-    const index = src.indexOf(id);
-    assert(index !== -1, `object ${id} is missing from its ${from} zone list`);
-    src.splice(index, 1);
-  }
-  state.objects.delete(id);
+	const old = maybeObject(state, id);
+	assert(old, `cannot move missing object ${id}`);
+	assert(
+		old.zone === from,
+		`cannot move object ${id} from ${from}: it is in ${old.zone}`,
+	);
+	if (from === "stack") {
+		const index = state.stack.findIndex(
+			(entry) => entry.kind === "spell" && entry.objectId === id,
+		);
+		assert(index !== -1, `spell ${id} is missing from the stack`);
+		state.stack.splice(index, 1);
+	} else {
+		const src = mutableZoneList(state, from, old.owner);
+		const index = src.indexOf(id);
+		assert(index !== -1, `object ${id} is missing from its ${from} zone list`);
+		src.splice(index, 1);
+	}
+	state.objects.delete(id);
 
-  // The printed card identity survives copy effects and zone changes.
-  const printedId = physicalCardId(old);
-  const tokenValues =
-    old.kind === "permanent" && old.representation.kind === "token"
-      ? cloneCharacteristics(old.representation.createdValues)
-      : old.kind === "nonbattlefield-token"
-        ? cloneCharacteristics(old.createdValues)
-        : null;
-  const freshId = state.nextObjectId++ as ObjectId;
-  let fresh: GameObject;
-  if (to === "battlefield") {
-    let representation: PermanentObject["representation"];
-    if (tokenValues) {
-      representation = { kind: "token", createdValues: tokenValues };
-    } else {
-      assert(printedId, "moved object has no card identity or token values");
-      representation = { kind: "card", cardId: printedId };
-    }
-    fresh = {
-      kind: "permanent",
-      id: freshId,
-      owner: old.owner,
-      controller: opts.toController,
-      zone: "battlefield",
-      representation,
-      ...(opts.copiableOverride
-        ? {
-            copiableOverride: cloneCharacteristics(opts.copiableOverride),
-          }
-        : {}),
-      tapped: opts.tapped ?? false,
-      counters: { ...opts.counters },
-      effectData: {},
-      damage: 0,
-      attacking: false,
-      blocking: false,
-      token: tokenValues !== null,
-      attributes: {},
-    };
-  } else if (to === "stack") {
-    assert(printedId, "tokens cannot become spells");
-    fresh = {
-      kind: "spell",
-      id: freshId,
-      owner: old.owner,
-      controller: opts.toController,
-      zone: "stack",
-      representation: { kind: "card", cardId: printedId },
-      effectData: {},
-    };
-  } else if (tokenValues) {
-    fresh = {
-      kind: "nonbattlefield-token",
-      id: freshId,
-      owner: old.owner,
-      zone: to,
-      createdValues: tokenValues,
-      effectData: {},
-    };
-  } else {
-    assert(printedId, "card-backed object has no card identity");
-    fresh = {
-      kind: "card",
-      id: freshId,
-      owner: old.owner,
-      zone: to,
-      cardId: printedId,
-      effectData: {},
-    };
-  }
-  state.objects.set(fresh.id, fresh);
-  if (to === "stack") {
-    assert(
-      fresh.kind === "spell",
-      "only spells can enter the stack as objects",
-    );
-    state.stack.push({
-      kind: "spell",
-      objectId: fresh.id,
-      targets: structuredClone(opts.spellTargets ?? []),
-    });
-  } else {
-    const dst = mutableZoneList(state, to, fresh.owner);
-    if (to === "library" && opts.toBottom) dst.unshift(fresh.id);
-    else dst.push(fresh.id);
-  }
-  log(
-    state,
-    `  ${initialCharacteristics(fresh).name}#${fresh.id} is now in ${to}`,
-  );
-  return fresh.id;
+	// The printed card identity survives copy effects and zone changes.
+	const printedId = physicalCardId(old);
+	const tokenValues =
+		old.kind === "permanent" && old.representation.kind === "token"
+			? cloneCharacteristics(old.representation.createdValues)
+			: old.kind === "nonbattlefield-token"
+				? cloneCharacteristics(old.createdValues)
+				: null;
+	const freshId = state.nextObjectId++ as ObjectId;
+	let fresh: GameObject;
+	if (to === "battlefield") {
+		let representation: PermanentObject["representation"];
+		if (tokenValues) {
+			representation = { kind: "token", createdValues: tokenValues };
+		} else {
+			assert(printedId, "moved object has no card identity or token values");
+			representation = { kind: "card", cardId: printedId };
+		}
+		fresh = {
+			kind: "permanent",
+			id: freshId,
+			owner: old.owner,
+			controller: opts.toController,
+			zone: "battlefield",
+			representation,
+			...(opts.copiableOverride
+				? {
+						copiableOverride: cloneCharacteristics(opts.copiableOverride),
+					}
+				: {}),
+			tapped: opts.tapped ?? false,
+			counters: { ...opts.counters },
+			effectData: {},
+			damage: 0,
+			attacking: false,
+			blocking: false,
+			token: tokenValues !== null,
+			attributes: {},
+		};
+	} else if (to === "stack") {
+		assert(printedId, "tokens cannot become spells");
+		fresh = {
+			kind: "spell",
+			id: freshId,
+			owner: old.owner,
+			controller: opts.toController,
+			zone: "stack",
+			representation: { kind: "card", cardId: printedId },
+			effectData: {},
+		};
+	} else if (tokenValues) {
+		fresh = {
+			kind: "nonbattlefield-token",
+			id: freshId,
+			owner: old.owner,
+			zone: to,
+			createdValues: tokenValues,
+			effectData: {},
+		};
+	} else {
+		assert(printedId, "card-backed object has no card identity");
+		fresh = {
+			kind: "card",
+			id: freshId,
+			owner: old.owner,
+			zone: to,
+			cardId: printedId,
+			effectData: {},
+		};
+	}
+	state.objects.set(fresh.id, fresh);
+	if (to === "stack") {
+		assert(
+			fresh.kind === "spell",
+			"only spells can enter the stack as objects",
+		);
+		state.stack.push({
+			kind: "spell",
+			objectId: fresh.id,
+			targets: structuredClone(opts.spellTargets ?? []),
+		});
+	} else {
+		const dst = mutableZoneList(state, to, fresh.owner);
+		if (to === "library" && opts.toBottom) dst.unshift(fresh.id);
+		else dst.push(fresh.id);
+	}
+	log(
+		state,
+		`  ${initialCharacteristics(fresh).name}#${fresh.id} is now in ${to}`,
+	);
+	return fresh.id;
 }
 
 /** Convenience for logs/tests. */
 export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
-  switch (ev.kind) {
-    case "draw cards":
-      return `draw cards(P${ev.player}, ${ev.amount})`;
-    case "draw":
-      return `draw(P${ev.player})`;
-    case "mill":
-      return `mill(P${ev.player}, ${ev.amount})`;
-    case "discard":
-      if (ev.cards.kind === "hand-size")
-        return `discard(P${ev.player}, to hand size)`;
-      if (ev.cards.kind === "specific")
-        return `discard(P${ev.player}, ${name(state, ev.cards.card)})`;
-      assert(ev.cards.kind === "any");
-      return `discard(P${ev.player})`;
-    case "damage": {
-      const tgt =
-        ev.target.type === "player"
-          ? `P${ev.target.player}`
-          : name(state, ev.target.id);
-      return `damage(${ev.amount} from ${name(state, ev.source)} to ${tgt})`;
-    }
-    case "destroy":
-      return `destroy(${name(state, ev.object)})`;
-    case "regenerate":
-      return `regenerate(${name(state, ev.object)})`;
-    case "change zone": {
-      const extras = [
-        ev.entersTapped ? "tapped" : "",
-        ev.entersWithCounters ? JSON.stringify(ev.entersWithCounters) : "",
-        ev.copiableOverride
-          ? `copiableOverride=${ev.copiableOverride.name}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-      return `move(${name(state, ev.object)}: ${ev.from}->${ev.to}${extras ? ` ${extras}` : ""})`;
-    }
-    case "add counters": {
-      const tgt =
-        ev.target.type === "player"
-          ? `P${ev.target.player}`
-          : name(state, ev.target.id);
-      return `counters(${ev.amount}x ${ev.counter} on ${tgt})`;
-    }
-    case "remove counters": {
-      const tgt =
-        ev.target.type === "player"
-          ? `P${ev.target.player}`
-          : name(state, ev.target.id);
-      if (ev.counters === "all") return `counters(rm all on ${tgt})`;
-      return `counters(rm ${Object.entries(ev.counters)
-        .map(([k, v]) => `${v}x ${k}`)
-        .join(",")} on ${tgt})`;
-    }
-    case "gain life":
-    case "lose life":
-      return `life(P${ev.player} ${ev.amount >= 0 ? "+" : ""}${ev.amount})`;
-    case "add mana":
-      return `mana(P${ev.player} +${MANA_TYPES.map((type) =>
-        ev.mana[type] ? `${ev.mana[type]}${type.toUpperCase()}` : "",
-      )
-        .filter(Boolean)
-        .join(" ")})`;
-    case "tap":
-      if (ev.ref.kind === "all") return `tap(all P${ev.ref.player})`;
-      return `tap(${name(state, ev.ref.object)})`;
-    case "untap":
-      if (ev.ref.kind === "all") return `untap(all P${ev.ref.player})`;
-      return `untap(${name(state, ev.ref.object)})`;
-    case "begin turn":
-      return `beginTurn(P${ev.player}, #${ev.turnId}${ev.isExtra ? ", extra" : ""})`;
-    case "begin step":
-      return `beginStep(P${ev.player}, ${ev.step})`;
-    case "begin phase":
-      return `beginPhase(P${ev.player}, ${ev.phase})`;
-    case "create token":
-      return `token(${ev.amount}x ${ev.tokenDefinitionId} for P${ev.controller})`;
-    case "lose game":
-      return `loseGame(P${ev.player}: ${ev.reason})`;
-    case "declare attackers":
-      return ev.attackers.length === 0
-        ? `declareAttackers(P${ev.player}, none)`
-        : `declareAttackers(P${ev.player}, ${ev.attackers.map((id) => name(state, id)).join(", ")})`;
-    case "declare blockers":
-      return ev.blockers.length === 0
-        ? `declareBlockers(P${ev.player}, none)`
-        : `declareBlockers(P${ev.player}, ${ev.blockers
-            .map(
-              ({ blocker, attacker }) =>
-                `${name(state, blocker)} -> ${name(state, attacker)}`,
-            )
-            .join(", ")})`;
-    case "win game":
-      return `winGame(P${ev.player}: ${ev.reason})`;
-  }
+	switch (ev.kind) {
+		case "draw cards":
+			return `draw cards(P${ev.player}, ${ev.amount})`;
+		case "draw":
+			return `draw(P${ev.player})`;
+		case "mill":
+			return `mill(P${ev.player}, ${ev.amount})`;
+		case "discard":
+			if (ev.cards.kind === "hand-size")
+				return `discard(P${ev.player}, to hand size)`;
+			if (ev.cards.kind === "specific")
+				return `discard(P${ev.player}, ${name(state, ev.cards.card)})`;
+			assert(ev.cards.kind === "any");
+			return `discard(P${ev.player})`;
+		case "damage": {
+			const tgt =
+				ev.target.type === "player"
+					? `P${ev.target.player}`
+					: name(state, ev.target.id);
+			return `damage(${ev.amount} from ${name(state, ev.source)} to ${tgt})`;
+		}
+		case "destroy":
+			return `destroy(${name(state, ev.object)})`;
+		case "regenerate":
+			return `regenerate(${name(state, ev.object)})`;
+		case "change zone": {
+			const extras = [
+				ev.entersTapped ? "tapped" : "",
+				ev.entersWithCounters ? JSON.stringify(ev.entersWithCounters) : "",
+				ev.copiableOverride
+					? `copiableOverride=${ev.copiableOverride.name}`
+					: "",
+			]
+				.filter(Boolean)
+				.join(" ");
+			return `move(${name(state, ev.object)}: ${ev.from}->${ev.to}${extras ? ` ${extras}` : ""})`;
+		}
+		case "add counters": {
+			const tgt =
+				ev.target.type === "player"
+					? `P${ev.target.player}`
+					: name(state, ev.target.id);
+			return `counters(${ev.amount}x ${ev.counter} on ${tgt})`;
+		}
+		case "remove counters": {
+			const tgt =
+				ev.target.type === "player"
+					? `P${ev.target.player}`
+					: name(state, ev.target.id);
+			if (ev.counters === "all") return `counters(rm all on ${tgt})`;
+			return `counters(rm ${Object.entries(ev.counters)
+				.map(([k, v]) => `${v}x ${k}`)
+				.join(",")} on ${tgt})`;
+		}
+		case "gain life":
+		case "lose life":
+			return `life(P${ev.player} ${ev.amount >= 0 ? "+" : ""}${ev.amount})`;
+		case "add mana":
+			return `mana(P${ev.player} +${MANA_TYPES.map((type) =>
+				ev.mana[type] ? `${ev.mana[type]}${type.toUpperCase()}` : "",
+			)
+				.filter(Boolean)
+				.join(" ")})`;
+		case "tap":
+			if (ev.ref.kind === "all") return `tap(all P${ev.ref.player})`;
+			return `tap(${name(state, ev.ref.object)})`;
+		case "untap":
+			if (ev.ref.kind === "all") return `untap(all P${ev.ref.player})`;
+			return `untap(${name(state, ev.ref.object)})`;
+		case "begin turn":
+			return `beginTurn(P${ev.player}, #${ev.turnId}${ev.isExtra ? ", extra" : ""})`;
+		case "begin step":
+			return `beginStep(P${ev.player}, ${ev.step})`;
+		case "begin phase":
+			return `beginPhase(P${ev.player}, ${ev.phase})`;
+		case "create token":
+			return `token(${ev.amount}x ${ev.tokenDefinitionId} for P${ev.controller})`;
+		case "lose game":
+			return `loseGame(P${ev.player}: ${ev.reason})`;
+		case "declare attackers":
+			return ev.attackers.length === 0
+				? `declareAttackers(P${ev.player}, none)`
+				: `declareAttackers(P${ev.player}, ${ev.attackers.map((id) => name(state, id)).join(", ")})`;
+		case "declare blockers":
+			return ev.blockers.length === 0
+				? `declareBlockers(P${ev.player}, none)`
+				: `declareBlockers(P${ev.player}, ${ev.blockers
+						.map(
+							({ blocker, attacker }) =>
+								`${name(state, blocker)} -> ${name(state, attacker)}`,
+						)
+						.join(", ")})`;
+		case "win game":
+			return `winGame(P${ev.player}: ${ev.reason})`;
+	}
 }
 
 /* ------------------------------------------------------------------ *
@@ -3875,256 +3866,257 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
  * ------------------------------------------------------------------ */
 
 export function checkStateBasedActions(
-  state: GameState,
-  source: ChoiceSource,
+	state: GameState,
+	source: ChoiceSource,
 ): void {
-  checkStateBasedActionsIn(state, asChoiceController(source));
+	checkStateBasedActionsIn(state, asChoiceController(source));
 }
 
 function checkStateBasedActionsIn(
-  state: GameState,
-  choices: AnyChoiceController,
+	state: GameState,
+	choices: AnyChoiceController,
 ): void {
-  for (let pass = 0; pass < 32; pass++) {
-    let acted = false;
+	for (let pass = 0; pass < 32; pass++) {
+		let acted = false;
 
-    for (const p of state.players) {
-      //   704.5a. If a player has 0 or less life, that player loses the game.
-      if (!p.lost && !p.won && p.life <= 0) {
-        performIn(
-          state,
-          { kind: "lose game", player: p.id, reason: "life" },
-          choices,
-          newScope(),
-          0,
-        );
-        // A replacement effect such as Platinum Angel may prevent the loss.
-        // Only signal that an SBA happened if the player actually lost.
-        if (p.lost) acted = true;
-      }
-      //  704.5b. If a player attempted to draw a card from a library with no
-      // cards in it since the last time state-based actions were checked, that
-      // player loses the game.
-      if (!p.lost && !p.won && p.drewFromEmptyLibrary) {
-        performIn(
-          state,
-          {
-            kind: "lose game",
-            player: p.id,
-            reason: "drewFromEmptyLibrary",
-          },
-          choices,
-          newScope(),
-          0,
-        );
-        p.drewFromEmptyLibrary = false;
-        if (p.lost) acted = true;
-      }
-      // 704.5c. If a player has ten or more poison counters, that player loses
-      // the game.
-      if (p.counters.poison !== undefined && p.counters.poison >= 10) {
-        performIn(
-          state,
-          {
-            kind: "lose game",
-            player: p.id,
-            reason: "poison",
-          },
-          choices,
-          newScope(),
-          0,
-        );
-        if (p.lost) acted = true;
-      }
-    }
+		for (const p of state.players) {
+			//   704.5a. If a player has 0 or less life, that player loses the game.
+			if (!p.lost && !p.won && p.life <= 0) {
+				performIn(
+					state,
+					{ kind: "lose game", player: p.id, reason: "life" },
+					choices,
+					newScope(),
+					0,
+				);
+				// A replacement effect such as Platinum Angel may prevent the loss.
+				// Only signal that an SBA happened if the player actually lost.
+				if (p.lost) acted = true;
+			}
+			//  704.5b. If a player attempted to draw a card from a library with no
+			// cards in it since the last time state-based actions were checked, that
+			// player loses the game.
+			if (!p.lost && !p.won && p.drewFromEmptyLibrary) {
+				performIn(
+					state,
+					{
+						kind: "lose game",
+						player: p.id,
+						reason: "drewFromEmptyLibrary",
+					},
+					choices,
+					newScope(),
+					0,
+				);
+				p.drewFromEmptyLibrary = false;
+				if (p.lost) acted = true;
+			}
+			// 704.5c. If a player has ten or more poison counters, that player loses
+			// the game.
+			if (p.counters.poison !== undefined && p.counters.poison >= 10) {
+				performIn(
+					state,
+					{
+						kind: "lose game",
+						player: p.id,
+						reason: "poison",
+					},
+					choices,
+					newScope(),
+					0,
+				);
+				if (p.lost) acted = true;
+			}
+		}
 
-    // 704.5d. If a token is in a zone other than the battlefield, it ceases
-    // to exist. The zone change itself still happened and can trigger abilities.
-    for (const o of state.objects.values()) {
-      if (o.kind !== "nonbattlefield-token") continue;
-      const zone = mutableZoneList(state, o.zone, o.owner);
-      const idx = zone.indexOf(o.id);
-      assert(
-        idx !== -1,
-        `token ${o.id} is missing from its ${o.zone} zone list`,
-      );
-      zone.splice(idx, 1);
-      state.objects.delete(o.id);
-      state.revision++;
-      log(
-        state,
-        `  SBA: ${initialCharacteristics(o).name}#${o.id} (token) ceases to exist`,
-      );
-      acted = true;
-    }
+		// 704.5d. If a token is in a zone other than the battlefield, it ceases
+		// to exist. The zone change itself still happened and can trigger abilities.
+		for (const o of state.objects.values()) {
+			if (o.kind !== "nonbattlefield-token") continue;
+			const zone = mutableZoneList(state, o.zone, o.owner);
+			const idx = zone.indexOf(o.id);
+			assert(
+				idx !== -1,
+				`token ${o.id} is missing from its ${o.zone} zone list`,
+			);
+			zone.splice(idx, 1);
+			state.objects.delete(o.id);
+			state.revision++;
+			log(
+				state,
+				`  SBA: ${initialCharacteristics(o).name}#${o.id} (token) ceases to exist`,
+			);
+			acted = true;
+		}
 
-    // 704.5e. If a copy of a spell is in a zone other than the stack, it ceases
-    // to exist. If a copy of a card is in any zone other than the stack or the
-    // battlefield, it ceases to exist.
+		// 704.5e. If a copy of a spell is in a zone other than the stack, it ceases
+		// to exist. If a copy of a card is in any zone other than the stack or the
+		// battlefield, it ceases to exist.
 
-    // 704.5h. If a creature has toughness greater than 0, and it's been dealt
-    // damage by a source with deathtouch since the last time state-based
-    // actions were checked, that creature is destroyed. Regeneration can
-    // replace this event.
+		// 704.5h. If a creature has toughness greater than 0, and it's been dealt
+		// damage by a source with deathtouch since the last time state-based
+		// actions were checked, that creature is destroyed. Regeneration can
+		// replace this event.
 
-    // 704.5i. If a planeswalker has loyalty 0, it's put into its owner's
-    // graveyard.
+		// 704.5i. If a planeswalker has loyalty 0, it's put into its owner's
+		// graveyard.
 
-    // 704.5j. If two or more legendary permanents with the same name are
-    // controlled by the same player, that player chooses one of them, and the
-    // rest are put into their owners' graveyards. This is called the
-    // "legend rule."
+		// 704.5j. If two or more legendary permanents with the same name are
+		// controlled by the same player, that player chooses one of them, and the
+		// rest are put into their owners' graveyards. This is called the
+		// "legend rule."
 
-    // 704.5k. world permanents: don't support these.
+		// 704.5k. world permanents: don't support these.
 
-    // 704.5m. If an Aura is attached to an illegal object or player, or is not
-    // attached to an object or player, that Aura is put into its owner's
-    // graveyard.
+		// 704.5m. If an Aura is attached to an illegal object or player, or is not
+		// attached to an object or player, that Aura is put into its owner's
+		// graveyard.
 
-    // 704.5n. If an Equipment or Fortification is attached to an illegal
-    // permanent or to a player, it becomes unattached from that permanent
-    // or player. It remains on the battlefield.
+		// 704.5n. If an Equipment or Fortification is attached to an illegal
+		// permanent or to a player, it becomes unattached from that permanent
+		// or player. It remains on the battlefield.
 
-    // 704.5p. If a battle or creature is attached to an object or player, it
-    // becomes unattached and remains on the battlefield. Similarly, if any
-    // nonbattle, noncreature permanent that's neither an Aura, an Equipment,
-    // nor a Fortification is attached to an object or player, it becomes
-    // unattached and remains on the battlefield.
+		// 704.5p. If a battle or creature is attached to an object or player, it
+		// becomes unattached and remains on the battlefield. Similarly, if any
+		// nonbattle, noncreature permanent that's neither an Aura, an Equipment,
+		// nor a Fortification is attached to an object or player, it becomes
+		// unattached and remains on the battlefield.
 
-    // 704.5r. If a permanent with an ability that says it can't have more than
-    // N counters of a certain kind on it has more than N counters of that kind
-    // on it, all but N of those counters are removed from it.
+		// 704.5r. If a permanent with an ability that says it can't have more than
+		// N counters of a certain kind on it has more than N counters of that kind
+		// on it, all but N of those counters are removed from it.
 
-    // 704.5s. If the number of lore counters on a Saga permanent with one or
-    // more chapter abilities is greater than or equal to its final chapter
-    // number and it isn't the source of a chapter ability that has triggered
-    // but not yet left the stack, that Saga's controller sacrifices it. See
-    // rule 714, "Saga Cards."
+		// 704.5s. If the number of lore counters on a Saga permanent with one or
+		// more chapter abilities is greater than or equal to its final chapter
+		// number and it isn't the source of a chapter ability that has triggered
+		// but not yet left the stack, that Saga's controller sacrifices it. See
+		// rule 714, "Saga Cards."
 
-    // 704.5t. If a player's venture marker is on the bottommost room of a
-    // dungeon card, and that dungeon card isn't the source of a room ability
-    // that has triggered but not yet left the stack, the dungeon card's owner
-    // removes it from the game. See rule 309, "Dungeons."
+		// 704.5t. If a player's venture marker is on the bottommost room of a
+		// dungeon card, and that dungeon card isn't the source of a room ability
+		// that has triggered but not yet left the stack, the dungeon card's owner
+		// removes it from the game. See rule 309, "Dungeons."
 
-    // 704.5u. Space beleren: we don't support this.
+		// 704.5u. Space beleren: we don't support this.
 
-    // 704.5v-y. Battles: we don't support this.
+		// 704.5v-y. Battles: we don't support this.
 
-    // 704.5z. If a permanent has more than one Role controlled by the same
-    // player attached to it, each of those Roles except the one with the most
-    // recent timestamp is put into its owner's graveyard.
+		// 704.5z. If a permanent has more than one Role controlled by the same
+		// player attached to it, each of those Roles except the one with the most
+		// recent timestamp is put into its owner's graveyard.
 
-    // 704.5aa. Speed: we don't support this.
+		// 704.5aa. Speed: we don't support this.
 
-    // Prefilter for the permanent SBAs below. Skipping the sweep is only sound
-    // because every continuous effect in the engine comes from a *static
-    // ability* possessed by some object: floating effects are `ReplacementDef`s
-    // and cannot change characteristics. If a floating continuous effect ever
-    // exists (say, "target creature gets -3/-3 until end of turn"), this
-    // prefilter will silently stop noticing creatures that died to it, and
-    // `hasCharacteristicChangingStatic` must grow to cover `state.floating`.
-    const hasCharacteristicChangingStatic = anyPossessedStatic(
-      state,
-      (effect) => CHARACTERISTIC_CHANGING_LAYERS.includes(effect.layer),
-    );
-    const needsPermanentSbas =
-      hasCharacteristicChangingStatic ||
-      state.battlefield.some((id) => {
-        const object = maybePermanent(state, id);
-        if (!object) return false;
-        if (object.damage > 0 || object.attributes.deathtouched) return true;
-        if (object.counters["+1/+1"] || object.counters["-1/-1"]) return true;
-        const initial = initialCharacteristics(object);
-        return "toughness" in initial && initial.toughness <= 0;
-      });
-    if (!needsPermanentSbas) {
-      if (!acted) return;
-      continue;
-    }
+		// Prefilter for the permanent SBAs below. Skipping the sweep is only sound
+		// because every continuous effect in the engine comes from a *static
+		// ability* possessed by some object: floating effects are `ReplacementDef`s
+		// and cannot change characteristics. If a floating continuous effect ever
+		// exists (say, "target creature gets -3/-3 until end of turn"), this
+		// prefilter will silently stop noticing creatures that died to it, and
+		// `hasCharacteristicChangingStatic` must grow to cover `state.floating`.
+		const hasCharacteristicChangingStatic = anyPossessedStatic(
+			state,
+			(effect) => includes(CHARACTERISTIC_CHANGING_LAYERS, effect.layer),
+		);
 
-    let sbaRead = createReadContext(state);
-    for (const id of [...state.battlefield]) {
-      const o = maybePermanent(state, id);
-      if (!o) continue;
-      const snapshot = readObject(sbaRead, id);
-      assert(snapshot.kind === "permanent");
-      const characteristics = snapshot.currentCharacteristics;
-      if (characteristics.kind !== "creature") continue;
-      const v = flattenSnapshot(snapshot);
+		const needsPermanentSbas =
+			hasCharacteristicChangingStatic ||
+			state.battlefield.some((id) => {
+				const object = maybePermanent(state, id);
+				if (!object) return false;
+				if (object.damage > 0 || object.attributes.deathtouched) return true;
+				if (object.counters["+1/+1"] || object.counters["-1/-1"]) return true;
+				const initial = initialCharacteristics(object);
+				return "toughness" in initial && initial.toughness <= 0;
+			});
+		if (!needsPermanentSbas) {
+			if (!acted) return;
+			continue;
+		}
 
-      // 704.5f. If a creature has toughness 0 or less, it's put into its
-      // owner's graveyard. Regeneration can't replace this event.
-      if (characteristics.toughness <= 0) {
-        log(state, `  SBA: ${name(state, id)} has toughness ${v.toughness}`);
-        performIn(
-          state,
-          {
-            kind: "change zone",
-            object: id,
-            from: "battlefield",
-            to: "graveyard",
-            cause: "sba",
-            toController: o.controller,
-          },
-          choices,
-          newScope(),
-          0,
-        );
-        acted = true;
-        sbaRead = createReadContext(state);
-        continue;
-      }
-      // 704.5g. If a creature has toughness greater than 0, it has damage marked
-      // on it, and the total damage marked on it is greater than or equal to its
-      // toughness, that creature has been dealt lethal damage and is destroyed.
-      // Regeneration can replace this event.
-      if (lethalDamage(sbaRead, id) || o.attributes.deathtouched) {
-        const destroy: DestroyEvent = {
-          kind: "destroy",
-          object: id,
-          noRegen: false,
-        };
-        // Always use the replacement pipeline here. Under CR 614.17c, even an
-        // otherwise prohibited event must first get a chance to be changed by a
-        // self-replacement effect. Only count the SBA as acting if something
-        // actually happened, so an indestructible creature doesn't keep the SBA
-        // loop running forever.
-        const objectName = name(state, id);
-        const result = performIn(state, destroy, choices, newScope(), 0);
-        // Effect scratch preparation may mutate canonical state even when a
-        // prohibition prevents the event.
-        sbaRead = createReadContext(state);
-        if (result.executed.length > 0) {
-          log(state, `  SBA: ${objectName} has lethal damage`);
-          acted = true;
-          if (!state.objects.has(id)) continue;
-        }
-      }
+		let sbaRead = createReadContext(state);
+		for (const id of [...state.battlefield]) {
+			const o = maybePermanent(state, id);
+			if (!o) continue;
+			const snapshot = readObject(sbaRead, id);
+			assert(snapshot.kind === "permanent");
+			const characteristics = snapshot.currentCharacteristics;
+			if (characteristics.kind !== "creature") continue;
+			const v = flattenSnapshot(snapshot);
 
-      // 704.5q. If a permanent has both a +1/+1 counter and a -1/-1 counter on
-      // it, N +1/+1 and N -1/-1 counters are removed from it, where N is the
-      // smaller of the number of +1/+1 and -1/-1 counters on it.
-      if (o.counters["+1/+1"] && o.counters["-1/-1"]) {
-        const n = Math.min(o.counters["+1/+1"], o.counters["-1/-1"]);
-        performIn(
-          state,
-          {
-            kind: "remove counters",
-            target: { type: "permanent", id: id },
-            counters: { "+1/+1": n, "-1/-1": n },
-          },
-          choices,
-          newScope(),
-          0,
-        );
-        acted = true;
-        sbaRead = createReadContext(state);
-      }
-    }
+			// 704.5f. If a creature has toughness 0 or less, it's put into its
+			// owner's graveyard. Regeneration can't replace this event.
+			if (characteristics.toughness <= 0) {
+				log(state, `  SBA: ${name(state, id)} has toughness ${v.toughness}`);
+				performIn(
+					state,
+					{
+						kind: "change zone",
+						object: id,
+						from: "battlefield",
+						to: "graveyard",
+						cause: "sba",
+						toController: o.controller,
+					},
+					choices,
+					newScope(),
+					0,
+				);
+				acted = true;
+				sbaRead = createReadContext(state);
+				continue;
+			}
+			// 704.5g. If a creature has toughness greater than 0, it has damage marked
+			// on it, and the total damage marked on it is greater than or equal to its
+			// toughness, that creature has been dealt lethal damage and is destroyed.
+			// Regeneration can replace this event.
+			if (lethalDamage(sbaRead, id) || o.attributes.deathtouched) {
+				const destroy: DestroyEvent = {
+					kind: "destroy",
+					object: id,
+					noRegen: false,
+				};
+				// Always use the replacement pipeline here. Under CR 614.17c, even an
+				// otherwise prohibited event must first get a chance to be changed by a
+				// self-replacement effect. Only count the SBA as acting if something
+				// actually happened, so an indestructible creature doesn't keep the SBA
+				// loop running forever.
+				const objectName = name(state, id);
+				const result = performIn(state, destroy, choices, newScope(), 0);
+				// Effect scratch preparation may mutate canonical state even when a
+				// prohibition prevents the event.
+				sbaRead = createReadContext(state);
+				if (result.executed.length > 0) {
+					log(state, `  SBA: ${objectName} has lethal damage`);
+					acted = true;
+					if (!state.objects.has(id)) continue;
+				}
+			}
 
-    if (!acted) return;
-  }
-  throw new Error("SBA loop did not stabilize");
+			// 704.5q. If a permanent has both a +1/+1 counter and a -1/-1 counter on
+			// it, N +1/+1 and N -1/-1 counters are removed from it, where N is the
+			// smaller of the number of +1/+1 and -1/-1 counters on it.
+			if (o.counters["+1/+1"] && o.counters["-1/-1"]) {
+				const n = Math.min(o.counters["+1/+1"], o.counters["-1/-1"]);
+				performIn(
+					state,
+					{
+						kind: "remove counters",
+						target: { type: "permanent", id: id },
+						counters: { "+1/+1": n, "-1/-1": n },
+					},
+					choices,
+					newScope(),
+					0,
+				);
+				acted = true;
+				sbaRead = createReadContext(state);
+			}
+		}
+
+		if (!acted) return;
+	}
+	throw new Error("SBA loop did not stabilize");
 }
 
 /* ------------------------------------------------------------------ *
@@ -4137,52 +4129,52 @@ function checkStateBasedActionsIn(
  * an event carries `fact` (recorded on success) and `guard` (required to run).
  */
 export interface Scope {
-  facts: Set<string>;
+	facts: Set<string>;
 }
 
 export function newScope(): Scope {
-  return { facts: new Set() };
+	return { facts: new Set() };
 }
 
 /** Result of running one event through replacements and execution. */
 export interface PerformResult {
-  executed: GameEvent[];
-  created: ObjectId[];
+	executed: GameEvent[];
+	created: ObjectId[];
 }
 
 /** Public entry point. Replace, then execute. Callers must run SBAs separately. */
 export function perform(
-  state: GameState,
-  event: GameEvent,
-  source: ChoiceSource,
+	state: GameState,
+	event: GameEvent,
+	source: ChoiceSource,
 ): PerformResult {
-  return performIn(state, event, asChoiceController(source), newScope(), 0);
+	return performIn(state, event, asChoiceController(source), newScope(), 0);
 }
 
 /** Applies event replacements and delegates to `executeIn` to apply changes. */
 function performIn(
-  state: GameState,
-  event: GameEvent,
-  choices: AnyChoiceController,
-  scope: Scope,
-  depth: number,
+	state: GameState,
+	event: GameEvent,
+	choices: AnyChoiceController,
+	scope: Scope,
+	depth: number,
 ): PerformResult {
-  log(state, `${"  ".repeat(depth)}> ${describeEvent(state, event)}`);
-  // Mutable replacement scratch is installed before the mutation-free read window.
-  prepareEffectData(state);
-  const read = createReadContext(state);
-  const finals = resolveReplacements(read, event, choices);
-  if (finals.length === 0)
-    log(state, `${"  ".repeat(depth + 1)}(replaced by nothing)`);
-  const executed: GameEvent[] = [];
-  const created: ObjectId[] = [];
-  for (const ev of finals) {
-    const before = createReadContext(state);
-    const result = executeIn(state, before, ev, choices, scope, depth + 1);
-    executed.push(...result.executed);
-    created.push(...result.created);
-  }
-  return { executed, created };
+	log(state, `${"  ".repeat(depth)}> ${describeEvent(state, event)}`);
+	// Mutable replacement scratch is installed before the mutation-free read window.
+	prepareEffectData(state);
+	const read = createReadContext(state);
+	const finals = resolveReplacements(read, event, choices);
+	if (finals.length === 0)
+		log(state, `${"  ".repeat(depth + 1)}(replaced by nothing)`);
+	const executed: GameEvent[] = [];
+	const created: ObjectId[] = [];
+	for (const ev of finals) {
+		const before = createReadContext(state);
+		const result = executeIn(state, before, ev, choices, scope, depth + 1);
+		executed.push(...result.executed);
+		created.push(...result.created);
+	}
+	return { executed, created };
 }
 
 /* ------------------------------------------------------------------ *
@@ -4191,203 +4183,203 @@ function performIn(
 
 /** Adds a trigger to `state.pendingTriggers`. */
 function enqueueTrigger(
-  state: GameState,
-  source: GameObject,
-  triggerId: TriggeredAbilityId,
-  trigger: TriggerDef,
+	state: GameState,
+	source: GameObject,
+	triggerId: TriggeredAbilityId,
+	trigger: TriggerDef,
 ): void {
-  const controller = controllerOf(source);
-  assertDefined(controller);
-  state.pendingTriggers.push({
-    source: source.id,
-    triggerId,
-    controller,
-    text: trigger.text,
-    effects: trigger.effects,
-  });
-  log(
-    state,
-    `  [trigger] ${name(state, source.id)}#${source.id} — ${trigger.text}`,
-  );
+	const controller = controllerOf(source);
+	assertDefined(controller);
+	state.pendingTriggers.push({
+		source: source.id,
+		triggerId,
+		controller,
+		text: trigger.text,
+		effects: trigger.effects,
+	});
+	log(
+		state,
+		`  [trigger] ${name(state, source.id)}#${source.id} — ${trigger.text}`,
+	);
 }
 
 function relativePlayerMatches(
-  actual: PlayerId,
-  expected: ValidPlayer,
-  source: DeepReadOnly<GameObject>,
+	actual: PlayerId,
+	expected: ValidPlayer,
+	source: DeepReadOnly<GameObject>,
 ): boolean {
-  if (expected === "either") return true;
-  const controller = controllerOf(source);
-  assertDefined(controller);
-  return expected === "you" ? actual === controller : actual !== controller;
+	if (expected === "either") return true;
+	const controller = controllerOf(source);
+	assertDefined(controller);
+	return expected === "you" ? actual === controller : actual !== controller;
 }
 
 function triggerSubjectMatches(
-  read: ReadContext,
-  source: DeepReadOnly<GameObject>,
-  subject: DeepReadOnly<GameObject>,
-  selector: TriggerSelector,
+	read: ReadContext,
+	source: DeepReadOnly<GameObject>,
+	subject: DeepReadOnly<GameObject>,
+	selector: TriggerSelector,
 ): boolean {
-  if (selector === "self") return subject.id === source.id;
+	if (selector === "self") return subject.id === source.id;
 
-  let matches: boolean;
-  if ("controller" in selector) {
-    const controller = controllerOf(subject);
-    if (controller === null) return false;
-    matches = relativePlayerMatches(controller, selector.controller, source);
-  } else if ("owner" in selector) {
-    matches = relativePlayerMatches(subject.owner, selector.owner, source);
-  } else {
-    const printedId = physicalCardId(subject);
-    const subjectSnapshot =
-      subject.kind === "permanent" && subject.zone === "battlefield"
-        ? readObject(read, subject.id)
-        : null;
-    if (subjectSnapshot !== null) assert(subjectSnapshot.kind === "permanent");
-    const characteristics =
-      subjectSnapshot?.kind === "permanent"
-        ? subjectSnapshot.currentCharacteristics
-        : printedId
-          ? card(printedId)
-          : initialCharacteristics(subject);
-    if ("type" in selector) {
-      matches = characteristics.types.includes(selector.type);
-    } else if ("subtype" in selector) {
-      matches = characteristics.subtypes?.includes(selector.subtype) ?? false;
-    } else if ("supertype" in selector) {
-      matches =
-        characteristics.supertypes?.includes(selector.supertype as Supertype) ??
-        false;
-    } else {
-      matches = characteristics.colors.includes(selector.color);
-    }
-  }
+	let matches: boolean;
+	if ("controller" in selector) {
+		const controller = controllerOf(subject);
+		if (controller === null) return false;
+		matches = relativePlayerMatches(controller, selector.controller, source);
+	} else if ("owner" in selector) {
+		matches = relativePlayerMatches(subject.owner, selector.owner, source);
+	} else {
+		const printedId = physicalCardId(subject);
+		const subjectSnapshot =
+			subject.kind === "permanent" && subject.zone === "battlefield"
+				? readObject(read, subject.id)
+				: null;
+		if (subjectSnapshot !== null) assert(subjectSnapshot.kind === "permanent");
+		const characteristics =
+			subjectSnapshot?.kind === "permanent"
+				? subjectSnapshot.currentCharacteristics
+				: printedId
+					? card(printedId)
+					: initialCharacteristics(subject);
+		if ("type" in selector) {
+			matches = characteristics.types.includes(selector.type);
+		} else if ("subtype" in selector) {
+			matches = characteristics.subtypes?.includes(selector.subtype) ?? false;
+		} else if ("supertype" in selector) {
+			matches =
+				characteristics.supertypes?.includes(selector.supertype as Supertype) ??
+				false;
+		} else {
+			matches = characteristics.colors.includes(selector.color);
+		}
+	}
 
-  return "non" in selector && selector.non ? !matches : matches;
+	return "non" in selector && selector.non ? !matches : matches;
 }
 
 function triggerSubjectsMatch(
-  read: ReadContext,
-  source: DeepReadOnly<GameObject>,
-  subjects: DeepReadOnly<GameObject>[],
-  _selectors: TriggerSelector | TriggerSelector[],
+	read: ReadContext,
+	source: DeepReadOnly<GameObject>,
+	subjects: DeepReadOnly<GameObject>[],
+	_selectors: TriggerSelector | TriggerSelector[],
 ): boolean {
-  const selectors = Array.isArray(_selectors) ? _selectors : [_selectors];
-  return subjects.some((subject) =>
-    selectors.every((selector) =>
-      triggerSubjectMatches(read, source, subject, selector),
-    ),
-  );
+	const selectors = Array.isArray(_selectors) ? _selectors : [_selectors];
+	return subjects.some((subject) =>
+		selectors.every((selector) =>
+			triggerSubjectMatches(read, source, subject, selector),
+		),
+	);
 }
 
 function triggerMatches(
-  read: ReadContext,
-  source: DeepReadOnly<GameObject>,
-  condition: TriggerCondition,
-  ev: GameEvent,
-  created: ObjectId[],
-  changed: ObjectId[],
+	read: ReadContext,
+	source: DeepReadOnly<GameObject>,
+	condition: TriggerCondition,
+	ev: GameEvent,
+	created: ObjectId[],
+	changed: ObjectId[],
 ): boolean {
-  if (ev.kind !== condition.kind) return false;
+	if (ev.kind !== condition.kind) return false;
 
-  switch (condition.kind) {
-    case "gain life":
-    case "lose life":
-    case "draw":
-      assert(
-        ev.kind === "gain life" ||
-          ev.kind === "lose life" ||
-          ev.kind === "draw",
-      );
-      return relativePlayerMatches(ev.player, condition.player, source);
+	switch (condition.kind) {
+		case "gain life":
+		case "lose life":
+		case "draw":
+			assert(
+				ev.kind === "gain life" ||
+					ev.kind === "lose life" ||
+					ev.kind === "draw",
+			);
+			return relativePlayerMatches(ev.player, condition.player, source);
 
-    case "begin step":
-      assert(ev.kind === "begin step");
-      return (
-        ev.step === condition.step &&
-        relativePlayerMatches(ev.player, condition.player, source)
-      );
+		case "begin step":
+			assert(ev.kind === "begin step");
+			return (
+				ev.step === condition.step &&
+				relativePlayerMatches(ev.player, condition.player, source)
+			);
 
-    case "declare attackers": {
-      assert(ev.kind === "declare attackers");
-      if (
-        condition.attacker &&
-        !relativePlayerMatches(ev.player, condition.attacker, source)
-      ) {
-        return false;
-      }
-      if (!condition.selector) return true;
-      const attackers = ev.attackers.flatMap((id) => {
-        const attacker = maybeObject(read.state, id);
-        return attacker ? [attacker] : [];
-      });
-      return triggerSubjectsMatch(read, source, attackers, condition.selector);
-    }
+		case "declare attackers": {
+			assert(ev.kind === "declare attackers");
+			if (
+				condition.attacker &&
+				!relativePlayerMatches(ev.player, condition.attacker, source)
+			) {
+				return false;
+			}
+			if (!condition.selector) return true;
+			const attackers = ev.attackers.flatMap((id) => {
+				const attacker = maybeObject(read.state, id);
+				return attacker ? [attacker] : [];
+			});
+			return triggerSubjectsMatch(read, source, attackers, condition.selector);
+		}
 
-    case "change zone": {
-      assert(ev.kind === "change zone");
-      if (condition.from !== "any" && ev.from !== condition.from) return false;
-      if (condition.to !== "any" && ev.to !== condition.to) return false;
+		case "change zone": {
+			assert(ev.kind === "change zone");
+			if (condition.from !== "any" && ev.from !== condition.from) return false;
+			if (condition.to !== "any" && ev.to !== condition.to) return false;
 
-      if (condition.from === "battlefield")
-        throw new Error("leaves the battlefield triggers are not supported");
-      // CR 400.7: ev.object names the old object, which no longer exists after
-      // execution. Match against the new object(s) returned by moveObject instead.
-      // Leaves-the-battlefield triggers will need last-known information here.
-      const movedObjects = created.flatMap((id) => {
-        const moved = maybeObject(read.state, id);
-        return moved ? [moved] : [];
-      });
-      return triggerSubjectsMatch(
-        read,
-        source,
-        movedObjects,
-        condition.selector,
-      );
-    }
+			if (condition.from === "battlefield")
+				throw new Error("leaves the battlefield triggers are not supported");
+			// CR 400.7: ev.object names the old object, which no longer exists after
+			// execution. Match against the new object(s) returned by moveObject instead.
+			// Leaves-the-battlefield triggers will need last-known information here.
+			const movedObjects = created.flatMap((id) => {
+				const moved = maybeObject(read.state, id);
+				return moved ? [moved] : [];
+			});
+			return triggerSubjectsMatch(
+				read,
+				source,
+				movedObjects,
+				condition.selector,
+			);
+		}
 
-    case "tap":
-    case "untap": {
-      assert(ev.kind === "tap" || ev.kind === "untap");
-      const subjects = changed.flatMap((id) => {
-        const subject = maybeObject(read.state, id);
-        return subject ? [subject] : [];
-      });
-      return triggerSubjectsMatch(read, source, subjects, condition.selector);
-    }
-  }
+		case "tap":
+		case "untap": {
+			assert(ev.kind === "tap" || ev.kind === "untap");
+			const subjects = changed.flatMap((id) => {
+				const subject = maybeObject(read.state, id);
+				return subject ? [subject] : [];
+			});
+			return triggerSubjectsMatch(read, source, subjects, condition.selector);
+		}
+	}
 }
 
 /** Observe events only after they successfully execute and all replacements are final. */
 function detectTriggers(
-  state: GameState,
-  read: ReadContext,
-  ev: GameEvent,
-  created: ObjectId[],
-  changed: ObjectId[],
+	state: GameState,
+	read: ReadContext,
+	ev: GameEvent,
+	created: ObjectId[],
+	changed: ObjectId[],
 ): void {
-  for (const abilitySource of state.objects.values()) {
-    const snapshot = read.view.objects.get(abilitySource.id);
-    assertDefined(snapshot, `no derived view for object ${abilitySource.id}`);
-    for (const triggerId of snapshot.currentCharacteristics.abilities
-      .triggered) {
-      const trigger = getAbilityDefinition("triggered", triggerId);
-      const functionsFrom = trigger.functionsFrom ?? ["battlefield"];
-      if (!functionsFrom.includes(abilitySource.zone)) continue;
-      if (
-        triggerMatches(
-          read,
-          abilitySource,
-          trigger.condition,
-          ev,
-          created,
-          changed,
-        )
-      ) {
-        enqueueTrigger(state, abilitySource, triggerId, trigger);
-      }
-    }
-  }
+	for (const abilitySource of state.objects.values()) {
+		const snapshot = read.view.objects.get(abilitySource.id);
+		assertDefined(snapshot, `no derived view for object ${abilitySource.id}`);
+		for (const triggerId of snapshot.currentCharacteristics.abilities
+			.triggered) {
+			const trigger = getAbilityDefinition("triggered", triggerId);
+			const functionsFrom = trigger.functionsFrom ?? ["battlefield"];
+			if (!functionsFrom.includes(abilitySource.zone)) continue;
+			if (
+				triggerMatches(
+					read,
+					abilitySource,
+					trigger.condition,
+					ev,
+					created,
+					changed,
+				)
+			) {
+				enqueueTrigger(state, abilitySource, triggerId, trigger);
+			}
+		}
+	}
 }
 
 /**
@@ -4395,636 +4387,636 @@ function detectTriggers(
  * `performIn` so they receive their own replacement pass.
  */
 function executeIn(
-  state: GameState,
-  before: ReadContext,
-  ev: GameEvent,
-  choices: AnyChoiceController,
-  scope: Scope,
-  depth: number,
+	state: GameState,
+	before: ReadContext,
+	ev: GameEvent,
+	choices: AnyChoiceController,
+	scope: Scope,
+	depth: number,
 ): PerformResult {
-  if (ev.guard && !scope.facts.has(ev.guard)) {
-    log(
-      state,
-      `${"  ".repeat(depth)}(skipped ${describeEvent(state, ev)} — guard "${ev.guard}" unmet)`,
-    );
-    return { executed: [], created: [] };
-  }
-  if (ev.unless && scope.facts.has(ev.unless)) {
-    log(
-      state,
-      `${"  ".repeat(depth)}(skipped ${describeEvent(state, ev)} — fact "${ev.unless}" present)`,
-    );
-    return { executed: [], created: [] };
-  }
+	if (ev.guard && !scope.facts.has(ev.guard)) {
+		log(
+			state,
+			`${"  ".repeat(depth)}(skipped ${describeEvent(state, ev)} — guard "${ev.guard}" unmet)`,
+		);
+		return { executed: [], created: [] };
+	}
+	if (ev.unless && scope.facts.has(ev.unless)) {
+		log(
+			state,
+			`${"  ".repeat(depth)}(skipped ${describeEvent(state, ev)} — fact "${ev.unless}" present)`,
+		);
+		return { executed: [], created: [] };
+	}
 
-  let happened = true;
-  const created: ObjectId[] = [];
-  const changed: ObjectId[] = [];
-  const childResults: PerformResult[] = [];
+	let happened = true;
+	const created: ObjectId[] = [];
+	const changed: ObjectId[] = [];
+	const childResults: PerformResult[] = [];
 
-  switch (ev.kind) {
-    case "draw cards": {
-      // Should this be >= 0? could a replacement effect alter this legally?
-      assert(
-        ev.amount >= 1,
-        `draw cards amount must be at least 1, got ${ev.amount}`,
-      );
-      for (let i = 0; i < ev.amount; i++) {
-        childResults.push(
-          performIn(
-            state,
-            {
-              kind: "draw",
-              player: ev.player,
-            },
-            choices,
-            scope,
-            depth,
-          ),
-        );
-      }
-      break;
-    }
+	switch (ev.kind) {
+		case "draw cards": {
+			// Should this be >= 0? could a replacement effect alter this legally?
+			assert(
+				ev.amount >= 1,
+				`draw cards amount must be at least 1, got ${ev.amount}`,
+			);
+			for (let i = 0; i < ev.amount; i++) {
+				childResults.push(
+					performIn(
+						state,
+						{
+							kind: "draw",
+							player: ev.player,
+						},
+						choices,
+						scope,
+						depth,
+					),
+				);
+			}
+			break;
+		}
 
-    case "draw": {
-      const p = state.players[ev.player];
-      const top = p.library[p.library.length - 1];
-      if (top === undefined) {
-        // CR 704.5b: queue a state-based loss, don't resolve it here.
-        p.drewFromEmptyLibrary = true;
-        log(
-          state,
-          `${"  ".repeat(depth)}P${ev.player} tried to draw from an empty library`,
-        );
-        happened = false;
-        break;
-      }
-      if (
-        currentStepKind(state) === "draw" &&
-        activePlayer(state) === ev.player
-      )
-        p.drawnInDrawStep++;
-      // Drawing *is* a zone change, so zone-change replacements get a look too.
-      childResults.push(
-        performIn(
-          state,
-          {
-            kind: "change zone",
-            object: top,
-            from: "library",
-            to: "hand",
-            cause: "draw",
-            toController: ev.player,
-          },
-          choices,
-          scope,
-          depth + 1,
-        ),
-      );
-      break;
-    }
+		case "draw": {
+			const p = state.players[ev.player];
+			const top = p.library[p.library.length - 1];
+			if (top === undefined) {
+				// CR 704.5b: queue a state-based loss, don't resolve it here.
+				p.drewFromEmptyLibrary = true;
+				log(
+					state,
+					`${"  ".repeat(depth)}P${ev.player} tried to draw from an empty library`,
+				);
+				happened = false;
+				break;
+			}
+			if (
+				currentStepKind(state) === "draw" &&
+				activePlayer(state) === ev.player
+			)
+				p.drawnInDrawStep++;
+			// Drawing *is* a zone change, so zone-change replacements get a look too.
+			childResults.push(
+				performIn(
+					state,
+					{
+						kind: "change zone",
+						object: top,
+						from: "library",
+						to: "hand",
+						cause: "draw",
+						toController: ev.player,
+					},
+					choices,
+					scope,
+					depth + 1,
+				),
+			);
+			break;
+		}
 
-    case "mill": {
-      const p = state.players[ev.player];
-      if (ev.amount <= 0 || p.library.length === 0) {
-        happened = false;
-        break;
-      }
-      for (let i = 0; i < ev.amount; i++) {
-        const top = p.library[p.library.length - 1];
-        if (top === undefined) break;
-        childResults.push(
-          performIn(
-            state,
-            {
-              kind: "change zone",
-              object: top,
-              from: "library",
-              to: "graveyard",
-              cause: "mill",
-              toController: ev.player,
-            },
-            choices,
-            scope,
-            depth + 1,
-          ),
-        );
-      }
-      break;
-    }
+		case "mill": {
+			const p = state.players[ev.player];
+			if (ev.amount <= 0 || p.library.length === 0) {
+				happened = false;
+				break;
+			}
+			for (let i = 0; i < ev.amount; i++) {
+				const top = p.library[p.library.length - 1];
+				if (top === undefined) break;
+				childResults.push(
+					performIn(
+						state,
+						{
+							kind: "change zone",
+							object: top,
+							from: "library",
+							to: "graveyard",
+							cause: "mill",
+							toController: ev.player,
+						},
+						choices,
+						scope,
+						depth + 1,
+					),
+				);
+			}
+			break;
+		}
 
-    case "discard": {
-      const p = state.players[ev.player];
-      if (p.hand.length === 0) {
-        happened = false;
-        break;
-      }
-      if (ev.cards.kind === "hand-size") {
-        const countToDiscard = p.hand.length - 7;
-        if (countToDiscard <= 0) {
-          happened = false;
-          break;
-        }
-        const toDiscard: ObjectId[] = [];
+		case "discard": {
+			const p = state.players[ev.player];
+			if (p.hand.length === 0) {
+				happened = false;
+				break;
+			}
+			if (ev.cards.kind === "hand-size") {
+				const countToDiscard = p.hand.length - 7;
+				if (countToDiscard <= 0) {
+					happened = false;
+					break;
+				}
+				const toDiscard: ObjectId[] = [];
 
-        for (let i = 0; i < countToDiscard; i++) {
-          const remaining = p.hand.filter((id) => !toDiscard.includes(id));
-          const selected = choices.chooseFromOwnHand(
-            state,
-            ev.player,
-            remaining,
-          );
+				for (let i = 0; i < countToDiscard; i++) {
+					const remaining = p.hand.filter((id) => !toDiscard.includes(id));
+					const selected = choices.chooseFromOwnHand(
+						state,
+						ev.player,
+						remaining,
+					);
 
-          assertDefined(selected);
-          toDiscard.push(selected);
-        }
-        toDiscard.forEach((id) => {
-          childResults.push(
-            performIn(
-              state,
-              {
-                kind: "change zone",
-                object: id,
-                from: "hand",
-                to: "graveyard",
-                cause: "discard",
-                toController: ev.player,
-              },
-              choices,
-              scope,
-              depth + 1,
-            ),
-          );
-        });
-        break;
-      }
+					assertDefined(selected);
+					toDiscard.push(selected);
+				}
+				toDiscard.forEach((id) => {
+					childResults.push(
+						performIn(
+							state,
+							{
+								kind: "change zone",
+								object: id,
+								from: "hand",
+								to: "graveyard",
+								cause: "discard",
+								toController: ev.player,
+							},
+							choices,
+							scope,
+							depth + 1,
+						),
+					);
+				});
+				break;
+			}
 
-      const chosen =
-        ev.cards.kind === "specific"
-          ? ev.cards.card
-          : choices.chooseFromOwnHand(state, ev.player, p.hand);
-      assertDefined(chosen);
-      childResults.push(
-        performIn(
-          state,
-          {
-            kind: "change zone",
-            object: chosen,
-            from: "hand",
-            to: "graveyard",
-            cause: "discard",
-            toController: ev.player,
-          },
-          choices,
-          scope,
-          depth + 1,
-        ),
-      );
-      break;
-    }
+			const chosen =
+				ev.cards.kind === "specific"
+					? ev.cards.card
+					: choices.chooseFromOwnHand(state, ev.player, p.hand);
+			assertDefined(chosen);
+			childResults.push(
+				performIn(
+					state,
+					{
+						kind: "change zone",
+						object: chosen,
+						from: "hand",
+						to: "graveyard",
+						cause: "discard",
+						toController: ev.player,
+					},
+					choices,
+					scope,
+					depth + 1,
+				),
+			);
+			break;
+		}
 
-    case "damage": {
-      if (ev.amount <= 0) {
-        happened = false;
-        break;
-      }
-      if (ev.target.type === "player") {
-        state.players[ev.target.player].life -= ev.amount;
-        log(
-          state,
-          `${"  ".repeat(depth)}P${ev.target.player} -> ${state.players[ev.target.player].life} life`,
-        );
-      } else {
-        const o = maybePermanent(state, ev.target.id);
-        if (o?.zone !== "battlefield") {
-          happened = false;
-          break;
-        }
-        const characteristics = readObject(before, o.id);
-        assert(characteristics.kind === "permanent");
-        assert(
-          !characteristics.currentCharacteristics.types.includes(
-            "planeswalker",
-          ),
-          "planeswalker damage is not implemented",
-        );
-        o.damage += ev.amount;
-        if (ev.deathtouch) o.attributes.deathtouched = true;
-        log(
-          state,
-          `${"  ".repeat(depth)}${name(state, o.id)} has ${o.damage} damage marked`,
-        );
-      }
-      if (ev.lifelink) {
-        childResults.push(
-          performIn(
-            state,
-            {
-              kind: "gain life",
-              player: ev.sourceController,
-              amount: ev.amount,
-              source: ev.source,
-            },
-            choices,
-            scope,
-            depth + 1,
-          ),
-        );
-      }
-      break;
-    }
+		case "damage": {
+			if (ev.amount <= 0) {
+				happened = false;
+				break;
+			}
+			if (ev.target.type === "player") {
+				state.players[ev.target.player].life -= ev.amount;
+				log(
+					state,
+					`${"  ".repeat(depth)}P${ev.target.player} -> ${state.players[ev.target.player].life} life`,
+				);
+			} else {
+				const o = maybePermanent(state, ev.target.id);
+				if (o?.zone !== "battlefield") {
+					happened = false;
+					break;
+				}
+				const characteristics = readObject(before, o.id);
+				assert(characteristics.kind === "permanent");
+				assert(
+					!characteristics.currentCharacteristics.types.includes(
+						"planeswalker",
+					),
+					"planeswalker damage is not implemented",
+				);
+				o.damage += ev.amount;
+				if (ev.deathtouch) o.attributes.deathtouched = true;
+				log(
+					state,
+					`${"  ".repeat(depth)}${name(state, o.id)} has ${o.damage} damage marked`,
+				);
+			}
+			if (ev.lifelink) {
+				childResults.push(
+					performIn(
+						state,
+						{
+							kind: "gain life",
+							player: ev.sourceController,
+							amount: ev.amount,
+							source: ev.source,
+						},
+						choices,
+						scope,
+						depth + 1,
+					),
+				);
+			}
+			break;
+		}
 
-    case "destroy": {
-      const o = maybePermanent(state, ev.object);
-      if (o?.zone !== "battlefield") {
-        happened = false;
-        break;
-      }
-      const snapshot = readObject(before, o.id);
-      assert(snapshot.kind === "permanent");
-      const movement = performIn(
-        state,
-        {
-          kind: "change zone",
-          object: o.id,
-          from: "battlefield",
-          to: "graveyard",
-          cause: "destroy",
-          toController: snapshot.controller,
-        },
-        choices,
-        scope,
-        depth + 1,
-      );
-      childResults.push(movement);
-      happened = movement.executed.some(
-        (child) =>
-          child.kind === "change zone" &&
-          child.object === o.id &&
-          child.from === "battlefield" &&
-          child.to === "graveyard" &&
-          child.cause === "destroy",
-      );
-      break;
-    }
+		case "destroy": {
+			const o = maybePermanent(state, ev.object);
+			if (o?.zone !== "battlefield") {
+				happened = false;
+				break;
+			}
+			const snapshot = readObject(before, o.id);
+			assert(snapshot.kind === "permanent");
+			const movement = performIn(
+				state,
+				{
+					kind: "change zone",
+					object: o.id,
+					from: "battlefield",
+					to: "graveyard",
+					cause: "destroy",
+					toController: snapshot.controller,
+				},
+				choices,
+				scope,
+				depth + 1,
+			);
+			childResults.push(movement);
+			happened = movement.executed.some(
+				(child) =>
+					child.kind === "change zone" &&
+					child.object === o.id &&
+					child.from === "battlefield" &&
+					child.to === "graveyard" &&
+					child.cause === "destroy",
+			);
+			break;
+		}
 
-    case "regenerate": {
-      const o = maybePermanent(state, ev.object);
-      if (!o) {
-        happened = false;
-        break;
-      }
-      o.tapped = true;
-      o.damage = 0;
-      o.attacking = false;
-      o.blocking = false;
-      delete o.attributes.deathtouched;
-      log(
-        state,
-        `${"  ".repeat(depth)}${name(state, o.id)} regenerates (tapped, damage removed, out of combat)`,
-      );
-      break;
-    }
+		case "regenerate": {
+			const o = maybePermanent(state, ev.object);
+			if (!o) {
+				happened = false;
+				break;
+			}
+			o.tapped = true;
+			o.damage = 0;
+			o.attacking = false;
+			o.blocking = false;
+			delete o.attributes.deathtouched;
+			log(
+				state,
+				`${"  ".repeat(depth)}${name(state, o.id)} regenerates (tapped, damage removed, out of combat)`,
+			);
+			break;
+		}
 
-    case "change zone": {
-      const newId = moveObject(state, ev.object, ev.from, ev.to, {
-        toController: ev.toController,
-        tapped: ev.entersTapped,
-        counters: ev.entersWithCounters,
-        copiableOverride: ev.copiableOverride,
-        toBottom: ev.toBottom,
-        spellTargets: ev.spellTargets,
-      });
-      created.push(newId);
-      break;
-    }
+		case "change zone": {
+			const newId = moveObject(state, ev.object, ev.from, ev.to, {
+				toController: ev.toController,
+				tapped: ev.entersTapped,
+				counters: ev.entersWithCounters,
+				copiableOverride: ev.copiableOverride,
+				toBottom: ev.toBottom,
+				spellTargets: ev.spellTargets,
+			});
+			created.push(newId);
+			break;
+		}
 
-    case "add counters": {
-      if (ev.amount <= 0) {
-        throw new Error(
-          "undefined behavior: tried to add non-natural quantity of counters.",
-        );
-        // happened = false;
-        // break;
-      }
-      if (ev.target.type === "permanent") {
-        const o = maybePermanent(state, ev.target.id);
-        if (!o) {
-          throw new Error(
-            "undefined behavior: tried to add counters to a non-existent permanent.",
-          );
-        }
-        // if (!o) {
-        // 	happened = false;
-        // 	break;
-        // }
-        o.counters[ev.counter] = (o.counters[ev.counter] ?? 0) + ev.amount;
-        log(
-          state,
-          `${"  ".repeat(depth)}${name(state, o.id)} now has ${o.counters[ev.counter]} ${ev.counter}`,
-        );
-      } else {
-        state.players[ev.target.player].counters[ev.counter] =
-          (state.players[ev.target.player].counters[ev.counter] ?? 0) +
-          ev.amount;
-        log(
-          state,
-          `${"  ".repeat(depth)}${state.players[ev.target.player].id} now has ${state.players[ev.target.player].counters[ev.counter]} ${ev.counter}`,
-        );
-      }
-      break;
-    }
-    case "remove counters": {
-      if (ev.target.type === "player") {
-        throw new Error("player counters not implemented");
-      }
-      const o = maybePermanent(state, ev.target.id);
-      if (!o) {
-        happened = false;
-        break;
-      }
-      if (ev.counters === "all") {
-        o.counters = {};
-        break;
-      }
-      Object.entries(ev.counters).forEach(([_counter, amount]) => {
-        const counter = _counter as CounterNames;
-        if (amount === "all") {
-          o.counters[counter] = 0;
-          return;
-        }
-        if (o.counters[counter] === undefined)
-          throw new Error(
-            "undefined behavior: tried to remove a counter that wasn't present.",
-          );
-        if (o.counters[counter] < amount)
-          throw new Error(
-            "undefined behavior: tried to remove more counters than were present.",
-          );
-        o.counters[counter] -= amount;
-      });
-      break;
-    }
+		case "add counters": {
+			if (ev.amount <= 0) {
+				throw new Error(
+					"undefined behavior: tried to add non-natural quantity of counters.",
+				);
+				// happened = false;
+				// break;
+			}
+			if (ev.target.type === "permanent") {
+				const o = maybePermanent(state, ev.target.id);
+				if (!o) {
+					throw new Error(
+						"undefined behavior: tried to add counters to a non-existent permanent.",
+					);
+				}
+				// if (!o) {
+				// 	happened = false;
+				// 	break;
+				// }
+				o.counters[ev.counter] = (o.counters[ev.counter] ?? 0) + ev.amount;
+				log(
+					state,
+					`${"  ".repeat(depth)}${name(state, o.id)} now has ${o.counters[ev.counter]} ${ev.counter}`,
+				);
+			} else {
+				state.players[ev.target.player].counters[ev.counter] =
+					(state.players[ev.target.player].counters[ev.counter] ?? 0) +
+					ev.amount;
+				log(
+					state,
+					`${"  ".repeat(depth)}${state.players[ev.target.player].id} now has ${state.players[ev.target.player].counters[ev.counter]} ${ev.counter}`,
+				);
+			}
+			break;
+		}
+		case "remove counters": {
+			if (ev.target.type === "player") {
+				throw new Error("player counters not implemented");
+			}
+			const o = maybePermanent(state, ev.target.id);
+			if (!o) {
+				happened = false;
+				break;
+			}
+			if (ev.counters === "all") {
+				o.counters = {};
+				break;
+			}
+			Object.entries(ev.counters).forEach(([_counter, amount]) => {
+				const counter = _counter as CounterNames;
+				if (amount === "all") {
+					o.counters[counter] = 0;
+					return;
+				}
+				if (o.counters[counter] === undefined)
+					throw new Error(
+						"undefined behavior: tried to remove a counter that wasn't present.",
+					);
+				if (o.counters[counter] < amount)
+					throw new Error(
+						"undefined behavior: tried to remove more counters than were present.",
+					);
+				o.counters[counter] -= amount;
+			});
+			break;
+		}
 
-    case "gain life": {
-      if (ev.amount <= 0) {
-        throw new Error(
-          "undefined behavior: tried to gain non-natural quantity of life.",
-        );
-      }
-      const p = state.players[ev.player];
-      p.life += ev.amount;
-      log(state, `${"  ".repeat(depth)}P${ev.player} -> ${p.life} life`);
-      break;
-    }
-    case "lose life": {
-      if (ev.amount <= 0) {
-        throw new Error(
-          "undefined behavior: tried to lose non-natural quantity of life.",
-        );
-      }
-      const p = state.players[ev.player];
-      p.life -= ev.amount;
-      log(state, `${"  ".repeat(depth)}P${ev.player} -> ${p.life} life`);
-      break;
-    }
+		case "gain life": {
+			if (ev.amount <= 0) {
+				throw new Error(
+					"undefined behavior: tried to gain non-natural quantity of life.",
+				);
+			}
+			const p = state.players[ev.player];
+			p.life += ev.amount;
+			log(state, `${"  ".repeat(depth)}P${ev.player} -> ${p.life} life`);
+			break;
+		}
+		case "lose life": {
+			if (ev.amount <= 0) {
+				throw new Error(
+					"undefined behavior: tried to lose non-natural quantity of life.",
+				);
+			}
+			const p = state.players[ev.player];
+			p.life -= ev.amount;
+			log(state, `${"  ".repeat(depth)}P${ev.player} -> ${p.life} life`);
+			break;
+		}
 
-    case "add mana": {
-      let total = 0;
-      for (const type of MANA_TYPES) {
-        const amount = ev.mana[type] ?? 0;
-        if (!Number.isSafeInteger(amount) || amount < 0) {
-          throw new Error(
-            "undefined behavior: tried to add an invalid quantity of mana",
-          );
-        }
-        total += amount;
-      }
-      if (total <= 0) {
-        throw new Error("undefined behavior: tried to add no mana");
-      }
-      const pool = state.players[ev.player].manaPool;
-      for (const type of MANA_TYPES) pool[type] += ev.mana[type] ?? 0;
-      log(
-        state,
-        `${"  ".repeat(depth)}P${ev.player} mana pool -> ${MANA_TYPES.map((type) => `${pool[type]}${type.toUpperCase()}`).join(" ")}`,
-      );
-      break;
-    }
+		case "add mana": {
+			let total = 0;
+			for (const type of MANA_TYPES) {
+				const amount = ev.mana[type] ?? 0;
+				if (!Number.isSafeInteger(amount) || amount < 0) {
+					throw new Error(
+						"undefined behavior: tried to add an invalid quantity of mana",
+					);
+				}
+				total += amount;
+			}
+			if (total <= 0) {
+				throw new Error("undefined behavior: tried to add no mana");
+			}
+			const pool = state.players[ev.player].manaPool;
+			for (const type of MANA_TYPES) pool[type] += ev.mana[type] ?? 0;
+			log(
+				state,
+				`${"  ".repeat(depth)}P${ev.player} mana pool -> ${MANA_TYPES.map((type) => `${pool[type]}${type.toUpperCase()}`).join(" ")}`,
+			);
+			break;
+		}
 
-    case "tap":
-    case "untap": {
-      const tapped = ev.kind === "tap";
-      if (ev.ref.kind === "all") {
-        const p = state.players[ev.ref.player];
-        for (const o of permanentsInPlay(state).filter(
-          (o) => o.controller === p.id,
-        )) {
-          if (o.tapped === tapped) continue;
-          o.tapped = tapped;
-          changed.push(o.id);
-        }
-        if (changed.length === 0) happened = false;
-      } else {
-        const o = maybePermanent(state, ev.ref.object);
-        if (!o || o.tapped === tapped) {
-          happened = false;
-          break;
-        }
-        o.tapped = tapped;
-        changed.push(o.id);
-      }
-      break;
-    }
-    case "begin turn":
-    case "begin phase":
-      // Structural continuation belongs to the turn scheduler. These events only
-      // record that the replaceable boundary successfully happened.
-      break;
+		case "tap":
+		case "untap": {
+			const tapped = ev.kind === "tap";
+			if (ev.ref.kind === "all") {
+				const p = state.players[ev.ref.player];
+				for (const o of permanentsInPlay(state).filter(
+					(o) => o.controller === p.id,
+				)) {
+					if (o.tapped === tapped) continue;
+					o.tapped = tapped;
+					changed.push(o.id);
+				}
+				if (changed.length === 0) happened = false;
+			} else {
+				const o = maybePermanent(state, ev.ref.object);
+				if (!o || o.tapped === tapped) {
+					happened = false;
+					break;
+				}
+				o.tapped = tapped;
+				changed.push(o.id);
+			}
+			break;
+		}
+		case "begin turn":
+		case "begin phase":
+			// Structural continuation belongs to the turn scheduler. These events only
+			// record that the replaceable boundary successfully happened.
+			break;
 
-    case "begin step":
-      // Turn-based actions (untap, normal draw, combat declarations, etc.)
-      // run only after the scheduler confirms this exact boundary executed.
-      break;
+		case "begin step":
+			// Turn-based actions (untap, normal draw, combat declarations, etc.)
+			// run only after the scheduler confirms this exact boundary executed.
+			break;
 
-    case "create token": {
-      for (let i = 0; i < ev.amount; i++) {
-        const t = spawnToken(
-          state,
-          ev.controller,
-          characteristicsFromCardDef(card(ev.tokenDefinitionId)),
-        );
-        created.push(t.id);
-        log(state, `${"  ".repeat(depth)}created ${name(state, t.id)}`);
-      }
-      break;
-    }
+		case "create token": {
+			for (let i = 0; i < ev.amount; i++) {
+				const t = spawnToken(
+					state,
+					ev.controller,
+					characteristicsFromCardDef(card(ev.tokenDefinitionId)),
+				);
+				created.push(t.id);
+				log(state, `${"  ".repeat(depth)}created ${name(state, t.id)}`);
+			}
+			break;
+		}
 
-    case "declare attackers": {
-      // A declare-attackers occurrence must genuinely be in progress and belong
-      // to the current turn.
-      const progress = state.turnScheduler.progress;
-      const location =
-        progress.kind === "inTurn" ? progress.location : undefined;
-      if (
-        progress.kind !== "inTurn" ||
-        location?.kind !== "step" ||
-        location.step.kind !== "declare attackers"
-      ) {
-        throw new IllegalAttackDeclarationError(
-          `cannot declare attackers outside the declare attackers step (current step: "${location?.kind === "step" ? location.step.kind : "none"}")`,
-        );
-      }
-      const currentTurn = progress.turn;
-      if (ev.player !== currentTurn.player) {
-        throw new IllegalAttackDeclarationError(
-          `P${ev.player} declared attackers, but P${currentTurn.player} is the active player`,
-        );
-      }
-      if (new Set(ev.attackers).size !== ev.attackers.length) {
-        throw new IllegalAttackDeclarationError(
-          "declared attackers must be unique",
-        );
-      }
-      const eligible = new Set(eligibleAttackers(state, ev.player));
-      for (const id of ev.attackers) {
-        if (!eligible.has(id)) {
-          throw new IllegalAttackDeclarationError(
-            `${name(state, id)} is not an eligible attacker for P${ev.player}`,
-          );
-        }
-      }
-      // Validation above is exhaustive before any mutation, so this commits
-      // atomically: either every selected attacker taps and attacks, or none do.
-      for (const id of ev.attackers) {
-        const o = permanent(state, id);
-        o.attacking = true;
-        // CR 508.1f / 702.20b: attacking taps the creature, unless it has
-        // vigilance. Read the derived characteristics rather than the printed
-        // card, so a granted or copied vigilance counts.
-        const attackerSnapshot = readObject(before, id);
-        assert(attackerSnapshot.kind === "permanent");
-        if (
-          !attackerSnapshot.currentCharacteristics.keywords.includes(
-            "vigilance",
-          )
-        ) {
-          o.tapped = true;
-        }
-      }
-      log(
-        state,
-        `${"  ".repeat(depth)}P${ev.player} declares ${ev.attackers.length} attacker(s)`,
-      );
-      break;
-    }
+		case "declare attackers": {
+			// A declare-attackers occurrence must genuinely be in progress and belong
+			// to the current turn.
+			const progress = state.turnScheduler.progress;
+			const location =
+				progress.kind === "inTurn" ? progress.location : undefined;
+			if (
+				progress.kind !== "inTurn" ||
+				location?.kind !== "step" ||
+				location.step.kind !== "declare attackers"
+			) {
+				throw new IllegalAttackDeclarationError(
+					`cannot declare attackers outside the declare attackers step (current step: "${location?.kind === "step" ? location.step.kind : "none"}")`,
+				);
+			}
+			const currentTurn = progress.turn;
+			if (ev.player !== currentTurn.player) {
+				throw new IllegalAttackDeclarationError(
+					`P${ev.player} declared attackers, but P${currentTurn.player} is the active player`,
+				);
+			}
+			if (new Set(ev.attackers).size !== ev.attackers.length) {
+				throw new IllegalAttackDeclarationError(
+					"declared attackers must be unique",
+				);
+			}
+			const eligible = new Set(eligibleAttackers(state, ev.player));
+			for (const id of ev.attackers) {
+				if (!eligible.has(id)) {
+					throw new IllegalAttackDeclarationError(
+						`${name(state, id)} is not an eligible attacker for P${ev.player}`,
+					);
+				}
+			}
+			// Validation above is exhaustive before any mutation, so this commits
+			// atomically: either every selected attacker taps and attacks, or none do.
+			for (const id of ev.attackers) {
+				const o = permanent(state, id);
+				o.attacking = true;
+				// CR 508.1f / 702.20b: attacking taps the creature, unless it has
+				// vigilance. Read the derived characteristics rather than the printed
+				// card, so a granted or copied vigilance counts.
+				const attackerSnapshot = readObject(before, id);
+				assert(attackerSnapshot.kind === "permanent");
+				if (
+					!attackerSnapshot.currentCharacteristics.keywords.includes(
+						"vigilance",
+					)
+				) {
+					o.tapped = true;
+				}
+			}
+			log(
+				state,
+				`${"  ".repeat(depth)}P${ev.player} declares ${ev.attackers.length} attacker(s)`,
+			);
+			break;
+		}
 
-    case "declare blockers": {
-      // Mirror-image boundary check to "declare attackers", but keyed to the
-      // declare blockers step and the defending (non-active) player.
-      const progress = state.turnScheduler.progress;
-      const location =
-        progress.kind === "inTurn" ? progress.location : undefined;
-      if (
-        progress.kind !== "inTurn" ||
-        location?.kind !== "step" ||
-        location.step.kind !== "declare blockers"
-      ) {
-        throw new IllegalBlockDeclarationError(
-          `cannot declare blockers outside the declare blockers step (current step: "${location?.kind === "step" ? location.step.kind : "none"}")`,
-        );
-      }
-      const currentTurn = progress.turn;
-      const defender = (1 - currentTurn.player) as PlayerId;
-      if (ev.player !== defender) {
-        throw new IllegalBlockDeclarationError(
-          `P${ev.player} declared blockers, but P${defender} is the defending player`,
-        );
-      }
-      // A single blocker cannot be assigned to multiple attackers under the
-      // base rules; multi-blockers (many blockers on one attacker) are allowed
-      // and are represented by multiple distinct pairs.
-      const usedBlockers = new Set<ObjectId>();
-      const attackingIds = new Set(
-        creaturesControlledBy(createReadContext(state), currentTurn.player)
-          .filter((o) => o.attacking)
-          .map((o) => o.id),
-      );
-      const eligible = new Set(eligibleBlockers(state, ev.player));
-      for (const { blocker, attacker } of ev.blockers) {
-        if (usedBlockers.has(blocker)) {
-          throw new IllegalBlockDeclarationError(
-            `${name(state, blocker)} cannot block multiple attackers`,
-          );
-        }
-        usedBlockers.add(blocker);
-        if (!eligible.has(blocker)) {
-          throw new IllegalBlockDeclarationError(
-            `${name(state, blocker)} is not an eligible blocker for P${ev.player}`,
-          );
-        }
-        if (!attackingIds.has(attacker)) {
-          throw new IllegalBlockDeclarationError(
-            `${name(state, attacker)} is not a legal attacker to be blocked`,
-          );
-        }
-      }
-      // Atomic commit: either every assignment and blocker status is recorded,
-      // or none is. Keep the pair order as the deterministic damage-assignment
-      // order for the base engine's noninteractive combat model.
-      state.blockAssignments = ev.blockers.map((assignment) => ({
-        ...assignment,
-      }));
-      for (const { blocker } of state.blockAssignments) {
-        permanent(state, blocker).blocking = true;
-      }
-      log(
-        state,
-        `${"  ".repeat(depth)}P${ev.player} declares ${ev.blockers.length} blocker assignment(s)`,
-      );
-      break;
-    }
+		case "declare blockers": {
+			// Mirror-image boundary check to "declare attackers", but keyed to the
+			// declare blockers step and the defending (non-active) player.
+			const progress = state.turnScheduler.progress;
+			const location =
+				progress.kind === "inTurn" ? progress.location : undefined;
+			if (
+				progress.kind !== "inTurn" ||
+				location?.kind !== "step" ||
+				location.step.kind !== "declare blockers"
+			) {
+				throw new IllegalBlockDeclarationError(
+					`cannot declare blockers outside the declare blockers step (current step: "${location?.kind === "step" ? location.step.kind : "none"}")`,
+				);
+			}
+			const currentTurn = progress.turn;
+			const defender = (1 - currentTurn.player) as PlayerId;
+			if (ev.player !== defender) {
+				throw new IllegalBlockDeclarationError(
+					`P${ev.player} declared blockers, but P${defender} is the defending player`,
+				);
+			}
+			// A single blocker cannot be assigned to multiple attackers under the
+			// base rules; multi-blockers (many blockers on one attacker) are allowed
+			// and are represented by multiple distinct pairs.
+			const usedBlockers = new Set<ObjectId>();
+			const attackingIds = new Set(
+				creaturesControlledBy(createReadContext(state), currentTurn.player)
+					.filter((o) => o.attacking)
+					.map((o) => o.id),
+			);
+			const eligible = new Set(eligibleBlockers(state, ev.player));
+			for (const { blocker, attacker } of ev.blockers) {
+				if (usedBlockers.has(blocker)) {
+					throw new IllegalBlockDeclarationError(
+						`${name(state, blocker)} cannot block multiple attackers`,
+					);
+				}
+				usedBlockers.add(blocker);
+				if (!eligible.has(blocker)) {
+					throw new IllegalBlockDeclarationError(
+						`${name(state, blocker)} is not an eligible blocker for P${ev.player}`,
+					);
+				}
+				if (!attackingIds.has(attacker)) {
+					throw new IllegalBlockDeclarationError(
+						`${name(state, attacker)} is not a legal attacker to be blocked`,
+					);
+				}
+			}
+			// Atomic commit: either every assignment and blocker status is recorded,
+			// or none is. Keep the pair order as the deterministic damage-assignment
+			// order for the base engine's noninteractive combat model.
+			state.blockAssignments = ev.blockers.map((assignment) => ({
+				...assignment,
+			}));
+			for (const { blocker } of state.blockAssignments) {
+				permanent(state, blocker).blocking = true;
+			}
+			log(
+				state,
+				`${"  ".repeat(depth)}P${ev.player} declares ${ev.blockers.length} blocker assignment(s)`,
+			);
+			break;
+		}
 
-    case "lose game": {
-      const p = state.players[ev.player];
-      if (!p.lost && !p.won) {
-        p.lost = true;
-        log(
-          state,
-          `${"  ".repeat(depth)}P${ev.player} loses the game (${ev.reason})`,
-        );
-      }
-      break;
-    }
+		case "lose game": {
+			const p = state.players[ev.player];
+			if (!p.lost && !p.won) {
+				p.lost = true;
+				log(
+					state,
+					`${"  ".repeat(depth)}P${ev.player} loses the game (${ev.reason})`,
+				);
+			}
+			break;
+		}
 
-    case "win game": {
-      const p = state.players[ev.player];
-      if (!p.lost && !p.won) {
-        p.won = true;
-        log(
-          state,
-          `${"  ".repeat(depth)}P${ev.player} wins the game (${ev.reason})`,
-        );
-      }
-      break;
-    }
-    default:
-      assertNever(ev);
-  }
+		case "win game": {
+			const p = state.players[ev.player];
+			if (!p.lost && !p.won) {
+				p.won = true;
+				log(
+					state,
+					`${"  ".repeat(depth)}P${ev.player} wins the game (${ev.reason})`,
+				);
+			}
+			break;
+		}
+		default:
+			assertNever(ev);
+	}
 
-  const executed: GameEvent[] = [];
-  for (const r of childResults) {
-    executed.push(...r.executed);
-    created.push(...r.created);
-  }
-  if (happened) {
-    executed.push(ev);
-    state.revision++;
-    detectTriggers(state, createReadContext(state), ev, created, changed);
-    if (ev.fact) scope.facts.add(ev.fact);
-  }
+	const executed: GameEvent[] = [];
+	for (const r of childResults) {
+		executed.push(...r.executed);
+		created.push(...r.created);
+	}
+	if (happened) {
+		executed.push(ev);
+		state.revision++;
+		detectTriggers(state, createReadContext(state), ev, created, changed);
+		if (ev.fact) scope.facts.add(ev.fact);
+	}
 
-  return { executed, created };
+	return { executed, created };
 }
 
 /* ------------------------------------------------------------------ *
@@ -5032,40 +5024,40 @@ function executeIn(
  * ------------------------------------------------------------------ */
 
 function putPendingTriggersOnStack(
-  state: GameState,
-  choices: AnyChoiceController,
-  active: PlayerId,
+	state: GameState,
+	choices: AnyChoiceController,
+	active: PlayerId,
 ): void {
-  if (currentStepKind(state) === "untap") {
-    /**
-     * 502.4:
-     * No player receives priority during the untap step, so no spells can be
-     * cast or resolve and no abilities can be activated or resolve. Any ability
-     * that triggers during this step will be held until the next time a player
-     * would receive priority, which is usually during the upkeep step.
-     *
-     * (See rule 503, "Upkeep Step.")
-     */
-    return;
-  }
-  const nonactivePlayer = (1 - active) as PlayerId;
-  const ordered: PendingTrigger[] = [];
-  for (const controller of [active, nonactivePlayer] as const) {
-    const controlled = state.pendingTriggers.filter(
-      (pending) => pending.controller === controller,
-    );
-    ordered.push(...choices.chooseTriggerOrder(state, controller, controlled));
-  }
-  for (const pending of ordered) {
-    const item: TriggeredAbilityStackItem = {
-      id: state.nextStackItemId++ as StackItemId,
-      kind: "triggered ability",
-      ...pending,
-    };
-    state.stack.push(item);
-    log(state, `  [stack] ${item.text}`);
-  }
-  state.pendingTriggers.length = 0;
+	if (currentStepKind(state) === "untap") {
+		/**
+		 * 502.4:
+		 * No player receives priority during the untap step, so no spells can be
+		 * cast or resolve and no abilities can be activated or resolve. Any ability
+		 * that triggers during this step will be held until the next time a player
+		 * would receive priority, which is usually during the upkeep step.
+		 *
+		 * (See rule 503, "Upkeep Step.")
+		 */
+		return;
+	}
+	const nonactivePlayer = (1 - active) as PlayerId;
+	const ordered: PendingTrigger[] = [];
+	for (const controller of [active, nonactivePlayer] as const) {
+		const controlled = state.pendingTriggers.filter(
+			(pending) => pending.controller === controller,
+		);
+		ordered.push(...choices.chooseTriggerOrder(state, controller, controlled));
+	}
+	for (const pending of ordered) {
+		const item: TriggeredAbilityStackItem = {
+			id: state.nextStackItemId++ as StackItemId,
+			kind: "triggered ability",
+			...pending,
+		};
+		state.stack.push(item);
+		log(state, `  [stack] ${item.text}`);
+	}
+	state.pendingTriggers.length = 0;
 }
 
 /**
@@ -5076,16 +5068,16 @@ function putPendingTriggersOnStack(
  * resolves on its own terms below.
  */
 function resolveTopOfStack(
-  state: GameState,
-  choices: AnyChoiceController,
+	state: GameState,
+	choices: AnyChoiceController,
 ): void {
-  const entry = state.stack[state.stack.length - 1];
-  assertDefined(entry, "nothing on the stack to resolve");
-  if (entry.kind === "spell") {
-    resolveSpell(state, choices, entry);
-  } else {
-    resolveStackAbility(state, choices, entry);
-  }
+	const entry = state.stack[state.stack.length - 1];
+	assertDefined(entry, "nothing on the stack to resolve");
+	if (entry.kind === "spell") {
+		resolveSpell(state, choices, entry);
+	} else {
+		resolveStackAbility(state, choices, entry);
+	}
 }
 
 /**
@@ -5096,104 +5088,104 @@ function resolveTopOfStack(
  * an instant or sorcery visible to its own effects while they resolve.
  */
 function resolveSpell(
-  state: GameState,
-  choices: AnyChoiceController,
-  entry: SpellStackEntry,
+	state: GameState,
+	choices: AnyChoiceController,
+	entry: SpellStackEntry,
 ): void {
-  const object = maybeObject(state, entry.objectId);
-  assertDefined(object, `no spell object ${entry.objectId}`);
-  assert(
-    object.kind === "spell",
-    `stack entry ${entry.objectId} is not a spell`,
-  );
+	const object = maybeObject(state, entry.objectId);
+	assertDefined(object, `no spell object ${entry.objectId}`);
+	assert(
+		object.kind === "spell",
+		`stack entry ${entry.objectId} is not a spell`,
+	);
 
-  // A copy of a spell has no card to read a spell ability from; its
-  // instructions would have to come from the copy snapshot instead. Nothing
-  // creates one yet, so this is unreachable rather than unimplemented.
-  assert(
-    object.representation.kind === "card",
-    "resolving a copied spell is not supported",
-  );
+	// A copy of a spell has no card to read a spell ability from; its
+	// instructions would have to come from the copy snapshot instead. Nothing
+	// creates one yet, so this is unreachable rather than unimplemented.
+	assert(
+		object.representation.kind === "card",
+		"resolving a copied spell is not supported",
+	);
 
-  const read = createReadContext(state);
-  const snapshot = readObject(read, object.id);
-  assert(snapshot.kind === "spell", "a spell object read back as another kind");
-  const characteristics = snapshot.currentCharacteristics;
+	const read = createReadContext(state);
+	const snapshot = readObject(read, object.id);
+	assert(snapshot.kind === "spell", "a spell object read back as another kind");
+	const characteristics = snapshot.currentCharacteristics;
 
-  log(state, `  [resolve] ${characteristics.name}#${object.id}`);
+	log(state, `  [resolve] ${characteristics.name}#${object.id}`);
 
-  // CR 608.3: a resolving permanent spell becomes a permanent, entering under
-  // its controller.
-  if (
-    characteristics.types.some((type) => includes(PERMANENT_CARD_TYPES, type))
-  ) {
-    performIn(
-      state,
-      {
-        kind: "change zone",
-        object: object.id,
-        from: "stack",
-        to: "battlefield",
-        cause: "resolve",
-        toController: object.controller,
-      },
-      choices,
-      newScope(),
-      0,
-    );
-    return;
-  }
+	// CR 608.3: a resolving permanent spell becomes a permanent, entering under
+	// its controller.
+	if (
+		characteristics.types.some((type) => includes(PERMANENT_CARD_TYPES, type))
+	) {
+		performIn(
+			state,
+			{
+				kind: "change zone",
+				object: object.id,
+				from: "stack",
+				to: "battlefield",
+				cause: "resolve",
+				toController: object.controller,
+			},
+			choices,
+			newScope(),
+			0,
+		);
+		return;
+	}
 
-  // CR 608.2m: an instant or sorcery follows its own instructions and is then
-  // put into its owner's graveyard as the last step of resolution.
-  const definition = card(object.representation.cardId).spell;
-  assertDefined(
-    definition,
-    `${characteristics.name} has no spell ability to resolve`,
-  );
-  const target = spellTargetDefinition(definition);
-  assert(
-    entry.targets.length === (target ? 1 : 0),
-    "spell target binding count disagrees with its definition",
-  );
-  const binding = entry.targets[0];
-  if (target)
-    assert(binding?.slot === target.id, "spell has the wrong target slot");
-  // CR 608.2b: with one required target, an illegal target stops every effect.
-  const legal =
-    !target ||
-    (binding !== undefined && isLegalSpellTarget(read, target, binding.target));
-  if (legal) {
-    /** Share a scope so facts can pass through the complete effect sequence. */
-    resolveEffects(
-      state,
-      choices,
-      {
-        controller: object.controller,
-        source: object.id,
-        ability: null,
-        targets: entry.targets,
-      },
-      definition.effects,
-      newScope(),
-    );
-  } else {
-    log(state, "  [illegal target] spell does not resolve");
-  }
-  performIn(
-    state,
-    {
-      kind: "change zone",
-      object: object.id,
-      from: "stack",
-      to: "graveyard",
-      cause: legal ? "resolve" : "illegal target",
-      toController: object.controller,
-    },
-    choices,
-    newScope(),
-    0,
-  );
+	// CR 608.2m: an instant or sorcery follows its own instructions and is then
+	// put into its owner's graveyard as the last step of resolution.
+	const definition = card(object.representation.cardId).spell;
+	assertDefined(
+		definition,
+		`${characteristics.name} has no spell ability to resolve`,
+	);
+	const target = spellTargetDefinition(definition);
+	assert(
+		entry.targets.length === (target ? 1 : 0),
+		"spell target binding count disagrees with its definition",
+	);
+	const binding = entry.targets[0];
+	if (target)
+		assert(binding?.slot === target.id, "spell has the wrong target slot");
+	// CR 608.2b: with one required target, an illegal target stops every effect.
+	const legal =
+		!target ||
+		(binding !== undefined && isLegalSpellTarget(read, target, binding.target));
+	if (legal) {
+		/** Share a scope so facts can pass through the complete effect sequence. */
+		resolveEffects(
+			state,
+			choices,
+			{
+				controller: object.controller,
+				source: object.id,
+				ability: null,
+				targets: entry.targets,
+			},
+			definition.effects,
+			newScope(),
+		);
+	} else {
+		log(state, "  [illegal target] spell does not resolve");
+	}
+	performIn(
+		state,
+		{
+			kind: "change zone",
+			object: object.id,
+			from: "stack",
+			to: "graveyard",
+			cause: legal ? "resolve" : "illegal target",
+			toController: object.controller,
+		},
+		choices,
+		newScope(),
+		0,
+	);
 }
 
 /**
@@ -5202,28 +5194,28 @@ function resolveSpell(
  * here before its effects run.
  */
 function resolveStackAbility(
-  state: GameState,
-  choices: AnyChoiceController,
-  entry: TriggeredAbilityStackItem | ActivatedAbilityStackItem,
+	state: GameState,
+	choices: AnyChoiceController,
+	entry: TriggeredAbilityStackItem | ActivatedAbilityStackItem,
 ): void {
-  const removed = state.stack.pop();
-  assert(removed === entry, "the stack changed while resolving its top entry");
+	const removed = state.stack.pop();
+	assert(removed === entry, "the stack changed while resolving its top entry");
 
-  log(state, `  [resolve] ${entry.text}`);
+	log(state, `  [resolve] ${entry.text}`);
 
-  /** Share a scope so facts can pass through the complete effect sequence. */
-  resolveEffects(
-    state,
-    choices,
-    {
-      controller: entry.controller,
-      source: entry.source,
-      ability: entry,
-      targets: [],
-    },
-    entry.effects,
-    newScope(),
-  );
+	/** Share a scope so facts can pass through the complete effect sequence. */
+	resolveEffects(
+		state,
+		choices,
+		{
+			controller: entry.controller,
+			source: entry.source,
+			ability: entry,
+			targets: [],
+		},
+		entry.effects,
+		newScope(),
+	);
 }
 
 /**
@@ -5233,138 +5225,138 @@ function resolveStackAbility(
  * ability id and no trigger — so `ability` is null for one.
  */
 interface ResolutionSource {
-  controller: PlayerId;
-  source: ObjectId;
-  ability: TriggeredAbilityStackItem | ActivatedAbilityStackItem | null;
-  targets: SpellTargets;
+	controller: PlayerId;
+	source: ObjectId;
+	ability: TriggeredAbilityStackItem | ActivatedAbilityStackItem | null;
+	targets: SpellTargets;
 }
 
 function resolveEffects(
-  state: GameState,
-  choices: AnyChoiceController,
-  item: ResolutionSource,
-  effects: EffectDef[],
-  scope: Scope,
+	state: GameState,
+	choices: AnyChoiceController,
+	item: ResolutionSource,
+	effects: EffectDef[],
+	scope: Scope,
 ): void {
-  for (const effect of effects) {
-    if (effect.kind === "may") {
-      const decider =
-        effect.decider === "you"
-          ? item.controller
-          : ((1 - item.controller) as PlayerId);
-      // chooseOptional puts the whole stack item in its choice request, so
-      // only an ability can ask this today. No spell the compiler accepts
-      // has an optional effect, making this unreachable rather than a
-      // missing feature.
-      assertDefined(
-        item.ability,
-        "optional effects on a resolving spell are not implemented",
-      );
-      if (choices.chooseOptional(state, item.ability, decider))
-        resolveEffects(state, choices, item, effect.effects, scope);
-      continue;
-    }
-    let bound = effect;
-    if (
-      (effect.kind === "damage" || effect.kind === "destroy") &&
-      typeof effect.target === "string"
-    ) {
-      const binding = item.targets[0];
-      assert(
-        binding?.slot === effect.target,
-        "effect has no matching target binding",
-      );
-      bound = { ...effect, target: binding.target };
-    }
-    performIn(state, effectToEvent(state, item, bound), choices, scope, 0);
-  }
+	for (const effect of effects) {
+		if (effect.kind === "may") {
+			const decider =
+				effect.decider === "you"
+					? item.controller
+					: ((1 - item.controller) as PlayerId);
+			// chooseOptional puts the whole stack item in its choice request, so
+			// only an ability can ask this today. No spell the compiler accepts
+			// has an optional effect, making this unreachable rather than a
+			// missing feature.
+			assertDefined(
+				item.ability,
+				"optional effects on a resolving spell are not implemented",
+			);
+			if (choices.chooseOptional(state, item.ability, decider))
+				resolveEffects(state, choices, item, effect.effects, scope);
+			continue;
+		}
+		let bound = effect;
+		if (
+			(effect.kind === "damage" || effect.kind === "destroy") &&
+			typeof effect.target === "string"
+		) {
+			const binding = item.targets[0];
+			assert(
+				binding?.slot === effect.target,
+				"effect has no matching target binding",
+			);
+			bound = { ...effect, target: binding.target };
+		}
+		performIn(state, effectToEvent(state, item, bound), choices, scope, 0);
+	}
 }
 
 function effectToEvent(
-  state: GameState,
-  item: Pick<TriggeredAbilityStackItem, "controller" | "source">,
-  effect: Exclude<EffectDef, { kind: "may" }>,
+	state: GameState,
+	item: Pick<TriggeredAbilityStackItem, "controller" | "source">,
+	effect: Exclude<EffectDef, { kind: "may" }>,
 ): GameEvent {
-  const player = (relative: "you" | "opponent") =>
-    relative === "you" ? item.controller : ((1 - item.controller) as PlayerId);
-  switch (effect.kind) {
-    case "gain-life":
-      return {
-        kind: "gain life",
-        player: player(effect.player),
-        amount: effect.amount,
-      };
-    case "lose-life":
-      return {
-        kind: "lose life",
-        player: player(effect.player),
-        amount: effect.amount,
-      };
-    case "draw":
-      return {
-        kind: "draw cards",
-        player: player(effect.player),
-        amount: effect.amount,
-      };
-    case "discard": {
-      assert(
-        effect.amount === 1,
-        "discarding multiple cards is not implemented",
-      );
-      if (effect.selector === "any") {
-        return {
-          kind: "discard",
-          player: player(effect.player),
-          cards: { kind: "any" },
-        };
-      }
-      if (effect.selector === "random") {
-        throw new Error("discard at random not implemented");
-      }
-      throw new Error("unexpected discard effect kind");
-    }
-    case "damage": {
-      assert(typeof effect.target !== "string", "damage target is unbound");
-      const source = readObject(createReadContext(state), item.source);
-      assert(
-        source.kind === "spell" || source.kind === "permanent",
-        "damage source has no characteristics",
-      );
-      const characteristics = source.currentCharacteristics;
-      return {
-        kind: "damage",
-        source: item.source,
-        sourceController: item.controller,
-        sourceColors: [...characteristics.colors],
-        target: effect.target,
-        amount: effect.amount,
-        combat: false,
-        deathtouch: false,
-        lifelink: characteristics.keywords.includes("lifelink"),
-        unpreventable: false,
-      };
-    }
-    case "destroy":
-      assert(
-        typeof effect.target !== "string" && effect.target.type === "permanent",
-        "destroy requires a bound permanent target",
-      );
-      return {
-        kind: "destroy",
-        object: effect.target.id,
-        source: item.source,
-        noRegen: false,
-      };
-    case "modify-pt":
-      throw new Error("temporary P/T effects are not implemented");
-    case "add-mana":
-      return {
-        kind: "add mana",
-        player: player(effect.player),
-        source: item.source,
-        mana: effect.mana,
-      };
-  }
+	const player = (relative: "you" | "opponent") =>
+		relative === "you" ? item.controller : ((1 - item.controller) as PlayerId);
+	switch (effect.kind) {
+		case "gain-life":
+			return {
+				kind: "gain life",
+				player: player(effect.player),
+				amount: effect.amount,
+			};
+		case "lose-life":
+			return {
+				kind: "lose life",
+				player: player(effect.player),
+				amount: effect.amount,
+			};
+		case "draw":
+			return {
+				kind: "draw cards",
+				player: player(effect.player),
+				amount: effect.amount,
+			};
+		case "discard": {
+			assert(
+				effect.amount === 1,
+				"discarding multiple cards is not implemented",
+			);
+			if (effect.selector === "any") {
+				return {
+					kind: "discard",
+					player: player(effect.player),
+					cards: { kind: "any" },
+				};
+			}
+			if (effect.selector === "random") {
+				throw new Error("discard at random not implemented");
+			}
+			throw new Error("unexpected discard effect kind");
+		}
+		case "damage": {
+			assert(typeof effect.target !== "string", "damage target is unbound");
+			const source = readObject(createReadContext(state), item.source);
+			assert(
+				source.kind === "spell" || source.kind === "permanent",
+				"damage source has no characteristics",
+			);
+			const characteristics = source.currentCharacteristics;
+			return {
+				kind: "damage",
+				source: item.source,
+				sourceController: item.controller,
+				sourceColors: [...characteristics.colors],
+				target: effect.target,
+				amount: effect.amount,
+				combat: false,
+				deathtouch: false,
+				lifelink: characteristics.keywords.includes("lifelink"),
+				unpreventable: false,
+			};
+		}
+		case "destroy":
+			assert(
+				typeof effect.target !== "string" && effect.target.type === "permanent",
+				"destroy requires a bound permanent target",
+			);
+			return {
+				kind: "destroy",
+				object: effect.target.id,
+				source: item.source,
+				noRegen: false,
+			};
+		case "modify-pt":
+			throw new Error("temporary P/T effects are not implemented");
+		case "add-mana":
+			return {
+				kind: "add mana",
+				player: player(effect.player),
+				source: item.source,
+				mana: effect.mana,
+			};
+	}
 }
 
 /**
@@ -5373,31 +5365,31 @@ function effectToEvent(
  * priority, everything else only at sorcery speed.
  */
 function doTimingRestrictionsAllowCast(
-  pv: PermanentView,
-  state: GameState,
-  player: PlayerId,
+	pv: PermanentView,
+	state: GameState,
+	player: PlayerId,
 ): boolean {
-  assert(
-    state.turnScheduler.progress.kind === "inTurn",
-    "tried to cast outside a game",
-  );
-  // TODO: "you may cast x as though it had flash"
+	assert(
+		state.turnScheduler.progress.kind === "inTurn",
+		"tried to cast outside a game",
+	);
+	// TODO: "you may cast x as though it had flash"
 
-  assert(pv.types.length > 0, "object has no types");
+	assert(pv.types.length > 0, "object has no types");
 
-  if (pv.types.includes("instant")) {
-    assert(pv.types.length === 1, "instant type must be the only type");
-    return true;
-  }
+	if (pv.types.includes("instant")) {
+		assert(pv.types.length === 1, "instant type must be the only type");
+		return true;
+	}
 
-  // CR 307.1: sorcery timing. A main phase of your own turn, with the stack
-  // empty. Every non-instant card type shares this restriction, so unlike the
-  // instant case above there is nothing per-type left to check.
-  if (turnLocation(state)?.kind !== "mainPhase") return false;
-  if (activePlayer(state) !== player) return false;
-  if (state.stack.length !== 0) return false;
+	// CR 307.1: sorcery timing. A main phase of your own turn, with the stack
+	// empty. Every non-instant card type shares this restriction, so unlike the
+	// instant case above there is nothing per-type left to check.
+	if (turnLocation(state)?.kind !== "mainPhase") return false;
+	if (activePlayer(state) !== player) return false;
+	if (state.stack.length !== 0) return false;
 
-  return true;
+	return true;
 }
 
 /**
@@ -5410,28 +5402,28 @@ function doTimingRestrictionsAllowCast(
  * split rather than a `ManaAmount`.
  */
 interface ManaCostBreakdown {
-  colored: Partial<Record<Color, number>>;
-  generic: number;
+	colored: Partial<Record<Color, number>>;
+	generic: number;
 }
 
 function manaCostBreakdown(cost: CardDefManaCost): ManaCostBreakdown | null {
-  if (cost === "none") return null;
-  if (cost === "zero") return { colored: {}, generic: 0 };
-  const colored: Partial<Record<Color, number>> = {};
-  for (const color of COLORS) {
-    const amount = cost[color] ?? 0;
-    assert(
-      Number.isSafeInteger(amount) && amount >= 0,
-      `invalid ${color} quantity in mana cost`,
-    );
-    if (amount > 0) colored[color] = amount;
-  }
-  const generic = cost.c ?? 0;
-  assert(
-    Number.isSafeInteger(generic) && generic >= 0,
-    "invalid generic quantity in mana cost",
-  );
-  return { colored, generic };
+	if (cost === "none") return null;
+	if (cost === "zero") return { colored: {}, generic: 0 };
+	const colored: Partial<Record<Color, number>> = {};
+	for (const color of COLORS) {
+		const amount = cost[color] ?? 0;
+		assert(
+			Number.isSafeInteger(amount) && amount >= 0,
+			`invalid ${color} quantity in mana cost`,
+		);
+		if (amount > 0) colored[color] = amount;
+	}
+	const generic = cost.c ?? 0;
+	assert(
+		Number.isSafeInteger(generic) && generic >= 0,
+		"invalid generic quantity in mana cost",
+	);
+	return { colored, generic };
 }
 
 /**
@@ -5448,121 +5440,121 @@ function manaCostBreakdown(cost: CardDefManaCost): ManaCostBreakdown | null {
  * every remaining unit of mana is interchangeable for generic.
  */
 export function planManaPayment(
-  pool: DeepReadOnly<ManaPool>,
-  cost: CardDefManaCost,
+	pool: DeepReadOnly<ManaPool>,
+	cost: CardDefManaCost,
 ): ManaAmount | null {
-  const breakdown = manaCostBreakdown(cost);
-  if (!breakdown) return null;
+	const breakdown = manaCostBreakdown(cost);
+	if (!breakdown) return null;
 
-  const payment: ManaPool = { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 };
-  const remaining: ManaPool = { ...pool };
+	const payment: ManaPool = { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 };
+	const remaining: ManaPool = { ...pool };
 
-  for (const color of COLORS) {
-    const required = breakdown.colored[color] ?? 0;
-    if (remaining[color] < required) return null;
-    remaining[color] -= required;
-    payment[color] += required;
-  }
+	for (const color of COLORS) {
+		const required = breakdown.colored[color] ?? 0;
+		if (remaining[color] < required) return null;
+		remaining[color] -= required;
+		payment[color] += required;
+	}
 
-  let generic = breakdown.generic;
-  // Colorless first: it is the only kind no colored requirement could have
-  // wanted, so spending it can never make a later payment impossible.
-  for (const type of ["c", ...COLORS] as const) {
-    if (generic === 0) break;
-    const spend = Math.min(generic, remaining[type]);
-    remaining[type] -= spend;
-    payment[type] += spend;
-    generic -= spend;
-  }
-  if (generic > 0) return null;
+	let generic = breakdown.generic;
+	// Colorless first: it is the only kind no colored requirement could have
+	// wanted, so spending it can never make a later payment impossible.
+	for (const type of ["c", ...COLORS] as const) {
+		if (generic === 0) break;
+		const spend = Math.min(generic, remaining[type]);
+		remaining[type] -= spend;
+		payment[type] += spend;
+		generic -= spend;
+	}
+	if (generic > 0) return null;
 
-  return payment;
+	return payment;
 }
 
 /** Validate the executable subset before a cast can spend mana. */
 function spellTargetDefinition(definition: SpellAbilityDef): TargetDef | null {
-  assert(
-    definition.targets.length <= 1,
-    "multiple target slots are not implemented",
-  );
-  const target = definition.targets[0] ?? null;
-  if (target) {
-    assert(
-      target.min === 1 && target.max === 1,
-      "only one required target is implemented",
-    );
-    if (target.legal.kind === "permanent") {
-      assert(
-        target.legal.selector.kind === "type" &&
-          target.legal.selector.type === "creature",
-        "target restrictions beyond creature type are not implemented",
-      );
-    }
-  }
-  for (const effect of definition.effects) {
-    assert(
-      effect.kind !== "modify-pt",
-      "temporary P/T effects are not implemented",
-    );
-    if (effect.kind === "damage" || effect.kind === "destroy") {
-      assert(
-        target && effect.target === target.id,
-        "spell effect must reference its target slot",
-      );
-      if (effect.kind === "destroy") {
-        assert(
-          target.legal.kind === "permanent",
-          "destroy requires a permanent target",
-        );
-      }
-    }
-  }
-  return target;
+	assert(
+		definition.targets.length <= 1,
+		"multiple target slots are not implemented",
+	);
+	const target = definition.targets[0] ?? null;
+	if (target) {
+		assert(
+			target.min === 1 && target.max === 1,
+			"only one required target is implemented",
+		);
+		if (target.legal.kind === "permanent") {
+			assert(
+				target.legal.selector.kind === "type" &&
+					target.legal.selector.type === "creature",
+				"target restrictions beyond creature type are not implemented",
+			);
+		}
+	}
+	for (const effect of definition.effects) {
+		assert(
+			effect.kind !== "modify-pt",
+			"temporary P/T effects are not implemented",
+		);
+		if (effect.kind === "damage" || effect.kind === "destroy") {
+			assert(
+				target && effect.target === target.id,
+				"spell effect must reference its target slot",
+			);
+			if (effect.kind === "destroy") {
+				assert(
+					target.legal.kind === "permanent",
+					"destroy requires a permanent target",
+				);
+			}
+		}
+	}
+	return target;
 }
 
 /** Both announcement and resolution use current characteristics. */
 function isLegalSpellTarget(
-  read: ReadContext,
-  definition: TargetDef,
-  target: EntityRef,
+	read: ReadContext,
+	definition: TargetDef,
+	target: EntityRef,
 ): boolean {
-  if (target.type === "player") {
-    return (
-      (definition.legal.kind === "player" ||
-        definition.legal.kind === "any-target") &&
-      !read.state.players[target.player].lost &&
-      !read.state.players[target.player].won
-    );
-  }
-  if (definition.legal.kind === "player") return false;
-  const object = read.view.objects.get(target.id);
-  if (object?.kind !== "permanent") return false;
-  const types = object.currentCharacteristics.types;
-  if (definition.legal.kind === "any-target") {
-    return types.includes("creature") || types.includes("planeswalker");
-  }
-  assert(
-    definition.legal.selector.kind === "type" &&
-      definition.legal.selector.type === "creature",
-    "target restrictions beyond creature type are not implemented",
-  );
-  return types.includes("creature");
+	if (target.type === "player") {
+		return (
+			(definition.legal.kind === "player" ||
+				definition.legal.kind === "any-target") &&
+			!read.state.players[target.player].lost &&
+			!read.state.players[target.player].won
+		);
+	}
+	if (definition.legal.kind === "player") return false;
+	const object = read.view.objects.get(target.id);
+	if (object?.kind !== "permanent") return false;
+	const types = object.currentCharacteristics.types;
+	if (definition.legal.kind === "any-target") {
+		return types.includes("creature") || types.includes("planeswalker");
+	}
+	assert(
+		definition.legal.selector.kind === "type" &&
+			definition.legal.selector.type === "creature",
+		"target restrictions beyond creature type are not implemented",
+	);
+	return types.includes("creature");
 }
 
 function legalSpellTargets(
-  read: ReadContext,
-  definition: TargetDef,
+	read: ReadContext,
+	definition: TargetDef,
 ): EntityRef[] {
-  const candidates: EntityRef[] = [
-    { type: "player", player: 0 },
-    { type: "player", player: 1 },
-    ...read.state.battlefield.map(
-      (id): EntityRef => ({ type: "permanent", id }),
-    ),
-  ];
-  return candidates.filter((target) =>
-    isLegalSpellTarget(read, definition, target),
-  );
+	const candidates: EntityRef[] = [
+		{ type: "player", player: 0 },
+		{ type: "player", player: 1 },
+		...read.state.battlefield.map(
+			(id): EntityRef => ({ type: "permanent", id }),
+		),
+	];
+	return candidates.filter((target) =>
+		isLegalSpellTarget(read, definition, target),
+	);
 }
 
 /**
@@ -5571,133 +5563,133 @@ function legalSpellTargets(
  * then fails payment (so affordability is decided here, before anything moves).
  */
 function canCast(
-  object: DeepReadOnly<CardObject>,
-  state: GameState,
-  read: ReadContext,
-  player: PlayerId,
+	object: DeepReadOnly<CardObject>,
+	state: GameState,
+	read: ReadContext,
+	player: PlayerId,
 ): boolean {
-  // TODO: this is simplified, and only accounts for the basics of casting
-  // from hand. it does not account for special cast actions.
-  assert(object.kind === "card");
-  assert(object.zone === "hand");
-  assert(object.owner === player);
+	// TODO: this is simplified, and only accounts for the basics of casting
+	// from hand. it does not account for special cast actions.
+	assert(object.kind === "card");
+	assert(object.zone === "hand");
+	assert(object.owner === player);
 
-  const pv = flattenSnapshot(readObject(read, object.id));
+	const pv = flattenSnapshot(readObject(read, object.id));
 
-  // CR 202.1: a card with no mana cost cannot be cast without an alternative
-  // cost, and the engine has none.
-  if (pv.manaCost === "none") return false;
+	// CR 202.1: a card with no mana cost cannot be cast without an alternative
+	// cost, and the engine has none.
+	if (pv.manaCost === "none") return false;
 
-  // CR 305.1: lands are played as a special action, never cast.
-  if (pv.types.includes("land")) return false;
+	// CR 305.1: lands are played as a special action, never cast.
+	if (pv.types.includes("land")) return false;
 
-  if (!doTimingRestrictionsAllowCast(pv, state, player)) return false;
+	if (!doTimingRestrictionsAllowCast(pv, state, player)) return false;
 
-  if (planManaPayment(state.players[player].manaPool, pv.manaCost) === null)
-    return false;
-  const definition = card(object.cardId).spell;
-  if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
-    assertDefined(definition, `${pv.name} has no spell definition`);
-    const target = spellTargetDefinition(definition);
-    if (target && legalSpellTargets(read, target).length === 0) return false;
-  } else {
-    assert(
-      !definition?.targets.length,
-      "targeted permanent spells are not implemented",
-    );
-  }
-  return true;
+	if (planManaPayment(state.players[player].manaPool, pv.manaCost) === null)
+		return false;
+	const definition = card(object.cardId).spell;
+	if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
+		assertDefined(definition, `${pv.name} has no spell definition`);
+		const target = spellTargetDefinition(definition);
+		if (target && legalSpellTargets(read, target).length === 0) return false;
+	} else {
+		assert(
+			!definition?.targets.length,
+			"targeted permanent spells are not implemented",
+		);
+	}
+	return true;
 }
 
 function castableSpells(
-  state: GameState,
-  read: ReadContext,
-  player: PlayerId,
+	state: GameState,
+	read: ReadContext,
+	player: PlayerId,
 ): CastAction[] {
-  const castable: CastAction[] = [];
-  for (const objectId of state.players[player].hand) {
-    const object = maybeObject(state, objectId);
-    assertDefined(object, `hand contains missing object ${objectId}`);
-    assert(
-      object.kind === "card" || object.kind === "nonbattlefield-token",
-      `hand contains unexpected object kind ${object.kind}`,
-    );
-    // CR 704.5d will remove a token in hand; it is never castable meanwhile.
-    if (object.kind !== "card") continue;
-    if (canCast(object, state, read, player)) {
-      castable.push({ kind: "cast", card: objectId });
-    }
-  }
-  return castable;
+	const castable: CastAction[] = [];
+	for (const objectId of state.players[player].hand) {
+		const object = maybeObject(state, objectId);
+		assertDefined(object, `hand contains missing object ${objectId}`);
+		assert(
+			object.kind === "card" || object.kind === "nonbattlefield-token",
+			`hand contains unexpected object kind ${object.kind}`,
+		);
+		// CR 704.5d will remove a token in hand; it is never castable meanwhile.
+		if (object.kind !== "card") continue;
+		if (canCast(object, state, read, player)) {
+			castable.push({ kind: "cast", card: objectId });
+		}
+	}
+	return castable;
 }
 
 function canPlayOrdinaryLand(state: GameState, player: PlayerId): boolean {
-  const location = turnLocation(state);
-  return (
-    player === activePlayer(state) &&
-    location?.kind === "mainPhase" &&
-    state.stack.length === 0 &&
-    state.players[player].landsPlayed < 1
-  );
+	const location = turnLocation(state);
+	return (
+		player === activePlayer(state) &&
+		location?.kind === "mainPhase" &&
+		state.stack.length === 0 &&
+		state.players[player].landsPlayed < 1
+	);
 }
 
 function activatedAbilityActions(
-  state: GameState,
-  player: PlayerId,
-  read: ReadContext,
+	state: GameState,
+	player: PlayerId,
+	read: ReadContext,
 ): ActivateAbilityAction[] {
-  if (state.turnScheduler.progress.kind !== "inTurn") return [];
-  if (currentStepKind(state) === "untap") return [];
-  if (currentStepKind(state) === "cleanup" && state.stack.length === 0)
-    return [];
-  return state.battlefield.flatMap((id) => {
-    const object = maybeObject(state, id);
-    if (
-      object?.kind !== "permanent" ||
-      object.controller !== player ||
-      object.tapped
-    )
-      return [];
-    const snapshot = readObject(read, id);
-    if (snapshot.kind !== "permanent") return [];
-    const actions: ActivateAbilityAction[] = [];
-    for (const ability of snapshot.currentCharacteristics.abilities.activated) {
-      const definition = getAbilityDefinition("activated", ability);
-      if (
-        definition.costs.length === 1 &&
-        definition.costs[0]?.kind === "tap-self" &&
-        (definition.kind === "mana" || definition.targets.length === 0)
-      ) {
-        actions.push({ kind: "activate ability", source: id, ability });
-      }
-    }
-    return actions;
-  });
+	if (state.turnScheduler.progress.kind !== "inTurn") return [];
+	if (currentStepKind(state) === "untap") return [];
+	if (currentStepKind(state) === "cleanup" && state.stack.length === 0)
+		return [];
+	return state.battlefield.flatMap((id) => {
+		const object = maybeObject(state, id);
+		if (
+			object?.kind !== "permanent" ||
+			object.controller !== player ||
+			object.tapped
+		)
+			return [];
+		const snapshot = readObject(read, id);
+		if (snapshot.kind !== "permanent") return [];
+		const actions: ActivateAbilityAction[] = [];
+		for (const ability of snapshot.currentCharacteristics.abilities.activated) {
+			const definition = getAbilityDefinition("activated", ability);
+			if (
+				definition.costs.length === 1 &&
+				definition.costs[0]?.kind === "tap-self" &&
+				(definition.kind === "mana" || definition.targets.length === 0)
+			) {
+				actions.push({ kind: "activate ability", source: id, ability });
+			}
+		}
+		return actions;
+	});
 }
 
 /** Actions currently offered to a player receiving priority. */
 export function getObservableActions(
-  state: GameState,
-  player: PlayerId,
+	state: GameState,
+	player: PlayerId,
 ): PriorityAction[] {
-  const actions: PriorityAction[] = [{ kind: "pass" }];
-  const read = createReadContext(state);
-  if (canPlayOrdinaryLand(state, player)) {
-    for (const id of state.players[player].hand) {
-      const object = maybeObject(state, id);
-      if (object?.kind !== "card" || object.zone !== "hand") continue;
-      const snapshot = readObject(read, id);
-      if (
-        snapshot.kind === "card" &&
-        snapshot.currentCharacteristics.types.includes("land")
-      ) {
-        actions.push({ kind: "play land", card: id });
-      }
-    }
-  }
-  actions.push(...activatedAbilityActions(state, player, read));
-  actions.push(...castableSpells(state, read, player));
-  return actions;
+	const actions: PriorityAction[] = [{ kind: "pass" }];
+	const read = createReadContext(state);
+	if (canPlayOrdinaryLand(state, player)) {
+		for (const id of state.players[player].hand) {
+			const object = maybeObject(state, id);
+			if (object?.kind !== "card" || object.zone !== "hand") continue;
+			const snapshot = readObject(read, id);
+			if (
+				snapshot.kind === "card" &&
+				snapshot.currentCharacteristics.types.includes("land")
+			) {
+				actions.push({ kind: "play land", card: id });
+			}
+		}
+	}
+	actions.push(...activatedAbilityActions(state, player, read));
+	actions.push(...castableSpells(state, read, player));
+	return actions;
 }
 
 /**
@@ -5706,165 +5698,165 @@ export function getObservableActions(
  * tap cost mutates canonical state.
  */
 export function executeAbilityAction(
-  state: GameState,
-  priorityPlayer: PlayerId,
-  action: ActivateAbilityAction,
-  source: ChoiceSource,
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: ActivateAbilityAction,
+	source: ChoiceSource,
 ): void {
-  activateAbilityIn(state, priorityPlayer, action, asChoiceController(source));
+	activateAbilityIn(state, priorityPlayer, action, asChoiceController(source));
 }
 
 function activateAbilityIn(
-  state: GameState,
-  priorityPlayer: PlayerId,
-  action: ActivateAbilityAction,
-  choices: AnyChoiceController,
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: ActivateAbilityAction,
+	choices: AnyChoiceController,
 ): void {
-  if (state.turnScheduler.progress.kind !== "inTurn") {
-    throw new IllegalAbilityActivationError(
-      "an ability cannot be activated outside a turn",
-    );
-  }
-  if (currentStepKind(state) === "untap") {
-    throw new IllegalAbilityActivationError(
-      "an ability cannot be activated during the untap step",
-    );
-  }
-  if (currentStepKind(state) === "cleanup" && state.stack.length === 0) {
-    throw new IllegalAbilityActivationError(
-      "an ability cannot be activated during an ordinary cleanup step",
-    );
-  }
+	if (state.turnScheduler.progress.kind !== "inTurn") {
+		throw new IllegalAbilityActivationError(
+			"an ability cannot be activated outside a turn",
+		);
+	}
+	if (currentStepKind(state) === "untap") {
+		throw new IllegalAbilityActivationError(
+			"an ability cannot be activated during the untap step",
+		);
+	}
+	if (currentStepKind(state) === "cleanup" && state.stack.length === 0) {
+		throw new IllegalAbilityActivationError(
+			"an ability cannot be activated during an ordinary cleanup step",
+		);
+	}
 
-  const object = maybeObject(state, action.source);
-  if (object?.kind !== "permanent" || object.zone !== "battlefield") {
-    throw new IllegalAbilityActivationError(
-      `object ${action.source} is not a permanent on the battlefield`,
-    );
-  }
-  if (object.controller !== priorityPlayer) {
-    throw new IllegalAbilityActivationError(
-      `P${priorityPlayer} does not control object ${action.source}`,
-    );
-  }
-  if (object.tapped) {
-    throw new IllegalAbilityActivationError(
-      `object ${action.source} is already tapped`,
-    );
-  }
+	const object = maybeObject(state, action.source);
+	if (object?.kind !== "permanent" || object.zone !== "battlefield") {
+		throw new IllegalAbilityActivationError(
+			`object ${action.source} is not a permanent on the battlefield`,
+		);
+	}
+	if (object.controller !== priorityPlayer) {
+		throw new IllegalAbilityActivationError(
+			`P${priorityPlayer} does not control object ${action.source}`,
+		);
+	}
+	if (object.tapped) {
+		throw new IllegalAbilityActivationError(
+			`object ${action.source} is already tapped`,
+		);
+	}
 
-  const snapshot = readObject(createReadContext(state), object.id);
-  assert(snapshot.kind === "permanent");
-  if (
-    !snapshot.currentCharacteristics.abilities.activated.includes(
-      action.ability,
-    )
-  ) {
-    throw new IllegalAbilityActivationError(
-      `object ${action.source} does not have ability ${action.ability}`,
-    );
-  }
-  const ability = getAbilityDefinition("activated", action.ability);
-  if (ability.kind === "activated") {
-    assert(
-      ability.targets.length === 0,
-      "targeted activated abilities are not implemented",
-    );
-  }
-  if (ability.costs.length !== 1 || ability.costs[0]?.kind !== "tap-self") {
-    throw new IllegalAbilityActivationError(
-      `ability ${action.ability} does not have the supported tap-self cost`,
-    );
-  }
+	const snapshot = readObject(createReadContext(state), object.id);
+	assert(snapshot.kind === "permanent");
+	if (
+		!snapshot.currentCharacteristics.abilities.activated.includes(
+			action.ability,
+		)
+	) {
+		throw new IllegalAbilityActivationError(
+			`object ${action.source} does not have ability ${action.ability}`,
+		);
+	}
+	const ability = getAbilityDefinition("activated", action.ability);
+	if (ability.kind === "activated") {
+		assert(
+			ability.targets.length === 0,
+			"targeted activated abilities are not implemented",
+		);
+	}
+	if (ability.costs.length !== 1 || ability.costs[0]?.kind !== "tap-self") {
+		throw new IllegalAbilityActivationError(
+			`ability ${action.ability} does not have the supported tap-self cost`,
+		);
+	}
 
-  const context = { source: object.id, controller: priorityPlayer };
-  const events =
-    ability.kind === "mana"
-      ? ability.effects.map((effect) => {
-          if (effect.kind !== "add-mana") {
-            throw new IllegalAbilityActivationError(
-              "only fixed mana production is supported for mana abilities",
-            );
-          }
-          let total = 0;
-          for (const type of COLORS) {
-            const amount = effect.mana[type] ?? 0;
-            if (!Number.isSafeInteger(amount) || amount < 0) {
-              throw new IllegalAbilityActivationError(
-                `mana ability ${action.ability} produces an invalid quantity`,
-              );
-            }
-            total += amount;
-          }
-          if (total <= 0) {
-            throw new IllegalAbilityActivationError(
-              `mana ability ${action.ability} produces no mana`,
-            );
-          }
-          return effectToEvent(state, context, effect);
-        })
-      : [];
-  if (ability.kind === "activated") {
-    for (const effect of ability.effects) {
-      if (
-        effect.kind === "draw" ||
-        effect.kind === "gain-life" ||
-        effect.kind === "lose-life"
-      ) {
-        continue;
-      }
-      if (effect.kind === "discard") {
-        assert(
-          effect.amount === 1,
-          "discarding multiple cards is not implemented",
-        );
-        if (effect.selector === "any") continue;
-        throw new IllegalAbilityActivationError(
-          "discarding at random is not supported for activated abilities",
-        );
-      }
-      throw new IllegalAbilityActivationError(
-        `effect ${effect.kind} is not supported for activated abilities`,
-      );
-    }
-  }
-  const scope = newScope();
-  const payment = performIn(
-    state,
-    { kind: "tap", ref: { kind: "object", object: object.id } },
-    choices,
-    scope,
-    0,
-  );
-  if (
-    !payment.executed.some(
-      (event) =>
-        event.kind === "tap" &&
-        event.ref.kind === "object" &&
-        event.ref.object === object.id,
-    )
-  ) {
-    throw new IllegalAbilityActivationError(
-      `the tap cost for ability ${action.ability} was not paid`,
-    );
-  }
-  if (ability.kind === "mana") {
-    log(state, `  [mana ability] ${ability.text}`);
-    for (const event of events) performIn(state, event, choices, scope, 0);
-  } else {
-    const item: ActivatedAbilityStackItem = {
-      id: state.nextStackItemId++ as StackItemId,
-      kind: "activated ability",
-      source: object.id,
-      abilityId: action.ability,
-      controller: priorityPlayer,
-      text: ability.text,
-      effects: structuredClone(ability.effects),
-    };
-    state.stack.push(item);
-    state.revision++;
-    log(state, `  [stack] ${item.text}`);
-  }
+	const context = { source: object.id, controller: priorityPlayer };
+	const events =
+		ability.kind === "mana"
+			? ability.effects.map((effect) => {
+					if (effect.kind !== "add-mana") {
+						throw new IllegalAbilityActivationError(
+							"only fixed mana production is supported for mana abilities",
+						);
+					}
+					let total = 0;
+					for (const type of COLORS) {
+						const amount = effect.mana[type] ?? 0;
+						if (!Number.isSafeInteger(amount) || amount < 0) {
+							throw new IllegalAbilityActivationError(
+								`mana ability ${action.ability} produces an invalid quantity`,
+							);
+						}
+						total += amount;
+					}
+					if (total <= 0) {
+						throw new IllegalAbilityActivationError(
+							`mana ability ${action.ability} produces no mana`,
+						);
+					}
+					return effectToEvent(state, context, effect);
+				})
+			: [];
+	if (ability.kind === "activated") {
+		for (const effect of ability.effects) {
+			if (
+				effect.kind === "draw" ||
+				effect.kind === "gain-life" ||
+				effect.kind === "lose-life"
+			) {
+				continue;
+			}
+			if (effect.kind === "discard") {
+				assert(
+					effect.amount === 1,
+					"discarding multiple cards is not implemented",
+				);
+				if (effect.selector === "any") continue;
+				throw new IllegalAbilityActivationError(
+					"discarding at random is not supported for activated abilities",
+				);
+			}
+			throw new IllegalAbilityActivationError(
+				`effect ${effect.kind} is not supported for activated abilities`,
+			);
+		}
+	}
+	const scope = newScope();
+	const payment = performIn(
+		state,
+		{ kind: "tap", ref: { kind: "object", object: object.id } },
+		choices,
+		scope,
+		0,
+	);
+	if (
+		!payment.executed.some(
+			(event) =>
+				event.kind === "tap" &&
+				event.ref.kind === "object" &&
+				event.ref.object === object.id,
+		)
+	) {
+		throw new IllegalAbilityActivationError(
+			`the tap cost for ability ${action.ability} was not paid`,
+		);
+	}
+	if (ability.kind === "mana") {
+		log(state, `  [mana ability] ${ability.text}`);
+		for (const event of events) performIn(state, event, choices, scope, 0);
+	} else {
+		const item: ActivatedAbilityStackItem = {
+			id: state.nextStackItemId++ as StackItemId,
+			kind: "activated ability",
+			source: object.id,
+			abilityId: action.ability,
+			controller: priorityPlayer,
+			text: ability.text,
+			effects: structuredClone(ability.effects),
+		};
+		state.stack.push(item);
+		state.revision++;
+		log(state, `  [stack] ${item.text}`);
+	}
 }
 
 /**
@@ -5878,132 +5870,132 @@ function activateAbilityIn(
  * beforehand at priority rather than during casting.
  */
 export function executeCastAction(
-  state: GameState,
-  priorityPlayer: PlayerId,
-  action: CastAction,
-  source: ChoiceSource,
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: CastAction,
+	source: ChoiceSource,
 ): void {
-  castSpellIn(state, priorityPlayer, action, asChoiceController(source));
+	castSpellIn(state, priorityPlayer, action, asChoiceController(source));
 }
 
 function castSpellIn(
-  state: GameState,
-  priorityPlayer: PlayerId,
-  action: CastAction,
-  choices: AnyChoiceController,
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: CastAction,
+	choices: AnyChoiceController,
 ): void {
-  if (state.turnScheduler.progress.kind !== "inTurn") {
-    throw new IllegalCastError("a spell cannot be cast outside a turn");
-  }
+	if (state.turnScheduler.progress.kind !== "inTurn") {
+		throw new IllegalCastError("a spell cannot be cast outside a turn");
+	}
 
-  const object = maybeObject(state, action.card);
-  if (
-    object?.kind !== "card" ||
-    object.zone !== "hand" ||
-    object.owner !== priorityPlayer ||
-    !state.players[priorityPlayer].hand.includes(action.card)
-  ) {
-    throw new IllegalCastError(
-      `object ${action.card} is not a card in P${priorityPlayer}'s hand`,
-    );
-  }
+	const object = maybeObject(state, action.card);
+	if (
+		object?.kind !== "card" ||
+		object.zone !== "hand" ||
+		object.owner !== priorityPlayer ||
+		!state.players[priorityPlayer].hand.includes(action.card)
+	) {
+		throw new IllegalCastError(
+			`object ${action.card} is not a card in P${priorityPlayer}'s hand`,
+		);
+	}
 
-  const read = createReadContext(state);
-  const pv = flattenSnapshot(readObject(read, action.card));
+	const read = createReadContext(state);
+	const pv = flattenSnapshot(readObject(read, action.card));
 
-  if (pv.manaCost === "none") {
-    throw new IllegalCastError(
-      `${pv.name} has no mana cost and cannot be cast`,
-    );
-  }
-  if (pv.types.includes("land")) {
-    throw new IllegalCastError(`${pv.name} is a land and is played, not cast`);
-  }
-  if (!doTimingRestrictionsAllowCast(pv, state, priorityPlayer)) {
-    throw new IllegalCastError(
-      `P${priorityPlayer} cannot cast ${pv.name} at this time`,
-    );
-  }
+	if (pv.manaCost === "none") {
+		throw new IllegalCastError(
+			`${pv.name} has no mana cost and cannot be cast`,
+		);
+	}
+	if (pv.types.includes("land")) {
+		throw new IllegalCastError(`${pv.name} is a land and is played, not cast`);
+	}
+	if (!doTimingRestrictionsAllowCast(pv, state, priorityPlayer)) {
+		throw new IllegalCastError(
+			`P${priorityPlayer} cannot cast ${pv.name} at this time`,
+		);
+	}
 
-  const payment = planManaPayment(
-    state.players[priorityPlayer].manaPool,
-    pv.manaCost,
-  );
-  if (!payment) {
-    throw new IllegalCastError(
-      `P${priorityPlayer} cannot pay ${pv.name}'s mana cost from their mana pool`,
-    );
-  }
+	const payment = planManaPayment(
+		state.players[priorityPlayer].manaPool,
+		pv.manaCost,
+	);
+	if (!payment) {
+		throw new IllegalCastError(
+			`P${priorityPlayer} cannot pay ${pv.name}'s mana cost from their mana pool`,
+		);
+	}
 
-  const definition = card(object.cardId).spell;
-  let targets: SpellTargets = [];
-  if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
-    assertDefined(definition, `${pv.name} has no spell definition`);
-    const target = spellTargetDefinition(definition);
-    if (target) {
-      const candidates = legalSpellTargets(read, target);
-      if (candidates.length === 0)
-        throw new IllegalCastError(`${pv.name} has no legal target`);
-      const chosen = choices.chooseTarget(
-        state,
-        priorityPlayer,
-        action.card,
-        target,
-        candidates,
-      );
-      if (!isLegalSpellTarget(createReadContext(state), target, chosen)) {
-        throw new IllegalCastError(
-          `${pv.name}'s chosen target is no longer legal`,
-        );
-      }
-      targets = [{ slot: target.id, target: chosen }];
-    }
-  } else {
-    assert(
-      !definition?.targets.length,
-      "targeted permanent spells are not implemented",
-    );
-  }
+	const definition = card(object.cardId).spell;
+	let targets: SpellTargets = [];
+	if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
+		assertDefined(definition, `${pv.name} has no spell definition`);
+		const target = spellTargetDefinition(definition);
+		if (target) {
+			const candidates = legalSpellTargets(read, target);
+			if (candidates.length === 0)
+				throw new IllegalCastError(`${pv.name} has no legal target`);
+			const chosen = choices.chooseTarget(
+				state,
+				priorityPlayer,
+				action.card,
+				target,
+				candidates,
+			);
+			if (!isLegalSpellTarget(createReadContext(state), target, chosen)) {
+				throw new IllegalCastError(
+					`${pv.name}'s chosen target is no longer legal`,
+				);
+			}
+			targets = [{ slot: target.id, target: chosen }];
+		}
+	} else {
+		assert(
+			!definition?.targets.length,
+			"targeted permanent spells are not implemented",
+		);
+	}
 
-  // Payment is deducted directly rather than as an event: spending mana is a
-  // cost, not something that happens to a player, so nothing may replace or
-  // trigger off it. The move to the stack below is the replaceable part.
-  const pool = state.players[priorityPlayer].manaPool;
-  for (const type of MANA_TYPES) {
-    const spent = payment[type] ?? 0;
-    assert(
-      pool[type] >= spent,
-      `payment plan spends ${spent} ${type} from a pool holding ${pool[type]}`,
-    );
-    pool[type] -= spent;
-  }
-  state.revision++;
-  log(
-    state,
-    `  [cast] P${priorityPlayer} pays ${
-      MANA_TYPES.map((type) =>
-        payment[type] ? `${payment[type]}${type.toUpperCase()}` : "",
-      )
-        .filter(Boolean)
-        .join(" ") || "nothing"
-    } for ${pv.name}`,
-  );
+	// Payment is deducted directly rather than as an event: spending mana is a
+	// cost, not something that happens to a player, so nothing may replace or
+	// trigger off it. The move to the stack below is the replaceable part.
+	const pool = state.players[priorityPlayer].manaPool;
+	for (const type of MANA_TYPES) {
+		const spent = payment[type] ?? 0;
+		assert(
+			pool[type] >= spent,
+			`payment plan spends ${spent} ${type} from a pool holding ${pool[type]}`,
+		);
+		pool[type] -= spent;
+	}
+	state.revision++;
+	log(
+		state,
+		`  [cast] P${priorityPlayer} pays ${
+			MANA_TYPES.map((type) =>
+				payment[type] ? `${payment[type]}${type.toUpperCase()}` : "",
+			)
+				.filter(Boolean)
+				.join(" ") || "nothing"
+		} for ${pv.name}`,
+	);
 
-  performIn(
-    state,
-    {
-      kind: "change zone",
-      object: action.card,
-      from: "hand",
-      to: "stack",
-      cause: "cast",
-      toController: priorityPlayer,
-      spellTargets: targets,
-    },
-    choices,
-    newScope(),
-    0,
-  );
+	performIn(
+		state,
+		{
+			kind: "change zone",
+			object: action.card,
+			from: "hand",
+			to: "stack",
+			cause: "cast",
+			toController: priorityPlayer,
+			spellTargets: targets,
+		},
+		choices,
+		newScope(),
+		0,
+	);
 }
 
 /**
@@ -6011,80 +6003,80 @@ function castSpellIn(
  * Timing, actor, card, zone, and allowance are rechecked before mutation.
  */
 export function executeLandAction(
-  state: GameState,
-  priorityPlayer: PlayerId,
-  action: PlayLandAction,
-  source: ChoiceSource,
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: PlayLandAction,
+	source: ChoiceSource,
 ): void {
-  playLandIn(state, priorityPlayer, action, asChoiceController(source));
+	playLandIn(state, priorityPlayer, action, asChoiceController(source));
 }
 
 function playLandIn(
-  state: GameState,
-  priorityPlayer: PlayerId,
-  action: PlayLandAction,
-  choices: AnyChoiceController,
+	state: GameState,
+	priorityPlayer: PlayerId,
+	action: PlayLandAction,
+	choices: AnyChoiceController,
 ): void {
-  const active = activePlayer(state);
-  if (priorityPlayer !== active) {
-    throw new IllegalLandPlayError(
-      active === null
-        ? `P${priorityPlayer} cannot play a land outside a turn`
-        : `P${priorityPlayer} cannot play a land while P${active} is active`,
-    );
-  }
-  const location = turnLocation(state);
-  if (location?.kind !== "mainPhase") {
-    throw new IllegalLandPlayError(
-      "a land can be played only during a main phase",
-    );
-  }
-  if (state.stack.length !== 0) {
-    throw new IllegalLandPlayError(
-      "a land cannot be played while the stack is nonempty",
-    );
-  }
-  if (state.players[priorityPlayer].landsPlayed >= 1) {
-    throw new IllegalLandPlayError(
-      "the ordinary one-land-per-turn limit is exhausted",
-    );
-  }
+	const active = activePlayer(state);
+	if (priorityPlayer !== active) {
+		throw new IllegalLandPlayError(
+			active === null
+				? `P${priorityPlayer} cannot play a land outside a turn`
+				: `P${priorityPlayer} cannot play a land while P${active} is active`,
+		);
+	}
+	const location = turnLocation(state);
+	if (location?.kind !== "mainPhase") {
+		throw new IllegalLandPlayError(
+			"a land can be played only during a main phase",
+		);
+	}
+	if (state.stack.length !== 0) {
+		throw new IllegalLandPlayError(
+			"a land cannot be played while the stack is nonempty",
+		);
+	}
+	if (state.players[priorityPlayer].landsPlayed >= 1) {
+		throw new IllegalLandPlayError(
+			"the ordinary one-land-per-turn limit is exhausted",
+		);
+	}
 
-  const object = maybeObject(state, action.card);
-  if (
-    object?.kind !== "card" ||
-    object.zone !== "hand" ||
-    !state.players[priorityPlayer].hand.includes(action.card)
-  ) {
-    throw new IllegalLandPlayError(
-      `object ${action.card} is not in P${priorityPlayer}'s hand`,
-    );
-  }
-  const read = createReadContext(state);
-  const snapshot = readObject(read, action.card);
-  if (
-    snapshot.kind !== "card" ||
-    !snapshot.currentCharacteristics.types.includes("land")
-  ) {
-    throw new IllegalLandPlayError(`object ${action.card} is not a land`);
-  }
+	const object = maybeObject(state, action.card);
+	if (
+		object?.kind !== "card" ||
+		object.zone !== "hand" ||
+		!state.players[priorityPlayer].hand.includes(action.card)
+	) {
+		throw new IllegalLandPlayError(
+			`object ${action.card} is not in P${priorityPlayer}'s hand`,
+		);
+	}
+	const read = createReadContext(state);
+	const snapshot = readObject(read, action.card);
+	if (
+		snapshot.kind !== "card" ||
+		!snapshot.currentCharacteristics.types.includes("land")
+	) {
+		throw new IllegalLandPlayError(`object ${action.card} is not a land`);
+	}
 
-  performIn(
-    state,
-    {
-      kind: "change zone",
-      object: action.card,
-      from: "hand",
-      to: "battlefield",
-      cause: "play land",
-      toController: priorityPlayer,
-    },
-    choices,
-    newScope(),
-    0,
-  );
-  state.players[priorityPlayer].landsPlayed++;
-  state.revision++;
+	performIn(
+		state,
+		{
+			kind: "change zone",
+			object: action.card,
+			from: "hand",
+			to: "battlefield",
+			cause: "play land",
+			toController: priorityPlayer,
+		},
+		choices,
+		newScope(),
+		0,
+	);
+	state.players[priorityPlayer].landsPlayed++;
+	state.revision++;
 }
 
 /**
@@ -6099,358 +6091,358 @@ function playLandIn(
    5. all pass + stack empty      -> step ends
  */
 export function settlePriority(state: GameState, source: ChoiceSource): void {
-  settlePriorityIn(state, asChoiceController(source));
+	settlePriorityIn(state, asChoiceController(source));
 }
 
 function settlePriorityIn(
-  state: GameState,
-  choices: AnyChoiceController,
+	state: GameState,
+	choices: AnyChoiceController,
 ): void {
-  // Priority, and the APNAP order triggers follow onto the stack, are both
-  // defined relative to the active player. Neither exists outside a turn.
-  const active = activePlayer(state);
-  assertDefined(active, "no player receives priority outside a turn");
-  let lastWasPass = false;
-  let priority: 0 | 1 = active;
+	// Priority, and the APNAP order triggers follow onto the stack, are both
+	// defined relative to the active player. Neither exists outside a turn.
+	const active = activePlayer(state);
+	assertDefined(active, "no player receives priority outside a turn");
+	let lastWasPass = false;
+	let priority: 0 | 1 = active;
 
-  // Runaway guard, not a rules limit. Each resolution costs a full priority
-  // round (both players pass again per CR 117.3b), so this must be at least
-  // twice the deepest stack the engine can build.
-  for (let pass = 0; pass < 256; pass++) {
-    checkStateBasedActionsIn(state, choices);
-    if (gameOver(state)) return;
+	// Runaway guard, not a rules limit. Each resolution costs a full priority
+	// round (both players pass again per CR 117.3b), so this must be at least
+	// twice the deepest stack the engine can build.
+	for (let pass = 0; pass < 256; pass++) {
+		checkStateBasedActionsIn(state, choices);
+		if (gameOver(state)) return;
 
-    putPendingTriggersOnStack(state, choices, active);
-    // players only get priority in the untap & cleanup steps
-    // if something goes on the stack.
-    const step = currentStepKind(state);
-    if (step === "untap" && state.stack.length === 0) return;
+		putPendingTriggersOnStack(state, choices, active);
+		// players only get priority in the untap & cleanup steps
+		// if something goes on the stack.
+		const step = currentStepKind(state);
+		if (step === "untap" && state.stack.length === 0) return;
 
-    if (step === "cleanup") {
-      if (state.stack.length === 0) return;
+		if (step === "cleanup") {
+			if (state.stack.length === 0) return;
 
-      assert(state.turnScheduler.remainingSteps.length === 0);
-      const progress = state.turnScheduler.progress;
-      assert(progress.kind === "inTurn");
-      assert(progress.location?.kind === "step");
+			assert(state.turnScheduler.remainingSteps.length === 0);
+			const progress = state.turnScheduler.progress;
+			assert(progress.kind === "inTurn");
+			assert(progress.location?.kind === "step");
 
-      state.turnScheduler.remainingSteps.push({
-        id: nextScheduleId(state) as StepId,
-        phaseId: progress.location.phase.id,
-        turnId: progress.turn.id,
-        kind: "cleanup",
-      });
-    }
-    const action = choices.choosePriorityAction(
-      state,
-      priority,
-      getObservableActions(state, priority),
-    );
+			state.turnScheduler.remainingSteps.push({
+				id: nextScheduleId(state) as StepId,
+				phaseId: progress.location.phase.id,
+				turnId: progress.turn.id,
+				kind: "cleanup",
+			});
+		}
+		const action = choices.choosePriorityAction(
+			state,
+			priority,
+			getObservableActions(state, priority),
+		);
 
-    if (action.kind === "play land") {
-      playLandIn(state, priority, action, choices);
-      // A special action neither passes nor changes who has priority.
-      lastWasPass = false;
-      continue;
-    }
-    if (action.kind === "activate ability") {
-      activateAbilityIn(state, priority, action, choices);
-      // CR 117.3c: the activating player receives priority again. Mana
-      // abilities resolve immediately; other activated abilities are stacked.
-      lastWasPass = false;
-      continue;
-    }
-    if (action.kind === "cast") {
-      castSpellIn(state, priority, action, choices);
-      // CR 117.3c: the caster receives priority again after casting, and the
-      // round re-opens, so a pass already made no longer stands.
-      lastWasPass = false;
-      continue;
-    }
-    if (action.kind !== "pass") {
-      assertNever(action);
-    }
-    if (lastWasPass) {
-      if (state.stack.length === 0) return;
-      resolveTopOfStack(state, choices);
-      // CR 117.3b. The active player receives priority after a resolution,
-      // which re-opens the round: step 4's "goto 1" above.
-      lastWasPass = false;
-      priority = active;
-    } else {
-      lastWasPass = true;
-      priority = priority === 0 ? 1 : 0;
-    }
-  }
-  throw new Error("priority loop did not settle");
+		if (action.kind === "play land") {
+			playLandIn(state, priority, action, choices);
+			// A special action neither passes nor changes who has priority.
+			lastWasPass = false;
+			continue;
+		}
+		if (action.kind === "activate ability") {
+			activateAbilityIn(state, priority, action, choices);
+			// CR 117.3c: the activating player receives priority again. Mana
+			// abilities resolve immediately; other activated abilities are stacked.
+			lastWasPass = false;
+			continue;
+		}
+		if (action.kind === "cast") {
+			castSpellIn(state, priority, action, choices);
+			// CR 117.3c: the caster receives priority again after casting, and the
+			// round re-opens, so a pass already made no longer stands.
+			lastWasPass = false;
+			continue;
+		}
+		if (action.kind !== "pass") {
+			assertNever(action);
+		}
+		if (lastWasPass) {
+			if (state.stack.length === 0) return;
+			resolveTopOfStack(state, choices);
+			// CR 117.3b. The active player receives priority after a resolution,
+			// which re-opens the round: step 4's "goto 1" above.
+			lastWasPass = false;
+			priority = active;
+		} else {
+			lastWasPass = true;
+			priority = priority === 0 ? 1 : 0;
+		}
+	}
+	throw new Error("priority loop did not settle");
 }
 
 function priority(state: GameState, choices: AnyChoiceController) {
-  settlePriorityIn(state, choices);
+	settlePriorityIn(state, choices);
 }
 
 /* ------------------------------------------------------------------ *
  * Turn progression
  * ------------------------------------------------------------------ */
 function performPreGameActions(
-  state: GameState,
-  choices: AnyChoiceController,
-  step: PreGameStepKind,
+	state: GameState,
+	choices: AnyChoiceController,
+	step: PreGameStepKind,
 ): void {
-  switch (step) {
-    case "shuffle":
-      // CR 103.2. Both libraries are shuffled before anything is drawn.
-      for (const player of state.players) shuffleLibrary(state, player.id);
-      break;
-    case "opening hand": // increment 2: deal 7 through the draw path
-    case "mulligan": // increment 7
-    case "opening hand actions": // increment 8: Leyline
-      break;
-    default:
-      assertNever(step);
-  }
+	switch (step) {
+		case "shuffle":
+			// CR 103.2. Both libraries are shuffled before anything is drawn.
+			for (const player of state.players) shuffleLibrary(state, player.id);
+			break;
+		case "opening hand": // increment 2: deal 7 through the draw path
+		case "mulligan": // increment 7
+		case "opening hand actions": // increment 8: Leyline
+			break;
+		default:
+			assertNever(step);
+	}
 }
 /** CR 703 actions, dispatched only after the corresponding step began. */
 function performTurnBasedActions(
-  state: GameState,
-  choices: AnyChoiceController,
-  step: StepOccurrence,
-  active: PlayerId,
+	state: GameState,
+	choices: AnyChoiceController,
+	step: StepOccurrence,
+	active: PlayerId,
 ): void {
-  switch (step.kind) {
-    case "untap":
-      performIn(
-        state,
-        {
-          kind: "untap",
-          ref: { kind: "all", player: active },
-        },
-        choices,
-        newScope(),
-        0,
-      );
-      break;
-    case "draw":
-      state.players[active].drawnInDrawStep = 0;
-      performIn(
-        state,
-        { kind: "draw", player: active },
-        choices,
-        newScope(),
-        0,
-      );
-      break;
-    case "cleanup":
-      performIn(
-        state,
-        {
-          kind: "discard",
-          player: active,
-          cards: { kind: "hand-size" },
-        },
-        choices,
-        newScope(),
-        0,
-      );
-      // This is only the noninteractive part of CR 514. Repeated cleanup
-      // steps still need to be added when SBAs or triggers occur here.
-      for (const id of state.battlefield) permanent(state, id).damage = 0;
-      state.floating = state.floating.filter(
-        (f) => !f.expired && f.expires !== "endOfTurn",
-      );
+	switch (step.kind) {
+		case "untap":
+			performIn(
+				state,
+				{
+					kind: "untap",
+					ref: { kind: "all", player: active },
+				},
+				choices,
+				newScope(),
+				0,
+			);
+			break;
+		case "draw":
+			state.players[active].drawnInDrawStep = 0;
+			performIn(
+				state,
+				{ kind: "draw", player: active },
+				choices,
+				newScope(),
+				0,
+			);
+			break;
+		case "cleanup":
+			performIn(
+				state,
+				{
+					kind: "discard",
+					player: active,
+					cards: { kind: "hand-size" },
+				},
+				choices,
+				newScope(),
+				0,
+			);
+			// This is only the noninteractive part of CR 514. Repeated cleanup
+			// steps still need to be added when SBAs or triggers occur here.
+			for (const id of state.battlefield) permanent(state, id).damage = 0;
+			state.floating = state.floating.filter(
+				(f) => !f.expired && f.expires !== "endOfTurn",
+			);
 
-      break;
-    case "declare attackers": {
-      // Ask once for a replayable subset, then commit it as one event. Battlefield
-      // order is preserved so the offered options are stable and deterministic.
-      const eligible = eligibleAttackers(state, active);
-      const attackers = choices.chooseAttackers(state, active, eligible);
-      performIn(
-        state,
-        {
-          kind: "declare attackers",
-          player: active,
-          attackers,
-        },
-        choices,
-        newScope(),
-        0,
-      );
-      break;
-    }
-    case "end combat":
-      // CR 506.4: attacking/blocking status doesn't persist past combat. Direct
-      // mutation, not a replaceable event, matching the cleanup damage wipe below.
-      for (const id of state.battlefield) {
-        const o = permanent(state, id);
-        o.attacking = false;
-        o.blocking = false;
-      }
-      state.blockAssignments = [];
-      break;
-    case "combat damage": {
-      // CR 510.2: all combat damage is assigned, then dealt, simultaneously.
-      const defender = (1 - active) as PlayerId;
-      const events: DamageEvent[] = [];
-      const read = createReadContext(state);
-      const blockedAttackers = new Set(
-        state.blockAssignments.map(({ attacker }) => attacker),
-      );
-      const blockersByAttacker = new Map<ObjectId, ObjectId[]>();
-      for (const { blocker, attacker } of state.blockAssignments) {
-        const blockers = blockersByAttacker.get(attacker) ?? [];
-        blockers.push(blocker);
-        blockersByAttacker.set(attacker, blockers);
-      }
+			break;
+		case "declare attackers": {
+			// Ask once for a replayable subset, then commit it as one event. Battlefield
+			// order is preserved so the offered options are stable and deterministic.
+			const eligible = eligibleAttackers(state, active);
+			const attackers = choices.chooseAttackers(state, active, eligible);
+			performIn(
+				state,
+				{
+					kind: "declare attackers",
+					player: active,
+					attackers,
+				},
+				choices,
+				newScope(),
+				0,
+			);
+			break;
+		}
+		case "end combat":
+			// CR 506.4: attacking/blocking status doesn't persist past combat. Direct
+			// mutation, not a replaceable event, matching the cleanup damage wipe below.
+			for (const id of state.battlefield) {
+				const o = permanent(state, id);
+				o.attacking = false;
+				o.blocking = false;
+			}
+			state.blockAssignments = [];
+			break;
+		case "combat damage": {
+			// CR 510.2: all combat damage is assigned, then dealt, simultaneously.
+			const defender = (1 - active) as PlayerId;
+			const events: DamageEvent[] = [];
+			const read = createReadContext(state);
+			const blockedAttackers = new Set(
+				state.blockAssignments.map(({ attacker }) => attacker),
+			);
+			const blockersByAttacker = new Map<ObjectId, ObjectId[]>();
+			for (const { blocker, attacker } of state.blockAssignments) {
+				const blockers = blockersByAttacker.get(attacker) ?? [];
+				blockers.push(blocker);
+				blockersByAttacker.set(attacker, blockers);
+			}
 
-      const damageEvent = (
-        source: PermanentObject,
-        characteristics: CreatureCharacteristicsSnapshot,
-        target: EntityRef,
-        amount: number,
-      ): DamageEvent => ({
-        kind: "damage",
-        source: source.id,
-        sourceController: source.controller,
-        sourceColors: characteristics.colors,
-        target,
-        amount,
-        combat: true,
-        // The engine has no deathtouch keyword yet; false is correct until
-        // one is added.
-        deathtouch: false,
-        lifelink: characteristics.keywords.includes("lifelink"),
-        unpreventable: false,
-      });
+			const damageEvent = (
+				source: PermanentObject,
+				characteristics: CreatureCharacteristicsSnapshot,
+				target: EntityRef,
+				amount: number,
+			): DamageEvent => ({
+				kind: "damage",
+				source: source.id,
+				sourceController: source.controller,
+				sourceColors: characteristics.colors,
+				target,
+				amount,
+				combat: true,
+				// The engine has no deathtouch keyword yet; false is correct until
+				// one is added.
+				deathtouch: false,
+				lifelink: characteristics.keywords.includes("lifelink"),
+				unpreventable: false,
+			});
 
-      for (const id of state.battlefield) {
-        const o = maybePermanent(state, id);
-        if (!o?.attacking) continue;
-        const snapshot = readObject(read, id);
-        assert(snapshot.kind === "permanent");
-        const characteristics = snapshot.currentCharacteristics;
-        if (characteristics.kind !== "creature") continue;
+			for (const id of state.battlefield) {
+				const o = maybePermanent(state, id);
+				if (!o?.attacking) continue;
+				const snapshot = readObject(read, id);
+				assert(snapshot.kind === "permanent");
+				const characteristics = snapshot.currentCharacteristics;
+				if (characteristics.kind !== "creature") continue;
 
-        if (!blockedAttackers.has(id)) {
-          if (characteristics.power > 0) {
-            events.push(
-              damageEvent(
-                o,
-                characteristics,
-                {
-                  type: "player",
-                  player: defender,
-                },
-                characteristics.power,
-              ),
-            );
-          }
-          continue;
-        }
+				if (!blockedAttackers.has(id)) {
+					if (characteristics.power > 0) {
+						events.push(
+							damageEvent(
+								o,
+								characteristics,
+								{
+									type: "player",
+									player: defender,
+								},
+								characteristics.power,
+							),
+						);
+					}
+					continue;
+				}
 
-        // With no trample, a blocked attacker can assign damage only to the
-        // creatures still blocking it. Assign lethal in declaration order,
-        // putting any remainder on the final blocker.
-        let remaining = Math.max(0, characteristics.power);
-        const blockers = (blockersByAttacker.get(id) ?? []).filter(
-          (blockerId) => maybePermanent(state, blockerId)?.blocking,
-        );
-        for (let index = 0; index < blockers.length && remaining > 0; index++) {
-          const blockerId = blockers[index];
-          assertDefined(blockerId);
-          const blocker = maybePermanent(state, blockerId);
-          assertDefined(blocker);
-          const blockerSnapshot = readObject(read, blockerId);
-          assert(blockerSnapshot.kind === "permanent");
-          const blockerCharacteristics = blockerSnapshot.currentCharacteristics;
-          if (blockerCharacteristics.kind !== "creature") continue;
-          const amount =
-            index === blockers.length - 1
-              ? remaining
-              : Math.min(
-                  remaining,
-                  Math.max(
-                    0,
-                    blockerCharacteristics.toughness - blocker.damage,
-                  ),
-                );
-          if (amount > 0) {
-            events.push(
-              damageEvent(
-                o,
-                characteristics,
-                {
-                  type: "permanent",
-                  id: blockerId,
-                },
-                amount,
-              ),
-            );
-            remaining -= amount;
-          }
-        }
-      }
+				// With no trample, a blocked attacker can assign damage only to the
+				// creatures still blocking it. Assign lethal in declaration order,
+				// putting any remainder on the final blocker.
+				let remaining = Math.max(0, characteristics.power);
+				const blockers = (blockersByAttacker.get(id) ?? []).filter(
+					(blockerId) => maybePermanent(state, blockerId)?.blocking,
+				);
+				for (let index = 0; index < blockers.length && remaining > 0; index++) {
+					const blockerId = blockers[index];
+					assertDefined(blockerId);
+					const blocker = maybePermanent(state, blockerId);
+					assertDefined(blocker);
+					const blockerSnapshot = readObject(read, blockerId);
+					assert(blockerSnapshot.kind === "permanent");
+					const blockerCharacteristics = blockerSnapshot.currentCharacteristics;
+					if (blockerCharacteristics.kind !== "creature") continue;
+					const amount =
+						index === blockers.length - 1
+							? remaining
+							: Math.min(
+									remaining,
+									Math.max(
+										0,
+										blockerCharacteristics.toughness - blocker.damage,
+									),
+								);
+					if (amount > 0) {
+						events.push(
+							damageEvent(
+								o,
+								characteristics,
+								{
+									type: "permanent",
+									id: blockerId,
+								},
+								amount,
+							),
+						);
+						remaining -= amount;
+					}
+				}
+			}
 
-      for (const { blocker, attacker } of state.blockAssignments) {
-        const blockerObject = maybePermanent(state, blocker);
-        const attackerObject = maybePermanent(state, attacker);
-        if (!blockerObject?.blocking || !attackerObject?.attacking) continue;
-        const blockerSnapshot = readObject(read, blocker);
-        assert(blockerSnapshot.kind === "permanent");
-        const characteristics = blockerSnapshot.currentCharacteristics;
-        if (characteristics.kind !== "creature" || characteristics.power <= 0)
-          continue;
-        events.push(
-          damageEvent(
-            blockerObject,
-            characteristics,
-            {
-              type: "permanent",
-              id: attacker,
-            },
-            characteristics.power,
-          ),
-        );
-      }
-      for (const ev of events) performIn(state, ev, choices, newScope(), 0);
-      break;
-    }
-    case "upkeep":
-    case "begin combat":
-    case "end":
-      // Their turn-based actions are not implemented yet.
-      break;
-    case "declare blockers": {
-      // The defending player chooses which of their creatures block which
-      // attackers. This deviates from the attacker model: blockers are
-      // (blocker, attacker) pairs, not a plain list of IDs.
-      const defender = (1 - active) as PlayerId;
-      const attackers = creaturesControlledBy(createReadContext(state), active)
-        .filter((o) => o.attacking)
-        .map((o) => o.id);
-      const eligible = eligibleBlockers(state, defender);
-      const blockers = choices.chooseBlockers(
-        state,
-        defender,
-        attackers,
-        eligible,
-      );
-      performIn(
-        state,
-        {
-          kind: "declare blockers",
-          player: defender,
-          blockers,
-        },
-        choices,
-        newScope(),
-        0,
-      );
-      break;
-    }
-    default:
-      assertNever(step.kind);
-  }
+			for (const { blocker, attacker } of state.blockAssignments) {
+				const blockerObject = maybePermanent(state, blocker);
+				const attackerObject = maybePermanent(state, attacker);
+				if (!blockerObject?.blocking || !attackerObject?.attacking) continue;
+				const blockerSnapshot = readObject(read, blocker);
+				assert(blockerSnapshot.kind === "permanent");
+				const characteristics = blockerSnapshot.currentCharacteristics;
+				if (characteristics.kind !== "creature" || characteristics.power <= 0)
+					continue;
+				events.push(
+					damageEvent(
+						blockerObject,
+						characteristics,
+						{
+							type: "permanent",
+							id: attacker,
+						},
+						characteristics.power,
+					),
+				);
+			}
+			for (const ev of events) performIn(state, ev, choices, newScope(), 0);
+			break;
+		}
+		case "upkeep":
+		case "begin combat":
+		case "end":
+			// Their turn-based actions are not implemented yet.
+			break;
+		case "declare blockers": {
+			// The defending player chooses which of their creatures block which
+			// attackers. This deviates from the attacker model: blockers are
+			// (blocker, attacker) pairs, not a plain list of IDs.
+			const defender = (1 - active) as PlayerId;
+			const attackers = creaturesControlledBy(createReadContext(state), active)
+				.filter((o) => o.attacking)
+				.map((o) => o.id);
+			const eligible = eligibleBlockers(state, defender);
+			const blockers = choices.chooseBlockers(
+				state,
+				defender,
+				attackers,
+				eligible,
+			);
+			performIn(
+				state,
+				{
+					kind: "declare blockers",
+					player: defender,
+					blockers,
+				},
+				choices,
+				newScope(),
+				0,
+			);
+			break;
+		}
+		default:
+			assertNever(step.kind);
+	}
 }
 
 /**
@@ -6459,9 +6451,9 @@ function performTurnBasedActions(
  * partially installed turn, phase, or step.
  */
 export interface AdvanceWithReplayResult {
-  state: GameState;
-  transcript: ChoiceTranscript;
-  attempts: number;
+	state: GameState;
+	transcript: ChoiceTranscript;
+	attempts: number;
 }
 
 /**
@@ -6470,26 +6462,26 @@ export interface AdvanceWithReplayResult {
  * the same advancement is replayed from the untouched checkpoint.
  */
 export async function advanceWithReplay(
-  checkpoint: GameState,
-  agents: AgentPair,
-  transcript: ChoiceTranscript = { version: 1, choices: [] },
+	checkpoint: GameState,
+	agents: AgentPair,
+	transcript: ChoiceTranscript = { version: 1, choices: [] },
 ): Promise<AdvanceWithReplayResult> {
-  const baseline = structuredClone(checkpoint);
-  const choices = ChoiceController.suspending(agents, transcript);
+	const baseline = structuredClone(checkpoint);
+	const choices = ChoiceController.suspending(agents, transcript);
 
-  for (let attempts = 1; ; attempts++) {
-    const attempt = structuredClone(baseline);
-    choices.rewind();
+	for (let attempts = 1; ; attempts++) {
+		const attempt = structuredClone(baseline);
+		choices.rewind();
 
-    try {
-      advanceIn(attempt, choices);
-      choices.assertComplete();
-      return { state: attempt, transcript: choices.transcript(), attempts };
-    } catch (error) {
-      if (!(error instanceof ChoicePendingError)) throw error;
-      choices.recordAnswer(error.request, await error.answer);
-    }
-  }
+		try {
+			advanceIn(attempt, choices);
+			choices.assertComplete();
+			return { state: attempt, transcript: choices.transcript(), attempts };
+		} catch (error) {
+			if (!(error instanceof ChoicePendingError)) throw error;
+			choices.recordAnswer(error.request, await error.answer);
+		}
+	}
 }
 
 /**
@@ -6502,230 +6494,230 @@ export async function advanceWithReplay(
  * consumes every pre-game transition in one call.
  */
 export function startGame(state: GameState, source: ChoiceSource): void {
-  const choices = asChoiceController(source);
-  // One transition per pre-game step, plus the one that installs the turn.
-  for (let call = 0; call <= PRE_GAME_STEPS.length + 1; call++) {
-    if (state.turnScheduler.progress.kind === "inTurn") return;
-    advanceIn(state, choices);
-  }
-  throw new Error("the pre-game did not reach the first turn");
+	const choices = asChoiceController(source);
+	// One transition per pre-game step, plus the one that installs the turn.
+	for (let call = 0; call <= PRE_GAME_STEPS.length + 1; call++) {
+		if (state.turnScheduler.progress.kind === "inTurn") return;
+		advanceIn(state, choices);
+	}
+	throw new Error("the pre-game did not reach the first turn");
 }
 
 export function advance(state: GameState, source: ChoiceSource): void {
-  advanceIn(state, asChoiceController(source));
+	advanceIn(state, asChoiceController(source));
 }
 
 function advanceIn(state: GameState, choices: AnyChoiceController): void {
-  if (gameOver(state)) return;
+	if (gameOver(state)) return;
 
-  // Scheduler transitions and turn-based actions mutate canonical state outside
-  // executeIn, so invalidate any read window held by the caller up front.
-  state.revision++;
-  const scheduler = state.turnScheduler;
-  for (let transition = 0; transition < 64; transition++) {
-    const command = scheduler.command;
+	// Scheduler transitions and turn-based actions mutate canonical state outside
+	// executeIn, so invalidate any read window held by the caller up front.
+	state.revision++;
+	const scheduler = state.turnScheduler;
+	for (let transition = 0; transition < 64; transition++) {
+		const command = scheduler.command;
 
-    switch (command.kind) {
-      case "advancePreGameStep": {
-        const step = scheduler.remainingPregameSteps.shift();
-        if (!step) {
-          scheduler.command = { kind: "advanceTurn" };
-          continue;
-        }
-        scheduler.progress = { kind: "pregame", step };
-        performPreGameActions(state, choices, step);
-        scheduler.command = { kind: "finishPreGameStep" };
-        // A pre-game step is a rules-defined location, exactly like a turn's
-        // step. Unlike one, CR 103 opens no priority window, so there is no
-        // priority() call before returning.
-        return;
-      }
+		switch (command.kind) {
+			case "advancePreGameStep": {
+				const step = scheduler.remainingPregameSteps.shift();
+				if (!step) {
+					scheduler.command = { kind: "advanceTurn" };
+					continue;
+				}
+				scheduler.progress = { kind: "pregame", step };
+				performPreGameActions(state, choices, step);
+				scheduler.command = { kind: "finishPreGameStep" };
+				// A pre-game step is a rules-defined location, exactly like a turn's
+				// step. Unlike one, CR 103 opens no priority window, so there is no
+				// priority() call before returning.
+				return;
+			}
 
-      case "finishPreGameStep": {
-        assert(scheduler.progress.kind === "pregame");
-        scheduler.command = { kind: "advancePreGameStep" };
-        continue;
-      }
+			case "finishPreGameStep": {
+				assert(scheduler.progress.kind === "pregame");
+				scheduler.command = { kind: "advancePreGameStep" };
+				continue;
+			}
 
-      case "advanceTurn": {
-        const turn = takeNextTurn(state);
-        const result = performIn(
-          state,
-          {
-            kind: "begin turn",
-            turnId: turn.id,
-            player: turn.player,
-            isExtra: turn.isExtra,
-          },
-          choices,
-          newScope(),
-          0,
-        );
+			case "advanceTurn": {
+				const turn = takeNextTurn(state);
+				const result = performIn(
+					state,
+					{
+						kind: "begin turn",
+						turnId: turn.id,
+						player: turn.player,
+						isExtra: turn.isExtra,
+					},
+					choices,
+					newScope(),
+					0,
+				);
 
-        // Selection consumes the occurrence (and advances ordinary turn order),
-        // but a skipped turn never becomes current.
-        if (
-          !result.executed.some(
-            (ev) => ev.kind === "begin turn" && ev.turnId === turn.id,
-          )
-        ) {
-          scheduler.command = { kind: "advanceTurn" };
-          continue;
-        }
+				// Selection consumes the occurrence (and advances ordinary turn order),
+				// but a skipped turn never becomes current.
+				if (
+					!result.executed.some(
+						(ev) => ev.kind === "begin turn" && ev.turnId === turn.id,
+					)
+				) {
+					scheduler.command = { kind: "advanceTurn" };
+					continue;
+				}
 
-        // The turn is now current even though no phase of it has begun,
-        // so "whose turn is it" already answers with its player.
-        scheduler.progress = { kind: "inTurn", turn, location: null };
-        state.players[turn.player].landsPlayed = 0;
-        scheduler.remainingSteps = [];
-        scheduler.command = { kind: "advancePhase", turn };
-        continue;
-      }
+				// The turn is now current even though no phase of it has begun,
+				// so "whose turn is it" already answers with its player.
+				scheduler.progress = { kind: "inTurn", turn, location: null };
+				state.players[turn.player].landsPlayed = 0;
+				scheduler.remainingSteps = [];
+				scheduler.command = { kind: "advancePhase", turn };
+				continue;
+			}
 
-      case "advancePhase": {
-        const { turn } = command;
-        const phase = turn.remainingPhases.shift();
-        if (!phase) {
-          scheduler.remainingSteps = [];
-          state.completedTurns++;
-          scheduler.command = { kind: "advanceTurn" };
-          continue;
-        }
+			case "advancePhase": {
+				const { turn } = command;
+				const phase = turn.remainingPhases.shift();
+				if (!phase) {
+					scheduler.remainingSteps = [];
+					state.completedTurns++;
+					scheduler.command = { kind: "advanceTurn" };
+					continue;
+				}
 
-        const mainRole =
-          phase.kind === "main"
-            ? turn.mainPhasesBegun === 0
-              ? "precombat"
-              : "postcombat"
-            : undefined;
-        const result = performIn(
-          state,
-          {
-            kind: "begin phase",
-            turnId: turn.id,
-            phaseId: phase.id,
-            player: turn.player,
-            phase: phase.kind,
-            mainRole,
-          },
-          choices,
-          newScope(),
-          0,
-        );
+				const mainRole =
+					phase.kind === "main"
+						? turn.mainPhasesBegun === 0
+							? "precombat"
+							: "postcombat"
+						: undefined;
+				const result = performIn(
+					state,
+					{
+						kind: "begin phase",
+						turnId: turn.id,
+						phaseId: phase.id,
+						player: turn.player,
+						phase: phase.kind,
+						mainRole,
+					},
+					choices,
+					newScope(),
+					0,
+				);
 
-        if (
-          !result.executed.some(
-            (ev) => ev.kind === "begin phase" && ev.phaseId === phase.id,
-          )
-        ) {
-          scheduler.command = { kind: "advancePhase", turn };
-          continue;
-        }
+				if (
+					!result.executed.some(
+						(ev) => ev.kind === "begin phase" && ev.phaseId === phase.id,
+					)
+				) {
+					scheduler.command = { kind: "advancePhase", turn };
+					continue;
+				}
 
-        if (phase.kind === "main") {
-          const role = mainRole ?? "precombat";
-          turn.mainPhasesBegun++;
-          scheduler.progress = {
-            kind: "inTurn",
-            turn,
-            location: { kind: "mainPhase", phase, role },
-          };
-          scheduler.command = { kind: "finishPhase" };
-          priority(state, choices);
-          return;
-        }
+				if (phase.kind === "main") {
+					const role = mainRole ?? "precombat";
+					turn.mainPhasesBegun++;
+					scheduler.progress = {
+						kind: "inTurn",
+						turn,
+						location: { kind: "mainPhase", phase, role },
+					};
+					scheduler.command = { kind: "finishPhase" };
+					priority(state, choices);
+					return;
+				}
 
-        scheduler.remainingSteps = makeSteps(state, phase);
-        scheduler.command = { kind: "advanceStep", turn, phase };
-        continue;
-      }
+				scheduler.remainingSteps = makeSteps(state, phase);
+				scheduler.command = { kind: "advanceStep", turn, phase };
+				continue;
+			}
 
-      case "advanceStep": {
-        const { turn, phase } = command;
-        const step = scheduler.remainingSteps.shift();
-        if (!step) {
-          scheduler.command = { kind: "finishPhase" };
-          continue;
-        }
+			case "advanceStep": {
+				const { turn, phase } = command;
+				const step = scheduler.remainingSteps.shift();
+				if (!step) {
+					scheduler.command = { kind: "finishPhase" };
+					continue;
+				}
 
-        const result = performIn(
-          state,
-          {
-            kind: "begin step",
-            turnId: step.turnId,
-            phaseId: step.phaseId,
-            stepId: step.id,
-            player: turn.player,
-            step: step.kind,
-          },
-          choices,
-          newScope(),
-          0,
-        );
-        if (
-          !result.executed.some(
-            (ev) => ev.kind === "begin step" && ev.stepId === step.id,
-          )
-        ) {
-          scheduler.command = { kind: "advanceStep", turn, phase };
-          continue;
-        }
+				const result = performIn(
+					state,
+					{
+						kind: "begin step",
+						turnId: step.turnId,
+						phaseId: step.phaseId,
+						stepId: step.id,
+						player: turn.player,
+						step: step.kind,
+					},
+					choices,
+					newScope(),
+					0,
+				);
+				if (
+					!result.executed.some(
+						(ev) => ev.kind === "begin step" && ev.stepId === step.id,
+					)
+				) {
+					scheduler.command = { kind: "advanceStep", turn, phase };
+					continue;
+				}
 
-        scheduler.progress = {
-          kind: "inTurn",
-          turn,
-          location: { kind: "step", phase, step },
-        };
-        scheduler.command = { kind: "finishStep" };
-        performTurnBasedActions(state, choices, step, turn.player);
-        // Untap has no priority window. Cleanup normally has none, but the
-        // priority helper opens one if something triggered.
-        priority(state, choices);
-        return;
-      }
+				scheduler.progress = {
+					kind: "inTurn",
+					turn,
+					location: { kind: "step", phase, step },
+				};
+				scheduler.command = { kind: "finishStep" };
+				performTurnBasedActions(state, choices, step, turn.player);
+				// Untap has no priority window. Cleanup normally has none, but the
+				// priority helper opens one if something triggered.
+				priority(state, choices);
+				return;
+			}
 
-      case "finishStep": {
-        const progress = scheduler.progress;
-        assert(progress.kind === "inTurn");
-        assert(progress.location?.kind === "step");
-        emptyManaPools(state);
-        scheduler.command = {
-          kind: "advanceStep",
-          turn: progress.turn,
-          phase: progress.location.phase,
-        };
-        continue;
-      }
+			case "finishStep": {
+				const progress = scheduler.progress;
+				assert(progress.kind === "inTurn");
+				assert(progress.location?.kind === "step");
+				emptyManaPools(state);
+				scheduler.command = {
+					kind: "advanceStep",
+					turn: progress.turn,
+					phase: progress.location.phase,
+				};
+				continue;
+			}
 
-      case "finishPhase": {
-        const progress = scheduler.progress;
-        assert(progress.kind === "inTurn");
-        emptyManaPools(state);
-        scheduler.remainingSteps = [];
-        scheduler.command = {
-          kind: "advancePhase",
-          turn: progress.turn,
-        };
-        continue;
-      }
+			case "finishPhase": {
+				const progress = scheduler.progress;
+				assert(progress.kind === "inTurn");
+				emptyManaPools(state);
+				scheduler.remainingSteps = [];
+				scheduler.command = {
+					kind: "advancePhase",
+					turn: progress.turn,
+				};
+				continue;
+			}
 
-      default:
-        assertNever(command);
-    }
-  }
+			default:
+				assertNever(command);
+		}
+	}
 
-  throw new Error("scheduler did not reach a rules-defined location");
+	throw new Error("scheduler did not reach a rules-defined location");
 }
 
 export function gameOver(state: GameState): boolean {
-  return state.players.some((p) => p.lost || p.won);
+	return state.players.some((p) => p.lost || p.won);
 }
 
 export function winner(state: GameState): PlayerId | null {
-  const w = state.players.find((p) => p.won);
-  if (w) return w.id;
-  const losers = state.players.filter((p) => p.lost);
-  if (losers.length === 1)
-    return state.players.find((p) => !p.lost)?.id ?? null;
-  return null;
+	const w = state.players.find((p) => p.won);
+	if (w) return w.id;
+	const losers = state.players.filter((p) => p.lost);
+	if (losers.length === 1)
+		return state.players.find((p) => !p.lost)?.id ?? null;
+	return null;
 }

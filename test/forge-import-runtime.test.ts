@@ -27,8 +27,8 @@ import {
 	created,
 	passingAgents,
 	registerCardFixture,
-	setupMain,
 	type SyncAgents,
+	setupMain,
 } from "./utils/engine-helpers.ts";
 
 const CORPUS_ROOT = join(import.meta.dir, "..", "cards", "cardsfolder");
@@ -104,7 +104,8 @@ SVar:TrigB:DB$ Draw | Defined$ You | NumCards$ 1
 Oracle:
 `;
 	const result = importForgeCard(text, { id: "rt-test-optional-multi" });
-	if (!result.ok) throw new Error("expected synthetic optional-multi fixture to import");
+	if (!result.ok)
+		throw new Error("expected synthetic optional-multi fixture to import");
 	registerCard(result.card);
 }
 
@@ -190,7 +191,9 @@ describe("forge-import runtime: triggers", () => {
 		stockLibraries(accept);
 		const handBefore = accept.players[ALICE].hand.length;
 		advanceUntil(accept, acceptAgents, (next) => atUpkeepOf(next, ALICE));
-		expect(accept.players[ALICE].life, "both effects applied together").toBe(23);
+		expect(accept.players[ALICE].life, "both effects applied together").toBe(
+			23,
+		);
 		expect(accept.players[ALICE].hand.length).toBe(handBefore + 1);
 
 		const decline = newGame();
@@ -324,7 +327,10 @@ describe("forge-import runtime: activated abilities", () => {
 			passingAgents(),
 		);
 		expect(permanent(state, soulmender.id).tapped).toBe(true);
-		expect(state.players[ALICE].life, "effect is on the stack, not resolved").toBe(20);
+		expect(
+			state.players[ALICE].life,
+			"effect is on the stack, not resolved",
+		).toBe(20);
 
 		settlePriority(state, passingAgents());
 		expect(state.players[ALICE].life).toBe(21);

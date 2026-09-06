@@ -27,57 +27,61 @@
  * (`ActiveZones$`) replacement (see `lowerReplacement`).
  */
 import type {
-  ForgeAbilityRecord,
-  ForgeCardAst,
-  ForgeFaceAst,
-  ForgeParamList,
-  ForgeSVarRecord,
+	ForgeAbilityRecord,
+	ForgeCardAst,
+	ForgeFaceAst,
+	ForgeParamList,
+	ForgeSVarRecord,
 } from "./forge-ast.ts";
-import { getForgeParam, lookupForgeSVar, parseForgeCardScript } from "./forge-ast.ts";
+import {
+	getForgeParam,
+	lookupForgeSVar,
+	parseForgeCardScript,
+} from "./forge-ast.ts";
 import type {
-  AnyActivatedAbilityDef,
-  CardDef,
-  CardDefInput,
-  CardType,
-  Color,
-  ContinuousEffect,
-  EffectDef,
-  GameEvent,
-  ManaPool,
-  PermanentView,
-  PlayerId,
-  ReadonlyGameState,
-  ReplacementDef,
-  SpellAbilityDef,
-  Supertype,
-  TargetDef,
-  TargetSelectorDef,
-  TriggerDef,
+	AnyActivatedAbilityDef,
+	CardDef,
+	CardDefInput,
+	CardType,
+	Color,
+	ContinuousEffect,
+	EffectDef,
+	GameEvent,
+	ManaPool,
+	PermanentView,
+	PlayerId,
+	ReadonlyGameState,
+	ReplacementDef,
+	SpellAbilityDef,
+	Supertype,
+	TargetDef,
+	TargetSelectorDef,
+	TriggerDef,
 } from "./index.ts";
 import { defineCard, etbPreview } from "./index.ts";
 
 export interface ImportIssue {
-  code: string;
-  message: string;
-  nodeId?: string;
-  line?: number;
-  paramId?: string;
+	code: string;
+	message: string;
+	nodeId?: string;
+	line?: number;
+	paramId?: string;
 }
 
 export type ImportResult =
-  | { ok: true; card: CardDef; diagnostics: ImportIssue[] }
-  | { ok: false; diagnostics: [ImportIssue, ...ImportIssue[]] };
+	| { ok: true; card: CardDef; diagnostics: ImportIssue[] }
+	| { ok: false; diagnostics: [ImportIssue, ...ImportIssue[]] };
 
 function issue(
-  code: string,
-  message: string,
-  extra: { nodeId?: string; line?: number; paramId?: string } = {},
+	code: string,
+	message: string,
+	extra: { nodeId?: string; line?: number; paramId?: string } = {},
 ): ImportIssue {
-  return { code, message, ...extra };
+	return { code, message, ...extra };
 }
 
 function reject(i: ImportIssue): { ok: false; diagnostics: [ImportIssue] } {
-  return { ok: false, diagnostics: [i] };
+	return { ok: false, diagnostics: [i] };
 }
 
 /* ------------------------------------------------------------------------- */
@@ -86,52 +90,57 @@ function reject(i: ImportIssue): { ok: false; diagnostics: [ImportIssue] } {
 /* ------------------------------------------------------------------------- */
 
 const CARD_TYPES = new Set<CardType>([
-  "artifact",
-  "creature",
-  "enchantment",
-  "instant",
-  "land",
-  "planeswalker",
-  "sorcery",
+	"artifact",
+	"creature",
+	"enchantment",
+	"instant",
+	"land",
+	"planeswalker",
+	"sorcery",
 ]);
 const SUPERTYPES = new Set<Supertype>(["basic", "legendary", "snow"]);
 // `Map`, not a plain object: an object literal's lookups fall through to
 // `Object.prototype` (`obj["constructor"]` resolves to `Function`), and every
 // key here comes straight from untrusted card text.
 const COLOR_WORDS = new Map<string, Color>([
-  ["w", "w"],
-  ["white", "w"],
-  ["u", "u"],
-  ["blue", "u"],
-  ["b", "b"],
-  ["black", "b"],
-  ["r", "r"],
-  ["red", "r"],
-  ["g", "g"],
-  ["green", "g"],
+	["w", "w"],
+	["white", "w"],
+	["u", "u"],
+	["blue", "u"],
+	["b", "b"],
+	["black", "b"],
+	["r", "r"],
+	["red", "r"],
+	["g", "g"],
+	["green", "g"],
 ]);
 const BARE_KEYWORDS = new Map<
-  string,
-  "indestructible" | "lifelink" | "flying" | "vigilance"
+	string,
+	"indestructible" | "lifelink" | "flying" | "vigilance"
 >([
-  ["Flying", "flying"],
-  ["Lifelink", "lifelink"],
-  ["Indestructible", "indestructible"],
-  ["Vigilance", "vigilance"],
+	["Flying", "flying"],
+	["Lifelink", "lifelink"],
+	["Indestructible", "indestructible"],
+	["Vigilance", "vigilance"],
 ]);
 const COUNTER_NAMES = new Map<string, "+1/+1" | "-1/-1">([
-  ["P1P1", "+1/+1"],
-  ["M1M1", "-1/-1"],
+	["P1P1", "+1/+1"],
+	["M1M1", "-1/-1"],
 ]);
 const BASIC_LAND_MANA = new Map<string, Color>([
-  ["Plains", "w"],
-  ["Island", "u"],
-  ["Swamp", "b"],
-  ["Mountain", "r"],
-  ["Forest", "g"],
+	["Plains", "w"],
+	["Island", "u"],
+	["Swamp", "b"],
+	["Mountain", "r"],
+	["Forest", "g"],
 ]);
 /** Directive keys Forge stores at the card level, not per-face. */
-const ALLOWED_CARD_DIRECTIVES = new Set(["AI", "DeckHints", "DeckNeeds", "DeckHas"]);
+const ALLOWED_CARD_DIRECTIVES = new Set([
+	"AI",
+	"DeckHints",
+	"DeckNeeds",
+	"DeckHas",
+]);
 
 /* ------------------------------------------------------------------------- */
 /* Parameter-list checking                                                    */
@@ -143,53 +152,66 @@ const ALLOWED_CARD_DIRECTIVES = new Set(["AI", "DeckHints", "DeckNeeds", "DeckHa
  * is not something this bridge relies on.
  */
 function checkParams(
-  params: ForgeParamList,
-  allowedLower: ReadonlySet<string>,
-  where: { nodeId?: string; line?: number },
+	params: ForgeParamList,
+	allowedLower: ReadonlySet<string>,
+	where: { nodeId?: string; line?: number },
 ): ImportIssue | null {
-  const counts = new Map<string, number>();
-  for (const entry of params.entries) {
-    if (entry.malformed) {
-      return issue(
-        "UNSUPPORTED_PARAMETER",
-        `malformed parameter fragment "${entry.raw}"`,
-        { ...where, paramId: entry.id },
-      );
-    }
-    const lower = entry.key.toLowerCase();
-    counts.set(lower, (counts.get(lower) ?? 0) + 1);
-    if (!allowedLower.has(lower)) {
-      return issue("UNSUPPORTED_PARAMETER", `unsupported parameter ${entry.key}`, {
-        ...where,
-        paramId: entry.id,
-      });
-    }
-  }
-  for (const [key, count] of counts) {
-    if (count > 1) {
-      return issue("UNSUPPORTED_PARAMETER", `duplicate parameter ${key}`, where);
-    }
-  }
-  return null;
+	const counts = new Map<string, number>();
+	for (const entry of params.entries) {
+		if (entry.malformed) {
+			return issue(
+				"UNSUPPORTED_PARAMETER",
+				`malformed parameter fragment "${entry.raw}"`,
+				{ ...where, paramId: entry.id },
+			);
+		}
+		const lower = entry.key.toLowerCase();
+		counts.set(lower, (counts.get(lower) ?? 0) + 1);
+		if (!allowedLower.has(lower)) {
+			return issue(
+				"UNSUPPORTED_PARAMETER",
+				`unsupported parameter ${entry.key}`,
+				{
+					...where,
+					paramId: entry.id,
+				},
+			);
+		}
+	}
+	for (const [key, count] of counts) {
+		if (count > 1) {
+			return issue(
+				"UNSUPPORTED_PARAMETER",
+				`duplicate parameter ${key}`,
+				where,
+			);
+		}
+	}
+	return null;
 }
 
-function positiveInteger(value: string | undefined, fallback?: number): number | null {
-  if (value === undefined) return fallback ?? null;
-  return /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0
-    ? Number(value)
-    : null;
+function positiveInteger(
+	value: string | undefined,
+	fallback?: number,
+): number | null {
+	if (value === undefined) return fallback ?? null;
+	return /^\d+$/.test(value) &&
+		Number.isSafeInteger(Number(value)) &&
+		Number(value) > 0
+		? Number(value)
+		: null;
 }
 
 function signedInteger(value: string | undefined): number | null {
-  if (value === undefined || !/^[+-]?\d+$/.test(value)) return null;
-  const n = Number(value);
-  return Number.isSafeInteger(n) ? n : null;
+	if (value === undefined || !/^[+-]?\d+$/.test(value)) return null;
+	const n = Number(value);
+	return Number.isSafeInteger(n) ? n : null;
 }
 
 function player(value: string | undefined): "you" | "opponent" | null {
-  if (value === undefined || value === "You") return "you";
-  if (value === "Opponent") return "opponent";
-  return null;
+	if (value === undefined || value === "You") return "you";
+	if (value === "Opponent") return "opponent";
+	return null;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -197,50 +219,57 @@ function player(value: string | undefined): "you" | "opponent" | null {
 /* ------------------------------------------------------------------------- */
 
 function combineSelectors(
-  kind: "all" | "any",
-  selectors: TargetSelectorDef[],
+	kind: "all" | "any",
+	selectors: TargetSelectorDef[],
 ): TargetSelectorDef {
-  const only = selectors[0];
-  return selectors.length === 1 && only ? only : { kind, selectors };
+	const only = selectors[0];
+	return selectors.length === 1 && only ? only : { kind, selectors };
 }
 
 function parseSelectorPart(value: string): TargetSelectorDef | null {
-  if (value === "Card.Self" || value === "Self") return { kind: "self" };
-  const pieces = value.split(".");
-  const base = pieces.shift();
-  const parts: TargetSelectorDef[] = [];
-  const type = base ? ([...CARD_TYPES].find((t) => t === base.toLowerCase()) ?? null) : null;
-  if (type) parts.push({ kind: "type", type });
-  else if (base === "Player" || base === "Any") return null;
-  else if (base && base !== "Card" && base !== "Permanent")
-    parts.push({ kind: "subtype", subtype: base });
-  for (const modifier of pieces) {
-    if (modifier === "YouCtrl") parts.push({ kind: "controller", player: "you" });
-    else if (modifier === "OppCtrl") parts.push({ kind: "controller", player: "opponent" });
-    else return null;
-  }
-  return parts.length > 0 ? combineSelectors("all", parts) : null;
+	if (value === "Card.Self" || value === "Self") return { kind: "self" };
+	const pieces = value.split(".");
+	const base = pieces.shift();
+	const parts: TargetSelectorDef[] = [];
+	const type = base
+		? ([...CARD_TYPES].find((t) => t === base.toLowerCase()) ?? null)
+		: null;
+	if (type) parts.push({ kind: "type", type });
+	else if (base === "Player" || base === "Any") return null;
+	else if (base && base !== "Card" && base !== "Permanent")
+		parts.push({ kind: "subtype", subtype: base });
+	for (const modifier of pieces) {
+		if (modifier === "YouCtrl")
+			parts.push({ kind: "controller", player: "you" });
+		else if (modifier === "OppCtrl")
+			parts.push({ kind: "controller", player: "opponent" });
+		else return null;
+	}
+	return parts.length > 0 ? combineSelectors("all", parts) : null;
 }
 
 function parseSelector(value: string): TargetSelectorDef | null {
-  const choices = value.split(",").map((part) => parseSelectorPart(part.trim()));
-  return choices.every((choice): choice is TargetSelectorDef => choice !== null)
-    ? combineSelectors("any", choices)
-    : null;
+	const choices = value
+		.split(",")
+		.map((part) => parseSelectorPart(part.trim()));
+	return choices.every((choice): choice is TargetSelectorDef => choice !== null)
+		? combineSelectors("any", choices)
+		: null;
 }
 
 /** `ValidTgts$`/`Choices$`-shaped values, restricted to what casting/targeting supports. */
 function parseTarget(value: string | undefined): TargetDef[] | null {
-  if (value === undefined) return [];
-  let legal: TargetDef["legal"];
-  if (value === "Any") legal = { kind: "any-target" };
-  else if (value === "Player") legal = { kind: "player" };
-  else {
-    const selector = parseSelector(value);
-    if (!selector || selector.kind !== "type" || selector.type !== "creature") return null;
-    legal = { kind: "permanent", selector };
-  }
-  return [{ id: "target-1", min: 1, max: 1, legal }];
+	if (value === undefined) return [];
+	let legal: TargetDef["legal"];
+	if (value === "Any") legal = { kind: "any-target" };
+	else if (value === "Player") legal = { kind: "player" };
+	else {
+		const selector = parseSelector(value);
+		if (!selector || selector.kind !== "type" || selector.type !== "creature")
+			return null;
+		legal = { kind: "permanent", selector };
+	}
+	return [{ id: "target-1", min: 1, max: 1, legal }];
 }
 
 /* ------------------------------------------------------------------------- */
@@ -252,120 +281,177 @@ const COMMON_EFFECT_PARAMS = ["spelldescription", "subability", "cost"];
 type EffectChainContext = "spell" | "activated" | "trigger";
 
 function parseSingleEffect(
-  params: ForgeParamList,
-  discriminatorLower: string,
-  api: string,
-  where: { nodeId?: string; line?: number },
-  context: EffectChainContext,
+	params: ForgeParamList,
+	discriminatorLower: string,
+	api: string,
+	where: { nodeId?: string; line?: number },
+	context: EffectChainContext,
 ): Exclude<EffectDef, { kind: "may" }> | ImportIssue {
-  switch (api) {
-    case "gainlife":
-    case "loselife": {
-      const badParams = checkParams(
-        params,
-        new Set([discriminatorLower, "defined", "lifeamount", ...COMMON_EFFECT_PARAMS]),
-        where,
-      );
-      if (badParams) return badParams;
-      const who = player(getForgeParam(params, "Defined"));
-      const amount = positiveInteger(getForgeParam(params, "LifeAmount"));
-      if (!who || !amount)
-        return issue("UNSUPPORTED_PARAMETER", `unsupported or missing LifeAmount$/player for ${api}`, where);
-      return { kind: api === "gainlife" ? "gain-life" : "lose-life", player: who, amount };
-    }
-    case "draw": {
-      const badParams = checkParams(
-        params,
-        new Set([discriminatorLower, "defined", "numcards", ...COMMON_EFFECT_PARAMS]),
-        where,
-      );
-      if (badParams) return badParams;
-      const who = player(getForgeParam(params, "Defined"));
-      const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
-      if (!who || !amount)
-        return issue("UNSUPPORTED_PARAMETER", "unsupported draw amount/player", where);
-      return { kind: "draw", player: who, amount };
-    }
-    case "discard": {
-      const badParams = checkParams(
-        params,
-        new Set([discriminatorLower, "defined", "mode", "numcards", ...COMMON_EFFECT_PARAMS]),
-        where,
-      );
-      if (badParams) return badParams;
-      if (getForgeParam(params, "Mode") !== "TgtChoose")
-        return issue(
-          "UNSUPPORTED_EFFECT",
-          "only Mode$ TgtChoose discard is supported",
-          where,
-        );
-      const who = player(getForgeParam(params, "Defined"));
-      const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
-      if (!who || amount !== 1)
-        return issue(
-          "UNSUPPORTED_EFFECT",
-          "only discarding exactly one chosen card is supported",
-          where,
-        );
-      return { kind: "discard", selector: "any", amount: 1, player: who };
-    }
-    case "dealdamage": {
-      if (context !== "spell")
-        return issue("UNSUPPORTED_EFFECT", "DealDamage is only supported on spells", where);
-      const badParams = checkParams(
-        params,
-        new Set([discriminatorLower, "validtgts", "tgtprompt", "numdmg", ...COMMON_EFFECT_PARAMS]),
-        where,
-      );
-      if (badParams) return badParams;
-      const amount = positiveInteger(getForgeParam(params, "NumDmg"));
-      if (!amount) return issue("UNSUPPORTED_PARAMETER", "unsupported NumDmg", where);
-      return { kind: "damage", target: "target-1", amount };
-    }
-    case "destroy": {
-      if (context !== "spell")
-        return issue("UNSUPPORTED_EFFECT", "Destroy is only supported on spells", where);
-      const badParams = checkParams(
-        params,
-        new Set([discriminatorLower, "validtgts", "tgtprompt", ...COMMON_EFFECT_PARAMS]),
-        where,
-      );
-      if (badParams) return badParams;
-      return { kind: "destroy", target: "target-1" };
-    }
-    default:
-      return issue("UNSUPPORTED_EFFECT", `unsupported effect api ${api}`, where);
-  }
+	switch (api) {
+		case "gainlife":
+		case "loselife": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"lifeamount",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const who = player(getForgeParam(params, "Defined"));
+			const amount = positiveInteger(getForgeParam(params, "LifeAmount"));
+			if (!who || !amount)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					`unsupported or missing LifeAmount$/player for ${api}`,
+					where,
+				);
+			return {
+				kind: api === "gainlife" ? "gain-life" : "lose-life",
+				player: who,
+				amount,
+			};
+		}
+		case "draw": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"numcards",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const who = player(getForgeParam(params, "Defined"));
+			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
+			if (!who || !amount)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"unsupported draw amount/player",
+					where,
+				);
+			return { kind: "draw", player: who, amount };
+		}
+		case "discard": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"mode",
+					"numcards",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			if (getForgeParam(params, "Mode") !== "TgtChoose")
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"only Mode$ TgtChoose discard is supported",
+					where,
+				);
+			const who = player(getForgeParam(params, "Defined"));
+			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
+			if (!who || amount !== 1)
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"only discarding exactly one chosen card is supported",
+					where,
+				);
+			return { kind: "discard", selector: "any", amount: 1, player: who };
+		}
+		case "dealdamage": {
+			if (context !== "spell")
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"DealDamage is only supported on spells",
+					where,
+				);
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"validtgts",
+					"tgtprompt",
+					"numdmg",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const amount = positiveInteger(getForgeParam(params, "NumDmg"));
+			if (!amount)
+				return issue("UNSUPPORTED_PARAMETER", "unsupported NumDmg", where);
+			return { kind: "damage", target: "target-1", amount };
+		}
+		case "destroy": {
+			if (context !== "spell")
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"Destroy is only supported on spells",
+					where,
+				);
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"validtgts",
+					"tgtprompt",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			return { kind: "destroy", target: "target-1" };
+		}
+		default:
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				`unsupported effect api ${api}`,
+				where,
+			);
+	}
 }
 
 const ABILITY_DISCRIMINATOR_TOKENS = ["AB", "SP", "ST", "DB"] as const;
 
 function discriminator(
-  params: ForgeParamList,
-  where: { nodeId?: string; line?: number },
-): { token: (typeof ABILITY_DISCRIMINATOR_TOKENS)[number]; api: string } | ImportIssue {
-  const present = ABILITY_DISCRIMINATOR_TOKENS.filter(
-    (token) => params.effectiveLower[token.toLowerCase()] !== undefined,
-  );
-  if (present.length !== 1) {
-    return issue(
-      "UNSUPPORTED_PARAMETER",
-      present.length === 0
-        ? "ability record has no AB/SP/ST/DB discriminator"
-        : "ability record declares more than one AB/SP/ST/DB discriminator",
-      where,
-    );
-  }
-  const token = present[0] as (typeof ABILITY_DISCRIMINATOR_TOKENS)[number];
-  return { token, api: (params.effectiveLower[token.toLowerCase()] ?? "").toLowerCase() };
+	params: ForgeParamList,
+	where: { nodeId?: string; line?: number },
+):
+	| { token: (typeof ABILITY_DISCRIMINATOR_TOKENS)[number]; api: string }
+	| ImportIssue {
+	const present = ABILITY_DISCRIMINATOR_TOKENS.filter(
+		(token) => params.effectiveLower[token.toLowerCase()] !== undefined,
+	);
+	if (present.length !== 1) {
+		return issue(
+			"UNSUPPORTED_PARAMETER",
+			present.length === 0
+				? "ability record has no AB/SP/ST/DB discriminator"
+				: "ability record declares more than one AB/SP/ST/DB discriminator",
+			where,
+		);
+	}
+	const token = present[0] as (typeof ABILITY_DISCRIMINATOR_TOKENS)[number];
+	return {
+		token,
+		api: (params.effectiveLower[token.toLowerCase()] ?? "").toLowerCase(),
+	};
 }
 
 const CHAIN_FORBIDDEN_AFTER_ROOT = [
-  "validtgts",
-  "cost",
-  "unlesscost",
-  "conditiondefined",
-  "conditionchecksvar",
+	"validtgts",
+	"cost",
+	"unlesscost",
+	"conditiondefined",
+	"conditionchecksvar",
 ];
 
 /**
@@ -374,65 +460,91 @@ const CHAIN_FORBIDDEN_AFTER_ROOT = [
  * link, for trigger `Execute$` chains (triggers never carry these).
  */
 function lowerEffectChain(
-  face: ForgeFaceAst,
-  rootParams: ForgeParamList,
-  rootWhere: { nodeId?: string; line?: number },
-  rejectAtRoot: boolean,
-  rootTokens: readonly (typeof ABILITY_DISCRIMINATOR_TOKENS)[number][],
-  context: EffectChainContext,
+	face: ForgeFaceAst,
+	rootParams: ForgeParamList,
+	rootWhere: { nodeId?: string; line?: number },
+	rejectAtRoot: boolean,
+	rootTokens: readonly (typeof ABILITY_DISCRIMINATOR_TOKENS)[number][],
+	context: EffectChainContext,
 ): { effects: EffectDef[]; usedSVarNames: string[] } | ImportIssue {
-  const effects: EffectDef[] = [];
-  const usedSVarNames: string[] = [];
-  let current = rootParams;
-  let where = rootWhere;
-  const seen = new Set<string>();
-  let depth = 0;
-  for (;;) {
-    if ((depth > 0 || rejectAtRoot)) {
-      for (const key of CHAIN_FORBIDDEN_AFTER_ROOT) {
-        if (current.effectiveLower[key] !== undefined) {
-          return issue(
-            "UNSUPPORTED_EFFECT",
-            `${key} is not supported on a sub-ability continuation`,
-            where,
-          );
-        }
-      }
-    }
-    const disc = discriminator(current, where);
-    if ("code" in disc) return disc;
-    const allowedHere = depth === 0 ? rootTokens : (["DB"] as const);
-    if (!(allowedHere as readonly string[]).includes(disc.token)) {
-      return issue(
-        "UNSUPPORTED_EFFECT",
-        `expected ${allowedHere.join("/")} but found ${disc.token}`,
-        where,
-      );
-    }
-    const effect = parseSingleEffect(current, disc.token.toLowerCase(), disc.api, where, context);
-    if ("code" in effect) return effect;
-    effects.push(effect);
-    const next = getForgeParam(current, "SubAbility");
-    if (next === undefined) return { effects, usedSVarNames };
-    const nextLower = next.trim().toLowerCase();
-    if (seen.has(nextLower))
-      return issue("UNSUPPORTED_REFERENCE", `cyclic SubAbility chain at ${next}`, where);
-    seen.add(nextLower);
-    const bucket = face.svarIndex[nextLower];
-    if (!bucket || bucket.length === 0)
-      return issue("UNSUPPORTED_REFERENCE", `unresolved SubAbility ${next}`, where);
-    if (bucket.length > 1)
-      return issue("UNSUPPORTED_REFERENCE", `ambiguous duplicate SVar ${next}`, where);
-    const svar = bucket[0] as ForgeSVarRecord;
-    if (svar.parsed.kind !== "params")
-      return issue("UNSUPPORTED_REFERENCE", `SubAbility ${next} is not an ability body`, where);
-    usedSVarNames.push(nextLower);
-    current = svar.parsed.params;
-    where = { nodeId: svar.source.nodeId, line: svar.source.line };
-    depth += 1;
-    if (depth > 32)
-      return issue("UNSUPPORTED_REFERENCE", "SubAbility chain exceeds supported depth", where);
-  }
+	const effects: EffectDef[] = [];
+	const usedSVarNames: string[] = [];
+	let current = rootParams;
+	let where = rootWhere;
+	const seen = new Set<string>();
+	let depth = 0;
+	for (;;) {
+		if (depth > 0 || rejectAtRoot) {
+			for (const key of CHAIN_FORBIDDEN_AFTER_ROOT) {
+				if (current.effectiveLower[key] !== undefined) {
+					return issue(
+						"UNSUPPORTED_EFFECT",
+						`${key} is not supported on a sub-ability continuation`,
+						where,
+					);
+				}
+			}
+		}
+		const disc = discriminator(current, where);
+		if ("code" in disc) return disc;
+		const allowedHere = depth === 0 ? rootTokens : (["DB"] as const);
+		if (!(allowedHere as readonly string[]).includes(disc.token)) {
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				`expected ${allowedHere.join("/")} but found ${disc.token}`,
+				where,
+			);
+		}
+		const effect = parseSingleEffect(
+			current,
+			disc.token.toLowerCase(),
+			disc.api,
+			where,
+			context,
+		);
+		if ("code" in effect) return effect;
+		effects.push(effect);
+		const next = getForgeParam(current, "SubAbility");
+		if (next === undefined) return { effects, usedSVarNames };
+		const nextLower = next.trim().toLowerCase();
+		if (seen.has(nextLower))
+			return issue(
+				"UNSUPPORTED_REFERENCE",
+				`cyclic SubAbility chain at ${next}`,
+				where,
+			);
+		seen.add(nextLower);
+		const bucket = face.svarIndex[nextLower];
+		if (!bucket || bucket.length === 0)
+			return issue(
+				"UNSUPPORTED_REFERENCE",
+				`unresolved SubAbility ${next}`,
+				where,
+			);
+		if (bucket.length > 1)
+			return issue(
+				"UNSUPPORTED_REFERENCE",
+				`ambiguous duplicate SVar ${next}`,
+				where,
+			);
+		const svar = bucket[0] as ForgeSVarRecord;
+		if (svar.parsed.kind !== "params")
+			return issue(
+				"UNSUPPORTED_REFERENCE",
+				`SubAbility ${next} is not an ability body`,
+				where,
+			);
+		usedSVarNames.push(nextLower);
+		current = svar.parsed.params;
+		where = { nodeId: svar.source.nodeId, line: svar.source.line };
+		depth += 1;
+		if (depth > 32)
+			return issue(
+				"UNSUPPORTED_REFERENCE",
+				"SubAbility chain exceeds supported depth",
+				where,
+			);
+	}
 }
 
 /* ------------------------------------------------------------------------- */
@@ -440,91 +552,108 @@ function lowerEffectChain(
 /* ------------------------------------------------------------------------- */
 
 function selectorMatches(
-  selector: TargetSelectorDef,
-  view: PermanentView,
-  sourceController: PlayerId,
-  sourceId: number | null,
+	selector: TargetSelectorDef,
+	view: PermanentView,
+	sourceController: PlayerId,
+	sourceId: number | null,
 ): boolean {
-  switch (selector.kind) {
-    case "self":
-      return sourceId !== null && view.id === sourceId;
-    case "type":
-      return view.types.includes(selector.type);
-    case "supertype":
-      return view.supertypes.includes(selector.supertype);
-    case "subtype":
-      return view.subtypes.includes(selector.subtype);
-    case "color":
-      return view.colors.includes(selector.color);
-    case "controller":
-      return selector.player === "you"
-        ? view.controller === sourceController
-        : view.controller !== sourceController;
-    case "all":
-      return selector.selectors.every((part) =>
-        selectorMatches(part, view, sourceController, sourceId),
-      );
-    case "any":
-      return selector.selectors.some((part) =>
-        selectorMatches(part, view, sourceController, sourceId),
-      );
-    case "not":
-      return !selectorMatches(selector.selector, view, sourceController, sourceId);
-  }
+	switch (selector.kind) {
+		case "self":
+			return sourceId !== null && view.id === sourceId;
+		case "type":
+			return view.types.includes(selector.type);
+		case "supertype":
+			return view.supertypes.includes(selector.supertype);
+		case "subtype":
+			return view.subtypes.includes(selector.subtype);
+		case "color":
+			return view.colors.includes(selector.color);
+		case "controller":
+			return selector.player === "you"
+				? view.controller === sourceController
+				: view.controller !== sourceController;
+		case "all":
+			return selector.selectors.every((part) =>
+				selectorMatches(part, view, sourceController, sourceId),
+			);
+		case "any":
+			return selector.selectors.some((part) =>
+				selectorMatches(part, view, sourceController, sourceId),
+			);
+		case "not":
+			return !selectorMatches(
+				selector.selector,
+				view,
+				sourceController,
+				sourceId,
+			);
+	}
 }
 
 function lowerStatic(
-  record: ForgeAbilityRecord | { params: ForgeParamList; source: { nodeId: string; line: number } },
+	record:
+		| ForgeAbilityRecord
+		| { params: ForgeParamList; source: { nodeId: string; line: number } },
 ): ContinuousEffect | ImportIssue {
-  const params = record.params;
-  const where = { nodeId: record.source.nodeId, line: record.source.line };
-  const badParams = checkParams(
-    params,
-    new Set(["mode", "affected", "addpower", "addtoughness", "description"]),
-    where,
-  );
-  if (badParams) return badParams;
-  if (getForgeParam(params, "Mode") !== "Continuous")
-    return issue("UNSUPPORTED_EFFECT", "only Mode$ Continuous statics are supported", where);
-  const affected = getForgeParam(params, "Affected");
-  const selector = affected ? parseSelector(affected) : null;
-  const addPower = signedInteger(getForgeParam(params, "AddPower"));
-  const addToughness = signedInteger(getForgeParam(params, "AddToughness"));
-  const description = getForgeParam(params, "Description");
-  if (!selector || addPower === null || addToughness === null || !description)
-    return issue("UNSUPPORTED_EFFECT", "unsupported static ability shape", where);
-  return {
-    layer: "7c-modify-power-toughness",
-    text: description,
-    applies(view, _state, source) {
-      return (
-        source.zone === "battlefield" &&
-        selectorMatches(selector, view, source.controller, source.id)
-      );
-    },
-    modify(view) {
-      if (!("power" in view) || !("toughness" in view)) return;
-      view.power += addPower;
-      view.toughness += addToughness;
-    },
-  };
+	const params = record.params;
+	const where = { nodeId: record.source.nodeId, line: record.source.line };
+	const badParams = checkParams(
+		params,
+		new Set(["mode", "affected", "addpower", "addtoughness", "description"]),
+		where,
+	);
+	if (badParams) return badParams;
+	if (getForgeParam(params, "Mode") !== "Continuous")
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"only Mode$ Continuous statics are supported",
+			where,
+		);
+	const affected = getForgeParam(params, "Affected");
+	const selector = affected ? parseSelector(affected) : null;
+	const addPower = signedInteger(getForgeParam(params, "AddPower"));
+	const addToughness = signedInteger(getForgeParam(params, "AddToughness"));
+	const description = getForgeParam(params, "Description");
+	if (!selector || addPower === null || addToughness === null || !description)
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"unsupported static ability shape",
+			where,
+		);
+	return {
+		layer: "7c-modify-power-toughness",
+		text: description,
+		applies(view, _state, source) {
+			return (
+				source.zone === "battlefield" &&
+				selectorMatches(selector, view, source.controller, source.id)
+			);
+		},
+		modify(view) {
+			if (!("power" in view) || !("toughness" in view)) return;
+			view.power += addPower;
+			view.toughness += addToughness;
+		},
+	};
 }
 
 function selectorContainsSelf(selector: TargetSelectorDef): boolean {
-  switch (selector.kind) {
-    case "self":
-      return true;
-    case "all":
-    case "any":
-      return selector.selectors.some(selectorContainsSelf);
-    case "not":
-      return selectorContainsSelf(selector.selector);
-    default:
-      return false;
-  }
+	switch (selector.kind) {
+		case "self":
+			return true;
+		case "all":
+		case "any":
+			return selector.selectors.some(selectorContainsSelf);
+		case "not":
+			return selectorContainsSelf(selector.selector);
+		default:
+			return false;
+	}
 }
 
-type ReplacementLowering = { kind: "self-entry" } | { kind: "global"; def: ReplacementDef };
+type ReplacementLowering =
+	| { kind: "self-entry" }
+	| { kind: "global"; def: ReplacementDef };
 
 /**
  * Two canonical enters-tapped shapes share `Event$ Moved | ... | ReplaceWith$`:
@@ -544,96 +673,138 @@ type ReplacementLowering = { kind: "self-entry" } | { kind: "global"; def: Repla
  *   rejected.
  */
 function lowerReplacement(
-  face: ForgeFaceAst,
-  record: ForgeAbilityRecord | { params: ForgeParamList; source: { nodeId: string; line: number } },
+	face: ForgeFaceAst,
+	record:
+		| ForgeAbilityRecord
+		| { params: ForgeParamList; source: { nodeId: string; line: number } },
 ): ReplacementLowering | ImportIssue {
-  const params = record.params;
-  const where = { nodeId: record.source.nodeId, line: record.source.line };
-  const badParams = checkParams(
-    params,
-    new Set([
-      "event",
-      "validcard",
-      "destination",
-      "replacewith",
-      "replacementresult",
-      "activezones",
-      "description",
-    ]),
-    where,
-  );
-  if (badParams) return badParams;
-  if (
-    getForgeParam(params, "Event") !== "Moved" ||
-    getForgeParam(params, "Destination") !== "Battlefield" ||
-    getForgeParam(params, "ReplacementResult") !== "Updated"
-  )
-    return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
-  const validCard = getForgeParam(params, "ValidCard");
-  if (validCard === undefined)
-    return issue("UNSUPPORTED_PARAMETER", "ValidCard$ is required", where);
-  const replaceWith = getForgeParam(params, "ReplaceWith");
-  if (replaceWith === undefined)
-    return issue("UNSUPPORTED_REFERENCE", "missing ReplaceWith$", where);
-  const bucket = face.svarIndex[replaceWith.trim().toLowerCase()];
-  if (!bucket || bucket.length === 0)
-    return issue("UNSUPPORTED_REFERENCE", `unresolved ReplaceWith ${replaceWith}`, where);
-  if (bucket.length > 1)
-    return issue("UNSUPPORTED_REFERENCE", `ambiguous duplicate SVar ${replaceWith}`, where);
-  const effectSVar = bucket[0] as ForgeSVarRecord;
-  if (effectSVar.parsed.kind !== "params")
-    return issue("UNSUPPORTED_REFERENCE", `${replaceWith} is not an ability body`, where);
-  const effectParams = effectSVar.parsed.params;
-  const effectWhere = { nodeId: effectSVar.source.nodeId, line: effectSVar.source.line };
-  const effectBad = checkParams(effectParams, new Set(["db", "etb", "defined"]), effectWhere);
-  if (effectBad) return effectBad;
-  if (getForgeParam(effectParams, "DB") !== "Tap" || getForgeParam(effectParams, "ETB") !== "True")
-    return issue("UNSUPPORTED_EFFECT", "unsupported ReplaceWith effect body", effectWhere);
+	const params = record.params;
+	const where = { nodeId: record.source.nodeId, line: record.source.line };
+	const badParams = checkParams(
+		params,
+		new Set([
+			"event",
+			"validcard",
+			"destination",
+			"replacewith",
+			"replacementresult",
+			"activezones",
+			"description",
+		]),
+		where,
+	);
+	if (badParams) return badParams;
+	if (
+		getForgeParam(params, "Event") !== "Moved" ||
+		getForgeParam(params, "Destination") !== "Battlefield" ||
+		getForgeParam(params, "ReplacementResult") !== "Updated"
+	)
+		return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
+	const validCard = getForgeParam(params, "ValidCard");
+	if (validCard === undefined)
+		return issue("UNSUPPORTED_PARAMETER", "ValidCard$ is required", where);
+	const replaceWith = getForgeParam(params, "ReplaceWith");
+	if (replaceWith === undefined)
+		return issue("UNSUPPORTED_REFERENCE", "missing ReplaceWith$", where);
+	const bucket = face.svarIndex[replaceWith.trim().toLowerCase()];
+	if (!bucket || bucket.length === 0)
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`unresolved ReplaceWith ${replaceWith}`,
+			where,
+		);
+	if (bucket.length > 1)
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`ambiguous duplicate SVar ${replaceWith}`,
+			where,
+		);
+	const effectSVar = bucket[0] as ForgeSVarRecord;
+	if (effectSVar.parsed.kind !== "params")
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`${replaceWith} is not an ability body`,
+			where,
+		);
+	const effectParams = effectSVar.parsed.params;
+	const effectWhere = {
+		nodeId: effectSVar.source.nodeId,
+		line: effectSVar.source.line,
+	};
+	const effectBad = checkParams(
+		effectParams,
+		new Set(["db", "etb", "defined"]),
+		effectWhere,
+	);
+	if (effectBad) return effectBad;
+	if (
+		getForgeParam(effectParams, "DB") !== "Tap" ||
+		getForgeParam(effectParams, "ETB") !== "True"
+	)
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"unsupported ReplaceWith effect body",
+			effectWhere,
+		);
 
-  const activeZones = getForgeParam(params, "ActiveZones");
-  const isSelfForm =
-    (validCard === "Card.Self" || validCard === "Self") && activeZones === undefined;
-  if (isSelfForm) {
-    if (getForgeParam(effectParams, "Defined") !== "Self")
-      return issue("UNSUPPORTED_EFFECT", "unsupported self ReplaceWith effect body", effectWhere);
-    return { kind: "self-entry" };
-  }
+	const activeZones = getForgeParam(params, "ActiveZones");
+	const isSelfForm =
+		(validCard === "Card.Self" || validCard === "Self") &&
+		activeZones === undefined;
+	if (isSelfForm) {
+		if (getForgeParam(effectParams, "Defined") !== "Self")
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				"unsupported self ReplaceWith effect body",
+				effectWhere,
+			);
+		return { kind: "self-entry" };
+	}
 
-  if (activeZones !== "Battlefield")
-    return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
-  if (getForgeParam(effectParams, "Defined") !== "ReplacedCard")
-    return issue("UNSUPPORTED_EFFECT", "unsupported ReplaceWith effect body", effectWhere);
-  const selector = parseSelector(validCard);
-  if (!selector || selectorContainsSelf(selector))
-    return issue("UNSUPPORTED_TARGET", "unsupported ValidCard selector", where);
-  const description = getForgeParam(params, "Description") ?? "Enters tapped.";
-  const def: ReplacementDef = {
-    label: `import:${where.nodeId}`,
-    text: description,
-    layer: "other",
-    functionsFrom: "any",
-    applies(ev, ctx) {
-      // CR 614.12: a replacement affecting a general subset that happens to
-      // include its own source (rather than affecting only that source)
-      // does not apply to that source's own entry. The source must already
-      // be on the battlefield; it is never let through as the very object
-      // entering in `ev`, even if some other effect would make it match
-      // `selector` (e.g. Root Maze made into an artifact by something else
-      // while it enters stays untapped, absent a *different* copy already
-      // on the battlefield).
-      if (
-        ctx.self?.zone !== "battlefield" ||
-        ev.kind !== "change zone" ||
-        ev.to !== "battlefield" ||
-        ev.entersTapped
-      )
-        return false;
-      return selectorMatches(selector, etbPreview(ctx.state, ev), ctx.controller, ctx.self.id);
-    },
-    replace: (ev: GameEvent) =>
-      ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
-  };
-  return { kind: "global", def };
+	if (activeZones !== "Battlefield")
+		return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
+	if (getForgeParam(effectParams, "Defined") !== "ReplacedCard")
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"unsupported ReplaceWith effect body",
+			effectWhere,
+		);
+	const selector = parseSelector(validCard);
+	if (!selector || selectorContainsSelf(selector))
+		return issue("UNSUPPORTED_TARGET", "unsupported ValidCard selector", where);
+	const description = getForgeParam(params, "Description") ?? "Enters tapped.";
+	const def: ReplacementDef = {
+		label: `import:${where.nodeId}`,
+		text: description,
+		layer: "other",
+		functionsFrom: "any",
+		applies(ev, ctx) {
+			// CR 614.12: a replacement affecting a general subset that happens to
+			// include its own source (rather than affecting only that source)
+			// does not apply to that source's own entry. The source must already
+			// be on the battlefield; it is never let through as the very object
+			// entering in `ev`, even if some other effect would make it match
+			// `selector` (e.g. Root Maze made into an artifact by something else
+			// while it enters stays untapped, absent a *different* copy already
+			// on the battlefield).
+			if (
+				ctx.self?.zone !== "battlefield" ||
+				ev.kind !== "change zone" ||
+				ev.to !== "battlefield" ||
+				ev.entersTapped
+			)
+				return false;
+			return selectorMatches(
+				selector,
+				etbPreview(ctx.state, ev),
+				ctx.controller,
+				ctx.self.id,
+			);
+		},
+		replace: (ev: GameEvent) =>
+			ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
+	};
+	return { kind: "global", def };
 }
 
 /* ------------------------------------------------------------------------- */
@@ -641,114 +812,168 @@ function lowerReplacement(
 /* ------------------------------------------------------------------------- */
 
 function lowerTrigger(
-  face: ForgeFaceAst,
-  record: { params: ForgeParamList; source: { nodeId: string; line: number } },
-  used: Set<string>,
+	face: ForgeFaceAst,
+	record: { params: ForgeParamList; source: { nodeId: string; line: number } },
+	used: Set<string>,
 ): TriggerDef | ImportIssue {
-  const params = record.params;
-  const where = { nodeId: record.source.nodeId, line: record.source.line };
-  const mode = getForgeParam(params, "Mode");
-  const execute = getForgeParam(params, "Execute");
-  const text = getForgeParam(params, "TriggerDescription");
-  if (!mode || !execute || !text)
-    return issue("UNSUPPORTED_EFFECT", "trigger requires Mode$/Execute$/TriggerDescription$", where);
+	const params = record.params;
+	const where = { nodeId: record.source.nodeId, line: record.source.line };
+	const mode = getForgeParam(params, "Mode");
+	const execute = getForgeParam(params, "Execute");
+	const text = getForgeParam(params, "TriggerDescription");
+	if (!mode || !execute || !text)
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"trigger requires Mode$/Execute$/TriggerDescription$",
+			where,
+		);
 
-  const bucket = face.svarIndex[execute.trim().toLowerCase()];
-  if (!bucket || bucket.length === 0)
-    return issue("UNSUPPORTED_REFERENCE", `unresolved Execute ${execute}`, where);
-  if (bucket.length > 1)
-    return issue("UNSUPPORTED_REFERENCE", `ambiguous duplicate SVar ${execute}`, where);
-  const executeSVar = bucket[0] as ForgeSVarRecord;
-  if (executeSVar.parsed.kind !== "params")
-    return issue("UNSUPPORTED_REFERENCE", `${execute} is not an ability body`, where);
-  used.add(execute.trim().toLowerCase());
+	const bucket = face.svarIndex[execute.trim().toLowerCase()];
+	if (!bucket || bucket.length === 0)
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`unresolved Execute ${execute}`,
+			where,
+		);
+	if (bucket.length > 1)
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`ambiguous duplicate SVar ${execute}`,
+			where,
+		);
+	const executeSVar = bucket[0] as ForgeSVarRecord;
+	if (executeSVar.parsed.kind !== "params")
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`${execute} is not an ability body`,
+			where,
+		);
+	used.add(execute.trim().toLowerCase());
 
-  const optionalDecider = getForgeParam(params, "OptionalDecider");
-  if (optionalDecider !== undefined && optionalDecider !== "You")
-    return issue("UNSUPPORTED_EFFECT", "only OptionalDecider$ You is supported", where);
+	const optionalDecider = getForgeParam(params, "OptionalDecider");
+	if (optionalDecider !== undefined && optionalDecider !== "You")
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"only OptionalDecider$ You is supported",
+			where,
+		);
 
-  const chain = lowerEffectChain(
-    face,
-    executeSVar.parsed.params,
-    { nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
-    true,
-    ["DB"],
-    "trigger",
-  );
-  if ("code" in chain) return chain;
-  for (const n of chain.usedSVarNames) used.add(n);
-  const effects = optionalDecider
-    ? [{ kind: "may" as const, decider: "you" as const, effects: chain.effects }]
-    : chain.effects;
+	const chain = lowerEffectChain(
+		face,
+		executeSVar.parsed.params,
+		{ nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
+		true,
+		["DB"],
+		"trigger",
+	);
+	if ("code" in chain) return chain;
+	for (const n of chain.usedSVarNames) used.add(n);
+	const effects = optionalDecider
+		? [
+				{
+					kind: "may" as const,
+					decider: "you" as const,
+					effects: chain.effects,
+				},
+			]
+		: chain.effects;
 
-  switch (mode) {
-    case "ChangesZone": {
-      const badParams = checkParams(
-        params,
-        new Set(["mode", "origin", "destination", "validcard", "execute", "triggerdescription"]),
-        where,
-      );
-      if (badParams) return badParams;
-      if (
-        getForgeParam(params, "Origin") !== "Any" ||
-        getForgeParam(params, "Destination") !== "Battlefield" ||
-        getForgeParam(params, "ValidCard") !== "Card.Self"
-      )
-        return issue("UNSUPPORTED_EFFECT", "unsupported ChangesZone trigger shape", where);
-      return {
-        id: execute,
-        text,
-        condition: { kind: "change zone", from: "any", to: "battlefield", selector: "self" },
-        effects,
-      };
-    }
-    case "Phase": {
-      const badParams = checkParams(
-        params,
-        new Set([
-          "mode",
-          "phase",
-          "validplayer",
-          "triggerzones",
-          "execute",
-          "optionaldecider",
-          "triggerdescription",
-        ]),
-        where,
-      );
-      if (badParams) return badParams;
-      if (
-        getForgeParam(params, "Phase") !== "Upkeep" ||
-        getForgeParam(params, "ValidPlayer") !== "You" ||
-        getForgeParam(params, "TriggerZones") !== "Battlefield"
-      )
-        return issue("UNSUPPORTED_EFFECT", "unsupported Phase trigger shape", where);
-      return {
-        id: execute,
-        text,
-        condition: { kind: "begin step", player: "you", step: "upkeep" },
-        effects,
-      };
-    }
-    case "Attacks": {
-      const badParams = checkParams(
-        params,
-        new Set(["mode", "validcard", "execute", "triggerdescription"]),
-        where,
-      );
-      if (badParams) return badParams;
-      if (getForgeParam(params, "ValidCard") !== "Card.Self")
-        return issue("UNSUPPORTED_EFFECT", "unsupported Attacks trigger shape", where);
-      return {
-        id: execute,
-        text,
-        condition: { kind: "declare attackers", selector: "self" },
-        effects,
-      };
-    }
-    default:
-      return issue("UNSUPPORTED_KEYWORD", `unsupported trigger mode ${mode}`, where);
-  }
+	switch (mode) {
+		case "ChangesZone": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					"mode",
+					"origin",
+					"destination",
+					"validcard",
+					"execute",
+					"triggerdescription",
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			if (
+				getForgeParam(params, "Origin") !== "Any" ||
+				getForgeParam(params, "Destination") !== "Battlefield" ||
+				getForgeParam(params, "ValidCard") !== "Card.Self"
+			)
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"unsupported ChangesZone trigger shape",
+					where,
+				);
+			return {
+				id: execute,
+				text,
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: "self",
+				},
+				effects,
+			};
+		}
+		case "Phase": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					"mode",
+					"phase",
+					"validplayer",
+					"triggerzones",
+					"execute",
+					"optionaldecider",
+					"triggerdescription",
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			if (
+				getForgeParam(params, "Phase") !== "Upkeep" ||
+				getForgeParam(params, "ValidPlayer") !== "You" ||
+				getForgeParam(params, "TriggerZones") !== "Battlefield"
+			)
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"unsupported Phase trigger shape",
+					where,
+				);
+			return {
+				id: execute,
+				text,
+				condition: { kind: "begin step", player: "you", step: "upkeep" },
+				effects,
+			};
+		}
+		case "Attacks": {
+			const badParams = checkParams(
+				params,
+				new Set(["mode", "validcard", "execute", "triggerdescription"]),
+				where,
+			);
+			if (badParams) return badParams;
+			if (getForgeParam(params, "ValidCard") !== "Card.Self")
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"unsupported Attacks trigger shape",
+					where,
+				);
+			return {
+				id: execute,
+				text,
+				condition: { kind: "declare attackers", selector: "self" },
+				effects,
+			};
+		}
+		default:
+			return issue(
+				"UNSUPPORTED_KEYWORD",
+				`unsupported trigger mode ${mode}`,
+				where,
+			);
+	}
 }
 
 /* ------------------------------------------------------------------------- */
@@ -756,42 +981,50 @@ function lowerTrigger(
 /* ------------------------------------------------------------------------- */
 
 function parseManaCost(text: string): CardDefInput["manaCost"] | null {
-  if (text === "no cost") return "none";
-  if (text === "0") return "zero";
-  const result = { c: 0, w: 0, u: 0, b: 0, r: 0, g: 0 };
-  for (const symbol of text.split(/\s+/).filter(Boolean)) {
-    if (/^[1-9]\d*$/.test(symbol)) {
-      const n = Number(symbol);
-      if (!Number.isSafeInteger(n)) return null;
-      result.c += n;
-    } else if (symbol === "W" || symbol === "U" || symbol === "B" || symbol === "R" || symbol === "G")
-      result[symbol.toLowerCase() as Color] += 1;
-    else return null;
-  }
-  const total = result.c + result.w + result.u + result.b + result.r + result.g;
-  if (total === 0 || !Number.isSafeInteger(total)) return null;
-  const out: Exclude<CardDefInput["manaCost"], "none" | "zero"> = {};
-  if (result.c > 0) out.c = result.c;
-  for (const color of ["w", "u", "b", "r", "g"] as const) {
-    if (result[color] > 0) out[color] = result[color];
-  }
-  return out;
+	if (text === "no cost") return "none";
+	if (text === "0") return "zero";
+	const result = { c: 0, w: 0, u: 0, b: 0, r: 0, g: 0 };
+	for (const symbol of text.split(/\s+/).filter(Boolean)) {
+		if (/^[1-9]\d*$/.test(symbol)) {
+			const n = Number(symbol);
+			if (!Number.isSafeInteger(n)) return null;
+			result.c += n;
+		} else if (
+			symbol === "W" ||
+			symbol === "U" ||
+			symbol === "B" ||
+			symbol === "R" ||
+			symbol === "G"
+		)
+			result[symbol.toLowerCase() as Color] += 1;
+		else return null;
+	}
+	const total = result.c + result.w + result.u + result.b + result.r + result.g;
+	if (total === 0 || !Number.isSafeInteger(total)) return null;
+	const out: Exclude<CardDefInput["manaCost"], "none" | "zero"> = {};
+	if (result.c > 0) out.c = result.c;
+	for (const color of ["w", "u", "b", "r", "g"] as const) {
+		if (result[color] > 0) out[color] = result[color];
+	}
+	return out;
 }
 
 function manaCostColors(mana: CardDefInput["manaCost"]): Color[] {
-  if (mana === "none" || mana === "zero") return [];
-  return (["w", "u", "b", "r", "g"] as const).filter((color) => (mana[color] ?? 0) > 0);
+	if (mana === "none" || mana === "zero") return [];
+	return (["w", "u", "b", "r", "g"] as const).filter(
+		(color) => (mana[color] ?? 0) > 0,
+	);
 }
 
 function fullMana(color: Color, amount = 1): ManaPool {
-  return {
-    w: color === "w" ? amount : 0,
-    u: color === "u" ? amount : 0,
-    b: color === "b" ? amount : 0,
-    r: color === "r" ? amount : 0,
-    g: color === "g" ? amount : 0,
-    c: 0,
-  };
+	return {
+		w: color === "w" ? amount : 0,
+		u: color === "u" ? amount : 0,
+		b: color === "b" ? amount : 0,
+		r: color === "r" ? amount : 0,
+		g: color === "g" ? amount : 0,
+		c: 0,
+	};
 }
 
 /* ------------------------------------------------------------------------- */
@@ -799,521 +1032,646 @@ function fullMana(color: Color, amount = 1): ManaPool {
 /* ------------------------------------------------------------------------- */
 
 function countKey(face: ForgeFaceAst, key: string): number {
-  return face.characteristics.all.filter((d) => d.key.trim() === key).length;
+	return face.characteristics.all.filter((d) => d.key.trim() === key).length;
 }
 
-export function lowerForgeCard(ast: ForgeCardAst, options: { id: string }): ImportResult {
-  const { id } = options;
-  if (!id) return reject(issue("UNSUPPORTED_FACE", "an explicit id is required"));
+export function lowerForgeCard(
+	ast: ForgeCardAst,
+	options: { id: string },
+): ImportResult {
+	const { id } = options;
+	if (!id)
+		return reject(issue("UNSUPPORTED_FACE", "an explicit id is required"));
 
-  for (const directive of ast.cardDirectives) {
-    if (!ALLOWED_CARD_DIRECTIVES.has(directive.key.trim())) {
-      return reject(
-        issue("UNSUPPORTED_KEYWORD", `unsupported card directive ${directive.key}`, {
-          nodeId: directive.nodeId,
-          line: directive.line,
-        }),
-      );
-    }
-  }
+	for (const directive of ast.cardDirectives) {
+		if (!ALLOWED_CARD_DIRECTIVES.has(directive.key.trim())) {
+			return reject(
+				issue(
+					"UNSUPPORTED_KEYWORD",
+					`unsupported card directive ${directive.key}`,
+					{
+						nodeId: directive.nodeId,
+						line: directive.line,
+					},
+				),
+			);
+		}
+	}
 
-  if (ast.faces.length !== 1) {
-    return reject(
-      issue("UNSUPPORTED_FACE", "cards with alternate/specialize faces are not supported"),
-    );
-  }
-  const face = ast.faces[0] as ForgeFaceAst;
-  if (face.state !== "original") {
-    return reject(issue("UNSUPPORTED_FACE", "only the original face is supported"));
-  }
-  if (face.draftActions.length > 0) {
-    return reject(issue("UNSUPPORTED_KEYWORD", "Draft$ actions are not supported"));
-  }
-  if (face.variants.length > 0) {
-    return reject(issue("UNSUPPORTED_KEYWORD", "Variant$ patches are not supported"));
-  }
-  if (face.otherDirectives.length > 0) {
-    const other = face.otherDirectives[0];
-    if (other) {
-      return reject(
-        issue("UNSUPPORTED_KEYWORD", `unknown directive ${other.key}`, {
-          nodeId: other.nodeId,
-          line: other.line,
-        }),
-      );
-    }
-  }
-  if (face.characteristics.copyFaceFrom) {
-    return reject(issue("UNSUPPORTED_FACE", "CopyFaceFrom is not supported"));
-  }
-  for (const characteristic of ["loyalty", "defense", "attractionLights"] as const) {
-    const ref = face.characteristics[characteristic];
-    if (ref) {
-      return reject(
-        issue("UNSUPPORTED_PARAMETER", `${ref.key} is not supported`, {
-          nodeId: ref.nodeId,
-          line: ref.line,
-        }),
-      );
-    }
-  }
-  for (const node of ast.document.nodes) {
-    if (node.kind === "malformed") {
-      return reject(
-        issue("UNSUPPORTED_PARAMETER", `malformed source line: ${node.raw}`, {
-          nodeId: node.id,
-          line: node.line,
-        }),
-      );
-    }
-    if (node.kind === "face-marker") {
-      return reject(
-        issue("UNSUPPORTED_FACE", `unsupported face marker ${node.marker}`, {
-          nodeId: node.id,
-          line: node.line,
-        }),
-      );
-    }
-  }
+	if (ast.faces.length !== 1) {
+		return reject(
+			issue(
+				"UNSUPPORTED_FACE",
+				"cards with alternate/specialize faces are not supported",
+			),
+		);
+	}
+	const face = ast.faces[0] as ForgeFaceAst;
+	if (face.state !== "original") {
+		return reject(
+			issue("UNSUPPORTED_FACE", "only the original face is supported"),
+		);
+	}
+	if (face.draftActions.length > 0) {
+		return reject(
+			issue("UNSUPPORTED_KEYWORD", "Draft$ actions are not supported"),
+		);
+	}
+	if (face.variants.length > 0) {
+		return reject(
+			issue("UNSUPPORTED_KEYWORD", "Variant$ patches are not supported"),
+		);
+	}
+	if (face.otherDirectives.length > 0) {
+		const other = face.otherDirectives[0];
+		if (other) {
+			return reject(
+				issue("UNSUPPORTED_KEYWORD", `unknown directive ${other.key}`, {
+					nodeId: other.nodeId,
+					line: other.line,
+				}),
+			);
+		}
+	}
+	if (face.characteristics.copyFaceFrom) {
+		return reject(issue("UNSUPPORTED_FACE", "CopyFaceFrom is not supported"));
+	}
+	for (const characteristic of [
+		"loyalty",
+		"defense",
+		"attractionLights",
+	] as const) {
+		const ref = face.characteristics[characteristic];
+		if (ref) {
+			return reject(
+				issue("UNSUPPORTED_PARAMETER", `${ref.key} is not supported`, {
+					nodeId: ref.nodeId,
+					line: ref.line,
+				}),
+			);
+		}
+	}
+	for (const node of ast.document.nodes) {
+		if (node.kind === "malformed") {
+			return reject(
+				issue("UNSUPPORTED_PARAMETER", `malformed source line: ${node.raw}`, {
+					nodeId: node.id,
+					line: node.line,
+				}),
+			);
+		}
+		if (node.kind === "face-marker") {
+			return reject(
+				issue("UNSUPPORTED_FACE", `unsupported face marker ${node.marker}`, {
+					nodeId: node.id,
+					line: node.line,
+				}),
+			);
+		}
+	}
 
-  for (const key of ["Name", "ManaCost", "Types", "Colors", "PT"]) {
-    if (countKey(face, key) > 1) {
-      return reject(issue("UNSUPPORTED_PARAMETER", `duplicate ${key} directive`));
-    }
-  }
+	for (const key of ["Name", "ManaCost", "Types", "Colors", "PT"]) {
+		if (countKey(face, key) > 1) {
+			return reject(
+				issue("UNSUPPORTED_PARAMETER", `duplicate ${key} directive`),
+			);
+		}
+	}
 
-  const nameRef = face.characteristics.name;
-  if (!nameRef || nameRef.value === "") {
-    return reject(issue("UNSUPPORTED_PARAMETER", "Name$ is required"));
-  }
-  const name = nameRef.value;
+	const nameRef = face.characteristics.name;
+	if (!nameRef || nameRef.value === "") {
+		return reject(issue("UNSUPPORTED_PARAMETER", "Name$ is required"));
+	}
+	const name = nameRef.value;
 
-  const manaCostRef = face.characteristics.manaCost;
-  const manaCost = manaCostRef ? parseManaCost(manaCostRef.value) : null;
-  if (!manaCost) {
-    return reject(
-      issue("UNSUPPORTED_COST", `unsupported mana cost: ${manaCostRef?.value ?? ""}`, {
-        nodeId: manaCostRef?.nodeId,
-        line: manaCostRef?.line,
-      }),
-    );
-  }
+	const manaCostRef = face.characteristics.manaCost;
+	const manaCost = manaCostRef ? parseManaCost(manaCostRef.value) : null;
+	if (!manaCost) {
+		return reject(
+			issue(
+				"UNSUPPORTED_COST",
+				`unsupported mana cost: ${manaCostRef?.value ?? ""}`,
+				{
+					nodeId: manaCostRef?.nodeId,
+					line: manaCostRef?.line,
+				},
+			),
+		);
+	}
 
-  const typesRef = face.characteristics.types;
-  if (!typesRef) return reject(issue("UNSUPPORTED_PARAMETER", "Types$ is required"));
-  const words = typesRef.value.split(/\s+/).filter(Boolean);
-  const types: CardType[] = [];
-  const supertypes: Supertype[] = [];
-  const invalidTypesLine = () =>
-    reject(
-      issue("UNSUPPORTED_PARAMETER", `invalid Types$ line: ${typesRef.value}`, {
-        nodeId: typesRef.nodeId,
-        line: typesRef.line,
-      }),
-    );
-  let lastType = -1;
-  let sawSubtype = false;
-  for (const [index, raw] of words.entries()) {
-    const word = raw.toLowerCase();
-    if ((SUPERTYPES as ReadonlySet<string>).has(word)) {
-      const supertype = word as Supertype;
-      if (lastType >= 0 || sawSubtype || supertypes.includes(supertype)) return invalidTypesLine();
-      supertypes.push(supertype);
-      continue;
-    }
-    if ((CARD_TYPES as ReadonlySet<string>).has(word)) {
-      const type = word as CardType;
-      if (types.includes(type) || sawSubtype) return invalidTypesLine();
-      types.push(type);
-      lastType = index;
-      continue;
-    }
-    if (lastType < 0) return invalidTypesLine();
-    sawSubtype = true;
-  }
-  if (types.length === 0) return invalidTypesLine();
-  if (types.includes("planeswalker")) {
-    return reject(
-      issue("UNSUPPORTED_EFFECT", "planeswalkers are not supported", {
-        nodeId: typesRef.nodeId,
-        line: typesRef.line,
-      }),
-    );
-  }
-  const PERMANENT_TYPES: readonly CardType[] = [
-    "artifact",
-    "creature",
-    "enchantment",
-    "land",
-    "planeswalker",
-  ];
-  const SPELL_TYPES: readonly CardType[] = ["instant", "sorcery"];
-  const hasPermanentType = types.some((t) => PERMANENT_TYPES.includes(t));
-  const spellTypeCount = types.filter((t) => SPELL_TYPES.includes(t)).length;
-  if ((hasPermanentType && spellTypeCount > 0) || spellTypeCount > 1) {
-    return reject(
-      issue(
-        "UNSUPPORTED_PARAMETER",
-        `invalid Types$ line: ${typesRef.value}`,
-        { nodeId: typesRef.nodeId, line: typesRef.line },
-      ),
-    );
-  }
-  const subtypes = words.slice(lastType + 1);
+	const typesRef = face.characteristics.types;
+	if (!typesRef)
+		return reject(issue("UNSUPPORTED_PARAMETER", "Types$ is required"));
+	const words = typesRef.value.split(/\s+/).filter(Boolean);
+	const types: CardType[] = [];
+	const supertypes: Supertype[] = [];
+	const invalidTypesLine = () =>
+		reject(
+			issue("UNSUPPORTED_PARAMETER", `invalid Types$ line: ${typesRef.value}`, {
+				nodeId: typesRef.nodeId,
+				line: typesRef.line,
+			}),
+		);
+	let lastType = -1;
+	let sawSubtype = false;
+	for (const [index, raw] of words.entries()) {
+		const word = raw.toLowerCase();
+		if ((SUPERTYPES as ReadonlySet<string>).has(word)) {
+			const supertype = word as Supertype;
+			if (lastType >= 0 || sawSubtype || supertypes.includes(supertype))
+				return invalidTypesLine();
+			supertypes.push(supertype);
+			continue;
+		}
+		if ((CARD_TYPES as ReadonlySet<string>).has(word)) {
+			const type = word as CardType;
+			if (types.includes(type) || sawSubtype) return invalidTypesLine();
+			types.push(type);
+			lastType = index;
+			continue;
+		}
+		if (lastType < 0) return invalidTypesLine();
+		sawSubtype = true;
+	}
+	if (types.length === 0) return invalidTypesLine();
+	if (types.includes("planeswalker")) {
+		return reject(
+			issue("UNSUPPORTED_EFFECT", "planeswalkers are not supported", {
+				nodeId: typesRef.nodeId,
+				line: typesRef.line,
+			}),
+		);
+	}
+	const PERMANENT_TYPES: readonly CardType[] = [
+		"artifact",
+		"creature",
+		"enchantment",
+		"land",
+		"planeswalker",
+	];
+	const SPELL_TYPES: readonly CardType[] = ["instant", "sorcery"];
+	const hasPermanentType = types.some((t) => PERMANENT_TYPES.includes(t));
+	const spellTypeCount = types.filter((t) => SPELL_TYPES.includes(t)).length;
+	if ((hasPermanentType && spellTypeCount > 0) || spellTypeCount > 1) {
+		return reject(
+			issue("UNSUPPORTED_PARAMETER", `invalid Types$ line: ${typesRef.value}`, {
+				nodeId: typesRef.nodeId,
+				line: typesRef.line,
+			}),
+		);
+	}
+	const subtypes = words.slice(lastType + 1);
 
-  let colors = manaCostColors(manaCost);
-  const colorsRef = face.characteristics.colors;
-  if (colorsRef) {
-    if (colorsRef.value.toLowerCase() === "colorless") {
-      colors = [];
-    } else {
-      const parsed: Color[] = [];
-      let bad = false;
-      for (const part of colorsRef.value.split(",")) {
-        const color = COLOR_WORDS.get(part.trim().toLowerCase());
-        if (!color) {
-          bad = true;
-          break;
-        }
-        if (!parsed.includes(color)) parsed.push(color);
-      }
-      if (bad) {
-        return reject(
-          issue("UNSUPPORTED_PARAMETER", `unsupported Colors$ value: ${colorsRef.value}`, {
-            nodeId: colorsRef.nodeId,
-            line: colorsRef.line,
-          }),
-        );
-      }
-      colors = parsed;
-    }
-  }
+	let colors = manaCostColors(manaCost);
+	const colorsRef = face.characteristics.colors;
+	if (colorsRef) {
+		if (colorsRef.value.toLowerCase() === "colorless") {
+			colors = [];
+		} else {
+			const parsed: Color[] = [];
+			let bad = false;
+			for (const part of colorsRef.value.split(",")) {
+				const color = COLOR_WORDS.get(part.trim().toLowerCase());
+				if (!color) {
+					bad = true;
+					break;
+				}
+				if (!parsed.includes(color)) parsed.push(color);
+			}
+			if (bad) {
+				return reject(
+					issue(
+						"UNSUPPORTED_PARAMETER",
+						`unsupported Colors$ value: ${colorsRef.value}`,
+						{
+							nodeId: colorsRef.nodeId,
+							line: colorsRef.line,
+						},
+					),
+				);
+			}
+			colors = parsed;
+		}
+	}
 
-  let power: number | undefined;
-  let toughness: number | undefined;
-  const ptRef = face.characteristics.pt;
-  if (ptRef) {
-    const match = /^(-?\d+)\/(-?\d+)$/.exec(ptRef.value);
-    const parsedPower = match ? Number(match[1]) : null;
-    const parsedToughness = match ? Number(match[2]) : null;
-    if (
-      !match ||
-      !types.includes("creature") ||
-      parsedPower === null ||
-      parsedToughness === null ||
-      !Number.isSafeInteger(parsedPower) ||
-      !Number.isSafeInteger(parsedToughness)
-    ) {
-      return reject(
-        issue("UNSUPPORTED_PARAMETER", `invalid PT$: ${ptRef.value}`, {
-          nodeId: ptRef.nodeId,
-          line: ptRef.line,
-        }),
-      );
-    }
-    power = parsedPower;
-    toughness = parsedToughness;
-  } else if (types.includes("creature")) {
-    return reject(issue("UNSUPPORTED_PARAMETER", "creatures require PT$"));
-  }
+	let power: number | undefined;
+	let toughness: number | undefined;
+	const ptRef = face.characteristics.pt;
+	if (ptRef) {
+		const match = /^(-?\d+)\/(-?\d+)$/.exec(ptRef.value);
+		const parsedPower = match ? Number(match[1]) : null;
+		const parsedToughness = match ? Number(match[2]) : null;
+		if (
+			!match ||
+			!types.includes("creature") ||
+			parsedPower === null ||
+			parsedToughness === null ||
+			!Number.isSafeInteger(parsedPower) ||
+			!Number.isSafeInteger(parsedToughness)
+		) {
+			return reject(
+				issue("UNSUPPORTED_PARAMETER", `invalid PT$: ${ptRef.value}`, {
+					nodeId: ptRef.nodeId,
+					line: ptRef.line,
+				}),
+			);
+		}
+		power = parsedPower;
+		toughness = parsedToughness;
+	} else if (types.includes("creature")) {
+		return reject(issue("UNSUPPORTED_PARAMETER", "creatures require PT$"));
+	}
 
-  const keywords: ("indestructible" | "lifelink" | "flying" | "vigilance")[] = [];
-  const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
-  for (const record of face.keywordRecords) {
-    const where = { nodeId: record.source.nodeId, line: record.source.line };
-    if (record.keyword === "etbCounter") {
-      const [, counterKind, amountText] = record.segments;
-      const counterName = counterKind ? COUNTER_NAMES.get(counterKind) : undefined;
-      const amount = amountText ? positiveInteger(amountText) : null;
-      if (record.segments.length !== 3 || !counterName || !amount) {
-        return reject(issue("UNSUPPORTED_KEYWORD", `unsupported keyword: ${record.raw}`, where));
-      }
-      const summed = (entersWith[counterName] ?? 0) + amount;
-      if (!Number.isSafeInteger(summed)) {
-        return reject(issue("UNSUPPORTED_KEYWORD", `unsafe summed entry counter count: ${record.raw}`, where));
-      }
-      entersWith[counterName] = summed;
-      continue;
-    }
-    const bare = BARE_KEYWORDS.get(record.keyword);
-    if (record.segments.length !== 1 || !bare) {
-      return reject(issue("UNSUPPORTED_KEYWORD", `unsupported keyword: ${record.raw}`, where));
-    }
-    keywords.push(bare);
-  }
+	const keywords: ("indestructible" | "lifelink" | "flying" | "vigilance")[] =
+		[];
+	const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
+	for (const record of face.keywordRecords) {
+		const where = { nodeId: record.source.nodeId, line: record.source.line };
+		if (record.keyword === "etbCounter") {
+			const [, counterKind, amountText] = record.segments;
+			const counterName = counterKind
+				? COUNTER_NAMES.get(counterKind)
+				: undefined;
+			const amount = amountText ? positiveInteger(amountText) : null;
+			if (record.segments.length !== 3 || !counterName || !amount) {
+				return reject(
+					issue(
+						"UNSUPPORTED_KEYWORD",
+						`unsupported keyword: ${record.raw}`,
+						where,
+					),
+				);
+			}
+			const summed = (entersWith[counterName] ?? 0) + amount;
+			if (!Number.isSafeInteger(summed)) {
+				return reject(
+					issue(
+						"UNSUPPORTED_KEYWORD",
+						`unsafe summed entry counter count: ${record.raw}`,
+						where,
+					),
+				);
+			}
+			entersWith[counterName] = summed;
+			continue;
+		}
+		const bare = BARE_KEYWORDS.get(record.keyword);
+		if (record.segments.length !== 1 || !bare) {
+			return reject(
+				issue(
+					"UNSUPPORTED_KEYWORD",
+					`unsupported keyword: ${record.raw}`,
+					where,
+				),
+			);
+		}
+		keywords.push(bare);
+	}
 
-  const usedSVarNames = new Set<string>();
-  for (const bucket of Object.values(face.svarIndex)) {
-    if (bucket.length > 1) {
-      const first = bucket[0] as ForgeSVarRecord;
-      return reject(
-        issue("UNSUPPORTED_REFERENCE", `duplicate SVar ${first.name}`, {
-          nodeId: first.source.nodeId,
-          line: first.source.line,
-        }),
-      );
-    }
-  }
+	const usedSVarNames = new Set<string>();
+	for (const bucket of Object.values(face.svarIndex)) {
+		if (bucket.length > 1) {
+			const first = bucket[0] as ForgeSVarRecord;
+			return reject(
+				issue("UNSUPPORTED_REFERENCE", `duplicate SVar ${first.name}`, {
+					nodeId: first.source.nodeId,
+					line: first.source.line,
+				}),
+			);
+		}
+	}
 
-  const statics: ContinuousEffect[] = [];
-  for (const record of face.statics) {
-    const lowered = lowerStatic(record);
-    if ("code" in lowered) return reject(lowered);
-    statics.push(lowered);
-  }
+	const statics: ContinuousEffect[] = [];
+	for (const record of face.statics) {
+		const lowered = lowerStatic(record);
+		if ("code" in lowered) return reject(lowered);
+		statics.push(lowered);
+	}
 
-  const replacements: ReplacementDef[] = [];
-  let entersTappedFromReplacement = false;
-  for (const record of face.replacements) {
-    const lowered = lowerReplacement(face, record);
-    if ("code" in lowered) return reject(lowered);
-    if (lowered.kind === "self-entry") {
-      if (entersTappedFromReplacement) {
-        return reject(
-          issue("UNSUPPORTED_KEYWORD", "duplicate enters-tapped rule", {
-            nodeId: record.source.nodeId,
-            line: record.source.line,
-          }),
-        );
-      }
-      entersTappedFromReplacement = true;
-    } else {
-      replacements.push(lowered.def);
-    }
-    const replaceWith = getForgeParam(record.params, "ReplaceWith");
-    if (replaceWith) usedSVarNames.add(replaceWith.toLowerCase());
-  }
+	const replacements: ReplacementDef[] = [];
+	let entersTappedFromReplacement = false;
+	for (const record of face.replacements) {
+		const lowered = lowerReplacement(face, record);
+		if ("code" in lowered) return reject(lowered);
+		if (lowered.kind === "self-entry") {
+			if (entersTappedFromReplacement) {
+				return reject(
+					issue("UNSUPPORTED_KEYWORD", "duplicate enters-tapped rule", {
+						nodeId: record.source.nodeId,
+						line: record.source.line,
+					}),
+				);
+			}
+			entersTappedFromReplacement = true;
+		} else {
+			replacements.push(lowered.def);
+		}
+		const replaceWith = getForgeParam(record.params, "ReplaceWith");
+		if (replaceWith) usedSVarNames.add(replaceWith.toLowerCase());
+	}
 
-  const triggers: TriggerDef[] = [];
-  for (const record of face.triggers) {
-    const lowered = lowerTrigger(face, record, usedSVarNames);
-    if ("code" in lowered) return reject(lowered);
-    triggers.push(lowered);
-  }
+	const triggers: TriggerDef[] = [];
+	for (const record of face.triggers) {
+		const lowered = lowerTrigger(face, record, usedSVarNames);
+		if ("code" in lowered) return reject(lowered);
+		triggers.push(lowered);
+	}
 
-  let spell: SpellAbilityDef | undefined;
-  const activatedAbilities: AnyActivatedAbilityDef[] = [];
-  let spellCount = 0;
-  let activatedCount = 0;
-  for (const record of face.abilities) {
-    const where = { nodeId: record.source.nodeId, line: record.source.line };
-    const params = record.params;
-    const disc = discriminator(params, where);
-    if ("code" in disc) return reject(disc);
-    if (disc.token !== "AB" && disc.token !== "SP") {
-      return reject(issue("UNSUPPORTED_EFFECT", "expected an AB$ or SP$ root ability", where));
-    }
+	let spell: SpellAbilityDef | undefined;
+	const activatedAbilities: AnyActivatedAbilityDef[] = [];
+	let spellCount = 0;
+	let activatedCount = 0;
+	for (const record of face.abilities) {
+		const where = { nodeId: record.source.nodeId, line: record.source.line };
+		const params = record.params;
+		const disc = discriminator(params, where);
+		if ("code" in disc) return reject(disc);
+		if (disc.token !== "AB" && disc.token !== "SP") {
+			return reject(
+				issue(
+					"UNSUPPORTED_EFFECT",
+					"expected an AB$ or SP$ root ability",
+					where,
+				),
+			);
+		}
 
-    if (disc.token === "AB" && disc.api === "mana") {
-      const badParams = checkParams(
-        params,
-        new Set(["ab", "cost", "produced", "amount", "spelldescription"]),
-        where,
-      );
-      if (badParams) return reject(badParams);
-      if (getForgeParam(params, "Cost") !== "T") {
-        return reject(
-          issue("UNSUPPORTED_COST", "only a tap-self cost is supported for mana abilities", where),
-        );
-      }
-      const produced = getForgeParam(params, "Produced");
-      const color = produced && produced.length === 1 ? COLOR_WORDS.get(produced.toLowerCase()) : undefined;
-      const amount = positiveInteger(getForgeParam(params, "Amount"), 1);
-      if (!color || !amount) {
-        return reject(
-          issue("UNSUPPORTED_EFFECT", "only a fixed colored mana symbol is supported", where),
-        );
-      }
-      activatedCount += 1;
-      activatedAbilities.push({
-        kind: "mana",
-        id: `activated-${activatedCount}`,
-        text: getForgeParam(params, "SpellDescription") ?? `Add {${produced}}.`,
-        costs: [{ kind: "tap-self" }],
-        effects: [{ kind: "add-mana", player: "you", mana: fullMana(color, amount) }],
-      });
-      continue;
-    }
+		if (disc.token === "AB" && disc.api === "mana") {
+			const badParams = checkParams(
+				params,
+				new Set(["ab", "cost", "produced", "amount", "spelldescription"]),
+				where,
+			);
+			if (badParams) return reject(badParams);
+			if (getForgeParam(params, "Cost") !== "T") {
+				return reject(
+					issue(
+						"UNSUPPORTED_COST",
+						"only a tap-self cost is supported for mana abilities",
+						where,
+					),
+				);
+			}
+			const produced = getForgeParam(params, "Produced");
+			const color =
+				produced && produced.length === 1
+					? COLOR_WORDS.get(produced.toLowerCase())
+					: undefined;
+			const amount = positiveInteger(getForgeParam(params, "Amount"), 1);
+			if (!color || !amount) {
+				return reject(
+					issue(
+						"UNSUPPORTED_EFFECT",
+						"only a fixed colored mana symbol is supported",
+						where,
+					),
+				);
+			}
+			activatedCount += 1;
+			activatedAbilities.push({
+				kind: "mana",
+				id: `activated-${activatedCount}`,
+				text: getForgeParam(params, "SpellDescription") ?? `Add {${produced}}.`,
+				costs: [{ kind: "tap-self" }],
+				effects: [
+					{ kind: "add-mana", player: "you", mana: fullMana(color, amount) },
+				],
+			});
+			continue;
+		}
 
-    if (disc.token === "AB" && getForgeParam(params, "ValidTgts") !== undefined) {
-      return reject(
-        issue("UNSUPPORTED_TARGET", "targeted activated abilities are not supported", where),
-      );
-    }
-    if (disc.token === "AB" && getForgeParam(params, "Cost") !== "T") {
-      return reject(
-        issue("UNSUPPORTED_COST", "only a tap-self activation cost is supported", where),
-      );
-    }
-    if (disc.token === "SP" && getForgeParam(params, "Cost") !== undefined) {
-      return reject(issue("UNSUPPORTED_COST", "additional spell costs are unsupported", where));
-    }
-    if (disc.token === "SP" && !(types.includes("instant") || types.includes("sorcery"))) {
-      return reject(
-        issue(
-          "UNSUPPORTED_EFFECT",
-          "SP$ abilities on permanent cards are never resolved by the engine",
-          where,
-        ),
-      );
-    }
+		if (
+			disc.token === "AB" &&
+			getForgeParam(params, "ValidTgts") !== undefined
+		) {
+			return reject(
+				issue(
+					"UNSUPPORTED_TARGET",
+					"targeted activated abilities are not supported",
+					where,
+				),
+			);
+		}
+		if (disc.token === "AB" && getForgeParam(params, "Cost") !== "T") {
+			return reject(
+				issue(
+					"UNSUPPORTED_COST",
+					"only a tap-self activation cost is supported",
+					where,
+				),
+			);
+		}
+		if (disc.token === "SP" && getForgeParam(params, "Cost") !== undefined) {
+			return reject(
+				issue(
+					"UNSUPPORTED_COST",
+					"additional spell costs are unsupported",
+					where,
+				),
+			);
+		}
+		if (
+			disc.token === "SP" &&
+			!(types.includes("instant") || types.includes("sorcery"))
+		) {
+			return reject(
+				issue(
+					"UNSUPPORTED_EFFECT",
+					"SP$ abilities on permanent cards are never resolved by the engine",
+					where,
+				),
+			);
+		}
 
-    const chain = lowerEffectChain(
-      face,
-      params,
-      where,
-      false,
-      disc.token === "SP" ? ["SP"] : ["AB"],
-      disc.token === "SP" ? "spell" : "activated",
-    );
-    if ("code" in chain) return reject(chain);
-    const targets = parseTarget(getForgeParam(params, "ValidTgts"));
-    if (!targets) return reject(issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where));
-    for (const effect of chain.effects) {
-      if (effect.kind !== "damage" && effect.kind !== "destroy") continue;
-      const target = targets[0];
-      if (targets.length !== 1 || !target || effect.target !== target.id) {
-        return reject(
-          issue(
-            "UNSUPPORTED_TARGET",
-            "damage/destroy effects must reference the declared target slot",
-            where,
-          ),
-        );
-      }
-      if (effect.kind === "destroy" && target.legal.kind !== "permanent") {
-        return reject(
-          issue("UNSUPPORTED_TARGET", "Destroy requires a creature/permanent target", where),
-        );
-      }
-    }
-    const description = getForgeParam(params, "SpellDescription");
-    if (!description) return reject(issue("UNSUPPORTED_PARAMETER", "SpellDescription$ is required", where));
+		const chain = lowerEffectChain(
+			face,
+			params,
+			where,
+			false,
+			disc.token === "SP" ? ["SP"] : ["AB"],
+			disc.token === "SP" ? "spell" : "activated",
+		);
+		if ("code" in chain) return reject(chain);
+		const targets = parseTarget(getForgeParam(params, "ValidTgts"));
+		if (!targets)
+			return reject(
+				issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where),
+			);
+		for (const effect of chain.effects) {
+			if (effect.kind !== "damage" && effect.kind !== "destroy") continue;
+			const target = targets[0];
+			if (targets.length !== 1 || !target || effect.target !== target.id) {
+				return reject(
+					issue(
+						"UNSUPPORTED_TARGET",
+						"damage/destroy effects must reference the declared target slot",
+						where,
+					),
+				);
+			}
+			if (effect.kind === "destroy" && target.legal.kind !== "permanent") {
+				return reject(
+					issue(
+						"UNSUPPORTED_TARGET",
+						"Destroy requires a creature/permanent target",
+						where,
+					),
+				);
+			}
+		}
+		const description = getForgeParam(params, "SpellDescription");
+		if (!description)
+			return reject(
+				issue("UNSUPPORTED_PARAMETER", "SpellDescription$ is required", where),
+			);
 
-    for (const n of chain.usedSVarNames) usedSVarNames.add(n);
+		for (const n of chain.usedSVarNames) usedSVarNames.add(n);
 
-    if (disc.token === "SP") {
-      spellCount += 1;
-      if (spellCount > 1) {
-        return reject(
-          issue("UNSUPPORTED_EFFECT", "multiple spell abilities are not supported", where),
-        );
-      }
-      spell = { id: `spell-${spellCount}`, text: description, targets, effects: chain.effects };
-    } else {
-      activatedCount += 1;
-      activatedAbilities.push({
-        kind: "activated",
-        id: `activated-${activatedCount}`,
-        text: description,
-        costs: [{ kind: "tap-self" }],
-        targets,
-        effects: chain.effects,
-      });
-    }
-  }
+		if (disc.token === "SP") {
+			spellCount += 1;
+			if (spellCount > 1) {
+				return reject(
+					issue(
+						"UNSUPPORTED_EFFECT",
+						"multiple spell abilities are not supported",
+						where,
+					),
+				);
+			}
+			spell = {
+				id: `spell-${spellCount}`,
+				text: description,
+				targets,
+				effects: chain.effects,
+			};
+		} else {
+			activatedCount += 1;
+			activatedAbilities.push({
+				kind: "activated",
+				id: `activated-${activatedCount}`,
+				text: description,
+				costs: [{ kind: "tap-self" }],
+				targets,
+				effects: chain.effects,
+			});
+		}
+	}
 
-  if ((types.includes("instant") || types.includes("sorcery")) && !spell) {
-    return reject(
-      issue("UNSUPPORTED_EFFECT", "instants and sorceries require exactly one SP$ ability"),
-    );
-  }
+	if ((types.includes("instant") || types.includes("sorcery")) && !spell) {
+		return reject(
+			issue(
+				"UNSUPPORTED_EFFECT",
+				"instants and sorceries require exactly one SP$ ability",
+			),
+		);
+	}
 
-  // Basic land types intrinsically grant their tap-for-mana ability, whether or
-  // not the card also carries the "basic" supertype (e.g. Dryad Arbor). Only an
-  // *exact* pre-existing duplicate (a fixed tap-self ability producing exactly
-  // one of that color and nothing else) is treated as already covering it, so
-  // an explicit ability that happens to also produce that color never silently
-  // absorbs the intrinsic grant.
-  if (types.includes("land")) {
-    const intrinsicColors = new Set(
-      subtypes.map((subtype) => BASIC_LAND_MANA.get(subtype)).filter((c): c is Color => c !== undefined),
-    );
-    for (const color of intrinsicColors) {
-      const exactDuplicate = activatedAbilities.some(
-        (ability) =>
-          ability.kind === "mana" &&
-          ability.costs.length === 1 &&
-          ability.costs[0]?.kind === "tap-self" &&
-          ability.effects.length === 1 &&
-          ability.effects[0]?.kind === "add-mana" &&
-          (() => {
-            const mana = (ability.effects[0] as Extract<EffectDef, { kind: "add-mana" }>).mana;
-            return (
-              mana[color] === 1 &&
-              (["w", "u", "b", "r", "g", "c"] as const)
-                .filter((c) => c !== color)
-                .every((c) => (mana[c] ?? 0) === 0)
-            );
-          })(),
-      );
-      if (exactDuplicate) continue;
-      activatedCount += 1;
-      activatedAbilities.push({
-        kind: "mana",
-        id: `intrinsic-mana-${color}`,
-        text: `Add {${color.toUpperCase()}}.`,
-        costs: [{ kind: "tap-self" }],
-        effects: [{ kind: "add-mana", player: "you", mana: fullMana(color) }],
-      });
-    }
-  }
+	// Basic land types intrinsically grant their tap-for-mana ability, whether or
+	// not the card also carries the "basic" supertype (e.g. Dryad Arbor). Only an
+	// *exact* pre-existing duplicate (a fixed tap-self ability producing exactly
+	// one of that color and nothing else) is treated as already covering it, so
+	// an explicit ability that happens to also produce that color never silently
+	// absorbs the intrinsic grant.
+	if (types.includes("land")) {
+		const intrinsicColors = new Set(
+			subtypes
+				.map((subtype) => BASIC_LAND_MANA.get(subtype))
+				.filter((c): c is Color => c !== undefined),
+		);
+		for (const color of intrinsicColors) {
+			const exactDuplicate = activatedAbilities.some(
+				(ability) =>
+					ability.kind === "mana" &&
+					ability.costs.length === 1 &&
+					ability.costs[0]?.kind === "tap-self" &&
+					ability.effects.length === 1 &&
+					ability.effects[0]?.kind === "add-mana" &&
+					(() => {
+						const mana = (
+							ability.effects[0] as Extract<EffectDef, { kind: "add-mana" }>
+						).mana;
+						return (
+							mana[color] === 1 &&
+							(["w", "u", "b", "r", "g", "c"] as const)
+								.filter((c) => c !== color)
+								.every((c) => (mana[c] ?? 0) === 0)
+						);
+					})(),
+			);
+			if (exactDuplicate) continue;
+			activatedCount += 1;
+			activatedAbilities.push({
+				kind: "mana",
+				id: `intrinsic-mana-${color}`,
+				text: `Add {${color.toUpperCase()}}.`,
+				costs: [{ kind: "tap-self" }],
+				effects: [{ kind: "add-mana", player: "you", mana: fullMana(color) }],
+			});
+		}
+	}
 
-  // Recognized non-referenced SVars, kept exactly as data by design (AI hints /
-  // deck-building metadata), scoped to when the feature they describe is present.
-  const hasAttackEffect = lookupForgeSVar(face, "HasAttackEffect")?.parsed;
-  if (
-    triggers.some((t) => t.condition.kind === "declare attackers") &&
-    hasAttackEffect?.kind === "scalar" &&
-    hasAttackEffect.value === "TRUE"
-  )
-    usedSVarNames.add("hasattackeffect");
-  const playMain1 = lookupForgeSVar(face, "PlayMain1")?.parsed;
-  if (statics.length > 0 && playMain1?.kind === "scalar" && playMain1.value === "TRUE")
-    usedSVarNames.add("playmain1");
-  const nonCombatPriority = lookupForgeSVar(face, "NonCombatPriority")?.parsed;
-  if (
-    activatedAbilities.length > 0 &&
-    nonCombatPriority?.kind === "scalar" &&
-    nonCombatPriority.value === "1"
-  )
-    usedSVarNames.add("noncombatpriority");
+	// Recognized non-referenced SVars, kept exactly as data by design (AI hints /
+	// deck-building metadata), scoped to when the feature they describe is present.
+	const hasAttackEffect = lookupForgeSVar(face, "HasAttackEffect")?.parsed;
+	if (
+		triggers.some((t) => t.condition.kind === "declare attackers") &&
+		hasAttackEffect?.kind === "scalar" &&
+		hasAttackEffect.value === "TRUE"
+	)
+		usedSVarNames.add("hasattackeffect");
+	const playMain1 = lookupForgeSVar(face, "PlayMain1")?.parsed;
+	if (
+		statics.length > 0 &&
+		playMain1?.kind === "scalar" &&
+		playMain1.value === "TRUE"
+	)
+		usedSVarNames.add("playmain1");
+	const nonCombatPriority = lookupForgeSVar(face, "NonCombatPriority")?.parsed;
+	if (
+		activatedAbilities.length > 0 &&
+		nonCombatPriority?.kind === "scalar" &&
+		nonCombatPriority.value === "1"
+	)
+		usedSVarNames.add("noncombatpriority");
 
-  for (const record of face.svars) {
-    if (!usedSVarNames.has(record.name.toLowerCase())) {
-      return reject(
-        issue("UNSUPPORTED_REFERENCE", `unused SVar ${record.name}`, {
-          nodeId: record.source.nodeId,
-          line: record.source.line,
-        }),
-      );
-    }
-  }
+	for (const record of face.svars) {
+		if (!usedSVarNames.has(record.name.toLowerCase())) {
+			return reject(
+				issue("UNSUPPORTED_REFERENCE", `unused SVar ${record.name}`, {
+					nodeId: record.source.nodeId,
+					line: record.source.line,
+				}),
+			);
+		}
+	}
 
-  const input: CardDefInput = {
-    id,
-    name,
-    ...(supertypes.length > 0 ? { supertypes } : {}),
-    types,
-    ...(subtypes.length > 0 ? { subtypes } : {}),
-    colors,
-    manaCost,
-    ...(power !== undefined ? { power } : {}),
-    ...(toughness !== undefined ? { toughness } : {}),
-    ...(keywords.length > 0 ? { keywords } : {}),
-    ...(entersTappedFromReplacement ? { entersTapped: true } : {}),
-    ...(Object.keys(entersWith).length > 0 ? { entersWith } : {}),
-    ...(spell ? { spell } : {}),
-    ...(statics.length > 0 ? { statics } : {}),
-    ...(activatedAbilities.length > 0 ? { activatedAbilities } : {}),
-    ...(triggers.length > 0 ? { triggers } : {}),
-    ...(replacements.length > 0 ? { replacements } : {}),
-  };
+	const input: CardDefInput = {
+		id,
+		name,
+		...(supertypes.length > 0 ? { supertypes } : {}),
+		types,
+		...(subtypes.length > 0 ? { subtypes } : {}),
+		colors,
+		manaCost,
+		...(power !== undefined ? { power } : {}),
+		...(toughness !== undefined ? { toughness } : {}),
+		...(keywords.length > 0 ? { keywords } : {}),
+		...(entersTappedFromReplacement ? { entersTapped: true } : {}),
+		...(Object.keys(entersWith).length > 0 ? { entersWith } : {}),
+		...(spell ? { spell } : {}),
+		...(statics.length > 0 ? { statics } : {}),
+		...(activatedAbilities.length > 0 ? { activatedAbilities } : {}),
+		...(triggers.length > 0 ? { triggers } : {}),
+		...(replacements.length > 0 ? { replacements } : {}),
+	};
 
-  return { ok: true, card: defineCard(input), diagnostics: [] };
+	return { ok: true, card: defineCard(input), diagnostics: [] };
 }
 
-export function importForgeCard(text: string, options: { id: string }): ImportResult {
-  const { card } = parseForgeCardScript(text);
-  return lowerForgeCard(card, options);
+export function importForgeCard(
+	text: string,
+	options: { id: string },
+): ImportResult {
+	const { card } = parseForgeCardScript(text);
+	return lowerForgeCard(card, options);
 }

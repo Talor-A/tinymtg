@@ -276,7 +276,10 @@ describe("single-target spell casting", () => {
 	});
 
 	test("deferred selectors and P/T effects fail before payment", () => {
-		for (const cardId of ["target-test-doom-blade", "target-test-deferred-pt"]) {
+		for (const cardId of [
+			"target-test-doom-blade",
+			"target-test-deferred-pt",
+		]) {
 			const { state, spell } = setupCast(cardId);
 			spawnPermanent(state, "grizzly-bears", 1);
 			const before = structuredClone(state);
