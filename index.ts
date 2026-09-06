@@ -1297,7 +1297,7 @@ export interface GameState {
   /** Monotonic tag source for guard facts (e.g. Chains of Mephistopheles). */
   nextTag: number;
   log: string[];
-  rngState: number;
+  rngState: RngState;
 }
 export type ReadonlyGameState = DeepReadOnly<GameState>;
 
@@ -2071,6 +2071,119 @@ function card(id: string): CardDef {
 }
 
 /* ------------------------------------------------------------------ *
+ * Randomness
+ *
+ * Every random decision the rules require — currently only shuffling — is
+ * driven from state that lives on `GameState`, never from `Math.random()`.
+ * That is not a preference: `advanceWithReplay` re-runs a transition against a
+ * clone of its checkpoint, so a shuffle reading ambient randomness would
+ * produce a different library on replay and the checkpoint model would break.
+ *
+ * The generator is sfc32 ("Small Fast Counter", Doty-Humphrey), transcribed
+ * from the reference implementation. Javascript has no seeded generator in its
+ * standard library, and `crypto` is deliberately non-reproducible, so this is
+ * hand-written by necessity rather than by preference.
+ * ------------------------------------------------------------------ */
+
+/**
+ * sfc32's four 32-bit words, held as plain int32s.
+ *
+ * `d` is a pure counter and the other three are the chaotic part. That split
+ * is the reason to prefer sfc32 over the shorter generators: incrementing `d`
+ * every round guarantees a minimum period of 2^32 no matter what the mixing
+ * does, so there is no seed that falls into a short cycle and no absorbing
+ * all-zero state to special-case.
+ */
+type RngState = [a: number, b: number, c: number, d: number];
+
+/**
+ * Advances the generator one round and returns its raw 32-bit output.
+ *
+ * Mutates `rng` in place. The `| 0` casts are not decoration: they force
+ * Javascript's doubles back into wrapping int32 arithmetic, which is what the
+ * algorithm is defined over. The final `>>> 0` is needed because Javascript's
+ * bitwise operators produce *signed* int32, and callers want 0..2^32-1.
+ */
+function advanceRng(rng: RngState): number {
+  let [a, b, c, d] = rng;
+  const output = (((a + b) | 0) + d) | 0;
+  d = (d + 1) | 0; // the counter: the sole guarantor of the minimum period
+  a = b ^ (b >>> 9); // xorshift: folds b's high bits down into its low bits
+  b = (c + (c << 3)) | 0; // c * 9, cheaply: spreads low bits upward
+  c = (c << 21) | (c >>> 11); // barrel rotate: no bit is lost, unlike a shift
+  c = (c + output) | 0; // feed the output back so the three words stay coupled
+  rng[0] = a;
+  rng[1] = b;
+  rng[2] = c;
+  rng[3] = d;
+  return output >>> 0;
+}
+
+/**
+ * Expands one seed into a full generator state.
+ *
+ * sfc32 has no defined key schedule, so this follows the usual convention:
+ * place the seed in the chaotic words, use a nonzero constant for the rest so
+ * that seed 0 is still a live state, then discard early output until the words
+ * have avalanched. Without the discard, nearby seeds produce correlated first
+ * outputs — which would show up here as similar opening shuffles.
+ */
+function seedRng(seed: number): RngState {
+  const rng: RngState = [0x9e3779b9, seed | 0, seed | 0, 1];
+  for (let round = 0; round < 15; round++) advanceRng(rng);
+  return rng;
+}
+
+const RNG_RANGE = 0x100000000; // 2^32, the size of the generator's output space
+
+/**
+ * A uniformly distributed integer in `[0, bound)`.
+ *
+ * Rejection sampling rather than `output % bound`: 2^32 does not divide evenly
+ * by an arbitrary bound, so the modulo alone would make the first
+ * `2^32 % bound` values fractionally more likely. Discarding the unbalanced
+ * tail of the range costs, for any realistic deck size, far less than one
+ * extra round on average.
+ */
+function randomBelow(state: GameState, bound: number): number {
+  assert(
+    Number.isSafeInteger(bound) && bound > 0,
+    `random bound must be a positive integer, got ${bound}`,
+  );
+  const unbiasedLimit = Math.floor(RNG_RANGE / bound) * bound;
+  // A runaway guard, not a rules limit: for any plausible bound the loop
+  // exits on its first round with probability better than 1 - 1e-7.
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const value = advanceRng(state.rngState);
+    if (value < unbiasedLimit) return value % bound;
+  }
+  throw new Error("rejection sampling failed to terminate");
+}
+
+/**
+ * CR 103.2. Fisher-Yates, which visits every permutation with equal
+ * probability given an unbiased `randomBelow`.
+ *
+ * The *last* element of `library` is the top of the deck, because that is
+ * where `draw` reads from; the shuffle is uniform either way, but the
+ * convention matters to anything that inspects the result.
+ */
+function shuffleLibrary(state: GameState, player: PlayerId): void {
+  const library = state.players[player].library;
+  for (let i = library.length - 1; i > 0; i--) {
+    const j = randomBelow(state, i + 1);
+    const chosen = library[j];
+    const displaced = library[i];
+    assertDefined(chosen, "shuffle read past the end of the library");
+    assertDefined(displaced, "shuffle read past the end of the library");
+    library[i] = chosen;
+    library[j] = displaced;
+  }
+  state.revision++;
+  log(state, `  P${player} shuffles their library`);
+}
+
+/* ------------------------------------------------------------------ *
  * Game creation
  * ------------------------------------------------------------------ */
 
@@ -2105,7 +2218,15 @@ function emptyManaPools(state: GameState): void {
   }
 }
 
-export function newGame(): GameState {
+/**
+ * A fresh game.
+ *
+ * `seed` fixes every shuffle, so the same seed and the same choices reproduce
+ * a game exactly. It defaults to a constant rather than to ambient randomness
+ * on purpose: tests and the fuzzer depend on `newGame()` being reproducible.
+ * Callers that want a different game each run pass their own seed.
+ */
+export function newGame(seed = 0): GameState {
   return {
     revision: 0,
     objects: new Map(),
@@ -2129,7 +2250,7 @@ export function newGame(): GameState {
     nextStackItemId: 0,
     nextTag: 0,
     log: [],
-    rngState: 0,
+    rngState: seedRng(seed),
   };
 }
 
@@ -6077,7 +6198,10 @@ function performPreGameActions(
   step: PreGameStepKind,
 ): void {
   switch (step) {
-    case "shuffle": // increment 1: seeded shuffle
+    case "shuffle":
+      // CR 103.2. Both libraries are shuffled before anything is drawn.
+      for (const player of state.players) shuffleLibrary(state, player.id);
+      break;
     case "opening hand": // increment 2: deal 7 through the draw path
     case "mulligan": // increment 7
     case "opening hand actions": // increment 8: Leyline
