@@ -448,7 +448,7 @@ interface RegenerateEvent extends EventCommon {
 
 interface ZoneChangeEvent extends EventCommon {
 	/** Choices installed atomically when this movement creates a spell. */
-	spellTargets?: SpellTargets;
+	spellTargets?: TargetBindings;
 	kind: "change zone";
 	object: ObjectId;
 	from: Zone;
@@ -752,7 +752,7 @@ interface CardSnapshot extends SnapshotBase {
 }
 
 interface SpellSnapshot extends SnapshotBase {
-	targets: SpellTargets;
+	targets: TargetBindings;
 	kind: "spell";
 	zone: "stack";
 	controller: PlayerId;
@@ -1125,7 +1125,7 @@ function buildFilteredGameView(
 				);
 				assert(entry?.kind === "spell", "spell has no stack entry");
 				snapshots.set(object.id, {
-					targets: structuredClone(entry.targets) as SpellTargets,
+					targets: structuredClone(entry.targets) as TargetBindings,
 					kind: "spell",
 					objectId: object.id,
 					owner: object.owner,
@@ -1196,12 +1196,31 @@ function eid(id: string): EffectId {
 	return id as EffectId;
 }
 
+/**
+ * What a resolving ability still needs to know about its own source once the
+ * source may be gone (CR 113.7a, CR 608.2h). Only the fields the supported
+ * effects actually read are kept; this is not general last known information.
+ */
+export interface SourceLastKnown {
+	name: string;
+	controller: PlayerId;
+	colors: Color[];
+	lifelink: boolean;
+}
+
+/**
+ * A trigger that has triggered but has not yet been put on the stack. It has
+ * no targets yet: those are chosen when it goes on the stack (CR 603.3d).
+ */
 export interface PendingTrigger {
 	source: ObjectId;
 	triggerId: TriggeredAbilityId;
 	controller: PlayerId;
 	text: string;
+	/** Copied off the trigger definition, so a later text change cannot reach it. */
+	targetDefinitions: TargetDef[];
 	effects: EffectDef[];
+	sourceLastKnown: SourceLastKnown | null;
 }
 
 interface PlayerState {
@@ -1247,31 +1266,44 @@ export type PriorityAction =
 	| ActivateAbilityAction
 	| PlayLandAction;
 
-export interface TriggeredAbilityStackItem {
+/**
+ * An ability on the stack carries everything its resolution needs: the target
+ * restrictions it was announced under, the targets chosen then, and its own
+ * instructions. Nothing here is looked up again from the source object or the
+ * card registry, because CR 113.7a lets the source leave in the meantime.
+ */
+interface AbilityStackItemBase {
 	id: StackItemId;
-	kind: "triggered ability";
 	source: ObjectId;
-	triggerId: TriggeredAbilityId;
 	controller: PlayerId;
 	text: string;
+	targetDefinitions: TargetDef[];
+	targets: TargetBindings;
 	effects: EffectDef[];
+	sourceLastKnown: SourceLastKnown | null;
 }
 
-export interface ActivatedAbilityStackItem {
-	id: StackItemId;
+export interface TriggeredAbilityStackItem extends AbilityStackItemBase {
+	kind: "triggered ability";
+	triggerId: TriggeredAbilityId;
+}
+
+export interface ActivatedAbilityStackItem extends AbilityStackItemBase {
 	kind: "activated ability";
-	source: ObjectId;
 	abilityId: ActivatedAbilityId;
-	controller: PlayerId;
-	text: string;
-	effects: EffectDef[];
+}
+
+/** One target slot's chosen target. */
+export interface TargetBinding {
+	slot: string;
+	target: EntityRef;
 }
 
 /** The runtime supports either no targets or one required target slot. */
-export type SpellTargets = [] | [{ slot: string; target: EntityRef }];
+export type TargetBindings = [] | [TargetBinding];
 
 export interface SpellStackEntry {
-	targets: SpellTargets;
+	targets: TargetBindings;
 	kind: "spell";
 	objectId: ObjectId;
 }
@@ -1660,8 +1692,9 @@ export function addFloating(
  * Effects
  *
  * One serializable effect language is shared by card definitions, imported IR,
- * stack items, and the resolver. Damage and destruction bind one target slot;
- * temporary P/T effects remain definition-only.
+ * stack items, and the resolver. An effect never carries a chosen target: it
+ * names a target slot its own ability declared, and the resolver looks the
+ * binding up. Temporary P/T effects remain definition-only.
  * ------------------------------------------------------------------ */
 
 export type EffectDef =
@@ -1676,12 +1709,11 @@ export type EffectDef =
 			amount: number;
 			player: "you" | "opponent";
 	  }
-	/** Definition-time targets are slot ids until casting binds them. */
-	| { kind: "damage"; target: EntityRef | string; amount: number }
-	| { kind: "destroy"; target: EntityRef | string }
+	| { kind: "damage"; targetSlot: string; amount: number }
+	| { kind: "destroy"; targetSlot: string }
 	| {
 			kind: "modify-pt";
-			target: string;
+			targetSlot: string;
 			power: number;
 			toughness: number;
 			duration: "until-end-of-turn";
@@ -1772,6 +1804,8 @@ export interface TriggerDef {
 	 * Defaults to `["battlefield"]`.
 	 */
 	functionsFrom?: [Zone];
+	/** Chosen when the ability is put on the stack, not when it triggers. */
+	targets: TargetDef[];
 	effects: EffectDef[];
 }
 
@@ -1781,7 +1815,11 @@ export interface TriggerDef {
 
 export type Keyword = "indestructible" | "lifelink" | "flying" | "vigilance";
 
-/** Importer-neutral selectors; runtime targeting currently supports creature type only. */
+/**
+ * Object restrictions shared by targeting and by imported continuous effects.
+ * Every case is evaluated against an object's *current* characteristics, so a
+ * restriction that stopped matching is what makes a target illegal later.
+ */
 export type TargetSelectorDef =
 	| { kind: "self" }
 	| { kind: "type"; type: CardType }
@@ -1792,7 +1830,7 @@ export type TargetSelectorDef =
 	| { kind: "all" | "any"; selectors: TargetSelectorDef[] }
 	| { kind: "not"; selector: TargetSelectorDef };
 
-/** Declarative targeting; runtime casting supports one required target. */
+/** Declarative targeting; the runtime supports one required target slot. */
 export interface TargetDef {
 	id: string;
 	min: number;
@@ -1801,6 +1839,56 @@ export interface TargetDef {
 		| { kind: "player" }
 		| { kind: "permanent"; selector: TargetSelectorDef }
 		| { kind: "any-target" };
+}
+
+/**
+ * What a target restriction is read relative to. `controller` is the
+ * controller of the spell or ability, which is what "you" means in a
+ * restriction — never the source's current controller, which a control-change
+ * effect can move independently (CR 109.5).
+ */
+export interface TargetContext {
+	controller: PlayerId;
+	source: ObjectId;
+}
+
+/**
+ * Whether one object satisfies a selector. `source` carries the id the `self`
+ * case compares against, or null where there is no source object.
+ */
+export function selectorMatches(
+	selector: TargetSelectorDef,
+	object: PermanentView,
+	source: { controller: PlayerId; id: ObjectId | null },
+): boolean {
+	switch (selector.kind) {
+		case "self":
+			return source.id !== null && object.id === source.id;
+		case "type":
+			return object.types.includes(selector.type);
+		case "supertype":
+			return object.supertypes.includes(selector.supertype);
+		case "subtype":
+			return object.subtypes.includes(selector.subtype);
+		case "color":
+			return object.colors.includes(selector.color);
+		case "controller":
+			// An object with no controller matches neither "you" nor "opponent".
+			if (object.controller === null) return false;
+			return selector.player === "you"
+				? object.controller === source.controller
+				: object.controller !== source.controller;
+		case "all":
+			return selector.selectors.every((part) =>
+				selectorMatches(part, object, source),
+			);
+		case "any":
+			return selector.selectors.some((part) =>
+				selectorMatches(part, object, source),
+			);
+		case "not":
+			return !selectorMatches(selector.selector, object, source);
+	}
 }
 
 export interface SpellAbilityDef {
@@ -3651,7 +3739,7 @@ function moveObject(
 		counters?: CounterBag;
 		copiableOverride?: CharacteristicsSnapshot;
 		toBottom?: boolean;
-		spellTargets?: SpellTargets;
+		spellTargets?: TargetBindings;
 	},
 ): ObjectId {
 	const old = maybeObject(state, id);
@@ -5149,7 +5237,10 @@ function resolveSpell(
 		definition,
 		`${characteristics.name} has no spell ability to resolve`,
 	);
-	const target = spellTargetDefinition(definition);
+	const target = requiredTargetDefinition(
+		definition.targets,
+		definition.effects,
+	);
 	assert(
 		entry.targets.length === (target ? 1 : 0),
 		"spell target binding count disagrees with its definition",
@@ -5160,7 +5251,11 @@ function resolveSpell(
 	// CR 608.2b: with one required target, an illegal target stops every effect.
 	const legal =
 		!target ||
-		(binding !== undefined && isLegalSpellTarget(read, target, binding.target));
+		(binding !== undefined &&
+			isLegalTarget(read, target, binding.target, {
+				controller: object.controller,
+				source: object.id,
+			}));
 	if (legal) {
 		/** Share a scope so facts can pass through the complete effect sequence. */
 		resolveEffects(
@@ -5234,7 +5329,7 @@ interface ResolutionSource {
 	controller: PlayerId;
 	source: ObjectId;
 	ability: TriggeredAbilityStackItem | ActivatedAbilityStackItem | null;
-	targets: SpellTargets;
+	targets: TargetBindings;
 }
 
 function resolveEffects(
@@ -5477,52 +5572,59 @@ export function planManaPayment(
 	return payment;
 }
 
-/** Validate the executable subset before a cast can spend mana. */
-function spellTargetDefinition(definition: SpellAbilityDef): TargetDef | null {
-	assert(
-		definition.targets.length <= 1,
-		"multiple target slots are not implemented",
-	);
-	const target = definition.targets[0] ?? null;
+/**
+ * The single required target slot a spell or ability declares, or null, after
+ * checking that its targets and instructions fall inside the executable
+ * subset. Every announcement path runs this before it can spend a cost, so an
+ * unsupported definition can never leave a half-paid cast behind.
+ */
+function requiredTargetDefinition(
+	targets: TargetDef[],
+	effects: EffectDef[],
+): TargetDef | null {
+	assert(targets.length <= 1, "multiple target slots are not implemented");
+	const target = targets[0] ?? null;
 	if (target) {
 		assert(
 			target.min === 1 && target.max === 1,
 			"only one required target is implemented",
 		);
-		if (target.legal.kind === "permanent") {
-			assert(
-				target.legal.selector.kind === "type" &&
-					target.legal.selector.type === "creature",
-				"target restrictions beyond creature type are not implemented",
-			);
-		}
 	}
-	for (const effect of definition.effects) {
+	const check = (effect: EffectDef): void => {
+		if (effect.kind === "may") {
+			for (const inner of effect.effects) check(inner);
+			return;
+		}
 		assert(
 			effect.kind !== "modify-pt",
 			"temporary P/T effects are not implemented",
 		);
-		if (effect.kind === "damage" || effect.kind === "destroy") {
+		if (effect.kind !== "damage" && effect.kind !== "destroy") return;
+		assert(
+			target !== null && effect.targetSlot === target.id,
+			"effect must reference its ability's target slot",
+		);
+		if (effect.kind === "destroy") {
 			assert(
-				target && effect.target === target.id,
-				"spell effect must reference its target slot",
+				target.legal.kind === "permanent",
+				"destroy requires a permanent target",
 			);
-			if (effect.kind === "destroy") {
-				assert(
-					target.legal.kind === "permanent",
-					"destroy requires a permanent target",
-				);
-			}
 		}
-	}
+	};
+	for (const effect of effects) check(effect);
 	return target;
 }
 
-/** Both announcement and resolution use current characteristics. */
-function isLegalSpellTarget(
+/**
+ * CR 115.4 / CR 608.2b: announcement and resolution ask exactly the same
+ * question, of current characteristics. `ctx` supplies what a restriction
+ * reads relative to the spell or ability itself.
+ */
+function isLegalTarget(
 	read: ReadContext,
 	definition: TargetDef,
 	target: EntityRef,
+	ctx: TargetContext,
 ): boolean {
 	if (target.type === "player") {
 		return (
@@ -5533,23 +5635,28 @@ function isLegalSpellTarget(
 		);
 	}
 	if (definition.legal.kind === "player") return false;
-	const object = read.view.objects.get(target.id);
-	if (object?.kind !== "permanent") return false;
-	const types = object.currentCharacteristics.types;
+	const snapshot = read.view.objects.get(target.id);
+	// CR 608.2b: a target that left the zone it was targeted in is illegal, and
+	// the object that replaced it is a different object with a different id.
+	if (snapshot?.kind !== "permanent") return false;
+	const object = flattenSnapshot(snapshot);
 	if (definition.legal.kind === "any-target") {
-		return types.includes("creature") || types.includes("planeswalker");
+		// CR 115.4: "any target" is a creature, a planeswalker, a battle, or a
+		// player; the engine has no battles.
+		return (
+			object.types.includes("creature") || object.types.includes("planeswalker")
+		);
 	}
-	assert(
-		definition.legal.selector.kind === "type" &&
-			definition.legal.selector.type === "creature",
-		"target restrictions beyond creature type are not implemented",
-	);
-	return types.includes("creature");
+	return selectorMatches(definition.legal.selector, object, {
+		controller: ctx.controller,
+		id: ctx.source,
+	});
 }
 
-function legalSpellTargets(
+function legalTargets(
 	read: ReadContext,
 	definition: TargetDef,
+	ctx: TargetContext,
 ): EntityRef[] {
 	const candidates: EntityRef[] = [
 		{ type: "player", player: 0 },
@@ -5559,7 +5666,7 @@ function legalSpellTargets(
 		),
 	];
 	return candidates.filter((target) =>
-		isLegalSpellTarget(read, definition, target),
+		isLegalTarget(read, definition, target, ctx),
 	);
 }
 
@@ -5934,7 +6041,7 @@ function castSpellIn(
 	}
 
 	const definition = card(object.cardId).spell;
-	let targets: SpellTargets = [];
+	let targets: TargetBindings = [];
 	if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
 		assertDefined(definition, `${pv.name} has no spell definition`);
 		const target = spellTargetDefinition(definition);
