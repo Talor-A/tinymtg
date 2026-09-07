@@ -7045,11 +7045,19 @@ export function gameOver(state: GameState): boolean {
 	return state.players.some((p) => p.lost || p.won);
 }
 
-export function winner(state: GameState): PlayerId | null {
-	const w = state.players.find((p) => p.won);
-	if (w) return w.id;
-	const losers = state.players.filter((p) => p.lost);
-	if (losers.length === 1)
-		return state.players.find((p) => !p.lost)?.id ?? null;
+export function winner(state: GameState): PlayerId | "draw" | null {
+	if (state.players[0].won && state.players[1].won) {
+		throw new Error("two players cannot win the game at the same time.");
+	}
+	if (state.players[0].lost && state.players[1].lost) return "draw";
+
+	const won = state.players.filter((p) => p.won);
+
+	if (won[0]) return won[0].id;
+
+	const lost = state.players.filter((p) => p.lost);
+
+	if (lost[0]) return (1 - lost[0].id) as PlayerId;
+	// game still in progress.
 	return null;
 }
