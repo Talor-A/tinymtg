@@ -529,10 +529,12 @@ async function main(): Promise<void> {
 
 		console.log();
 		const w = winner(state);
-		if (w !== null) {
+		if (w === "draw") {
+			console.log(bold("  Draw."));
+		} else if (w !== null) {
 			console.log(bold(PLAYER_COLOR[w](`  ★ ${PLAYER_NAME[w]} wins! ★`)));
 		} else {
-			console.log(bold("  Draw."));
+			throw new Error("game not terminal");
 		}
 		printBoard(state);
 	}
