@@ -4,6 +4,7 @@ import "../cards.ts"; // side effect: registers the card database
 import type {
 	SyncAgent as Agent,
 	ChoiceRequest,
+	GameEvent,
 	GameState,
 	ObjectId,
 	PlayerId,
@@ -43,6 +44,11 @@ describe("triggered abilities", () => {
 			triggerId: abilityId("triggered", "test-trigger", 0),
 			controller,
 			text,
+			triggeringEvent: {
+				kind: "gain life",
+				player: controller,
+				amount: 1,
+			},
 			targetDefinitions: [],
 			effects: [],
 			sourceLastKnown: null,
@@ -165,22 +171,20 @@ describe("triggered abilities", () => {
 		beginFirstTurn(state, agents);
 		const cleric = spawnCard(state, "arashin-cleric", ALICE, "hand");
 
-		perform(
-			state,
-			{
-				kind: "change zone",
-				object: cleric.id,
-				from: "hand",
-				to: "battlefield",
-				cause: "resolve",
-				toController: ALICE,
-			},
-			agents,
-		);
+		const triggeringEvent = {
+			kind: "change zone",
+			object: cleric.id,
+			from: "hand",
+			to: "battlefield",
+			cause: "resolve",
+			toController: ALICE,
+		} satisfies GameEvent;
+		perform(state, triggeringEvent, agents);
 
 		expect(state.players[ALICE].life, "trigger has not resolved yet").toBe(20);
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(state.pendingTriggers[0]?.source).not.toBe(cleric.id);
+		expect(state.pendingTriggers[0]?.triggeringEvent).toBe(triggeringEvent);
 
 		settlePriority(state, agents);
 		expect(state.players[ALICE].life).toBe(23);

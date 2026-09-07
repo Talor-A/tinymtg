@@ -1302,6 +1302,8 @@ export interface PendingTrigger {
 	triggerId: TriggeredAbilityId;
 	controller: PlayerId;
 	text: string;
+	/** The final event occurrence that caused this trigger to fire. */
+	readonly triggeringEvent: DeepReadOnly<GameEvent>;
 	/** Copied off the trigger definition, which outlives it. */
 	targetDefinitions: TargetDef[];
 	effects: EffectDef[];
@@ -1371,6 +1373,7 @@ interface AbilityStackItemBase {
 export interface TriggeredAbilityStackItem extends AbilityStackItemBase {
 	kind: "triggered ability";
 	triggerId: TriggeredAbilityId;
+	readonly triggeringEvent: DeepReadOnly<GameEvent>;
 }
 
 export interface ActivatedAbilityStackItem extends AbilityStackItemBase {
@@ -4357,6 +4360,7 @@ function enqueueTrigger(
 	source: GameObject,
 	triggerId: TriggeredAbilityId,
 	trigger: TriggeredAbilityDefinition,
+	triggeringEvent: DeepReadOnly<GameEvent>,
 ): void {
 	const controller = controllerOf(source);
 	assertDefined(controller);
@@ -4367,6 +4371,7 @@ function enqueueTrigger(
 		triggerId,
 		controller,
 		text: trigger.text,
+		triggeringEvent,
 		targetDefinitions: structuredClone(trigger.targets),
 		effects: structuredClone(trigger.effects),
 		sourceLastKnown: null,
@@ -4550,7 +4555,7 @@ function detectTriggers(
 					changed,
 				)
 			) {
-				enqueueTrigger(state, abilitySource, triggerId, trigger);
+				enqueueTrigger(state, abilitySource, triggerId, trigger, ev);
 			}
 		}
 	}

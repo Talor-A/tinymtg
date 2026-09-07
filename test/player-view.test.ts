@@ -5,6 +5,7 @@ import {
 	abilityId,
 	buildPlayerView,
 	newGame,
+	type PhaseId,
 	type PlayerBattlefieldObjectView,
 	type PlayerExileObjectView,
 	type PlayerGraveyardObjectView,
@@ -13,8 +14,10 @@ import {
 	type PlayerStackView,
 	perform,
 	type StackItemId,
+	type StepId,
 	spawnCard,
 	spawnPermanent,
+	type TurnId,
 } from "../index.ts";
 
 function assertExactPlayerViewTypes(
@@ -119,6 +122,14 @@ describe("player views", () => {
 			source: mine.id,
 			triggerId: abilityId("triggered", "ajanis-mantra", 0),
 			controller: 0,
+			triggeringEvent: {
+				kind: "begin step",
+				turnId: 0 as TurnId,
+				phaseId: 0 as PhaseId,
+				stepId: 0 as StepId,
+				player: 0,
+				step: "upkeep",
+			},
 			targetDefinitions: [],
 			targets: [],
 			sourceLastKnown: null,
@@ -213,6 +224,14 @@ describe("player views", () => {
 			source: source.id,
 			triggerId: abilityId("triggered", "ajanis-mantra", 0),
 			controller: 0,
+			triggeringEvent: {
+				kind: "begin step",
+				turnId: 0 as TurnId,
+				phaseId: 0 as PhaseId,
+				stepId: 0 as StepId,
+				player: 0,
+				step: "upkeep",
+			},
 			targetDefinitions: [],
 			targets: [],
 			sourceLastKnown: null,
