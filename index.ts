@@ -4283,12 +4283,17 @@ function enqueueTrigger(
 ): void {
 	const controller = controllerOf(source);
 	assertDefined(controller);
+	// The definition is copied rather than referenced: the pending trigger and
+	// the stack item built from it outlive the source, and must not be able to
+	// write back into the registry's card definitions.
 	state.pendingTriggers.push({
 		source: source.id,
 		triggerId,
 		controller,
 		text: trigger.text,
-		effects: trigger.effects,
+		targetDefinitions: structuredClone(trigger.targets),
+		effects: structuredClone(trigger.effects),
+		sourceLastKnown: null,
 	});
 	log(
 		state,
@@ -4772,6 +4777,7 @@ function executeIn(
 		}
 
 		case "change zone": {
+			recordSourceDeparture(state, before, ev.object, ev.from);
 			const newId = moveObject(state, ev.object, ev.from, ev.to, {
 				toController: ev.toController,
 				tapped: ev.entersTapped,
@@ -5142,12 +5148,45 @@ function putPendingTriggersOnStack(
 		ordered.push(...choices.chooseTriggerOrder(state, controller, controlled));
 	}
 	for (const pending of ordered) {
+		// CR 603.3d: targets are chosen now, as the ability is put on the stack,
+		// not when the event that triggered it happened. Each item is finished
+		// before the next one starts, so an earlier trigger's targets are visible
+		// to a later trigger's choice.
+		const target = requiredTargetDefinition(
+			pending.targetDefinitions,
+			pending.effects,
+		);
+		let targets: TargetBindings = [];
+		if (target) {
+			const ctx = { controller: pending.controller, source: pending.source };
+			const candidates = legalTargets(createReadContext(state), target, ctx);
+			if (candidates.length === 0) {
+				// CR 603.3d: with no legal choice the ability is simply removed. It
+				// never waits on the stack for one to appear.
+				log(state, `  [illegal target] ${pending.text} is removed`);
+				continue;
+			}
+			const chosen = choices.chooseTarget(
+				state,
+				pending.controller,
+				{ announcing: "triggered ability", source: pending.source },
+				target,
+				candidates,
+			);
+			assert(
+				isLegalTarget(createReadContext(state), target, chosen, ctx),
+				"chooseTarget returned a target outside its own candidate list",
+			);
+			targets = [{ slot: target.id, target: chosen }];
+		}
 		const item: TriggeredAbilityStackItem = {
 			id: state.nextStackItemId++ as StackItemId,
 			kind: "triggered ability",
 			...pending,
+			targets,
 		};
 		state.stack.push(item);
+		state.revision++;
 		log(state, `  [stack] ${item.text}`);
 	}
 	state.pendingTriggers.length = 0;
@@ -5290,33 +5329,60 @@ function resolveSpell(
 }
 
 /**
- * CR 608.2m for an ability: unlike a spell it moves to no zone, it simply
- * ceases to exist. Nothing else will take it off the stack, so it is popped
- * here before its effects run.
+ * CR 608.2n for an ability: unlike a spell it moves to no zone, it simply
+ * ceases to exist, and only as the *final* part of its resolution. Staying on
+ * the stack throughout is what lets an ability that removes its own source
+ * still receive that departure's last known information (CR 113.7a).
  */
 function resolveStackAbility(
 	state: GameState,
 	choices: AnyChoiceController,
 	entry: TriggeredAbilityStackItem | ActivatedAbilityStackItem,
 ): void {
-	const removed = state.stack.pop();
-	assert(removed === entry, "the stack changed while resolving its top entry");
-
 	log(state, `  [resolve] ${entry.text}`);
 
-	/** Share a scope so facts can pass through the complete effect sequence. */
-	resolveEffects(
-		state,
-		choices,
-		{
-			controller: entry.controller,
-			source: entry.source,
-			ability: entry,
-			targets: [],
-		},
-		entry.effects,
-		newScope(),
+	const target = entry.targetDefinitions[0] ?? null;
+	assert(
+		entry.targetDefinitions.length <= 1,
+		"multiple target slots are not implemented",
 	);
+	assert(
+		entry.targets.length === (target ? 1 : 0),
+		"ability target binding count disagrees with its captured definition",
+	);
+	const binding = entry.targets[0];
+	if (target)
+		assert(binding?.slot === target.id, "ability has the wrong target slot");
+	// CR 608.2b: with one required target, an illegal target stops every effect,
+	// including the untargeted parts of the same ability.
+	const legal =
+		!target ||
+		(binding !== undefined &&
+			isLegalTarget(createReadContext(state), target, binding.target, {
+				controller: entry.controller,
+				source: entry.source,
+			}));
+	if (legal) {
+		/** Share a scope so facts can pass through the complete effect sequence. */
+		resolveEffects(
+			state,
+			choices,
+			{
+				controller: entry.controller,
+				source: entry.source,
+				ability: entry,
+				targets: entry.targets,
+			},
+			entry.effects,
+			newScope(),
+		);
+	} else {
+		log(state, "  [illegal target] ability does not resolve");
+	}
+
+	const removed = state.stack.pop();
+	assert(removed === entry, "the stack changed while resolving its top entry");
+	state.revision++;
 }
 
 /**
@@ -5330,6 +5396,40 @@ interface ResolutionSource {
 	source: ObjectId;
 	ability: TriggeredAbilityStackItem | ActivatedAbilityStackItem | null;
 	targets: TargetBindings;
+}
+
+/**
+ * CR 608.2h: an effect that reads its own source uses the source's current
+ * information while the source is still where the effect expects it, and its
+ * last known information once it is not. The ability's own controller is a
+ * separate thing and is never taken from here — a control-change effect moves
+ * a permanent without moving abilities already on the stack (CR 109.5).
+ */
+function sourceInformation(
+	state: GameState,
+	item: ResolutionSource,
+): SourceLastKnown {
+	const object = maybeObject(state, item.source);
+	if (object && (object.kind === "permanent" || object.kind === "spell")) {
+		const snapshot = readObject(createReadContext(state), item.source);
+		assert(
+			snapshot.kind === "permanent" || snapshot.kind === "spell",
+			"source object read back as another kind",
+		);
+		const characteristics = snapshot.currentCharacteristics;
+		return {
+			name: characteristics.name,
+			controller: object.controller,
+			colors: [...characteristics.colors],
+			lifelink: characteristics.keywords.includes("lifelink"),
+		};
+	}
+	const lastKnown = item.ability?.sourceLastKnown ?? null;
+	assertDefined(
+		lastKnown,
+		`no current or last known information for source ${item.source}`,
+	);
+	return lastKnown;
 }
 
 function resolveEffects(
@@ -5357,26 +5457,35 @@ function resolveEffects(
 				resolveEffects(state, choices, item, effect.effects, scope);
 			continue;
 		}
-		let bound = effect;
-		if (
-			(effect.kind === "damage" || effect.kind === "destroy") &&
-			typeof effect.target === "string"
-		) {
+		let bound: EntityRef | null = null;
+		if (effect.kind === "damage" || effect.kind === "destroy") {
 			const binding = item.targets[0];
 			assert(
-				binding?.slot === effect.target,
+				binding?.slot === effect.targetSlot,
 				"effect has no matching target binding",
 			);
-			bound = { ...effect, target: binding.target };
+			bound = binding.target;
 		}
-		performIn(state, effectToEvent(state, item, bound), choices, scope, 0);
+		performIn(
+			state,
+			effectToEvent(state, item, effect, bound),
+			choices,
+			scope,
+			0,
+		);
 	}
 }
 
+/**
+ * Turns one definition-time instruction into the concrete event it performs.
+ * `bound` is the target chosen for the effect's slot, which only the targeting
+ * effects have.
+ */
 function effectToEvent(
 	state: GameState,
-	item: Pick<TriggeredAbilityStackItem, "controller" | "source">,
+	item: ResolutionSource,
 	effect: Exclude<EffectDef, { kind: "may" }>,
+	bound: EntityRef | null,
 ): GameEvent {
 	const player = (relative: "you" | "opponent") =>
 		relative === "you" ? item.controller : ((1 - item.controller) as PlayerId);
@@ -5417,34 +5526,32 @@ function effectToEvent(
 			throw new Error("unexpected discard effect kind");
 		}
 		case "damage": {
-			assert(typeof effect.target !== "string", "damage target is unbound");
-			const source = readObject(createReadContext(state), item.source);
-			assert(
-				source.kind === "spell" || source.kind === "permanent",
-				"damage source has no characteristics",
-			);
-			const characteristics = source.currentCharacteristics;
+			assertDefined(bound, "damage target is unbound");
+			// CR 119.3 / CR 702.15b: the life a lifelink source gains goes to that
+			// *source's* controller, which a control-change effect can move away
+			// from the controller of the ability that is dealing the damage.
+			const source = sourceInformation(state, item);
 			return {
 				kind: "damage",
 				source: item.source,
-				sourceController: item.controller,
-				sourceColors: [...characteristics.colors],
-				target: effect.target,
+				sourceController: source.controller,
+				sourceColors: source.colors,
+				target: bound,
 				amount: effect.amount,
 				combat: false,
 				deathtouch: false,
-				lifelink: characteristics.keywords.includes("lifelink"),
+				lifelink: source.lifelink,
 				unpreventable: false,
 			};
 		}
 		case "destroy":
 			assert(
-				typeof effect.target !== "string" && effect.target.type === "permanent",
+				bound !== null && bound.type === "permanent",
 				"destroy requires a bound permanent target",
 			);
 			return {
 				kind: "destroy",
-				object: effect.target.id,
+				object: bound.id,
 				source: item.source,
 				noRegen: false,
 			};
@@ -5703,8 +5810,16 @@ function canCast(
 	const definition = card(object.cardId).spell;
 	if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
 		assertDefined(definition, `${pv.name} has no spell definition`);
-		const target = spellTargetDefinition(definition);
-		if (target && legalSpellTargets(read, target).length === 0) return false;
+		const target = requiredTargetDefinition(
+			definition.targets,
+			definition.effects,
+		);
+		if (
+			target &&
+			legalTargets(read, target, { controller: player, source: object.id })
+				.length === 0
+		)
+			return false;
 	} else {
 		assert(
 			!definition?.targets.length,
@@ -5769,12 +5884,25 @@ function activatedAbilityActions(
 		for (const ability of snapshot.currentCharacteristics.abilities.activated) {
 			const definition = getAbilityDefinition("activated", ability);
 			if (
-				definition.costs.length === 1 &&
-				definition.costs[0]?.kind === "tap-self" &&
-				(definition.kind === "mana" || definition.targets.length === 0)
-			) {
-				actions.push({ kind: "activate ability", source: id, ability });
+				definition.costs.length !== 1 ||
+				definition.costs[0]?.kind !== "tap-self"
+			)
+				continue;
+			if (definition.kind === "activated") {
+				// CR 601.2c via CR 602.2b: an ability with a required target cannot
+				// be activated at all unless a legal target exists for it.
+				const target = requiredTargetDefinition(
+					definition.targets,
+					definition.effects,
+				);
+				if (
+					target &&
+					legalTargets(read, target, { controller: player, source: id })
+						.length === 0
+				)
+					continue;
 			}
+			actions.push({ kind: "activate ability", source: id, ability });
 		}
 		return actions;
 	});
@@ -5870,19 +5998,18 @@ function activateAbilityIn(
 		);
 	}
 	const ability = getAbilityDefinition("activated", action.ability);
-	if (ability.kind === "activated") {
-		assert(
-			ability.targets.length === 0,
-			"targeted activated abilities are not implemented",
-		);
-	}
 	if (ability.costs.length !== 1 || ability.costs[0]?.kind !== "tap-self") {
 		throw new IllegalAbilityActivationError(
 			`ability ${action.ability} does not have the supported tap-self cost`,
 		);
 	}
 
-	const context = { source: object.id, controller: priorityPlayer };
+	const context: ResolutionSource = {
+		source: object.id,
+		controller: priorityPlayer,
+		ability: null,
+		targets: [],
+	};
 	const events =
 		ability.kind === "mana"
 			? ability.effects.map((effect) => {
@@ -5906,15 +6033,19 @@ function activateAbilityIn(
 							`mana ability ${action.ability} produces no mana`,
 						);
 					}
-					return effectToEvent(state, context, effect);
+					return effectToEvent(state, context, effect, null);
 				})
 			: [];
+	let targets: TargetBindings = [];
+	let targetDefinitions: TargetDef[] = [];
 	if (ability.kind === "activated") {
 		for (const effect of ability.effects) {
 			if (
 				effect.kind === "draw" ||
 				effect.kind === "gain-life" ||
-				effect.kind === "lose-life"
+				effect.kind === "lose-life" ||
+				effect.kind === "damage" ||
+				effect.kind === "destroy"
 			) {
 				continue;
 			}
@@ -5931,6 +6062,37 @@ function activateAbilityIn(
 			throw new IllegalAbilityActivationError(
 				`effect ${effect.kind} is not supported for activated abilities`,
 			);
+		}
+
+		// CR 601.2c and CR 601.2h in order: the target is chosen, and rejected if
+		// illegal, strictly before the tap cost below is paid. Nothing above this
+		// point has mutated the game, so a refused activation leaves no trace.
+		targetDefinitions = structuredClone(ability.targets);
+		const target = requiredTargetDefinition(
+			targetDefinitions,
+			ability.effects,
+		);
+		if (target) {
+			const ctx = { controller: priorityPlayer, source: object.id };
+			const candidates = legalTargets(createReadContext(state), target, ctx);
+			if (candidates.length === 0) {
+				throw new IllegalAbilityActivationError(
+					`ability ${action.ability} has no legal target`,
+				);
+			}
+			const chosen = choices.chooseTarget(
+				state,
+				priorityPlayer,
+				{ announcing: "activated ability", source: object.id },
+				target,
+				candidates,
+			);
+			if (!isLegalTarget(createReadContext(state), target, chosen, ctx)) {
+				throw new IllegalAbilityActivationError(
+					`ability ${action.ability}'s chosen target is no longer legal`,
+				);
+			}
+			targets = [{ slot: target.id, target: chosen }];
 		}
 	}
 	const scope = newScope();
@@ -5964,7 +6126,10 @@ function activateAbilityIn(
 			abilityId: action.ability,
 			controller: priorityPlayer,
 			text: ability.text,
+			targetDefinitions,
+			targets,
 			effects: structuredClone(ability.effects),
+			sourceLastKnown: null,
 		};
 		state.stack.push(item);
 		state.revision++;
@@ -6044,19 +6209,23 @@ function castSpellIn(
 	let targets: TargetBindings = [];
 	if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
 		assertDefined(definition, `${pv.name} has no spell definition`);
-		const target = spellTargetDefinition(definition);
+		const target = requiredTargetDefinition(
+			definition.targets,
+			definition.effects,
+		);
 		if (target) {
-			const candidates = legalSpellTargets(read, target);
+			const ctx = { controller: priorityPlayer, source: action.card };
+			const candidates = legalTargets(read, target, ctx);
 			if (candidates.length === 0)
 				throw new IllegalCastError(`${pv.name} has no legal target`);
 			const chosen = choices.chooseTarget(
 				state,
 				priorityPlayer,
-				action.card,
+				{ announcing: "spell", source: action.card },
 				target,
 				candidates,
 			);
-			if (!isLegalSpellTarget(createReadContext(state), target, chosen)) {
+			if (!isLegalTarget(createReadContext(state), target, chosen, ctx)) {
 				throw new IllegalCastError(
 					`${pv.name}'s chosen target is no longer legal`,
 				);
