@@ -4,7 +4,7 @@ import "../cards.ts";
 import {
 	type ActivatedAbilityDef,
 	type Agent,
-	type AnyActivatedAbilityDef,
+	type AnyActivatedAbilityDefinition,
 	abilityId,
 	addFloating,
 	advanceWithReplay,
@@ -328,7 +328,7 @@ registerCard({
 });
 
 function assertActivated(
-	definition: AnyActivatedAbilityDef,
+	definition: AnyActivatedAbilityDefinition,
 ): asserts definition is ActivatedAbilityDef {
 	if (definition.kind !== "activated")
 		throw new Error("expected an activation");

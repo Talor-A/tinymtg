@@ -3,12 +3,12 @@ import {
 	etbPreview,
 	type ObjectId,
 	type PlayerId,
-	type ReplacementDef,
+	type ReplacementEffectDefinition,
 } from ".";
 
 type EffectFactory = (
 	params: Record<string, number | string>,
-) => ReplacementDef;
+) => ReplacementEffectDefinition;
 const gatherSpecimens: EffectFactory = (params) => {
 	const you = params.you as PlayerId;
 	return {
@@ -65,7 +65,9 @@ const preventNextDamage: EffectFactory = (params) => {
 		},
 	};
 };
-const prismaticStrands: EffectFactory = (params): ReplacementDef => {
+const prismaticStrands: EffectFactory = (
+	params,
+): ReplacementEffectDefinition => {
 	const color = params.color as Color;
 	return {
 		label: `strands:${color}`,
@@ -78,7 +80,9 @@ const prismaticStrands: EffectFactory = (params): ReplacementDef => {
 	};
 };
 
-const regenerationShield: EffectFactory = (params): ReplacementDef => {
+const regenerationShield: EffectFactory = (
+	params,
+): ReplacementEffectDefinition => {
 	const target = params.target as ObjectId;
 	return {
 		label: `regen:${target}`,

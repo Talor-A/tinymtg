@@ -1105,7 +1105,7 @@ function buildFilteredGameView(
 	const abilities: Partial<
 		Record<
 			ContinuousEffectLayer,
-			[effect: ContinuousEffect, source: DeepReadOnly<GameObject>][]
+			[effect: StaticAbilityDefinition, source: DeepReadOnly<GameObject>][]
 		>
 	> = {};
 
@@ -1634,7 +1634,7 @@ function functionsHere(
 	return scopes.includes(zone);
 }
 
-export interface ReplacementDef {
+export interface ReplacementEffectDefinition {
 	/** Stable label used to identify this effect on its source. */
 	label: string;
 	text: string;
@@ -1660,7 +1660,7 @@ export interface ReplacementDef {
 /** A ReplacementDef bound to a concrete source. This is what the loop sees. */
 export interface BoundReplacement {
 	id: EffectId;
-	def: ReplacementDef;
+	def: ReplacementEffectDefinition;
 	source: DeepReadOnly<GameObject> | null;
 	controller: PlayerId;
 	data: Record<string, number>;
@@ -1718,7 +1718,7 @@ export interface ProhibitionDef {
 }
 
 /**
- * @see {ReplacementDef}.
+ * @see {ReplacementEffectDefinition}.
  */
 export interface BoundProhibition {
 	id: EffectId;
@@ -1875,7 +1875,7 @@ type TriggerCondition =
 	| ZoneChangeTriggerCondition
 	| TapTriggerCondition;
 
-export interface TriggerDef {
+export interface TriggeredAbilityDefinition {
 	id: string;
 	text: string;
 	condition: TriggerCondition;
@@ -1997,7 +1997,9 @@ export interface ManaAbilityDef extends ActivatedAbilityDefBase {
 }
 
 /** Every ability definition possessed through an activated-ability reference. */
-export type AnyActivatedAbilityDef = ActivatedAbilityDef | ManaAbilityDef;
+export type AnyActivatedAbilityDefinition =
+	| ActivatedAbilityDef
+	| ManaAbilityDef;
 
 export type CardDefManaCost =
 	| {
@@ -2044,10 +2046,10 @@ export type CardDefManaCost =
  * actually has is {@link CardDef.printedAbilities}.
  */
 export interface AbilityDefinitions {
-	static: ContinuousEffect[];
-	activated: AnyActivatedAbilityDef[];
-	triggered: TriggerDef[];
-	replacement: ReplacementDef[];
+	static: StaticAbilityDefinition[];
+	activated: AnyActivatedAbilityDefinition[];
+	triggered: TriggeredAbilityDefinition[];
+	replacement: ReplacementEffectDefinition[];
 	prohibition: ProhibitionDef[];
 }
 
@@ -2089,10 +2091,10 @@ export interface CardDef extends CardDefBase {
  * the card's definitions; by default the card prints all of them.
  */
 export interface CardDefInput extends CardDefBase {
-	statics?: ContinuousEffect[];
-	activatedAbilities?: AnyActivatedAbilityDef[];
-	triggers?: TriggerDef[];
-	replacements?: ReplacementDef[];
+	statics?: StaticAbilityDefinition[];
+	activatedAbilities?: AnyActivatedAbilityDefinition[];
+	triggers?: TriggeredAbilityDefinition[];
+	replacements?: ReplacementEffectDefinition[];
 	prohibitions?: ProhibitionDef[];
 	/**
 	 * Which definition *indices* the card actually prints, per kind. Omit a kind
@@ -2139,8 +2141,10 @@ function printedRefsFor(
  * They function from anywhere, because the object is still in the zone it is
  * leaving when they apply, and they are self-scoped to the object entering.
  */
-function printedEntryReplacements(def: CardDefBase): ReplacementDef[] {
-	const out: ReplacementDef[] = [];
+function printedEntryReplacements(
+	def: CardDefBase,
+): ReplacementEffectDefinition[] {
+	const out: ReplacementEffectDefinition[] = [];
 	const entersSelf = (ev: GameEvent, ctx: EffectCtx): boolean =>
 		ev.kind === "change zone" &&
 		ev.to === "battlefield" &&
@@ -2827,7 +2831,7 @@ export function name(state: ReadonlyGameState, id: ObjectId): string {
  * still require timestamp order unless their operations commute (CR 613.7);
  * absence of dependencies does not make arbitrary ordering correct.
  */
-export interface ContinuousEffect {
+export interface StaticAbilityDefinition {
 	text: string;
 	layer: ContinuousEffectLayer;
 	/**
@@ -2859,25 +2863,6 @@ export interface ContinuousEffect {
 	): void;
 }
 
-interface EvaluationContext {
-	state: GameState;
-}
-
-interface ContinuousEffectInstance {
-	id: EffectId;
-	source: ObjectId | null;
-	// timestamp: Timestamp;
-
-	parts: ContinuousEffectPart[];
-}
-
-interface ContinuousEffectPart {
-	layer: ContinuousEffectLayer;
-
-	appliesTo(subject: ObjectId, ctx: EvaluationContext): boolean;
-
-	apply(subject: ObjectId, ctx: EvaluationContext): void;
-}
 /**
  * 613. Interaction of Continuous Effects
  *  613.1. The values of an object's characteristics are determined by starting
@@ -3257,7 +3242,7 @@ const CHARACTERISTIC_CHANGING_LAYERS = [
  */
 function anyPossessedStatic(
 	state: ReadonlyGameState,
-	predicate: (effect: ContinuousEffect) => boolean,
+	predicate: (effect: StaticAbilityDefinition) => boolean,
 ): boolean {
 	for (const object of state.objects.values()) {
 		for (const id of baseCharacteristics(object).abilities.static) {
@@ -3286,7 +3271,7 @@ function viewName(view: GameView, id: ObjectId): string {
 function replacementsOf(
 	view: GameView,
 	object: DeepReadOnly<GameObject>,
-): { id: ReplacementAbilityId; def: ReplacementDef }[] {
+): { id: ReplacementAbilityId; def: ReplacementEffectDefinition }[] {
 	return abilityReferencesOf(view, object).replacement.map((id) => ({
 		id,
 		def: getAbilityDefinition("replacement", id),
@@ -4315,7 +4300,7 @@ function enqueueTrigger(
 	state: GameState,
 	source: GameObject,
 	triggerId: TriggeredAbilityId,
-	trigger: TriggerDef,
+	trigger: TriggeredAbilityDefinition,
 ): void {
 	const controller = controllerOf(source);
 	assertDefined(controller);

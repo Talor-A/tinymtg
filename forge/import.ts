@@ -31,23 +31,23 @@
  */
 
 import type {
-	AnyActivatedAbilityDef,
+	AnyActivatedAbilityDefinition,
 	CardDef,
 	CardDefInput,
 	CardType,
 	Color,
-	ContinuousEffect,
 	EffectDef,
 	GameEvent,
 	ManaCostType,
 	ManaPool,
 	ManaType,
-	ReplacementDef,
+	ReplacementEffectDefinition,
 	SpellAbilityDef,
+	StaticAbilityDefinition,
 	Supertype,
 	TargetDef,
 	TargetSelectorDef,
-	TriggerDef,
+	TriggeredAbilityDefinition,
 } from "../index.ts";
 import {
 	defineCard,
@@ -628,7 +628,7 @@ function lowerStatic(
 	record:
 		| ForgeAbilityRecord
 		| { params: ForgeParamList; source: { nodeId: string; line: number } },
-): ContinuousEffect | ImportIssue {
+): StaticAbilityDefinition | ImportIssue {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
 	const badParams = checkParams(
@@ -690,7 +690,7 @@ function selectorContainsSelf(selector: TargetSelectorDef): boolean {
 
 type ReplacementLowering =
 	| { kind: "self-entry" }
-	| { kind: "global"; def: ReplacementDef };
+	| { kind: "global"; def: ReplacementEffectDefinition };
 
 /**
  * Two canonical enters-tapped shapes share `Event$ Moved | ... | ReplaceWith$`:
@@ -810,7 +810,7 @@ function lowerReplacement(
 	if (!selector || selectorContainsSelf(selector))
 		return issue("UNSUPPORTED_TARGET", "unsupported ValidCard selector", where);
 	const description = getForgeParam(params, "Description") ?? "Enters tapped.";
-	const def: ReplacementDef = {
+	const def: ReplacementEffectDefinition = {
 		label: `import:${where.nodeId}`,
 		text: description,
 		layer: "other",
@@ -850,7 +850,7 @@ function lowerTrigger(
 	face: ForgeFaceAst,
 	record: { params: ForgeParamList; source: { nodeId: string; line: number } },
 	used: Set<string>,
-): TriggerDef | ImportIssue {
+): TriggeredAbilityDefinition | ImportIssue {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
 	const mode = getForgeParam(params, "Mode");
@@ -1397,14 +1397,14 @@ export function lowerForgeCard(
 		}
 	}
 
-	const statics: ContinuousEffect[] = [];
+	const statics: StaticAbilityDefinition[] = [];
 	for (const record of face.statics) {
 		const lowered = lowerStatic(record);
 		if ("code" in lowered) return reject(lowered);
 		statics.push(lowered);
 	}
 
-	const replacements: ReplacementDef[] = [];
+	const replacements: ReplacementEffectDefinition[] = [];
 	let entersTappedFromReplacement = false;
 	for (const record of face.replacements) {
 		const lowered = lowerReplacement(face, record);
@@ -1426,7 +1426,7 @@ export function lowerForgeCard(
 		if (replaceWith) usedSVarNames.add(replaceWith.toLowerCase());
 	}
 
-	const triggers: TriggerDef[] = [];
+	const triggers: TriggeredAbilityDefinition[] = [];
 	for (const record of face.triggers) {
 		const lowered = lowerTrigger(face, record, usedSVarNames);
 		if ("code" in lowered) return reject(lowered);
@@ -1434,7 +1434,7 @@ export function lowerForgeCard(
 	}
 
 	let spell: SpellAbilityDef | undefined;
-	const activatedAbilities: AnyActivatedAbilityDef[] = [];
+	const activatedAbilities: AnyActivatedAbilityDefinition[] = [];
 	let spellCount = 0;
 	let activatedCount = 0;
 	for (const record of face.abilities) {
