@@ -29,18 +29,7 @@
  * `Card.Self`-containing selector inside a global (`ActiveZones$`) replacement
  * (see `lowerReplacement`).
  */
-import type {
-	ForgeAbilityRecord,
-	ForgeCardAst,
-	ForgeFaceAst,
-	ForgeParamList,
-	ForgeSVarRecord,
-} from "./forge-ast.ts";
-import {
-	getForgeParam,
-	lookupForgeSVar,
-	parseForgeCardScript,
-} from "./forge-ast.ts";
+
 import type {
 	AnyActivatedAbilityDef,
 	CardDef,
@@ -59,13 +48,21 @@ import type {
 	TargetDef,
 	TargetSelectorDef,
 	TriggerDef,
-} from "./index.ts";
+} from "../index.ts";
 import {
 	defineCard,
 	etbPreview,
 	MANA_COST_TYPES,
 	selectorMatches,
-} from "./index.ts";
+} from "../index.ts";
+import type {
+	ForgeAbilityRecord,
+	ForgeCardAst,
+	ForgeFaceAst,
+	ForgeParamList,
+	ForgeSVarRecord,
+} from "./ast.ts";
+import { getForgeParam, lookupForgeSVar, parseForgeCardScript } from "./ast.ts";
 
 export interface ImportIssue {
 	code: string;

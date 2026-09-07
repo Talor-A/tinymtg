@@ -58,10 +58,7 @@ const COLORS: readonly Color[] = ["w", "u", "b", "r", "g"];
 
 /**
  * A kind of mana that can exist in a player's pool: the five colors plus
- * colorless. Every unit of mana is exactly one of these.
- *
- * `c` is colorless mana, an actual kind of mana — not "generic". Generic is a
- * property of a *cost*, so it lives in {@link ManaCostType} instead.
+ * colorless.
  */
 export type ManaType = Color | "c";
 
@@ -70,10 +67,6 @@ const MANA_TYPES: readonly ManaType[] = [...COLORS, "c"];
 /**
  * A kind of requirement a mana cost can contain: every {@link ManaType}, plus
  * generic.
- *
- * @example
- * kozilek, butcher of truth costs {10}{C}{C}: ten generic (`n: 10`, payable
- * with any mana) and two colorless (`c: 2`, payable only with colorless mana).
  */
 export type ManaCostType = ManaType | "n";
 

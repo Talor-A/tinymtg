@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ScriptedAgent } from "../agents.ts";
 import "../cards.ts"; // side effect: registers the baseline lands (forest) libraries rely on
-import { importForgeCard } from "../forge-import.ts";
 import type { GameState, ObjectId, PlayerId } from "../index.ts";
 import {
 	abilityId,
@@ -29,7 +28,8 @@ import {
 	registerCardFixture,
 	type SyncAgents,
 	setupMain,
-} from "./utils/engine-helpers.ts";
+} from "../test/utils/engine-helpers.ts";
+import { importForgeCard } from "./import.ts";
 
 const CORPUS_ROOT = join(import.meta.dir, "..", "cards", "cardsfolder");
 

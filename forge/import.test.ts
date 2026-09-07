@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseForgeCardScript } from "../forge-ast.ts";
-import { importForgeCard, lowerForgeCard } from "../forge-import.ts";
 import { name, newGame, spawnCard } from "../index.ts";
+import { parseForgeCardScript } from "./ast.ts";
+import { importForgeCard, lowerForgeCard } from "./import.ts";
 
 const CORPUS_ROOT = join(import.meta.dir, "..", "cards", "cardsfolder");
 

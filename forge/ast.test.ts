@@ -33,7 +33,7 @@ import {
 	parseForgeScalarSVarExpression,
 	printForgeCardScript,
 	projectForgeDocument,
-} from "../forge-ast.ts";
+} from "./ast.ts";
 
 /* ------------------------------------------------------------------------- */
 /* Helpers                                                                    */

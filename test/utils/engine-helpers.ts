@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ScriptedAgent } from "../../agents.ts";
-import { importForgeCard } from "../../forge-import.ts";
+import { importForgeCard } from "../../forge/import.ts";
 import type {
 	GameState,
 	ObjectId,
