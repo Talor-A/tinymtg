@@ -329,6 +329,51 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
+	test("ValidPlayer$ lowers the three unqualified words, and only those", () => {
+		const card = (validPlayer: string) =>
+			[
+				"Name:Watcher",
+				"ManaCost:1 W",
+				"Types:Enchantment",
+				`T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ ${validPlayer} | TriggerZones$ Battlefield | Execute$ Trig | TriggerDescription$ x`,
+				"SVar:Trig:DB$ GainLife | Defined$ You | LifeAmount$ 1",
+				"Oracle:",
+				"",
+			].join("\n");
+
+		// `Player.Opponent` is Forge's long spelling of `Opponent`.
+		const expected: Record<string, "you" | "opponent" | "either"> = {
+			You: "you",
+			Opponent: "opponent",
+			"Player.Opponent": "opponent",
+			Player: "either",
+		};
+		for (const [written, lowered] of Object.entries(expected)) {
+			const result = importText(card(written));
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			expect(result.card.abilityDefinitions.triggered[0]?.condition).toEqual({
+				kind: "begin step",
+				player: lowered,
+				step: "upkeep",
+			});
+		}
+
+		// Dotted forms restrict the player set by game state the engine has no
+		// relative-player equivalent for, so they must reject rather than widen.
+		for (const written of [
+			"Player.EnchantedController",
+			"You.lifeGE1",
+			"Player.IsRemembered",
+			"Player.Active",
+		]) {
+			const result = importText(card(written));
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+		}
+	});
+
 	test("Herald of Faith keeps Flying and its attack trigger", () => {
 		const result = importFixture("h/herald_of_faith");
 		if (!result.ok) throw new Error("expected ok");

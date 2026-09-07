@@ -1821,7 +1821,7 @@ export type EffectDef =
  * condition is met, the trigger's abilities are put on the stack.
  * ------------------------------------------------------------------ */
 
-type ValidPlayer = "you" | "opponent" | "either";
+export type ValidPlayer = "you" | "opponent" | "either";
 
 type TriggerSelector =
 	| "self"

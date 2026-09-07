@@ -48,6 +48,7 @@ import type {
 	TargetDef,
 	TargetSelectorDef,
 	TriggeredAbilityDefinition,
+	ValidPlayer,
 } from "../index.ts";
 import {
 	defineCard,
@@ -253,6 +254,32 @@ function combineSelectors(
  * restriction (zone, combat state, counters, subtype-as-modifier) rejects the
  * card rather than being approximated.
  */
+/**
+ * `ValidPlayer$` -> the engine's relative-player vocabulary.
+ *
+ * Forge writes the player set a trigger, replacement, or static watches
+ * relative to the source's controller. Only the three unqualified words map
+ * cleanly:
+ *
+ *     You       -> "you"        the controller alone
+ *     Opponent  -> "opponent"   any opponent of the controller
+ *     Player    -> "either"     any player, controller included
+ *
+ * `Player.Opponent` is Forge's long spelling of `Opponent` and means the same
+ * set. Every other dotted form (`Player.EnchantedController`,
+ * `You.lifeGE1`, `Player.IsRemembered`, ...) restricts the set by game state
+ * the engine has no relative-player equivalent for, so it returns null and the
+ * caller rejects the card rather than silently widening the set.
+ */
+function parseValidPlayer(value: string): ValidPlayer | null {
+	const trimmed = value.trim();
+	if (trimmed === "You") return "you";
+	if (trimmed === "Opponent" || trimmed === "Player.Opponent")
+		return "opponent";
+	if (trimmed === "Player") return "either";
+	return null;
+}
+
 function parseSelectorModifier(modifier: string): TargetSelectorDef | null {
 	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
@@ -1031,7 +1058,6 @@ function lowerTrigger(
 			if (badParams) return badParams;
 			if (
 				getForgeParam(params, "Phase") !== "Upkeep" ||
-				getForgeParam(params, "ValidPlayer") !== "You" ||
 				getForgeParam(params, "TriggerZones") !== "Battlefield"
 			)
 				return issue(
@@ -1039,10 +1065,24 @@ function lowerTrigger(
 					"unsupported Phase trigger shape",
 					where,
 				);
+			const rawPlayer = getForgeParam(params, "ValidPlayer");
+			if (rawPlayer === undefined)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"ValidPlayer$ is required",
+					where,
+				);
+			const player = parseValidPlayer(rawPlayer);
+			if (player === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					`unsupported ValidPlayer$ ${rawPlayer}`,
+					where,
+				);
 			return {
 				id: execute,
 				text,
-				condition: { kind: "begin step", player: "you", step: "upkeep" },
+				condition: { kind: "begin step", player, step: "upkeep" },
 				targets,
 				effects,
 			};
