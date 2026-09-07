@@ -1,7 +1,4 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { ScriptedAgent } from "../../agents.ts";
-import { importForgeCard } from "../../forge/import.ts";
 import type {
 	GameState,
 	ObjectId,
@@ -14,10 +11,11 @@ import {
 	gameOver,
 	isTurnStep,
 	newGame,
-	registerCard,
 	spawnCard,
 	turnLocation,
 } from "../../index.ts";
+
+export { registerCardFixture } from "../../corpus.ts";
 
 export const ALICE = 0 as PlayerId;
 export const BOB = 1 as PlayerId;
@@ -160,39 +158,4 @@ export function newInProgressGame(seed = 0) {
 		remainingPregameSteps: [],
 		nextId: 0,
 	};
-}
-
-/**
- * Registers a card straight from the Forge card database, through the strict
- * forge-import bridge.
- *
- * Tests are held to the real printed card rather than a hand-written stand-in,
- * so a card whose definition drifts fails the tests that depend on it. The id
- * is derived deterministically from the fixture's filename (never guessed
- * from its display name), matching the ids existing tests already use.
- */
-export function registerCardFixture(cardsfolderPath: string): void {
-	const text = readFileSync(
-		join(
-			import.meta.dir,
-			"..",
-			"..",
-			"cards",
-			"cardsfolder",
-			`${cardsfolderPath}.txt`,
-		),
-		"utf8",
-	);
-	const filename = cardsfolderPath.split("/").at(-1);
-	if (!filename)
-		throw new Error(`invalid card fixture path ${cardsfolderPath}`);
-	const id = filename.replaceAll("_", "-");
-	const result = importForgeCard(text, { id });
-	if (!result.ok)
-		throw new Error(
-			`unsupported card fixture ${cardsfolderPath}: ${result.diagnostics
-				.map((d) => `${d.code}: ${d.message}`)
-				.join("; ")}`,
-		);
-	registerCard(result.card);
 }

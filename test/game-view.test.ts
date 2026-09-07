@@ -252,7 +252,9 @@ describe("derived game views", () => {
 			"arashin-cleric:0",
 		]);
 		const id = abilityId("triggered", "arashin-cleric", 0);
-		expect(getAbilityDefinition("triggered", id).id).toBe("etb-life");
+		// `TrigGainLife` is the SVar name the Forge script gives the trigger;
+		// the importer carries it through as the definition id.
+		expect(getAbilityDefinition("triggered", id).id).toBe("TrigGainLife");
 	});
 
 	test("counters change current characteristics but not copiable values", () => {

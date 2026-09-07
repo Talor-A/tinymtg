@@ -1,3 +1,4 @@
+import { registerCardFixture } from "./corpus.ts";
 import type {
 	CharacteristicsSnapshot,
 	Color,
@@ -21,6 +22,27 @@ import {
 	turnLocation,
 } from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
+
+/* ------------------------------------------------------------------ *
+ * Cards sourced from the Forge corpus
+ *
+ * These lower through `forge/import.ts` unchanged, so there is no reason to
+ * hand-write them. Everything below this block is still hand-authored only
+ * because the importer rejects the real Forge script; each one moves up here
+ * as its gap closes, and this file goes away once the list is empty.
+ * ------------------------------------------------------------------ */
+
+registerCardFixture("f/forest");
+registerCardFixture("g/grizzly_bears");
+registerCardFixture("e/eager_cadet");
+registerCardFixture("d/darksteel_myr");
+registerCardFixture("d/darksteel_relic");
+registerCardFixture("f/faithful_watchdog");
+registerCardFixture("a/ajanis_mantra");
+registerCardFixture("a/arashin_cleric");
+registerCardFixture("r/rhox_war_monk");
+registerCardFixture("r/root_maze");
+registerCardFixture("r/revitalize");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family
@@ -203,177 +225,6 @@ export const WALKING_BALLISTA = registerCard({
 	entersWith: { "+1/+1": 2 },
 });
 
-/**
- * Enters with three +1/+1 counters, and is a 0/0 without them — so a test that
- * sees it alive on the battlefield has proven the ETB replacement applied.
- *
- */
-export const FAITHFUL_WATCHDOG = registerCard({
-	id: "faithful-watchdog",
-	name: "Faithful Watchdog",
-	types: ["creature"],
-	subtypes: ["Dog"],
-	colors: ["g", "w"],
-	manaCost: {
-		g: 1,
-		w: 1,
-	},
-	power: 0,
-	toughness: 0,
-	keywords: ["vigilance"],
-	entersWith: { "+1/+1": 3 },
-});
-
-/**
- * A genuinely zero-cost card: `{0}`, not "no mana cost". It can be cast from
- * hand with an empty mana pool, which is what separates `"zero"` from
- * `"none"` at the casting boundary.
- */
-export const DARKSTEEL_RELIC = registerCard({
-	id: "darksteel-relic",
-	name: "Darksteel Relic",
-	types: ["artifact"],
-	colors: [],
-	manaCost: "zero",
-	keywords: ["indestructible"],
-});
-
-export const GRIZZLY_BEARS = registerCard({
-	id: "grizzly-bears",
-	name: "Grizzly Bears",
-	types: ["creature"],
-	subtypes: ["Bear"],
-	colors: ["g"],
-	manaCost: {
-		g: 1,
-		n: 1,
-	},
-	power: 2,
-	toughness: 2,
-});
-
-export const EAGER_CADET = registerCard({
-	id: "eager-cadet",
-	name: "Eager Cadet",
-	types: ["creature"],
-	subtypes: ["Human", "Soldier"],
-	colors: ["w"],
-	manaCost: {
-		w: 1,
-	},
-	power: 1,
-	toughness: 1,
-});
-
-export const DARKSTEEL_MYR = registerCard({
-	id: "darksteel-myr",
-	name: "Darksteel Myr",
-	types: ["artifact", "creature"],
-	subtypes: ["Myr"],
-	colors: [],
-	manaCost: {
-		n: 3,
-	},
-	power: 0,
-	toughness: 1,
-	keywords: ["indestructible"],
-});
-
-export const AJANIS_MANTRA = registerCard({
-	id: "ajanis-mantra",
-	name: "Ajani's Mantra",
-	types: ["enchantment"],
-	colors: ["w"],
-	manaCost: {
-		w: 1,
-		n: 1,
-	},
-	triggers: [
-		{
-			id: "upkeep-life",
-			text: "At the beginning of your upkeep, you may gain 1 life.",
-			condition: { kind: "begin step", player: "you", step: "upkeep" },
-			targets: [],
-			effects: [
-				{
-					kind: "may",
-					decider: "you",
-					effects: [{ kind: "gain-life", player: "you", amount: 1 }],
-				},
-			],
-		},
-	],
-});
-
-export const ARASHIN_CLERIC = registerCard({
-	id: "arashin-cleric",
-	name: "Arashin Cleric",
-	types: ["creature"],
-	subtypes: ["Human", "Cleric"],
-	colors: ["w"],
-	manaCost: {
-		w: 1,
-		n: 1,
-	},
-	power: 1,
-	toughness: 3,
-	triggers: [
-		{
-			id: "etb-life",
-			text: "When this creature enters, you gain 3 life.",
-			condition: {
-				kind: "change zone",
-				from: "any",
-				to: "battlefield",
-				selector: "self",
-			},
-			targets: [],
-			effects: [{ kind: "gain-life", player: "you", amount: 3 }],
-		},
-	],
-});
-
-/** Vanilla lifelink — no other abilities, so it exercises lifelink alone. */
-export const RHOX_WAR_MONK = registerCard({
-	id: "rhox-war-monk",
-	name: "Rhox War Monk",
-	types: ["creature"],
-	subtypes: ["Rhino", "Monk"],
-	colors: ["g", "w", "u"],
-	manaCost: {
-		g: 1,
-		w: 1,
-		u: 1,
-	},
-	power: 3,
-	toughness: 4,
-	keywords: ["lifelink"],
-});
-
-export const FOREST = registerCard({
-	id: "forest",
-	name: "Forest",
-	types: ["land"],
-	subtypes: ["Forest"],
-	colors: [],
-	manaCost: "none",
-	activatedAbilities: [
-		{
-			kind: "mana",
-			id: "intrinsic-mana-g",
-			text: "Add {G}.",
-			costs: [{ kind: "tap-self" }],
-			effects: [
-				{
-					kind: "add-mana",
-					player: "you",
-					mana: { w: 0, u: 0, b: 0, r: 0, g: 1 },
-				},
-			],
-		},
-	],
-});
-
 export const EXPLORATION = registerCard({
 	id: "exploration",
 	name: "Exploration",
@@ -427,7 +278,6 @@ export const AESTHIR_GLIDER = registerCard({
 		},
 	],
 });
-
 export const SAPROLING_TOKEN = registerCard({
 	id: "saproling-token",
 	name: "Saproling",
@@ -665,40 +515,6 @@ export const BABY_MYCOSYNTH = registerCard({
 	],
 });
 
-export const ROOT_MAZE = registerCard({
-	id: "root-maze",
-	name: "Root Maze",
-	types: ["enchantment"],
-	colors: ["g"],
-	manaCost: {
-		g: 1,
-	},
-	replacements: [
-		{
-			label: "rootmaze",
-			layer: "other",
-			text: "Artifacts and lands enter tapped.",
-			applies(ev, ctx) {
-				if (
-					!onBattlefield(ctx) ||
-					ev.kind !== "change zone" ||
-					ev.to !== "battlefield"
-				)
-					return false;
-				if (ev.entersTapped) return false;
-				// Preview, not the printed card: Mycosynth Lattice can make this an artifact.
-				const v = etbPreview(ctx.state, ev);
-				return (
-					v.currentCharacteristics.types.includes("artifact") ||
-					v.currentCharacteristics.types.includes("land")
-				);
-			},
-			replace: (ev) =>
-				ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
-		},
-	],
-});
-
 /* ------------------------------------------------------------------ *
  * Copy tier (CR 616.1c)
  * ------------------------------------------------------------------ */
@@ -921,24 +737,4 @@ export const KALITAS = registerCard({
 			},
 		},
 	],
-});
-
-export const REVITALIZE = registerCard({
-	id: "revitalize",
-	name: "Revitalize",
-	types: ["instant"],
-	colors: ["w"],
-	manaCost: {
-		n: 1,
-		w: 1,
-	},
-	spell: {
-		id: "spell-1",
-		text: "You gain 3 life. Draw a card.",
-		targets: [],
-		effects: [
-			{ kind: "gain-life", amount: 3, player: "you" },
-			{ kind: "draw", amount: 1, player: "you" },
-		],
-	},
 });
