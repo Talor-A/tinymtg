@@ -20,10 +20,13 @@ const LIBRARY_CARDS = [
 ] as const;
 
 const PERMANENTS = [
+	"aesthir-glider",
 	"ajanis-mantra",
+	"azusa-lost-but-seeking",
 	"chains-of-mephistopheles",
 	"doubling-season",
 	"eager-cadet",
+	"exploration",
 	"furnace-of-rath",
 	"grizzly-bears",
 	"hardened-scales",

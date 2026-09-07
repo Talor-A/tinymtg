@@ -1105,7 +1105,10 @@ function buildFilteredGameView(
 	const abilities: Partial<
 		Record<
 			ContinuousEffectLayer,
-			[effect: StaticAbilityDefinition, source: DeepReadOnly<GameObject>][]
+			[
+				effect: CharacteristicStaticAbilityDefinition,
+				source: DeepReadOnly<GameObject>,
+			][]
 		>
 	> = {};
 
@@ -1121,6 +1124,7 @@ function buildFilteredGameView(
 		for (const id of initial.abilities.static) {
 			const ability = getAbilityDefinition("static", id);
 			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
+			if (!isCharacteristicStaticAbility(ability)) continue;
 			let layerAbilities = abilities[ability.layer];
 			if (!layerAbilities) {
 				layerAbilities = [];
@@ -2768,12 +2772,19 @@ export function eligibleBlockers(
 	return state.battlefield.filter((id) => {
 		const object = state.objects.get(id);
 		const snapshot = read.view.objects.get(id);
-		return (
-			object?.kind === "permanent" &&
-			object.controller === player &&
-			!object.tapped &&
-			snapshot?.kind === "permanent" &&
-			snapshot.currentCharacteristics.types.includes("creature")
+		if (
+			object?.kind !== "permanent" ||
+			object.controller !== player ||
+			object.tapped ||
+			snapshot?.kind !== "permanent" ||
+			!snapshot.currentCharacteristics.types.includes("creature")
+		)
+			return false;
+		return !snapshot.currentCharacteristics.abilities.static.some(
+			(abilityId) => {
+				const ability = getAbilityDefinition("static", abilityId);
+				return "kind" in ability && ability.kind === "cant-block-self";
+			},
 		);
 	});
 }
@@ -2831,7 +2842,7 @@ export function name(state: ReadonlyGameState, id: ObjectId): string {
  * still require timestamp order unless their operations commute (CR 613.7);
  * absence of dependencies does not make arbitrary ordering correct.
  */
-export interface StaticAbilityDefinition {
+export interface CharacteristicStaticAbilityDefinition {
 	text: string;
 	layer: ContinuousEffectLayer;
 	/**
@@ -2861,6 +2872,46 @@ export interface StaticAbilityDefinition {
 		state: ReadonlyGameState,
 		source: DeepReadOnly<GameObject>,
 	): void;
+}
+
+/**
+ * The deliberately small rule-effect subset. These are static abilities, so
+ * possession is still copied, granted, and removed through the ordinary
+ * `abilities.static` references. Unlike characteristic effects, they are read
+ * by the rule they modify instead of participating in CR 613's layer system.
+ *
+ * The supported cases are finite positive additions to the source controller's
+ * ordinary land-play allowance and an unconditional prohibition on the source
+ * blocking. Temporary effects (Explore), unlimited allowances (Fastbond),
+ * other affected players, conditions, broader combat restrictions, and
+ * alternate-zone land play remain outside the engine's subset.
+ */
+export interface AdjustLandPlaysStaticAbilityDefinition {
+	kind: "adjust-land-plays";
+	text: string;
+	affects: "you";
+	amount: number;
+	/** This first rule-effect slice functions only from the battlefield. */
+	functionsFrom?: never;
+}
+
+/** A battlefield permanent with this currently possessed ability can't block. */
+export interface CantBlockSelfStaticAbilityDefinition {
+	kind: "cant-block-self";
+	text: string;
+	/** This first rule-effect slice functions only from the battlefield. */
+	functionsFrom?: never;
+}
+
+export type StaticAbilityDefinition =
+	| CharacteristicStaticAbilityDefinition
+	| AdjustLandPlaysStaticAbilityDefinition
+	| CantBlockSelfStaticAbilityDefinition;
+
+function isCharacteristicStaticAbility(
+	ability: StaticAbilityDefinition,
+): ability is CharacteristicStaticAbilityDefinition {
+	return !("kind" in ability);
 }
 
 /**
@@ -3240,13 +3291,15 @@ const CHARACTERISTIC_CHANGING_LAYERS = [
  * its created values and no card of its own, and a card that merely hosts an
  * implementation it never prints must not count.
  */
-function anyPossessedStatic(
+function anyPossessedCharacteristicStatic(
 	state: ReadonlyGameState,
-	predicate: (effect: StaticAbilityDefinition) => boolean,
+	predicate: (effect: CharacteristicStaticAbilityDefinition) => boolean,
 ): boolean {
 	for (const object of state.objects.values()) {
 		for (const id of baseCharacteristics(object).abilities.static) {
-			if (predicate(getAbilityDefinition("static", id))) return true;
+			const ability = getAbilityDefinition("static", id);
+			if (!isCharacteristicStaticAbility(ability)) continue;
+			if (predicate(ability)) return true;
 		}
 	}
 	return false;
@@ -3543,7 +3596,7 @@ function ctxFor(
 
 function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 	const out: BoundProhibition[] = [];
-	const abilityCanChangeKeywords = anyPossessedStatic(
+	const abilityCanChangeKeywords = anyPossessedCharacteristicStatic(
 		read.state,
 		(effect) => effect.layer === "6-ability-changing",
 	);
@@ -4130,7 +4183,7 @@ function checkStateBasedActionsIn(
 		// exists (say, "target creature gets -3/-3 until end of turn"), this
 		// prefilter will silently stop noticing creatures that died to it, and
 		// `hasCharacteristicChangingStatic` must grow to cover `state.floating`.
-		const hasCharacteristicChangingStatic = anyPossessedStatic(
+		const hasCharacteristicChangingStatic = anyPossessedCharacteristicStatic(
 			state,
 			(effect) => includes(CHARACTERISTIC_CHANGING_LAYERS, effect.layer),
 		);
@@ -5898,13 +5951,54 @@ function castableSpells(
 	return castable;
 }
 
-function canPlayOrdinaryLand(state: GameState, player: PlayerId): boolean {
+/**
+ * CR 305.2a's ordinary one land, plus the supported finite positive static
+ * adjustments affecting `player`. The allowance is derived rather than stored:
+ * changing an ability's possession, source zone, or source controller changes
+ * the answer immediately, while `landsPlayed` remains turn history.
+ */
+function landPlayAllowance(read: ReadContext, player: PlayerId): number {
+	let allowance = 1;
+	for (const object of read.state.objects.values()) {
+		// Use current possession from the derived view: a layer-6 grant or removal
+		// changes whether this object generates the rule effect. The allowance is
+		// not an input to characteristic derivation, so this does not recurse.
+		for (const id of abilityReferencesOf(read.view, object).static) {
+			const ability = getAbilityDefinition("static", id);
+			if (!("kind" in ability) || ability.kind !== "adjust-land-plays")
+				continue;
+			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
+			assert(
+				ability.affects === "you",
+				"adjust-land-plays effect must affect its source's controller",
+			);
+			assert(
+				Number.isSafeInteger(ability.amount) && ability.amount > 0,
+				"adjust-land-plays amount must be a finite positive integer",
+			);
+			const controller = controllerOf(object);
+			if (controller !== player) continue;
+			allowance += ability.amount;
+			assert(
+				Number.isSafeInteger(allowance),
+				"land-play allowance exceeds the safe integer range",
+			);
+		}
+	}
+	return allowance;
+}
+
+function canPlayOrdinaryLand(
+	state: GameState,
+	read: ReadContext,
+	player: PlayerId,
+): boolean {
 	const location = turnLocation(state);
 	return (
 		player === activePlayer(state) &&
 		location?.kind === "mainPhase" &&
 		state.stack.length === 0 &&
-		state.players[player].landsPlayed < 1
+		state.players[player].landsPlayed < landPlayAllowance(read, player)
 	);
 }
 
@@ -5962,7 +6056,7 @@ export function getObservableActions(
 ): PriorityAction[] {
 	const actions: PriorityAction[] = [{ kind: "pass" }];
 	const read = createReadContext(state);
-	if (canPlayOrdinaryLand(state, player)) {
+	if (canPlayOrdinaryLand(state, read, player)) {
 		for (const id of state.players[player].hand) {
 			const object = maybeObject(state, id);
 			if (object?.kind !== "card" || object.zone !== "hand") continue;
@@ -6409,9 +6503,11 @@ function playLandIn(
 			"a land cannot be played while the stack is nonempty",
 		);
 	}
-	if (state.players[priorityPlayer].landsPlayed >= 1) {
+	const read = createReadContext(state);
+	const allowance = landPlayAllowance(read, priorityPlayer);
+	if (state.players[priorityPlayer].landsPlayed >= allowance) {
 		throw new IllegalLandPlayError(
-			"the ordinary one-land-per-turn limit is exhausted",
+			`the ${allowance}-land-per-turn allowance is exhausted`,
 		);
 	}
 
@@ -6425,7 +6521,6 @@ function playLandIn(
 			`object ${action.card} is not in P${priorityPlayer}'s hand`,
 		);
 	}
-	const read = createReadContext(state);
 	const snapshot = readObject(read, action.card);
 	if (
 		snapshot.kind !== "card" ||

@@ -8,7 +8,9 @@ import {
 	abilityId,
 	activePlayer,
 	createReadContext,
+	eligibleBlockers,
 	executeAbilityAction,
+	getObservableActions,
 	isTurnStep,
 	newGame,
 	perform,
@@ -56,6 +58,8 @@ function registerRuntimeFixture(path: string, id: string): void {
 
 registerRuntimeFixture("g/grizzly_bears", "rt-grizzly-bears");
 registerRuntimeFixture("g/glorious_anthem", "rt-glorious-anthem");
+registerRuntimeFixture("e/exploration", "rt-exploration");
+registerRuntimeFixture("a/aesthir_glider", "rt-aesthir-glider");
 registerRuntimeFixture("r/root_maze", "rt-root-maze");
 registerRuntimeFixture("f/faithful_watchdog", "rt-faithful-watchdog");
 registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
@@ -266,6 +270,32 @@ describe("forge-import runtime: triggers", () => {
 });
 
 describe("forge-import runtime: statics and replacements", () => {
+	test("Aesthir Glider's imported static removes only itself from blocker candidates", () => {
+		const state = newGame();
+		const glider = spawnPermanent(state, "rt-aesthir-glider", BOB);
+		const bear = spawnPermanent(state, "rt-grizzly-bears", BOB);
+		expect(eligibleBlockers(state, BOB)).toEqual([bear.id]);
+		expect(eligibleBlockers(state, BOB)).not.toContain(glider.id);
+	});
+
+	test("Exploration's imported rule effect offers exactly one additional land", () => {
+		const state = setupMain();
+		spawnPermanent(state, "rt-exploration", ALICE);
+		const land = spawnCard(state, "forest", ALICE, "hand");
+
+		state.players[ALICE].landsPlayed = 1;
+		expect(getObservableActions(state, ALICE)).toContainEqual({
+			kind: "play land",
+			card: land.id,
+		});
+
+		state.players[ALICE].landsPlayed = 2;
+		expect(getObservableActions(state, ALICE)).not.toContainEqual({
+			kind: "play land",
+			card: land.id,
+		});
+	});
+
 	test("Glorious Anthem's imported static only pumps creatures its controller controls", () => {
 		const state = newGame();
 		spawnPermanent(state, "rt-glorious-anthem", ALICE);

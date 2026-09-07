@@ -633,22 +633,76 @@ function lowerStatic(
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
 	const badParams = checkParams(
 		params,
-		new Set(["mode", "affected", "addpower", "addtoughness", "description"]),
+		new Set([
+			"mode",
+			"affected",
+			"addpower",
+			"addtoughness",
+			"adjustlandplays",
+			"validcard",
+			"description",
+		]),
 		where,
 	);
 	if (badParams) return badParams;
-	if (getForgeParam(params, "Mode") !== "Continuous")
+	const mode = getForgeParam(params, "Mode");
+	const description = getForgeParam(params, "Description");
+	if (mode === "CantBlock") {
+		if (
+			getForgeParam(params, "ValidCard") !== "Card.Self" ||
+			getForgeParam(params, "Affected") !== undefined ||
+			getForgeParam(params, "AddPower") !== undefined ||
+			getForgeParam(params, "AddToughness") !== undefined ||
+			getForgeParam(params, "AdjustLandPlays") !== undefined ||
+			!description
+		)
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				"only unconditional CantBlock for Card.Self is supported",
+				where,
+			);
+		return { kind: "cant-block-self", text: description };
+	}
+	if (mode !== "Continuous")
 		return issue(
 			"UNSUPPORTED_EFFECT",
-			"only Mode$ Continuous statics are supported",
+			"only supported Continuous and CantBlock statics are implemented",
 			where,
 		);
 	const affected = getForgeParam(params, "Affected");
+	const adjustLandPlaysText = getForgeParam(params, "AdjustLandPlays");
+	if (adjustLandPlaysText !== undefined) {
+		const amount = positiveInteger(adjustLandPlaysText);
+		if (
+			affected !== "You" ||
+			amount === null ||
+			getForgeParam(params, "ValidCard") !== undefined ||
+			getForgeParam(params, "AddPower") !== undefined ||
+			getForgeParam(params, "AddToughness") !== undefined ||
+			!description
+		)
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				"only finite positive AdjustLandPlays effects affecting You are supported",
+				where,
+			);
+		return {
+			kind: "adjust-land-plays",
+			text: description,
+			affects: "you",
+			amount,
+		};
+	}
 	const selector = affected ? parseSelector(affected) : null;
 	const addPower = signedInteger(getForgeParam(params, "AddPower"));
 	const addToughness = signedInteger(getForgeParam(params, "AddToughness"));
-	const description = getForgeParam(params, "Description");
-	if (!selector || addPower === null || addToughness === null || !description)
+	if (
+		!selector ||
+		addPower === null ||
+		addToughness === null ||
+		getForgeParam(params, "ValidCard") !== undefined ||
+		!description
+	)
 		return issue(
 			"UNSUPPORTED_EFFECT",
 			"unsupported static ability shape",

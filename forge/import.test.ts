@@ -41,6 +41,9 @@ const POSITIVE_FIXTURES = [
 	"a/ajanis_mantra",
 	"h/herald_of_faith",
 	"g/glorious_anthem",
+	"e/exploration",
+	"a/azusa_lost_but_seeking",
+	"a/aesthir_glider",
 	"r/root_maze",
 	"c/charcoal_diamond",
 	"d/diregraf_ghoul",
@@ -345,9 +348,39 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		const result = importFixture("g/glorious_anthem");
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.abilityDefinitions.static).toHaveLength(1);
-		expect(result.card.abilityDefinitions.static[0]?.layer).toBe(
-			"7c-modify-power-toughness",
-		);
+		const ability = result.card.abilityDefinitions.static[0];
+		if (!ability || "kind" in ability)
+			throw new Error("expected a characteristic static ability");
+		expect(ability.layer).toBe("7c-modify-power-toughness");
+	});
+
+	test("Exploration and Azusa lower finite positive land-play adjustments", () => {
+		for (const [fixture, amount] of [
+			["e/exploration", 1],
+			["a/azusa_lost_but_seeking", 2],
+		] as const) {
+			const result = importFixture(fixture);
+			if (!result.ok) throw new Error(`expected ${fixture} to import`);
+			expect(result.card.abilityDefinitions.static).toEqual([
+				{
+					kind: "adjust-land-plays",
+					text: expect.any(String),
+					affects: "you",
+					amount,
+				},
+			]);
+		}
+	});
+
+	test("Aesthir Glider lowers only its unconditional self block restriction", () => {
+		const result = importFixture("a/aesthir_glider");
+		if (!result.ok) throw new Error("expected Aesthir Glider to import");
+		expect(result.card.abilityDefinitions.static).toEqual([
+			{
+				kind: "cant-block-self",
+				text: "CARDNAME can't block.",
+			},
+		]);
 	});
 
 	test("Root Maze lowers an artifact/land enters-tapped replacement", () => {
@@ -474,6 +507,31 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(importText(BOLT).ok).toBe(true);
 		expect(importText(REVITALIZE).ok).toBe(true);
 		expect(importText(BEARS).ok).toBe(true);
+	});
+
+	test("rejects unlimited, nonpositive, and non-You land-play adjustments", () => {
+		for (const staticLine of [
+			"S:Mode$ Continuous | Affected$ You | AdjustLandPlays$ Unlimited | Description$ x",
+			"S:Mode$ Continuous | Affected$ You | AdjustLandPlays$ 0 | Description$ x",
+			"S:Mode$ Continuous | Affected$ Opponent | AdjustLandPlays$ 1 | Description$ x",
+		]) {
+			const result = importText(`${BEARS}${staticLine}\n`);
+			expect(result.ok).toBe(false);
+			if (!result.ok)
+				expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		}
+	});
+
+	test("rejects CantBlock shapes other than unconditional Card.Self", () => {
+		for (const staticLine of [
+			"S:Mode$ CantBlock | ValidCard$ Creature | Description$ x",
+			"S:Mode$ CantBlock | ValidCard$ Card.Self | Affected$ You | Description$ x",
+		]) {
+			const result = importText(`${BEARS}${staticLine}\n`);
+			expect(result.ok).toBe(false);
+			if (!result.ok)
+				expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		}
 	});
 
 	test("rejects a supported spell plus an unknown keyword", () => {
@@ -975,7 +1033,8 @@ describe("lowerForgeCard: bridge contract", () => {
 		const first = lowerForgeCard(ast, { id: "anthem-1" });
 		if (!first.ok) throw new Error("expected ok");
 		const effect = first.card.abilityDefinitions.static[0];
-		if (!effect) throw new Error("expected a static effect");
+		if (!effect || "kind" in effect)
+			throw new Error("expected a characteristic static effect");
 
 		// Find and mutate the AddPower$/AddToughness$ param entries in the AST
 		// after lowering: if `modify` closed over the AST node instead of a

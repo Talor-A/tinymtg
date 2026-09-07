@@ -374,6 +374,60 @@ export const FOREST = registerCard({
 	],
 });
 
+export const EXPLORATION = registerCard({
+	id: "exploration",
+	name: "Exploration",
+	types: ["enchantment"],
+	colors: ["g"],
+	manaCost: { g: 1 },
+	statics: [
+		{
+			kind: "adjust-land-plays",
+			text: "You may play an additional land on each of your turns.",
+			affects: "you",
+			amount: 1,
+		},
+	],
+});
+
+export const AZUSA_LOST_BUT_SEEKING = registerCard({
+	id: "azusa-lost-but-seeking",
+	name: "Azusa, Lost but Seeking",
+	supertypes: ["legendary"],
+	types: ["creature"],
+	subtypes: ["Human", "Monk"],
+	colors: ["g"],
+	manaCost: { g: 1, n: 2 },
+	power: 1,
+	toughness: 2,
+	statics: [
+		{
+			kind: "adjust-land-plays",
+			text: "You may play two additional lands on each of your turns.",
+			affects: "you",
+			amount: 2,
+		},
+	],
+});
+
+export const AESTHIR_GLIDER = registerCard({
+	id: "aesthir-glider",
+	name: "Aesthir Glider",
+	types: ["artifact", "creature"],
+	subtypes: ["Bird", "Construct"],
+	colors: [],
+	manaCost: { n: 3 },
+	power: 2,
+	toughness: 1,
+	keywords: ["flying"],
+	statics: [
+		{
+			kind: "cant-block-self",
+			text: "CARDNAME can't block.",
+		},
+	],
+});
+
 export const SAPROLING_TOKEN = registerCard({
 	id: "saproling-token",
 	name: "Saproling",

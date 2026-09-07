@@ -4,6 +4,7 @@ import "../cards.ts";
 import type { GameState, ObjectId } from "../index.ts";
 import {
 	advance,
+	eligibleBlockers,
 	gameOver,
 	IllegalAttackDeclarationError,
 	IllegalBlockDeclarationError,
@@ -289,6 +290,29 @@ describe("declaring blockers", () => {
 		expect(permanent(state, blocker.id).blocking).toBe(false);
 		expect(permanent(state, blocker.id).tapped).toBe(false);
 		expect(permanent(state, attacker.id).attacking).toBe(true);
+	});
+
+	test("Aesthir Glider is neither offered nor accepted as a blocker", () => {
+		const { state, agents, attacker } = declareBlockersSetup();
+		const glider = spawnPermanent(state, "aesthir-glider", BOB);
+		const bear = spawnPermanent(state, "grizzly-bears", BOB);
+
+		expect(eligibleBlockers(state, BOB)).toEqual([bear.id]);
+		const before = structuredClone(state);
+		expect(() =>
+			perform(
+				state,
+				{
+					kind: "declare blockers",
+					player: BOB,
+					blockers: [{ blocker: glider.id, attacker: attacker.id }],
+				},
+				agents,
+			),
+		).toThrow(IllegalBlockDeclarationError);
+		// perform() logs the attempted event before validation; gameplay state is
+		// otherwise unchanged by the rejected declaration.
+		expect({ ...state, log: before.log }).toEqual(before);
 	});
 
 	test("a blocker assignment marks the blocker but does not tap it", () => {

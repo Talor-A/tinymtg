@@ -6,6 +6,7 @@ import type {
 	GameState,
 	ObjectId,
 	PlayerId,
+	PlayLandAction,
 	PriorityAction,
 	StackItemId,
 	SyncAgent,
@@ -17,6 +18,7 @@ import {
 	getObservableActions,
 	IllegalLandPlayError,
 	newGame,
+	perform,
 	permanent,
 	registerCard,
 	spawnCard,
@@ -54,7 +56,30 @@ registerCard({
 	],
 });
 
-function landAction(card: ObjectId): PriorityAction {
+registerCard({
+	id: "test-grant-exploration-static",
+	name: "Test Grant Exploration Static",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	statics: [
+		{
+			layer: "6-ability-changing",
+			text: "Creatures you control have Exploration's static ability.",
+			applies: (subject, _state, source) =>
+				source.kind === "permanent" &&
+				subject.controller === source.controller &&
+				subject.currentCharacteristics.types.includes("creature"),
+			modify: (characteristics) => {
+				characteristics.abilities.static.push(
+					abilityId("static", "exploration", 0),
+				);
+			},
+		},
+	],
+});
+
+function landAction(card: ObjectId): PlayLandAction {
 	return { kind: "play land", card };
 }
 
@@ -103,6 +128,82 @@ describe("land action observability", () => {
 		state.players[ALICE].landsPlayed = 0;
 		occupyStack(state);
 		expect(getObservableActions(state, ALICE)).toEqual([{ kind: "pass" }]);
+	});
+
+	test("uses finite additive land-play effects from the current controller", () => {
+		const state = setupMain();
+		const land = spawnCard(state, "forest", ALICE, "hand");
+		spawnPermanent(state, "exploration", ALICE);
+
+		state.players[ALICE].landsPlayed = 1;
+		expect(getObservableActions(state, ALICE)).toContainEqual(
+			landAction(land.id),
+		);
+
+		state.players[ALICE].landsPlayed = 2;
+		expect(getObservableActions(state, ALICE)).not.toContainEqual(
+			landAction(land.id),
+		);
+	});
+
+	test("adds multiple finite adjustments and ignores sources not functioning for that player", () => {
+		const state = setupMain();
+		const land = spawnCard(state, "forest", ALICE, "hand");
+		spawnPermanent(state, "exploration", ALICE);
+		spawnPermanent(state, "azusa-lost-but-seeking", ALICE);
+		spawnCard(state, "exploration", ALICE, "graveyard");
+		const opponentExploration = spawnPermanent(state, "exploration", ALICE);
+		permanent(state, opponentExploration.id).controller = BOB;
+		state.revision++;
+
+		state.players[ALICE].landsPlayed = 3;
+		expect(getObservableActions(state, ALICE)).toContainEqual(
+			landAction(land.id),
+		);
+
+		state.players[ALICE].landsPlayed = 4;
+		expect(getObservableActions(state, ALICE)).not.toContainEqual(
+			landAction(land.id),
+		);
+	});
+
+	test("uses rule abilities granted through the derived layer-6 view", () => {
+		const state = setupMain();
+		const land = spawnCard(state, "forest", ALICE, "hand");
+		spawnPermanent(state, "test-grant-exploration-static", ALICE);
+		spawnPermanent(state, "grizzly-bears", ALICE);
+		state.players[ALICE].landsPlayed = 1;
+
+		expect(getObservableActions(state, ALICE)).toContainEqual(
+			landAction(land.id),
+		);
+	});
+
+	test("loses the additional allowance as soon as Exploration leaves", () => {
+		const state = setupMain();
+		const exploration = spawnPermanent(state, "exploration", ALICE);
+		const land = spawnCard(state, "forest", ALICE, "hand");
+		state.players[ALICE].landsPlayed = 1;
+		expect(getObservableActions(state, ALICE)).toContainEqual(
+			landAction(land.id),
+		);
+
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: exploration.id,
+				from: "battlefield",
+				to: "graveyard",
+				cause: "effect",
+				toController: ALICE,
+			},
+			passingAgents(),
+		);
+
+		expect(getObservableActions(state, ALICE)).not.toContainEqual(
+			landAction(land.id),
+		);
 	});
 });
 
@@ -243,6 +344,18 @@ describe("authoritative land-play rejection", () => {
 		}
 		const staleState = setupMain();
 		expectAtomicRejection(staleState, ALICE, landAction(999 as ObjectId));
+	});
+
+	test("accepts the additional land but atomically rejects one beyond the derived allowance", () => {
+		const state = setupMain();
+		spawnPermanent(state, "exploration", ALICE);
+		state.players[ALICE].landsPlayed = 1;
+		const second = spawnCard(state, "forest", ALICE, "hand");
+		executeLandAction(state, ALICE, landAction(second.id), passingAgents());
+		expect(state.players[ALICE].landsPlayed).toBe(2);
+
+		const third = spawnCard(state, "forest", ALICE, "hand");
+		expectAtomicRejection(state, ALICE, landAction(third.id));
 	});
 
 	test("rejects the opponent's hand, the nonactive player, non-main timing, and a nonempty stack", () => {
