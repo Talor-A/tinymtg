@@ -4034,26 +4034,29 @@ function checkStateBasedActionsIn(
 		// 704.5d. If a token is in a zone other than the battlefield, it ceases
 		// to exist. The zone change itself still happened and can trigger abilities.
 		for (const o of state.objects.values()) {
-			if (o.kind !== "nonbattlefield-token") continue;
-			const zone = mutableZoneList(state, o.zone, o.owner);
-			const idx = zone.indexOf(o.id);
-			assert(
-				idx !== -1,
-				`token ${o.id} is missing from its ${o.zone} zone list`,
-			);
-			zone.splice(idx, 1);
-			state.objects.delete(o.id);
-			state.revision++;
-			log(
-				state,
-				`  SBA: ${initialCharacteristics(o).name}#${o.id} (token) ceases to exist`,
-			);
-			acted = true;
-		}
+			if (o.kind === "nonbattlefield-token") {
+				const zone = mutableZoneList(state, o.zone, o.owner);
+				const idx = zone.indexOf(o.id);
+				assert(
+					idx !== -1,
+					`token ${o.id} is missing from its ${o.zone} zone list`,
+				);
+				zone.splice(idx, 1);
+				state.objects.delete(o.id);
+				state.revision++;
+				log(
+					state,
+					`  SBA: ${initialCharacteristics(o).name}#${o.id} (token) ceases to exist`,
+				);
+				acted = true;
+			} else if (o.kind === "spell") {
+				// 704.5e. If a copy of a spell is in a zone other than the stack, it ceases
+				// to exist. If a copy of a card is in any zone other than the stack or the
+				// battlefield, it ceases to exist.
 
-		// 704.5e. If a copy of a spell is in a zone other than the stack, it ceases
-		// to exist. If a copy of a card is in any zone other than the stack or the
-		// battlefield, it ceases to exist.
+				assert(o.zone === "stack");
+			}
+		}
 
 		// 704.5h. If a creature has toughness greater than 0, and it's been dealt
 		// damage by a source with deathtouch since the last time state-based
