@@ -6136,10 +6136,9 @@ function activateAbilityIn(
 			targets = [{ slot: target.id, target: chosen }];
 		}
 	}
-	// CR 733.1: activation is the one action the engine cannot fully validate
-	// before mutating, because CR 602.2b puts the ability on the stack before
-	// its cost is paid. A checkpoint here is what lets an unpaid cost rewind
-	// everything the attempt did, including the announcement itself.
+	// CR 602.2b puts the ability on the stack before its cost is paid, so the
+	// announcement mutates before the activation is known to be legal. CR 733.1
+	// requires an attempt that cannot be completed to rewind everything it did.
 	const checkpoint = structuredClone(state);
 
 	// The ability is announced before payment so that it is already on the stack
@@ -6167,13 +6166,21 @@ function activateAbilityIn(
 	}
 
 	const scope = newScope();
-	const payment = performIn(
-		state,
-		{ kind: "tap", ref: { kind: "object", object: object.id } },
-		choices,
-		scope,
-		0,
-	);
+	let payment: PerformResult;
+	try {
+		payment = performIn(
+			state,
+			{ kind: "tap", ref: { kind: "object", object: object.id } },
+			choices,
+			scope,
+			0,
+		);
+	} catch (error) {
+		// A rejected or suspended choice during payment leaves the same
+		// half-finished activation as an unpayable cost does.
+		restoreCheckpoint(state, checkpoint);
+		throw error;
+	}
 	if (
 		!payment.executed.some(
 			(event) =>

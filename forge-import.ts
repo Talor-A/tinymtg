@@ -19,9 +19,10 @@
  * temporary P/T effects; random or multi-card discard; alternate/additional
  * costs on spells or activations other than a bare tap-self;
  * X/hybrid/Phyrexian/snow mana and dynamic amounts; more than one target slot,
- * or an optional one; selector restrictions outside card type, supertype,
- * color, and controller (so hexproof, shroud, protection, and combat- or
- * zone-dependent restrictions all reject); more than one spell ability, or a
+ * or an optional one; selector modifiers outside `YouCtrl`/`OppCtrl` and
+ * `non`-prefixable color, card type, and supertype words (so hexproof, shroud,
+ * protection, and combat- or zone-dependent restrictions all reject, while a
+ * subtype is only readable as a selector's base); more than one spell ability, or a
  * spell ability on a permanent card; conditions, alternate "unless" costs, or
  * new target declarations on a `SubAbility`/`Execute` continuation;
  * alternate/specialize faces, `Variant:` patches, and `Draft:` actions; and any

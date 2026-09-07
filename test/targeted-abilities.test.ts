@@ -598,6 +598,33 @@ describe("an ability outliving its source", () => {
 		expect(state).toEqual(before);
 	});
 
+	test("a rejected choice while paying rewinds the announcement too", () => {
+		const state = mainPhaseGame();
+		// Two copies make the tap replacement a real decision for P0.
+		spawnPermanent(state, "test-tap-fizzle", 1);
+		spawnPermanent(state, "test-tap-fizzle", 1);
+		const pinger = spawnPermanent(state, "test-pinger", 0);
+		const before = structuredClone(state);
+
+		expect(() =>
+			executeAbilityAction(
+				state,
+				0,
+				{ kind: "activate ability", source: pinger.id, ability: PINGER_TAP },
+				[
+					{
+						choose: (_view, request) =>
+							request.kind === "target"
+								? { optionId: "player:1" }
+								: { optionId: "not-an-option" },
+					},
+					new ScriptedAgent(),
+				],
+			),
+		).toThrow(InvalidChoiceAnswerError);
+		expect(state).toEqual(before);
+	});
+
 	test("a source that destroys itself mid-resolution still finishes the ability", () => {
 		const state = mainPhaseGame();
 		const destroyer = spawnPermanent(state, "test-self-destroyer", 0);
