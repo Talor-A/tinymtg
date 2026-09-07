@@ -22,6 +22,8 @@ export {
 	type ChoiceTranscript,
 	InvalidChoiceAnswerError,
 	type RecordedChoice,
+	type ScryChoiceAnswer,
+	type ScryResult,
 	type SyncAgent,
 	type SyncAgentPair,
 } from "./choices.ts";
@@ -428,6 +430,11 @@ interface MillEvent extends EventCommon {
 	player: PlayerId;
 	amount: number;
 }
+interface ScryEvent extends EventCommon {
+	kind: "scry";
+	player: PlayerId;
+	amount: number;
+}
 
 interface DiscardEvent extends EventCommon {
 	kind: "discard";
@@ -656,6 +663,7 @@ export type GameEvent =
 	| DrawCardsEvent
 	| DrawEvent
 	| MillEvent
+	| ScryEvent
 	| DiscardEvent
 	| DamageEvent
 	| DestroyEvent
@@ -1795,7 +1803,7 @@ export type EffectDef<
 	Player extends TriggerEffectPlayer = RelativeEffectPlayer,
 > =
 	| {
-			kind: "gain-life" | "lose-life" | "draw";
+			kind: "gain-life" | "lose-life" | "draw" | "scry";
 			player: Player;
 			amount: number;
 	  }
@@ -3533,6 +3541,7 @@ export function affectedPlayer(
 		case "draw":
 		case "draw cards":
 		case "mill":
+		case "scry":
 		case "discard":
 		case "begin turn":
 		case "begin step":
@@ -3942,6 +3951,8 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 			return `draw(P${ev.player})`;
 		case "mill":
 			return `mill(P${ev.player}, ${ev.amount})`;
+		case "scry":
+			return `scry(P${ev.player}, ${ev.amount})`;
 		case "discard":
 			if (ev.cards.kind === "hand-size")
 				return `discard(P${ev.player}, to hand size)`;
@@ -4724,6 +4735,37 @@ function executeIn(
 					),
 				);
 			}
+			break;
+		}
+
+		case "scry": {
+			assert(
+				Number.isSafeInteger(ev.amount) && ev.amount >= 0,
+				`scry amount must be a nonnegative integer, got ${ev.amount}`,
+			);
+			if (ev.amount === 0) {
+				happened = false;
+				break;
+			}
+			const library = state.players[ev.player].library;
+			const count = Math.min(ev.amount, library.length);
+			const seen = library.slice(library.length - count).reverse();
+			const arrangement = choices.chooseScry(state, ev.player, seen);
+			const arranged = [...arrangement.top, ...arrangement.bottom];
+			assert(arranged.length === seen.length, "scry changed the card count");
+			assert(
+				new Set(arranged).size === arranged.length,
+				"scry arrangement contains duplicate cards",
+			);
+			assert(
+				arranged.every((id) => seen.includes(id)),
+				"scry arrangement contains a card that was not looked at",
+			);
+
+			library.length -= count;
+			library.unshift(...[...arrangement.bottom].reverse());
+			library.push(...[...arrangement.top].reverse());
+			log(state, `${"  ".repeat(depth)}P${ev.player} scries ${ev.amount}`);
 			break;
 		}
 
@@ -5619,6 +5661,12 @@ function effectToEvent(
 		case "draw":
 			return {
 				kind: "draw cards",
+				player: player(effect.player),
+				amount: effect.amount,
+			};
+		case "scry":
+			return {
+				kind: "scry",
 				player: player(effect.player),
 				amount: effect.amount,
 			};

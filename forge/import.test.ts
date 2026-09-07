@@ -36,6 +36,7 @@ const POSITIVE_FIXTURES = [
 	"l/lightning_bolt",
 	"m/murder",
 	"r/revitalize",
+	"p/preordain",
 	"s/sorins_thirst",
 	"a/arashin_cleric",
 	"a/ajanis_mantra",
@@ -280,6 +281,36 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			{ kind: "gain-life", player: "you", amount: 3 },
 			{ kind: "draw", player: "you", amount: 1 },
 		]);
+	});
+
+	test("Preordain sequences scry then draw", () => {
+		const result = importFixture("p/preordain");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.spell?.effects).toEqual([
+			{ kind: "scry", player: "you", amount: 2 },
+			{ kind: "draw", player: "you", amount: 1 },
+		]);
+	});
+
+	test("Scry defaults to one and rejects dynamic amounts", () => {
+		const defaulted = importText(
+			"Name:Default Scry\nManaCost:U\nTypes:Instant\nA:SP$ Scry | SpellDescription$ Scry 1.\nOracle:Scry 1.\n",
+		);
+		expect(defaulted.ok).toBe(true);
+		if (!defaulted.ok) return;
+		expect(defaulted.card.spell?.effects).toEqual([
+			{ kind: "scry", player: "you", amount: 1 },
+		]);
+
+		const dynamic = importText(
+			"Name:Dynamic Scry\nManaCost:U\nTypes:Instant\nA:SP$ Scry | ScryNum$ X | SpellDescription$ Scry X.\nOracle:Scry X.\n",
+		);
+		expect(dynamic.ok).toBe(false);
+		if (dynamic.ok) return;
+		expect(dynamic.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_PARAMETER",
+			message: "unsupported scry amount/player",
+		});
 	});
 
 	test("Sorin's Thirst sequences damage then life gain in one target slot", () => {

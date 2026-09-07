@@ -16,6 +16,7 @@ import type {
 	TurnLocation,
 } from "./index.ts";
 import { activePlayer, buildPlayerView, name, turnLocation } from "./index.ts";
+import { assert, assertDefined } from "./lib/assert.ts";
 
 function objectLabel(state: GameState, id: ObjectId): string {
 	const object = state.objects.get(id);
@@ -112,6 +113,15 @@ export interface DeclareBlockersChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
+export interface ScryChoiceRequest extends ChoiceRequestBase {
+	kind: "scry";
+	player: PlayerId;
+	context: {
+		/** The looked-at cards in current top-to-bottom order. */
+		cards: ObjectId[];
+	};
+}
+
 export type ChoiceRequest =
 	| TargetChoiceRequest
 	| ReplacementChoiceRequest
@@ -120,9 +130,28 @@ export type ChoiceRequest =
 	| PriorityActionChoiceRequest
 	| TriggerOrderChoiceRequest
 	| DeclareAttackersChoiceRequest
-	| DeclareBlockersChoiceRequest;
+	| DeclareBlockersChoiceRequest
+	| ScryChoiceRequest;
 
-export type ChoiceAnswer = { optionId: string } | { optionIds: string[] };
+export interface ScryChoiceAnswer {
+	/**
+	 * Both arrays are ordered from the top of the resulting library
+	 * toward the bottom—the earlier card will be drawn first.
+	 */
+	top: string[];
+	bottom: string[];
+}
+
+export interface ScryResult {
+	/** Both arrays are ordered in future draw order. */
+	top: ObjectId[];
+	bottom: ObjectId[];
+}
+
+export type ChoiceAnswer =
+	| { optionId: string }
+	| { optionIds: string[] }
+	| ScryChoiceAnswer;
 
 export interface SyncAgent {
 	choose(view: PlayerView, request: ChoiceRequest): ChoiceAnswer;
@@ -201,7 +230,8 @@ type RequestInput =
 	| Omit<
 			DeclareBlockersChoiceRequest,
 			"version" | "id" | "ordinal" | "fingerprint"
-	  >;
+	  >
+	| Omit<ScryChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">;
 
 function canonicalize(value: unknown, seen = new Set<object>()): string {
 	if (typeof value === "string" || typeof value === "boolean") {
@@ -272,7 +302,50 @@ function normalizeAnswer(
 	if (request.kind === "triggerOrder") {
 		return normalizeOrderedAnswer(request, answer);
 	}
+	if (request.kind === "scry") {
+		return normalizeScryAnswer(request, answer);
+	}
 	return normalizeSingleAnswer(request, answer);
+}
+
+function normalizeScryAnswer(
+	request: ScryChoiceRequest,
+	answer: ChoiceAnswer,
+): ScryChoiceAnswer {
+	const top = (answer as { top?: unknown })?.top;
+	const bottom = (answer as { bottom?: unknown })?.bottom;
+	if (!Array.isArray(top) || !Array.isArray(bottom)) {
+		throw new InvalidChoiceAnswerError(
+			`agent returned an invalid answer for choice ${request.id}`,
+		);
+	}
+
+	const legalIds = new Set(request.options.map((option) => option.id));
+	const seen = new Set<string>();
+	for (const id of [...top, ...bottom]) {
+		if (typeof id !== "string") {
+			throw new InvalidChoiceAnswerError(
+				`agent returned an invalid answer for choice ${request.id}`,
+			);
+		}
+		if (!legalIds.has(id)) {
+			throw new InvalidChoiceAnswerError(
+				`agent selected ${id} for choice ${request.id}; legal options: ${[...legalIds].join(", ")}`,
+			);
+		}
+		if (seen.has(id)) {
+			throw new InvalidChoiceAnswerError(
+				`agent selected duplicate option ${id} for choice ${request.id}`,
+			);
+		}
+		seen.add(id);
+	}
+	if (seen.size !== legalIds.size) {
+		throw new InvalidChoiceAnswerError(
+			`agent must place all ${legalIds.size} cards for choice ${request.id}`,
+		);
+	}
+	return { top: [...top] as string[], bottom: [...bottom] as string[] };
 }
 
 function normalizeOrderedAnswer(
@@ -840,6 +913,87 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			})),
 		});
 		return this.chooseMulti(state, request, candidates);
+	}
+
+	/**
+	 * One replayable ordered partition of the looked-at cards. `cards` and both
+	 * result arrays are top-to-bottom: an earlier card will be drawn first.
+	 */
+	chooseScry(
+		state: GameState,
+		player: PlayerId,
+		cards: ObjectId[],
+	): ScryResult {
+		if (cards.length === 0) return { top: [], bottom: [] };
+		assert(
+			new Set(cards).size === cards.length,
+			"scry candidates contain duplicate object ids",
+		);
+		const candidates = cards.map((id) => ({ id: String(id), value: id }));
+		const request = this.request({
+			kind: "scry",
+			player,
+			context: { cards: [...cards] },
+			options: cards.map((id) => ({
+				id: String(id),
+				label: `${objectLabel(state, id)}#${id}`,
+			})),
+		});
+
+		let normalized: ChoiceAnswer;
+		const recorded = this.decisions[this.cursor];
+		if (recorded) {
+			if (
+				recorded.request.id !== request.id ||
+				recorded.request.fingerprint !== request.fingerprint
+			) {
+				throw new ChoiceReplayMismatchError(
+					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
+				);
+			}
+			normalized = normalizeAnswer(request, recorded.answer);
+		} else {
+			const agent = this.agents?.[request.player];
+			if (!agent) {
+				throw new ChoiceReplayMismatchError(
+					`transcript ended before choice ${request.id}`,
+				);
+			}
+			const answer = agent.choose(
+				buildPlayerView(state, request.player),
+				request,
+			);
+			if (isPromiseLike(answer)) {
+				if (!this.allowSuspension) {
+					throw new Error(
+						"an async agent was used outside advanceWithReplay()",
+					);
+				}
+				this.pendingRequest = clone(request);
+				throw new ChoicePendingError(clone(request), answer);
+			}
+			normalized = normalizeAnswer(request, answer);
+			this.decisions.push({
+				request: clone(request),
+				answer: clone(normalized),
+			});
+		}
+
+		if (!("top" in normalized)) {
+			throw new InvalidChoiceAnswerError(
+				`choice ${request.id} requires a scry answer`,
+			);
+		}
+		const objectFor = (id: string): ObjectId => {
+			const candidate = candidates.find((entry) => entry.id === id);
+			assertDefined(candidate, `scry choice has no live candidate for ${id}`);
+			return candidate.value;
+		};
+		this.cursor++;
+		return {
+			top: normalized.top.map(objectFor),
+			bottom: normalized.bottom.map(objectFor),
+		};
 	}
 }
 

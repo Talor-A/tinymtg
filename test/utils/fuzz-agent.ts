@@ -57,6 +57,17 @@ export class FuzzAgent implements SyncAgent {
 					.map((option) => option.id),
 			};
 		}
+		if (request.kind === "scry") {
+			const shuffled = request.options
+				.map((option) => ({ option, order: this.rng() }))
+				.sort((left, right) => left.order - right.order)
+				.map(({ option }) => option.id);
+			const topCount = Math.floor(this.rng() * (shuffled.length + 1));
+			return {
+				top: shuffled.slice(0, topCount),
+				bottom: shuffled.slice(topCount),
+			};
+		}
 		const option =
 			request.options[Math.floor(this.rng() * request.options.length)];
 		if (!option) throw new Error("fuzz agent received no options");

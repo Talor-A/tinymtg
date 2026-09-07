@@ -10,8 +10,10 @@ import {
 	createReadContext,
 	eligibleBlockers,
 	executeAbilityAction,
+	executeCastAction,
 	getObservableActions,
 	isTurnStep,
+	name,
 	newGame,
 	perform,
 	permanent,
@@ -65,6 +67,7 @@ registerRuntimeFixture("f/faithful_watchdog", "rt-faithful-watchdog");
 registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
 registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
+registerRuntimeFixture("p/preordain", "rt-preordain");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
@@ -409,6 +412,41 @@ describe("forge-import runtime: statics and replacements", () => {
 		// entering afterward, proving Root Maze itself is still working.
 		const relic = enterFromHand(state, "darksteel-relic", ALICE, agents);
 		expect(permanent(state, relic).tapped).toBe(true);
+	});
+});
+
+describe("forge-import runtime: spell effects", () => {
+	test("Preordain's imported scry arrangement is applied before its draw", () => {
+		const state = setupMain();
+		const bottom = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+		const first = spawnCard(state, "forest", ALICE, "library").id;
+		const second = spawnCard(state, "rt-grizzly-bears", ALICE, "library").id;
+		const spell = spawnCard(state, "rt-preordain", ALICE, "hand");
+		perform(
+			state,
+			{
+				kind: "add mana",
+				source: spell.id,
+				player: ALICE,
+				mana: { u: 1 },
+			},
+			passingAgents(),
+		);
+		const agents = passingAgents();
+		agents[ALICE].scryChoices.push({
+			top: [second],
+			bottom: [first],
+		});
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		settlePriority(state, agents);
+
+		expect(state.players[ALICE].hand.map((id) => name(state, id))).toContain(
+			"Grizzly Bears",
+		);
+		expect(state.players[ALICE].library[0]).toBe(first);
+		expect(state.players[ALICE].library.at(-1)).toBe(bottom);
+		expect(agents[ALICE].scryChoices).toHaveLength(0);
 	});
 });
 

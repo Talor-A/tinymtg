@@ -431,6 +431,28 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				amount,
 			};
 		}
+		case "scry": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"scrynum",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const who = parsePlayer(getForgeParam(params, "Defined"));
+			const amount = positiveInteger(getForgeParam(params, "ScryNum"), 1);
+			if (!who || !amount)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"unsupported scry amount/player",
+					where,
+				);
+			return { kind: "scry", player: who, amount };
+		}
 		case "draw": {
 			const badParams = checkParams(
 				params,
