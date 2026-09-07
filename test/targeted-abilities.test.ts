@@ -175,7 +175,7 @@ registerCard({
 	types: ["artifact", "creature"],
 	subtypes: ["Construct"],
 	colors: [],
-	manaCost: { c: 1 },
+	manaCost: { n: 1 },
 	power: 1,
 	toughness: 1,
 	activatedAbilities: [

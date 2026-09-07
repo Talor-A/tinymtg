@@ -29,7 +29,7 @@ registerCard({
 	name: "Tap Observer",
 	types: ["creature"],
 	colors: [],
-	manaCost: { c: 1 },
+	manaCost: { n: 1 },
 	power: 1,
 	toughness: 1,
 	triggers: [
@@ -56,7 +56,7 @@ registerCard({
 	name: "Bulk Tap Observer",
 	types: ["enchantment"],
 	colors: [],
-	manaCost: { c: 1 },
+	manaCost: { n: 1 },
 	triggers: [
 		{
 			id: "red-tapped",
@@ -99,7 +99,7 @@ for (const [id, name] of [
 		name,
 		types: ["enchantment"],
 		colors: [],
-		manaCost: { c: 1 },
+		manaCost: { n: 1 },
 		replacements: [
 			{
 				label: id,

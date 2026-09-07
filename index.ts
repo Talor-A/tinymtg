@@ -56,10 +56,28 @@ export type Color = "w" | "u" | "b" | "r" | "g";
 
 const COLORS: readonly Color[] = ["w", "u", "b", "r", "g"];
 
-/** A kind of mana that can exist in a player's pool. */
+/**
+ * A kind of mana that can exist in a player's pool: the five colors plus
+ * colorless. Every unit of mana is exactly one of these.
+ *
+ * `c` is colorless mana, an actual kind of mana — not "generic". Generic is a
+ * property of a *cost*, so it lives in {@link ManaCostType} instead.
+ */
 export type ManaType = Color | "c";
 
 const MANA_TYPES: readonly ManaType[] = [...COLORS, "c"];
+
+/**
+ * A kind of requirement a mana cost can contain: every {@link ManaType}, plus
+ * generic.
+ *
+ * @example
+ * kozilek, butcher of truth costs {10}{C}{C}: ten generic (`n: 10`, payable
+ * with any mana) and two colorless (`c: 2`, payable only with colorless mana).
+ */
+export type ManaCostType = ManaType | "n";
+
+export const MANA_COST_TYPES: readonly ManaCostType[] = [...MANA_TYPES, "n"];
 
 /** Mana currently available to a player, including colorless mana. */
 export type ManaPool = Record<ManaType, number>;
@@ -1921,8 +1939,10 @@ export type CardDefManaCost =
 			b?: number;
 			r?: number;
 			g?: number;
-			/** generic */
+			/** colorless: payable only with colorless mana, as in {C}. */
 			c?: number;
+			/** generic: payable with mana of any type, as in {3}. */
+			n?: number;
 	  }
 	/**
 	 * Some cards have zero mana cost.
@@ -5628,37 +5648,36 @@ function doTimingRestrictionsAllowCast(
 }
 
 /**
- * The mana a cost demands, split into the colored part (which only that color
- * can pay) and the generic part (which anything can pay).
+ * The mana a cost demands, split into the specific part (each requirement
+ * payable only by mana of that exact {@link ManaType}) and the generic part
+ * (payable by any mana at all).
  *
- * `CardDefManaCost` spells generic as `c`, which is *not* the `c` of
- * {@link ManaType}: the former means "one mana of any type", the latter means
- * one colorless mana. Keeping them apart is the whole reason this returns a
- * split rather than a `ManaAmount`.
+ * The split is what makes payment planning tractable: specific requirements
+ * have exactly one way to be paid, generic has many.
  */
 interface ManaCostBreakdown {
-	colored: Partial<Record<Color, number>>;
+	specific: Partial<Record<ManaType, number>>;
 	generic: number;
 }
 
 function manaCostBreakdown(cost: CardDefManaCost): ManaCostBreakdown | null {
 	if (cost === "none") return null;
-	if (cost === "zero") return { colored: {}, generic: 0 };
-	const colored: Partial<Record<Color, number>> = {};
-	for (const color of COLORS) {
-		const amount = cost[color] ?? 0;
+	if (cost === "zero") return { specific: {}, generic: 0 };
+	const specific: Partial<Record<ManaType, number>> = {};
+	for (const type of MANA_TYPES) {
+		const amount = cost[type] ?? 0;
 		assert(
 			Number.isSafeInteger(amount) && amount >= 0,
-			`invalid ${color} quantity in mana cost`,
+			`invalid ${type} quantity in mana cost`,
 		);
-		if (amount > 0) colored[color] = amount;
+		if (amount > 0) specific[type] = amount;
 	}
-	const generic = cost.c ?? 0;
+	const generic = cost.n ?? 0;
 	assert(
 		Number.isSafeInteger(generic) && generic >= 0,
 		"invalid generic quantity in mana cost",
 	);
-	return { colored, generic };
+	return { specific, generic };
 }
 
 /**
@@ -5666,13 +5685,13 @@ function manaCostBreakdown(cost: CardDefManaCost): ManaCostBreakdown | null {
  * pay it. Pool-only: untapped sources are deliberately not considered, so a
  * player taps for mana first and then casts.
  *
- * Colored requirements are satisfied first, since only their own color can pay
- * them. Whatever generic remains is then paid in a fixed order — colorless
- * first, because nothing else can want it, then colors in WUBRG order. That is
- * a deterministic engine choice rather than a player decision: it can spend
- * mana the player was saving, but it never fails a payment that some other
- * assignment would have made, because after the colored requirements are met
- * every remaining unit of mana is interchangeable for generic.
+ * Specific requirements are satisfied first, since only their own mana type can
+ * pay them. Whatever generic remains is then paid in a fixed order — colorless
+ * first, then colors in WUBRG order. That is a deterministic engine choice
+ * rather than a player decision: it can spend mana the player was saving, but
+ * it never fails a payment that some other assignment would have made, because
+ * once the specific requirements are met every remaining unit of mana is
+ * interchangeable for generic.
  */
 export function planManaPayment(
 	pool: DeepReadOnly<ManaPool>,
@@ -5684,16 +5703,14 @@ export function planManaPayment(
 	const payment: ManaPool = { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 };
 	const remaining: ManaPool = { ...pool };
 
-	for (const color of COLORS) {
-		const required = breakdown.colored[color] ?? 0;
-		if (remaining[color] < required) return null;
-		remaining[color] -= required;
-		payment[color] += required;
+	for (const type of MANA_TYPES) {
+		const required = breakdown.specific[type] ?? 0;
+		if (remaining[type] < required) return null;
+		remaining[type] -= required;
+		payment[type] += required;
 	}
 
 	let generic = breakdown.generic;
-	// Colorless first: it is the only kind no colored requirement could have
-	// wanted, so spending it can never make a later payment impossible.
 	for (const type of ["c", ...COLORS] as const) {
 		if (generic === 0) break;
 		const spend = Math.min(generic, remaining[type]);
@@ -6063,7 +6080,7 @@ function activateAbilityIn(
 						);
 					}
 					let total = 0;
-					for (const type of COLORS) {
+					for (const type of MANA_TYPES) {
 						const amount = effect.mana[type] ?? 0;
 						if (!Number.isSafeInteger(amount) || amount < 0) {
 							throw new IllegalAbilityActivationError(

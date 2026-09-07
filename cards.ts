@@ -151,7 +151,7 @@ export const DOUBLING_SEASON = registerCard({
 	colors: ["g"],
 	manaCost: {
 		g: 1,
-		c: 4,
+		n: 4,
 	},
 	replacements: [
 		{
@@ -245,7 +245,7 @@ export const GRIZZLY_BEARS = registerCard({
 	colors: ["g"],
 	manaCost: {
 		g: 1,
-		c: 1,
+		n: 1,
 	},
 	power: 2,
 	toughness: 2,
@@ -271,7 +271,7 @@ export const DARKSTEEL_MYR = registerCard({
 	subtypes: ["Myr"],
 	colors: [],
 	manaCost: {
-		c: 3,
+		n: 3,
 	},
 	power: 0,
 	toughness: 1,
@@ -285,7 +285,7 @@ export const AJANIS_MANTRA = registerCard({
 	colors: ["w"],
 	manaCost: {
 		w: 1,
-		c: 1,
+		n: 1,
 	},
 	triggers: [
 		{
@@ -312,7 +312,7 @@ export const ARASHIN_CLERIC = registerCard({
 	colors: ["w"],
 	manaCost: {
 		w: 1,
-		c: 1,
+		n: 1,
 	},
 	power: 1,
 	toughness: 3,
@@ -399,7 +399,7 @@ export const REST_IN_PEACE = registerCard({
 	colors: ["w"],
 	manaCost: {
 		w: 1,
-		c: 1,
+		n: 1,
 	},
 	replacements: [
 		{
@@ -423,7 +423,7 @@ export const BABY_LEYLINE_OF_THE_VOID = registerCard({
 	colors: ["b"],
 	manaCost: {
 		b: 2,
-		c: 2,
+		n: 2,
 	},
 	replacements: [
 		{
@@ -457,7 +457,7 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 	colors: ["b"],
 	manaCost: {
 		b: 1,
-		c: 1,
+		n: 1,
 	},
 	replacements: [
 		{
@@ -534,7 +534,7 @@ export const FURNACE_OF_RATH = registerCard({
 	colors: ["r"],
 	manaCost: {
 		r: 3,
-		c: 1,
+		n: 1,
 	},
 	replacements: [
 		{
@@ -557,7 +557,7 @@ export const PALISADE_GIANT = registerCard({
 	colors: ["w"],
 	manaCost: {
 		w: 2,
-		c: 4,
+		n: 4,
 	},
 	power: 2,
 	toughness: 7,
@@ -652,7 +652,7 @@ export const CLONE = registerCard({
 	colors: ["u"],
 	manaCost: {
 		u: 1,
-		c: 3,
+		n: 3,
 	},
 	power: 0,
 	toughness: 0,
@@ -708,7 +708,7 @@ export const LABORATORY_MANIAC = registerCard({
 	colors: ["u"],
 	manaCost: {
 		u: 1,
-		c: 2,
+		n: 2,
 	},
 	power: 2,
 	toughness: 2,
@@ -743,7 +743,7 @@ export const PLATINUM_ANGEL = registerCard({
 	subtypes: ["Angel"],
 	colors: [],
 	manaCost: {
-		c: 7,
+		n: 7,
 	},
 	power: 4,
 	toughness: 4,
@@ -826,7 +826,7 @@ export const KALITAS = registerCard({
 	subtypes: ["Vampire", "Warrior"],
 	colors: ["b"],
 	manaCost: {
-		c: 2,
+		n: 2,
 		b: 2,
 	},
 	power: 3,
@@ -870,7 +870,7 @@ export const REVITALIZE = registerCard({
 	types: ["instant"],
 	colors: ["w"],
 	manaCost: {
-		c: 1,
+		n: 1,
 		w: 1,
 	},
 	spell: {

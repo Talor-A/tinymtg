@@ -51,6 +51,7 @@ const POSITIVE_FIXTURES = [
 	"p/prodigal_sorcerer",
 	"f/flametongue_kavu",
 	"m/manic_vandal",
+	"w/wastes",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -72,12 +73,53 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			name: "Grizzly Bears",
 			types: ["creature"],
 			subtypes: ["Bear"],
-			manaCost: { c: 1, g: 1 },
+			manaCost: { n: 1, g: 1 },
 			power: 2,
 			toughness: 2,
 		});
 		expect(result.card.abilityDefinitions.activated).toHaveLength(0);
 		expect(result.card.abilityDefinitions.triggered).toHaveLength(0);
+	});
+
+	test("{C} in a mana cost is colorless, not generic", () => {
+		// Reality Smasher costs {4}{C}: four generic plus one true colorless.
+		const result = importForgeCard(
+			"Name:Test Eldrazi\nManaCost:4 C\nTypes:Creature Eldrazi\nPT:5/5\nOracle:\n",
+			{ id: "test-eldrazi" },
+		);
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.manaCost).toEqual({ c: 1, n: 4 });
+		// A colorless requirement is not a color: the card is still colorless.
+		expect(result.card.colors).toEqual([]);
+	});
+
+	test("hybrid colorless symbols are still rejected", () => {
+		const result = importForgeCard(
+			"Name:Test Hybrid\nManaCost:CW\nTypes:Creature Eldrazi\nPT:1/1\nOracle:\n",
+			{ id: "test-hybrid" },
+		);
+		expect(result.ok).toBe(false);
+	});
+
+	test("Produced$ C lowers to colorless mana", () => {
+		const result = importFixture("w/wastes");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.colors).toEqual([]);
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "mana",
+				id: "activated-1",
+				text: "Add {C}.",
+				costs: [{ kind: "tap-self" }],
+				effects: [
+					{
+						kind: "add-mana",
+						player: "you",
+						mana: { w: 0, u: 0, b: 0, r: 0, g: 0, c: 1 },
+					},
+				],
+			},
+		]);
 	});
 
 	test("Forest and Swamp synthesize their basic-land mana ability", () => {
@@ -732,6 +774,27 @@ describe("lowerForgeCard: hardening regressions", () => {
 		expect(random.ok).toBe(false);
 		if (!random.ok)
 			expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("rejects the produced-mana forms that name a choice, not a symbol", () => {
+		for (const produced of ["Any", "Combo W U", "Chosen", "W U", "CW"]) {
+			const result = importText(
+				`Name:Bad Land\nManaCost:no cost\nTypes:Land\nA:AB$ Mana | Cost$ T | Produced$ ${produced} | SpellDescription$ x.\nOracle:\n`,
+			);
+			expect(result.ok, `Produced$ ${produced}`).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		}
+	});
+
+	test("a dynamic mana amount rejects on the amount, not the symbol", () => {
+		// Urza's Tower: {C}, or {C}{C}{C} with the other two Urza lands out.
+		const result = importText(
+			"Name:Test Tower\nManaCost:no cost\nTypes:Land\nA:AB$ Mana | Cost$ T | Produced$ C | Amount$ UrzaAmount | SpellDescription$ x.\nSVar:UrzaAmount:Count$UrzaLands.3.1\nOracle:\n",
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.message).toContain("mana amount");
 	});
 
 	test("rejects an unresolved SubAbility reference", () => {

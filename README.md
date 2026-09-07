@@ -85,7 +85,8 @@ to `CardDefInput.entersTapped`, and the global form (a supported selector
 scoped by `ActiveZones$ Battlefield`, e.g. Root Maze) lowers to a registered
 replacement, honoring CR 614.12's own-entry guard; basic-land mana abilities
 are synthesized from subtype (Forge omits explicit `A:` lines for those);
-fixed-color tap-for-mana abilities; tap-self activated abilities with
+tap-for-mana abilities producing a fixed amount of one mana symbol, colorless
+(`Produced$ C`, e.g. Wastes) included; tap-self activated abilities with
 life/draw/discard-one-chosen-card, damage, and destroy effects; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, or a `ValidTgts$` selector whose base is a card type, a
@@ -94,12 +95,12 @@ card type, or supertype word that may carry Forge's `non` prefix — so
 `Creature.nonBlack` lowers, `Creature.attacking` does not); simple self-entry,
 upkeep, and self-attack triggers, including one optional (`may`) wrapper around
 a trigger's whole (possibly multi-step) effect sequence; and fixed
-controlled-creature P/T statics. See
-the acceptance matrix in `test/forge-import.test.ts` for the exact fixtures
-this is checked against, and the "Deferred / explicitly unsupported" list at
-the top of `forge-import.ts` for what is intentionally out of scope (temporary
-P/T, random/multi-card discard, dynamic/X amounts, alternate costs,
-hexproof/shroud/protection, and more).
+controlled-creature P/T statics. See the acceptance matrix in
+`test/forge-import.test.ts` for the exact fixtures this is checked against, and
+the "Deferred / explicitly unsupported" list at the top of `forge-import.ts`
+for what is intentionally out of scope (temporary P/T, random/multi-card
+discard, dynamic/X amounts, alternate costs, hexproof/shroud/protection, and
+more).
 
 The engine's own selector vocabulary is wider than the spellings the bridge
 accepts: `TargetSelectorDef` covers the source itself, card type, supertype,

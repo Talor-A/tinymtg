@@ -45,7 +45,7 @@ const COMMUNAL_INSTRUCTION = registerCard({
 	name: "Communal Instruction",
 	types: ["enchantment"],
 	colors: ["u"],
-	manaCost: { u: 1, c: 1 },
+	manaCost: { u: 1, n: 1 },
 	activatedAbilities: [
 		{
 			kind: "activated",

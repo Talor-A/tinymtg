@@ -50,7 +50,9 @@ import type {
 	ContinuousEffect,
 	EffectDef,
 	GameEvent,
+	ManaCostType,
 	ManaPool,
+	ManaType,
 	ReplacementDef,
 	SpellAbilityDef,
 	Supertype,
@@ -58,7 +60,12 @@ import type {
 	TargetSelectorDef,
 	TriggerDef,
 } from "./index.ts";
-import { defineCard, etbPreview, selectorMatches } from "./index.ts";
+import {
+	defineCard,
+	etbPreview,
+	MANA_COST_TYPES,
+	selectorMatches,
+} from "./index.ts";
 
 export interface ImportIssue {
 	code: string;
@@ -113,6 +120,23 @@ const COLOR_WORDS = new Map<string, Color>([
 	["red", "r"],
 	["g", "g"],
 	["green", "g"],
+]);
+/**
+ * The `Produced$` values that name exactly one kind of mana. Colorless belongs
+ * here but never in {@link COLOR_WORDS}: `Produced$ C` makes colorless mana,
+ * while a card producing it is not thereby any color.
+ *
+ * Everything else Forge writes here — `Any`, `Combo W U`, `Chosen`, and the
+ * multi-symbol forms — is a choice the engine cannot yet represent, so it
+ * rejects the card.
+ */
+const PRODUCED_MANA_SYMBOLS = new Map<string, ManaType>([
+	["W", "w"],
+	["U", "u"],
+	["B", "b"],
+	["R", "r"],
+	["G", "g"],
+	["C", "c"],
 ]);
 const BARE_KEYWORDS = new Map<
 	string,
@@ -1009,28 +1033,37 @@ function lowerTrigger(
 function parseManaCost(text: string): CardDefInput["manaCost"] | null {
 	if (text === "no cost") return "none";
 	if (text === "0") return "zero";
-	const result = { c: 0, w: 0, u: 0, b: 0, r: 0, g: 0 };
+	const result: Record<ManaCostType, number> = {
+		n: 0,
+		c: 0,
+		w: 0,
+		u: 0,
+		b: 0,
+		r: 0,
+		g: 0,
+	};
 	for (const symbol of text.split(/\s+/).filter(Boolean)) {
 		if (/^[1-9]\d*$/.test(symbol)) {
-			const n = Number(symbol);
-			if (!Number.isSafeInteger(n)) return null;
-			result.c += n;
+			const generic = Number(symbol);
+			if (!Number.isSafeInteger(generic)) return null;
+			result.n += generic;
 		} else if (
 			symbol === "W" ||
 			symbol === "U" ||
 			symbol === "B" ||
 			symbol === "R" ||
-			symbol === "G"
+			symbol === "G" ||
+			// {C}: a colorless requirement, not generic. Kozilek and friends.
+			symbol === "C"
 		)
-			result[symbol.toLowerCase() as Color] += 1;
+			result[symbol.toLowerCase() as ManaType] += 1;
 		else return null;
 	}
-	const total = result.c + result.w + result.u + result.b + result.r + result.g;
+	const total = MANA_COST_TYPES.reduce((sum, type) => sum + result[type], 0);
 	if (total === 0 || !Number.isSafeInteger(total)) return null;
 	const out: Exclude<CardDefInput["manaCost"], "none" | "zero"> = {};
-	if (result.c > 0) out.c = result.c;
-	for (const color of ["w", "u", "b", "r", "g"] as const) {
-		if (result[color] > 0) out[color] = result[color];
+	for (const type of MANA_COST_TYPES) {
+		if (result[type] > 0) out[type] = result[type];
 	}
 	return out;
 }
@@ -1042,14 +1075,14 @@ function manaCostColors(mana: CardDefInput["manaCost"]): Color[] {
 	);
 }
 
-function fullMana(color: Color, amount = 1): ManaPool {
+function fullMana(produced: ManaType, amount = 1): ManaPool {
 	return {
-		w: color === "w" ? amount : 0,
-		u: color === "u" ? amount : 0,
-		b: color === "b" ? amount : 0,
-		r: color === "r" ? amount : 0,
-		g: color === "g" ? amount : 0,
-		c: 0,
+		w: produced === "w" ? amount : 0,
+		u: produced === "u" ? amount : 0,
+		b: produced === "b" ? amount : 0,
+		r: produced === "r" ? amount : 0,
+		g: produced === "g" ? amount : 0,
+		c: produced === "c" ? amount : 0,
 	};
 }
 
@@ -1439,16 +1472,24 @@ export function lowerForgeCard(
 				);
 			}
 			const produced = getForgeParam(params, "Produced");
-			const color =
-				produced && produced.length === 1
-					? COLOR_WORDS.get(produced.toLowerCase())
-					: undefined;
-			const amount = positiveInteger(getForgeParam(params, "Amount"), 1);
-			if (!color || !amount) {
+			const type = produced ? PRODUCED_MANA_SYMBOLS.get(produced) : undefined;
+			if (!type) {
 				return reject(
 					issue(
 						"UNSUPPORTED_EFFECT",
-						"only a fixed colored mana symbol is supported",
+						`unsupported produced mana ${produced ?? "(none)"}`,
+						where,
+					),
+				);
+			}
+			// A `Count$`/SVar amount (Urza's Tower) lands here: the symbol is
+			// fine, the quantity is the part the engine cannot yet express.
+			const amount = positiveInteger(getForgeParam(params, "Amount"), 1);
+			if (!amount) {
+				return reject(
+					issue(
+						"UNSUPPORTED_EFFECT",
+						`unsupported mana amount ${getForgeParam(params, "Amount") ?? ""}`,
 						where,
 					),
 				);
@@ -1460,7 +1501,7 @@ export function lowerForgeCard(
 				text: getForgeParam(params, "SpellDescription") ?? `Add {${produced}}.`,
 				costs: [{ kind: "tap-self" }],
 				effects: [
-					{ kind: "add-mana", player: "you", mana: fullMana(color, amount) },
+					{ kind: "add-mana", player: "you", mana: fullMana(type, amount) },
 				],
 			});
 			continue;
