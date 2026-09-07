@@ -314,8 +314,48 @@ function makeSteps(state: GameState, phase: PhaseOccurrence): StepOccurrence[] {
 export type ObjectId = Brand<number, "ObjectId">;
 export type StackItemId = Brand<number, "StackItemId">;
 
-export type CounterNames = "+1/+1" | "-1/-1" | "charge" | "poison";
-export type CounterBag = Partial<Record<CounterNames, number>>;
+/**
+ * CR 122.1 splits counters in two: counters on objects and counters on players.
+ * They are disjoint sets, so they get disjoint types — a creature cannot carry
+ * poison and a player cannot carry -1/-1.
+ */
+export type PermanentCounter = "+1/+1" | "-1/-1" | "charge";
+export type PlayerCounter = "poison";
+export type PermanentCounterBag = Partial<Record<PermanentCounter, number>>;
+export type PlayerCounterBag = Partial<Record<PlayerCounter, number>>;
+
+/**
+ * The bag left after taking `request` out of `bag`. Removal is the same
+ * arithmetic for a permanent's counters and a player's counters, and the
+ * generic parameter is what keeps the two counter vocabularies from mixing.
+ */
+function bagAfterRemoval<C extends string>(
+	bag: Partial<Record<C, number>>,
+	request: "all" | Partial<Record<C, number | "all">>,
+): Partial<Record<C, number>> {
+	if (request === "all") return {};
+	const next: Partial<Record<C, number>> = { ...bag };
+	for (const [counter, amount] of Object.entries(request) as [
+		C,
+		number | "all",
+	][]) {
+		if (amount === "all") {
+			next[counter] = 0;
+			continue;
+		}
+		const present = next[counter];
+		if (present === undefined)
+			throw new Error(
+				"undefined behavior: tried to remove a counter that wasn't present.",
+			);
+		if (present < amount)
+			throw new Error(
+				"undefined behavior: tried to remove more counters than were present.",
+			);
+		next[counter] = present - amount;
+	}
+	return next;
+}
 
 /* ------------------------------------------------------------------ *
  * Events
@@ -324,9 +364,9 @@ export type CounterBag = Partial<Record<CounterNames, number>>;
  * Used for referencing entities in events.
  * TODO: this might be insufficient
  */
-export type EntityRef =
-	| { type: "player"; player: PlayerId }
-	| { type: "permanent"; id: ObjectId };
+export type PlayerRef = { type: "player"; player: PlayerId };
+export type PermanentRef = { type: "permanent"; id: ObjectId };
+export type EntityRef = PlayerRef | PermanentRef;
 
 interface EventCommon {
 	/**
@@ -469,7 +509,7 @@ interface ZoneChangeEvent extends EventCommon {
 	toController: PlayerId;
 	// --- fields only meaningful when entering the battlefield (CR 614.1c-d) ---
 	entersTapped?: boolean;
-	entersWithCounters?: CounterBag;
+	entersWithCounters?: PermanentCounterBag;
 	/**
 	 * Serializable copiable-values override set by copy-tier replacements
 	 * (CR 616.1c). It carries the copied object's ability *references*, which is
@@ -496,18 +536,39 @@ type MoveCause =
 	| "return"
 	| "put";
 
+/**
+ * CR 122.1 keeps counters on objects and counters on players in disjoint sets,
+ * so they are disjoint events. Splitting on the event kind — rather than on a
+ * target that could be either — is what lets a permanent's counter names and a
+ * player's counter names stay apart everywhere they are read.
+ */
 interface AddCountersEvent extends EventCommon {
 	kind: "add counters";
-	target: EntityRef;
-	counter: CounterNames;
+	target: PermanentRef;
+	counter: PermanentCounter;
 	amount: number;
 	source?: ObjectId;
 }
 
 interface RemoveCountersEvent extends EventCommon {
 	kind: "remove counters";
-	target: EntityRef;
-	counters: "all" | Partial<Record<CounterNames, number | "all">>;
+	target: PermanentRef;
+	counters: "all" | Partial<Record<PermanentCounter, number | "all">>;
+	source?: ObjectId;
+}
+
+interface AddPlayerCountersEvent extends EventCommon {
+	kind: "add player counters";
+	target: PlayerRef;
+	counter: PlayerCounter;
+	amount: number;
+	source?: ObjectId;
+}
+
+interface RemovePlayerCountersEvent extends EventCommon {
+	kind: "remove player counters";
+	target: PlayerRef;
+	counters: "all" | Partial<Record<PlayerCounter, number | "all">>;
 	source?: ObjectId;
 }
 
@@ -602,6 +663,8 @@ export type GameEvent =
 	| ZoneChangeEvent
 	| AddCountersEvent
 	| RemoveCountersEvent
+	| AddPlayerCountersEvent
+	| RemovePlayerCountersEvent
 	| GainLifeEvent
 	| LoseLifeEvent
 	| AddManaEvent
@@ -803,7 +866,7 @@ export interface PermanentSnapshot extends SnapshotBase {
 	attacking: boolean;
 	blocking: boolean;
 	damage: number;
-	counters: CounterBag;
+	counters: PermanentCounterBag;
 	attributes: {
 		deathtouched?: boolean;
 	};
@@ -967,7 +1030,7 @@ export interface GameView {
 export interface PlayerPublicView {
 	readonly id: PlayerId;
 	readonly life: number;
-	readonly counters: DeepReadOnly<CounterBag>;
+	readonly counters: DeepReadOnly<PlayerCounterBag>;
 	readonly manaPool: DeepReadOnly<ManaPool>;
 	readonly handCount: number;
 	readonly libraryCount: number;
@@ -1248,7 +1311,7 @@ interface PlayerState {
 	hand: ObjectId[];
 	graveyard: ObjectId[];
 	exile: ObjectId[];
-	counters: CounterBag;
+	counters: PlayerCounterBag;
 	/** Turn-scoped counters, e.g. cards drawn in the draw step (Chains of Mephistopheles). */
 	drawnInDrawStep: number;
 	/** Set when the player has attempted to draw from an empty library since the last SBA check (CR 704.5b). */
@@ -1434,7 +1497,7 @@ export interface PermanentObject extends ObjectBase {
 	copiableOverride?: CharacteristicsSnapshot;
 
 	tapped: boolean;
-	counters: CounterBag;
+	counters: PermanentCounterBag;
 	damage: number;
 	attacking: boolean;
 	blocking: boolean;
@@ -2009,7 +2072,7 @@ interface CardDefBase {
 	/** Printed "enters tapped" — compiled into a replacement. */
 	entersTapped?: boolean;
 	/** Printed "enters with N counters" — also a replacement. */
-	entersWith?: CounterBag;
+	entersWith?: PermanentCounterBag;
 	/** Canonical declarative spell definition, including targets. */
 	spell?: SpellAbilityDef;
 }
@@ -2416,7 +2479,11 @@ function spawnOnBattlefield(
 	state: GameState,
 	owner: PlayerId,
 	representation: PermanentObject["representation"],
-	opts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
+	opts: {
+		tapped?: boolean;
+		counters?: PermanentCounterBag;
+		token?: boolean;
+	} = {},
 ): PermanentObject {
 	const obj: PermanentObject = {
 		kind: "permanent",
@@ -2446,7 +2513,11 @@ export function spawnPermanent(
 	state: GameState,
 	cardId: string,
 	owner: PlayerId,
-	opts: { tapped?: boolean; counters?: CounterBag; token?: boolean } = {},
+	opts: {
+		tapped?: boolean;
+		counters?: PermanentCounterBag;
+		token?: boolean;
+	} = {},
 ): PermanentObject {
 	const representation: PermanentObject["representation"] = opts.token
 		? { kind: "token", createdValues: characteristicsFromCardDef(card(cardId)) }
@@ -3439,14 +3510,12 @@ export function affectedPlayer(
 			return affectedObjectPlayer(state, ev.ref.object);
 
 		case "add counters":
-			return ev.target.type === "player"
-				? ev.target.player
-				: affectedObjectPlayer(state, ev.target.id);
-
 		case "remove counters":
-			return ev.target.type === "player"
-				? ev.target.player
-				: affectedObjectPlayer(state, ev.target.id);
+			return affectedObjectPlayer(state, ev.target.id);
+
+		case "add player counters":
+		case "remove player counters":
+			return ev.target.player;
 
 		case "create token":
 			return ev.controller;
@@ -3696,7 +3765,7 @@ function moveObject(
 	opts: {
 		toController: PlayerId;
 		tapped?: boolean;
-		counters?: CounterBag;
+		counters?: PermanentCounterBag;
 		copiableOverride?: CharacteristicsSnapshot;
 		toBottom?: boolean;
 		spellTargets?: TargetBindings;
@@ -3854,18 +3923,16 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 				.join(" ");
 			return `move(${name(state, ev.object)}: ${ev.from}->${ev.to}${extras ? ` ${extras}` : ""})`;
 		}
-		case "add counters": {
+		case "add counters":
+			return `counters(${ev.amount}x ${ev.counter} on ${name(state, ev.target.id)})`;
+		case "add player counters":
+			return `counters(${ev.amount}x ${ev.counter} on P${ev.target.player})`;
+		case "remove counters":
+		case "remove player counters": {
 			const tgt =
-				ev.target.type === "player"
-					? `P${ev.target.player}`
-					: name(state, ev.target.id);
-			return `counters(${ev.amount}x ${ev.counter} on ${tgt})`;
-		}
-		case "remove counters": {
-			const tgt =
-				ev.target.type === "player"
-					? `P${ev.target.player}`
-					: name(state, ev.target.id);
+				ev.kind === "remove counters"
+					? name(state, ev.target.id)
+					: `P${ev.target.player}`;
 			if (ev.counters === "all") return `counters(rm all on ${tgt})`;
 			return `counters(rm ${Object.entries(ev.counters)
 				.map(([k, v]) => `${v}x ${k}`)
@@ -3966,7 +4033,12 @@ function checkStateBasedActionsIn(
 			}
 			// 704.5c. If a player has ten or more poison counters, that player loses
 			// the game.
-			if (p.counters.poison !== undefined && p.counters.poison >= 10) {
+			if (
+				!p.lost &&
+				!p.won &&
+				p.counters.poison !== undefined &&
+				p.counters.poison >= 10
+			) {
 				performIn(
 					state,
 					{
@@ -4793,65 +4865,46 @@ function executeIn(
 				throw new Error(
 					"undefined behavior: tried to add non-natural quantity of counters.",
 				);
-				// happened = false;
-				// break;
 			}
-			if (ev.target.type === "permanent") {
-				const o = maybePermanent(state, ev.target.id);
-				if (!o) {
-					throw new Error(
-						"undefined behavior: tried to add counters to a non-existent permanent.",
-					);
-				}
-				// if (!o) {
-				// 	happened = false;
-				// 	break;
-				// }
-				o.counters[ev.counter] = (o.counters[ev.counter] ?? 0) + ev.amount;
-				log(
-					state,
-					`${"  ".repeat(depth)}${name(state, o.id)} now has ${o.counters[ev.counter]} ${ev.counter}`,
-				);
-			} else {
-				state.players[ev.target.player].counters[ev.counter] =
-					(state.players[ev.target.player].counters[ev.counter] ?? 0) +
-					ev.amount;
-				log(
-					state,
-					`${"  ".repeat(depth)}${state.players[ev.target.player].id} now has ${state.players[ev.target.player].counters[ev.counter]} ${ev.counter}`,
+			const o = maybePermanent(state, ev.target.id);
+			if (!o) {
+				throw new Error(
+					"undefined behavior: tried to add counters to a non-existent permanent.",
 				);
 			}
+			o.counters[ev.counter] = (o.counters[ev.counter] ?? 0) + ev.amount;
+			log(
+				state,
+				`${"  ".repeat(depth)}${name(state, o.id)} now has ${o.counters[ev.counter]} ${ev.counter}`,
+			);
+			break;
+		}
+		case "add player counters": {
+			if (ev.amount <= 0) {
+				throw new Error(
+					"undefined behavior: tried to add non-natural quantity of counters.",
+				);
+			}
+			const p = state.players[ev.target.player];
+			p.counters[ev.counter] = (p.counters[ev.counter] ?? 0) + ev.amount;
+			log(
+				state,
+				`${"  ".repeat(depth)}${p.id} now has ${p.counters[ev.counter]} ${ev.counter}`,
+			);
 			break;
 		}
 		case "remove counters": {
-			if (ev.target.type === "player") {
-				throw new Error("player counters not implemented");
-			}
 			const o = maybePermanent(state, ev.target.id);
 			if (!o) {
 				happened = false;
 				break;
 			}
-			if (ev.counters === "all") {
-				o.counters = {};
-				break;
-			}
-			Object.entries(ev.counters).forEach(([_counter, amount]) => {
-				const counter = _counter as CounterNames;
-				if (amount === "all") {
-					o.counters[counter] = 0;
-					return;
-				}
-				if (o.counters[counter] === undefined)
-					throw new Error(
-						"undefined behavior: tried to remove a counter that wasn't present.",
-					);
-				if (o.counters[counter] < amount)
-					throw new Error(
-						"undefined behavior: tried to remove more counters than were present.",
-					);
-				o.counters[counter] -= amount;
-			});
+			o.counters = bagAfterRemoval(o.counters, ev.counters);
+			break;
+		}
+		case "remove player counters": {
+			const p = state.players[ev.target.player];
+			p.counters = bagAfterRemoval(p.counters, ev.counters);
 			break;
 		}
 

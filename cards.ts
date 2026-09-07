@@ -1,11 +1,11 @@
 import type {
 	CharacteristicsSnapshot,
 	Color,
-	CounterBag,
-	CounterNames,
 	EffectCtx,
 	GameEvent,
 	ObjectId,
+	PermanentCounter,
+	PermanentCounterBag,
 	PlayerId,
 	ReadContext,
 	ReadonlyGameState,
@@ -31,8 +31,8 @@ import { assert, assertDefined } from "./lib/assert.ts";
  * or your engine quietly gets Walking Ballista wrong.
  * ------------------------------------------------------------------ */
 
-function eventCounters(ev: GameEvent): CounterBag | null {
-	if (ev.kind === "add counters" && ev.target.type === "permanent") {
+function eventCounters(ev: GameEvent): PermanentCounterBag | null {
+	if (ev.kind === "add counters") {
 		return { [ev.counter]: ev.amount };
 	}
 	if (
@@ -45,7 +45,7 @@ function eventCounters(ev: GameEvent): CounterBag | null {
 	return null;
 }
 
-function withCounters(ev: GameEvent, bag: CounterBag): GameEvent[] {
+function withCounters(ev: GameEvent, bag: PermanentCounterBag): GameEvent[] {
 	if (ev.kind === "add counters")
 		return [{ ...ev, amount: bag[ev.counter] ?? 0 }];
 	if (ev.kind === "change zone") return [{ ...ev, entersWithCounters: bag }];
@@ -58,7 +58,6 @@ function counterRecipientController(
 	ev: GameEvent,
 ): PlayerId | null {
 	if (ev.kind === "add counters") {
-		if (ev.target.type !== "permanent") return null;
 		return maybePermanent(state, ev.target.id)?.controller ?? null;
 	}
 	if (ev.kind === "change zone" && ev.to === "battlefield")
@@ -67,7 +66,7 @@ function counterRecipientController(
 }
 
 function isCreatureRecipient(ctx: EffectCtx, ev: GameEvent): boolean {
-	if (ev.kind === "add counters" && ev.target.type === "permanent") {
+	if (ev.kind === "add counters") {
 		const snapshot = readObject(ctx.read, ev.target.id);
 		return (
 			snapshot.kind === "permanent" &&
@@ -168,7 +167,7 @@ export const DOUBLING_SEASON = registerCard({
 			},
 			replace(ev) {
 				const bag = { ...eventCounters(ev)! };
-				for (const k of Object.keys(bag) as CounterNames[])
+				for (const k of Object.keys(bag) as PermanentCounter[])
 					bag[k] = (bag[k] ?? 0) * 2;
 				return withCounters(ev, bag);
 			},

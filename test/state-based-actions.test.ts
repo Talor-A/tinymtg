@@ -176,3 +176,50 @@ describe("regenerating a creature", () => {
 		);
 	});
 });
+
+describe("player counters", () => {
+	test("poison counters go on, come off, and kill at ten", () => {
+		const state = newGame();
+		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
+
+		perform(
+			state,
+			{
+				kind: "add player counters",
+				target: { type: "player", player: ALICE },
+				counter: "poison",
+				amount: 10,
+			},
+			agents,
+		);
+		expect(state.players[ALICE].counters.poison).toBe(10);
+
+		// Removal is symmetric with addition: nine off leaves one, below the
+		// 704.5c threshold.
+		perform(
+			state,
+			{
+				kind: "remove player counters",
+				target: { type: "player", player: ALICE },
+				counters: { poison: 9 },
+			},
+			agents,
+		);
+		expect(state.players[ALICE].counters.poison).toBe(1);
+		checkStateBasedActions(state, agents);
+		expect(state.players[ALICE].lost, "one poison is survivable").toBe(false);
+
+		perform(
+			state,
+			{
+				kind: "add player counters",
+				target: { type: "player", player: ALICE },
+				counter: "poison",
+				amount: 9,
+			},
+			agents,
+		);
+		checkStateBasedActions(state, agents);
+		expect(state.players[ALICE].lost, "ten poison loses the game").toBe(true);
+	});
+});
