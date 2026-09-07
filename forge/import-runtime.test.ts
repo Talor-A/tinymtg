@@ -64,6 +64,7 @@ registerRuntimeFixture("r/root_maze", "rt-root-maze");
 registerRuntimeFixture("f/faithful_watchdog", "rt-faithful-watchdog");
 registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
 registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
+registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
@@ -204,6 +205,29 @@ describe("forge-import runtime: triggers", () => {
 		stockLibraries(decline);
 		advanceUntil(decline, declineAgents, (next) => atUpkeepOf(next, ALICE));
 		expect(decline.players[ALICE].life, "declined the optional gain").toBe(20);
+	});
+
+	test("Necrogen Mists makes the player whose upkeep began discard", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		spawnPermanent(state, "rt-necrogen-mists", ALICE);
+		stockLibraries(state);
+
+		advanceUntil(
+			state,
+			agents,
+			(next) => isTurnStep(next, "untap") && activePlayer(next) === BOB,
+		);
+		const aliceCard = spawnCard(state, "forest", ALICE, "hand");
+		spawnCard(state, "forest", BOB, "hand");
+		const bobHandBefore = state.players[BOB].hand.length;
+		const bobGraveyardBefore = state.players[BOB].graveyard.length;
+
+		advanceUntil(state, agents, (next) => atUpkeepOf(next, BOB));
+
+		expect(state.players[ALICE].hand).toContain(aliceCard.id);
+		expect(state.players[BOB].hand).toHaveLength(bobHandBefore - 1);
+		expect(state.players[BOB].graveyard).toHaveLength(bobGraveyardBefore + 1);
 	});
 
 	test("an optional trigger's whole multi-effect sequence is accepted or declined as one choice", () => {

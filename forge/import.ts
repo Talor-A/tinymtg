@@ -41,12 +41,14 @@ import type {
 	ManaCostType,
 	ManaPool,
 	ManaType,
+	RelativeEffectPlayer,
 	ReplacementEffectDefinition,
 	SpellAbilityDef,
 	StaticAbilityDefinition,
 	Supertype,
 	TargetDef,
 	TargetSelectorDef,
+	TriggerEffectPlayer,
 	TriggeredAbilityDefinition,
 	ValidPlayer,
 } from "../index.ts";
@@ -230,10 +232,17 @@ function signedInteger(value: string | undefined): number | null {
 	return Number.isSafeInteger(n) ? n : null;
 }
 
-function player(value: string | undefined): "you" | "opponent" | null {
+function player(value: string | undefined): RelativeEffectPlayer | null {
 	if (value === undefined || value === "You") return "you";
 	if (value === "Opponent") return "opponent";
 	return null;
+}
+
+function triggerEffectPlayer(
+	value: string | undefined,
+): TriggerEffectPlayer | null {
+	if (value === "TriggeredPlayer") return "triggering-player";
+	return player(value);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -332,8 +341,8 @@ const TARGET_SLOT = "target-1";
  * A targeting effect and its ability's `ValidTgts$` have to agree, or the
  * engine would resolve an effect against a target nobody checked.
  */
-function checkEffectTargetSlots(
-	effects: EffectDef[],
+function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
+	effects: EffectDef<Player>[],
 	targets: TargetDef[],
 	where: { nodeId?: string; line?: number },
 ): ImportIssue | null {
@@ -387,12 +396,13 @@ function parseTarget(value: string | undefined): TargetDef[] | null {
 
 const COMMON_EFFECT_PARAMS = ["spelldescription", "subability", "cost"];
 
-function parseSingleEffect(
+function parseSingleEffect<Player extends TriggerEffectPlayer>(
 	params: ForgeParamList,
 	discriminatorLower: string,
 	api: string,
 	where: { nodeId?: string; line?: number },
-): Exclude<EffectDef, { kind: "may" }> | ImportIssue {
+	parsePlayer: (value: string | undefined) => Player | null,
+): Exclude<EffectDef<Player>, { kind: "may" }> | ImportIssue {
 	switch (api) {
 		case "gainlife":
 		case "loselife": {
@@ -407,7 +417,7 @@ function parseSingleEffect(
 				where,
 			);
 			if (badParams) return badParams;
-			const who = player(getForgeParam(params, "Defined"));
+			const who = parsePlayer(getForgeParam(params, "Defined"));
 			const amount = positiveInteger(getForgeParam(params, "LifeAmount"));
 			if (!who || !amount)
 				return issue(
@@ -433,7 +443,7 @@ function parseSingleEffect(
 				where,
 			);
 			if (badParams) return badParams;
-			const who = player(getForgeParam(params, "Defined"));
+			const who = parsePlayer(getForgeParam(params, "Defined"));
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!who || !amount)
 				return issue(
@@ -462,7 +472,7 @@ function parseSingleEffect(
 					"only Mode$ TgtChoose discard is supported",
 					where,
 				);
-			const who = player(getForgeParam(params, "Defined"));
+			const who = parsePlayer(getForgeParam(params, "Defined"));
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!who || amount !== 1)
 				return issue(
@@ -554,14 +564,15 @@ const CHAIN_FORBIDDEN = [
  * declaration is forbidden on every continuation, and allowed only at a root:
  * an ability declares its targets once, where it is announced.
  */
-function lowerEffectChain(
+function lowerEffectChain<Player extends TriggerEffectPlayer>(
 	face: ForgeFaceAst,
 	rootParams: ForgeParamList,
 	rootWhere: { nodeId?: string; line?: number },
 	rejectAtRoot: boolean,
 	rootTokens: readonly (typeof ABILITY_DISCRIMINATOR_TOKENS)[number][],
-): { effects: EffectDef[]; usedSVarNames: string[] } | ImportIssue {
-	const effects: EffectDef[] = [];
+	parsePlayer: (value: string | undefined) => Player | null,
+): { effects: EffectDef<Player>[]; usedSVarNames: string[] } | ImportIssue {
+	const effects: EffectDef<Player>[] = [];
 	const usedSVarNames: string[] = [];
 	let current = rootParams;
 	let where = rootWhere;
@@ -601,6 +612,7 @@ function lowerEffectChain(
 			disc.token.toLowerCase(),
 			disc.api,
 			where,
+			parsePlayer,
 		);
 		if ("code" in effect) return effect;
 		effects.push(effect);
@@ -980,6 +992,7 @@ function lowerTrigger(
 		{ nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
 		true,
 		["DB"],
+		triggerEffectPlayer,
 	);
 	if ("code" in chain) return chain;
 	for (const n of chain.usedSVarNames) used.add(n);
@@ -1635,6 +1648,7 @@ export function lowerForgeCard(
 			where,
 			false,
 			disc.token === "SP" ? ["SP"] : ["AB"],
+			player,
 		);
 		if ("code" in chain) return reject(chain);
 		const targets = parseTarget(getForgeParam(params, "ValidTgts"));

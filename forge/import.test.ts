@@ -39,6 +39,8 @@ const POSITIVE_FIXTURES = [
 	"s/sorins_thirst",
 	"a/arashin_cleric",
 	"a/ajanis_mantra",
+	"n/necrogen_mists",
+	"s/seizan_perverter_of_truth",
 	"h/herald_of_faith",
 	"g/glorious_anthem",
 	"e/exploration",
@@ -327,6 +329,58 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				],
 			},
 		]);
+	});
+
+	test("Necrogen Mists keeps the player whose upkeep triggered its effect", () => {
+		const result = importFixture("n/necrogen_mists");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigDiscard",
+				text: expect.any(String),
+				condition: { kind: "begin step", player: "either", step: "upkeep" },
+				targets: [],
+				effects: [
+					{
+						kind: "discard",
+						selector: "any",
+						amount: 1,
+						player: "triggering-player",
+					},
+				],
+			},
+		]);
+	});
+
+	test("Seizan keeps TriggeredPlayer through its SubAbility chain", () => {
+		const result = importFixture("s/seizan_perverter_of_truth");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+			{ kind: "lose-life", player: "triggering-player", amount: 2 },
+			{ kind: "draw", player: "triggering-player", amount: 2 },
+		]);
+	});
+
+	test("TriggeredPlayer is rejected outside a triggered ability", () => {
+		for (const [types, ability] of [
+			[
+				"Instant",
+				"A:SP$ Discard | Defined$ TriggeredPlayer | Mode$ TgtChoose | NumCards$ 1 | SpellDescription$ Discard a card.",
+			],
+			[
+				"Artifact",
+				"A:AB$ Discard | Cost$ T | Defined$ TriggeredPlayer | Mode$ TgtChoose | NumCards$ 1 | SpellDescription$ Discard a card.",
+			],
+		] as const) {
+			const result = importText(
+				`Name:Invalid TriggeredPlayer\nManaCost:1\nTypes:${types}\n${ability}\nOracle:\n`,
+			);
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.message).toBe(
+				"only discarding exactly one chosen card is supported",
+			);
+		}
 	});
 
 	test("ValidPlayer$ lowers the three unqualified words, and only those", () => {

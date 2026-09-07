@@ -1306,7 +1306,7 @@ export interface PendingTrigger {
 	readonly triggeringEvent: DeepReadOnly<GameEvent>;
 	/** Copied off the trigger definition, which outlives it. */
 	targetDefinitions: TargetDef[];
-	effects: EffectDef[];
+	effects: EffectDef<TriggerEffectPlayer>[];
 	sourceLastKnown: SourceLastKnown | null;
 }
 
@@ -1359,18 +1359,21 @@ export type PriorityAction =
  * instructions. CR 113.7a lets the source leave in the meantime, so none of it
  * is read back off the source object or the card registry.
  */
-interface AbilityStackItemBase {
+interface AbilityStackItemBase<
+	Player extends TriggerEffectPlayer = RelativeEffectPlayer,
+> {
 	id: StackItemId;
 	source: ObjectId;
 	controller: PlayerId;
 	text: string;
 	targetDefinitions: TargetDef[];
 	targets: TargetBindings;
-	effects: EffectDef[];
+	effects: EffectDef<Player>[];
 	sourceLastKnown: SourceLastKnown | null;
 }
 
-export interface TriggeredAbilityStackItem extends AbilityStackItemBase {
+export interface TriggeredAbilityStackItem
+	extends AbilityStackItemBase<TriggerEffectPlayer> {
 	kind: "triggered ability";
 	triggerId: TriggeredAbilityId;
 	readonly triggeringEvent: DeepReadOnly<GameEvent>;
@@ -1785,17 +1788,22 @@ export function addFloating(
  * binding up. Temporary P/T effects remain definition-only.
  * ------------------------------------------------------------------ */
 
-export type EffectDef =
+export type RelativeEffectPlayer = "you" | "opponent";
+export type TriggerEffectPlayer = RelativeEffectPlayer | "triggering-player";
+
+export type EffectDef<
+	Player extends TriggerEffectPlayer = RelativeEffectPlayer,
+> =
 	| {
 			kind: "gain-life" | "lose-life" | "draw";
-			player: "you" | "opponent";
+			player: Player;
 			amount: number;
 	  }
 	| {
 			kind: "discard";
 			selector: "any" | "random";
 			amount: number;
-			player: "you" | "opponent";
+			player: Player;
 	  }
 	| { kind: "damage"; targetSlot: string; amount: number }
 	| { kind: "destroy"; targetSlot: string }
@@ -1813,8 +1821,8 @@ export type EffectDef =
 	  }
 	| {
 			kind: "may";
-			decider: "you" | "opponent";
-			effects: EffectDef[];
+			decider: RelativeEffectPlayer;
+			effects: EffectDef<Player>[];
 	  };
 
 /* ------------------------------------------------------------------ *
@@ -1894,7 +1902,7 @@ export interface TriggeredAbilityDefinition {
 	functionsFrom?: [Zone];
 	/** Chosen when the ability is put on the stack, not when it triggers. */
 	targets: TargetDef[];
-	effects: EffectDef[];
+	effects: EffectDef<TriggerEffectPlayer>[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -5532,7 +5540,7 @@ function resolveEffects(
 	state: GameState,
 	choices: AnyChoiceController,
 	item: ResolutionSource,
-	effects: EffectDef[],
+	effects: EffectDef<TriggerEffectPlayer>[],
 	scope: Scope,
 ): void {
 	for (const effect of effects) {
@@ -5579,11 +5587,22 @@ function resolveEffects(
 function effectToEvent(
 	state: GameState,
 	item: ResolutionSource,
-	effect: Exclude<EffectDef, { kind: "may" }>,
+	effect: Exclude<EffectDef<TriggerEffectPlayer>, { kind: "may" }>,
 	bound: EntityRef | null,
 ): GameEvent {
-	const player = (relative: "you" | "opponent") =>
-		relative === "you" ? item.controller : ((1 - item.controller) as PlayerId);
+	const player = (relative: TriggerEffectPlayer): PlayerId => {
+		if (relative === "you") return item.controller;
+		if (relative === "opponent") return (1 - item.controller) as PlayerId;
+		assert(
+			item.ability?.kind === "triggered ability",
+			"triggering-player requires a triggered ability",
+		);
+		assert(
+			"player" in item.ability.triggeringEvent,
+			`triggering ${item.ability.triggeringEvent.kind} event has no player`,
+		);
+		return item.ability.triggeringEvent.player;
+	};
 	switch (effect.kind) {
 		case "gain-life":
 			return {
@@ -5781,7 +5800,7 @@ export function planManaPayment(
  */
 function requiredTargetDefinition(
 	targets: TargetDef[],
-	effects: EffectDef[],
+	effects: EffectDef<TriggerEffectPlayer>[],
 ): TargetDef | null {
 	assert(targets.length <= 1, "multiple target slots are not implemented");
 	const target = targets[0] ?? null;
@@ -5791,7 +5810,7 @@ function requiredTargetDefinition(
 			"only one required target is implemented",
 		);
 	}
-	const check = (effect: EffectDef): void => {
+	const check = (effect: EffectDef<TriggerEffectPlayer>): void => {
 		if (effect.kind === "may") {
 			for (const inner of effect.effects) check(inner);
 			return;
