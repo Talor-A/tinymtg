@@ -42,7 +42,9 @@ describe("triggered abilities", () => {
 			triggerId: abilityId("triggered", "test-trigger", 0),
 			controller,
 			text,
+			targetDefinitions: [],
 			effects: [],
+			sourceLastKnown: null,
 		});
 	}
 

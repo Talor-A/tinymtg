@@ -85,17 +85,19 @@ to `CardDefInput.entersTapped`, and the global form (a supported selector
 scoped by `ActiveZones$ Battlefield`, e.g. Root Maze) lowers to a registered
 replacement, honoring CR 614.12's own-entry guard; basic-land mana abilities
 are synthesized from subtype (Forge omits explicit `A:` lines for those);
-fixed-color tap-for-mana abilities; targetless tap-self activated abilities
-with life/draw/discard-one-chosen-card effects; single required-target spells
-(`Any`/`Player`/creature-type selectors) with damage, destroy, and sequenced
-life/draw effects; simple self-entry, upkeep, and self-attack triggers,
-including one optional (`may`) wrapper around a trigger's whole (possibly
-multi-step) effect sequence; and fixed controlled-creature P/T statics. See
+fixed-color tap-for-mana abilities; tap-self activated abilities with
+life/draw/discard-one-chosen-card, damage, and destroy effects; spells,
+activated abilities, and triggered abilities with at most one required target
+(`Any`, `Player`, or an object restriction built from card type, supertype,
+subtype, color, and controller, each optionally negated); simple self-entry,
+upkeep, and self-attack triggers, including one optional (`may`) wrapper around
+a trigger's whole (possibly multi-step) effect sequence; and fixed
+controlled-creature P/T statics. See
 the acceptance matrix in `test/forge-import.test.ts` for the exact fixtures
 this is checked against, and the "Deferred / explicitly unsupported" list at
 the top of `forge-import.ts` for what is intentionally out of scope (temporary
-P/T, random/multi-card discard, targeted activated abilities, dynamic/X
-amounts, alternate costs, and more).
+P/T, random/multi-card discard, dynamic/X amounts, alternate costs,
+hexproof/shroud/protection, and more).
 
 `test/utils/engine-helpers.ts`'s `registerCardFixture(cardsfolderPath)` reads
 a real card from `cards/cardsfolder`, imports it through this bridge, and
@@ -111,7 +113,8 @@ Normal progression through `advance()` currently supports:
 - priority passing and one ordinary land play from the active player's hand during either main phase while the stack is empty;
 - fixed tap-for-mana abilities and mana pools;
 - casting from hand with mana already in the pool, including supported single-target instants and sorceries;
-- the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith);
+- tap-self activated abilities, with or without a target (e.g. Merfolk Looter, Prodigal Sorcerer);
+- the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith), and targeted triggers (e.g. Flametongue Kavu, Manic Vandal);
 - declaring attackers, and unblocked two-player combat damage; and
 - replacement, prohibition, and state-based effects encountered by those events.
 
@@ -164,34 +167,56 @@ During either precombat or postcombat main phase, the active player's priority c
 
 This slice intentionally supports only one ordinary land from hand per turn. Modified allowances, playing from alternate zones, and effects granting special timing are not implemented. Invalid or stale land actions are rejected before action-specific state changes.
 
-Deck construction, opening hands, mulligans, and non-mana activated abilities are not implemented yet.
+Deck construction, opening hands, mulligans, and alternative activation costs are not implemented yet.
 
-### Targeted spells
+### Targeting
 
-The agent first chooses a spell, then answers a separate `target` request.
-The engine checks that choice before payment or zone movement. A spell with
-no legal required target is absent from the priority options.
+Spells, activated abilities, and triggered abilities may each declare at most
+one required target. A target is a player, or a permanent matching a
+restriction built from card type, supertype, subtype, color, controller, and
+the source itself, combined with all/any/not. `any-target` accepts a player, a
+creature, or a planeswalker. Restrictions are always evaluated against current
+characteristics, so a permanent that changes color, type, or controller can
+stop being a legal target.
 
-The runtime supports one required target: a creature, a player, or an
-`any-target` recipient. Murder and Lightning Bolt exercise the creature and
-`any-target` paths. Planeswalker damage raises an assertion because the engine
-does not support planeswalkers yet. Battles are outside the card-type model.
+A spell or activated ability with no legal target is absent from the priority
+options, and executing one directly is rejected. The agent answers a separate
+`target` request whose context says whether a spell, an activated ability, or a
+triggered ability is being announced. The engine rechecks the answer, and the
+whole announcement fails before any cost is paid if it is not legal.
 
-The stack entry stores the target slot and chosen reference. Both players can
-see this binding. Before resolution, the engine checks the target against its
-current characteristics. If the target is illegal, the spell does nothing and
-moves to its owner's graveyard. A permanent that leaves and returns has a new
-object ID and does not remain the target.
+A triggered ability's targets are chosen when it is put on the stack, not when
+the event that triggered it happened (CR 603.3d). The active player's triggers
+go on the stack first, so the non-active player orders and targets with those
+items and their targets already visible. A trigger with no legal target is
+removed instead of being put on the stack.
+
+The stack entry stores the target slot and chosen reference, and both players
+can see the binding. Before resolution, the engine rechecks the target. If it
+is illegal, nothing the spell or ability would do happens, including its
+untargeted effects (CR 608.2b); a spell also moves to its owner's graveyard. A
+permanent that leaves and returns has a new object ID and does not remain the
+target.
+
+An ability's source leaving does not invalidate the ability (CR 113.7a).
+**Last known information is currently an approximation:** waiting abilities
+retain only the source's controller, colors, and lifelink at departure.
+Damage effects use the live source when present and this limited snapshot
+otherwise. This is not a full implementation of CR 608.2h. A follow-up should
+use the engine's characteristic snapshot types before adding effects that
+need other information about a departed source.
 
 Damage and destruction use the existing event pipeline, including replacement
-effects and indestructible. Mana abilities must run before casting. Payment
-still precedes the move to the stack.
+effects and indestructible. Planeswalker damage raises an assertion because the
+engine does not support planeswalkers yet. Battles are outside the card-type
+model. Mana abilities must run before casting, and payment still precedes the
+move to the stack.
 
-Additional target restrictions, including Doom Blade's color restriction and
-hexproof, remain deferred. Multiple or optional targets, ability targets,
-stack/graveyard targets, and temporary P/T effects also remain deferred.
-Unsupported target selectors and temporary P/T spell effects raise assertions
-before payment. Target-choice requests use the same replay protocol as other
-agent choices.
+Multiple or optional targets, stack/graveyard targets, and temporary P/T
+effects remain deferred, as do hexproof, shroud, and protection: those are not
+in the `Keyword` union, so no target is ever illegal because of them and the
+importer rejects cards that have them. Unsupported target declarations and
+temporary P/T spell effects raise assertions before payment. Target-choice
+requests use the same replay protocol as other agent choices.
 
 `perform()` injects a rules event directly, and `settlePriority()` resolves the current priority window directly. They are useful for focused rules tests and integrations, but do not represent player actions supported by the normal gameplay loop.

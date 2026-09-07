@@ -47,6 +47,10 @@ const POSITIVE_FIXTURES = [
 	"f/faithful_watchdog",
 	"s/soulmender",
 	"m/merfolk_looter",
+	"d/doom_blade",
+	"p/prodigal_sorcerer",
+	"f/flametongue_kavu",
+	"m/manic_vandal",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -129,7 +133,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
-			effects: [{ kind: "damage", target: "target-1", amount: 3 }],
+			effects: [{ kind: "damage", targetSlot: "target-1", amount: 3 }],
 		});
 
 		const murder = importFixture("m/murder");
@@ -146,7 +150,79 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					},
 				},
 			],
-			effects: [{ kind: "destroy", target: "target-1" }],
+			effects: [{ kind: "destroy", targetSlot: "target-1" }],
+		});
+	});
+
+	test("Doom Blade lowers its nonblack restriction as a selector", () => {
+		const result = importFixture("d/doom_blade");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.spell?.targets).toEqual([
+			{
+				id: "target-1",
+				min: 1,
+				max: 1,
+				legal: {
+					kind: "permanent",
+					selector: {
+						kind: "all",
+						selectors: [
+							{ kind: "type", type: "creature" },
+							{ kind: "not", selector: { kind: "color", color: "b" } },
+						],
+					},
+				},
+			},
+		]);
+	});
+
+	test("Prodigal Sorcerer lowers a targeted activated ability", () => {
+		const result = importFixture("p/prodigal_sorcerer");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: "CARDNAME deals 1 damage to any target.",
+				costs: [{ kind: "tap-self" }],
+				targets: [
+					{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
+				],
+				effects: [{ kind: "damage", targetSlot: "target-1", amount: 1 }],
+			},
+		]);
+	});
+
+	test("targeted triggers carry their target declaration, not the T: line", () => {
+		const kavu = importFixture("f/flametongue_kavu");
+		if (!kavu.ok) throw new Error("expected ok");
+		expect(kavu.card.abilityDefinitions.triggered[0]).toMatchObject({
+			condition: { kind: "change zone", to: "battlefield", selector: "self" },
+			targets: [
+				{
+					id: "target-1",
+					legal: {
+						kind: "permanent",
+						selector: { kind: "type", type: "creature" },
+					},
+				},
+			],
+			effects: [{ kind: "damage", targetSlot: "target-1", amount: 4 }],
+		});
+
+		const vandal = importFixture("m/manic_vandal");
+		if (!vandal.ok) throw new Error("expected ok");
+		expect(vandal.card.abilityDefinitions.triggered[0]).toMatchObject({
+			targets: [
+				{
+					id: "target-1",
+					legal: {
+						kind: "permanent",
+						selector: { kind: "type", type: "artifact" },
+					},
+				},
+			],
+			effects: [{ kind: "destroy", targetSlot: "target-1" }],
 		});
 	});
 
@@ -164,7 +240,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.spell?.targets).toHaveLength(1);
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "damage", target: "target-1", amount: 2 },
+			{ kind: "damage", targetSlot: "target-1", amount: 2 },
 			{ kind: "gain-life", player: "you", amount: 2 },
 		]);
 	});
@@ -182,6 +258,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					to: "battlefield",
 					selector: "self",
 				},
+				targets: [],
 				effects: [{ kind: "gain-life", player: "you", amount: 3 }],
 			},
 		]);
@@ -195,6 +272,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				id: "TrigGainLife",
 				text: expect.any(String),
 				condition: { kind: "begin step", player: "you", step: "upkeep" },
+				targets: [],
 				effects: [
 					{
 						kind: "may",
@@ -215,6 +293,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				id: "TrigGainLife",
 				text: expect.any(String),
 				condition: { kind: "declare attackers", selector: "self" },
+				targets: [],
 				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
 			},
 		]);
@@ -297,9 +376,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 /* ------------------------------------------------------------------------- */
 
 const NEGATIVE_FIXTURES = [
-	"d/doom_blade",
 	"g/giant_growth",
-	"p/prodigal_sorcerer",
 	"b/blind_obedience",
 	"w/walking_ballista",
 	"r/rest_in_peace",
@@ -389,6 +466,31 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects a selector restriction outside the supported vocabulary", () => {
+		const result = importText(
+			BOLT.replace("ValidTgts$ Any", "ValidTgts$ Creature.attacking"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_TARGET");
+	});
+
+	test("rejects a new target declaration on a sub-ability continuation", () => {
+		const result = importText(
+			REVITALIZE.replace("DB$ Draw", "DB$ Draw | ValidTgts$ Creature"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("rejects an effect that targets a slot its ability never declared", () => {
+		const result = importText(BOLT.replace("ValidTgts$ Any | ", ""));
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_TARGET");
 	});
 
 	test("rejects an unsupported mana symbol", () => {
@@ -755,6 +857,7 @@ describe("lowerForgeCard: chain traversal", () => {
 				id: "TrigA",
 				text: "a",
 				condition: { kind: "begin step", player: "you", step: "upkeep" },
+				targets: [],
 				effects: [
 					{ kind: "gain-life", player: "you", amount: 1 },
 					{ kind: "draw", player: "you", amount: 1 },
@@ -769,6 +872,7 @@ describe("lowerForgeCard: chain traversal", () => {
 					to: "battlefield",
 					selector: "self",
 				},
+				targets: [],
 				effects: [
 					{ kind: "gain-life", player: "you", amount: 2 },
 					{ kind: "draw", player: "you", amount: 1 },

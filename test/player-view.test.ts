@@ -119,6 +119,9 @@ describe("player views", () => {
 			source: mine.id,
 			triggerId: abilityId("triggered", "ajanis-mantra", 0),
 			controller: 0,
+			targetDefinitions: [],
+			targets: [],
+			sourceLastKnown: null,
 			text: "gain 1 life",
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
 		});
@@ -210,6 +213,9 @@ describe("player views", () => {
 			source: source.id,
 			triggerId: abilityId("triggered", "ajanis-mantra", 0),
 			controller: 0,
+			targetDefinitions: [],
+			targets: [],
+			sourceLastKnown: null,
 			text: "gain 1 life",
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
 		});

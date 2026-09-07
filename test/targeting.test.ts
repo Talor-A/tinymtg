@@ -19,12 +19,15 @@ import {
 	type ObjectId,
 	perform,
 	registerCard,
-	type SpellTargets,
+	selectorMatches,
 	settlePriority,
 	spawnCard,
 	spawnPermanent,
+	type TargetBindings,
 	type TargetDef,
+	type TargetSelectorDef,
 	turnLocation,
+	view,
 } from "../index.ts";
 import {
 	advanceUntil,
@@ -37,8 +40,16 @@ for (const file of [
 	"l/lightning_bolt",
 	"s/swamp",
 	"s/sorins_thirst",
+	"d/doom_blade",
+	"p/prodigal_sorcerer",
+	"f/flametongue_kavu",
+	"m/manic_vandal",
 ]) {
 	registerCardFixture(file);
+}
+
+function announcement(source: ObjectId) {
+	return { announcing: "spell" as const, source };
 }
 
 const creatureTarget: TargetDef = {
@@ -48,12 +59,88 @@ const creatureTarget: TargetDef = {
 	legal: { kind: "permanent", selector: { kind: "type", type: "creature" } },
 };
 
+describe("target selectors", () => {
+	test("each selector kind reads the object's current characteristics", () => {
+		const state = newGame();
+		const bears = spawnPermanent(state, "grizzly-bears", 0);
+		const swamp = spawnPermanent(state, "swamp", 1);
+		const mine = { controller: 0 as const, id: bears.id };
+
+		const matches = (selector: TargetSelectorDef, id: ObjectId) =>
+			selectorMatches(selector, view(state, id), mine);
+
+		expect(matches({ kind: "self" }, bears.id)).toBe(true);
+		expect(matches({ kind: "self" }, swamp.id)).toBe(false);
+		expect(matches({ kind: "type", type: "creature" }, bears.id)).toBe(true);
+		expect(matches({ kind: "type", type: "creature" }, swamp.id)).toBe(false);
+		expect(matches({ kind: "subtype", subtype: "Bear" }, bears.id)).toBe(true);
+		expect(matches({ kind: "subtype", subtype: "Bear" }, swamp.id)).toBe(false);
+		expect(matches({ kind: "supertype", supertype: "basic" }, swamp.id)).toBe(
+			true,
+		);
+		expect(matches({ kind: "supertype", supertype: "basic" }, bears.id)).toBe(
+			false,
+		);
+		expect(matches({ kind: "color", color: "g" }, bears.id)).toBe(true);
+		expect(matches({ kind: "color", color: "g" }, swamp.id)).toBe(false);
+		expect(matches({ kind: "controller", player: "you" }, bears.id)).toBe(true);
+		expect(matches({ kind: "controller", player: "you" }, swamp.id)).toBe(
+			false,
+		);
+		expect(matches({ kind: "controller", player: "opponent" }, swamp.id)).toBe(
+			true,
+		);
+		expect(
+			matches(
+				{ kind: "not", selector: { kind: "color", color: "b" } },
+				bears.id,
+			),
+		).toBe(true);
+		expect(
+			matches(
+				{
+					kind: "all",
+					selectors: [
+						{ kind: "type", type: "creature" },
+						{ kind: "controller", player: "you" },
+					],
+				},
+				bears.id,
+			),
+		).toBe(true);
+		expect(
+			matches(
+				{
+					kind: "all",
+					selectors: [
+						{ kind: "type", type: "creature" },
+						{ kind: "controller", player: "opponent" },
+					],
+				},
+				bears.id,
+			),
+		).toBe(false);
+		expect(
+			matches(
+				{
+					kind: "any",
+					selectors: [
+						{ kind: "type", type: "land" },
+						{ kind: "type", type: "creature" },
+					],
+				},
+				swamp.id,
+			),
+		).toBe(true);
+	});
+});
+
 describe("target bindings and choices", () => {
 	test("zone movement installs detached bindings visible to both players", () => {
 		const state = newGame();
 		const spell = spawnCard(state, "murder", 0, "hand");
 		const creature = spawnPermanent(state, "grizzly-bears", 1);
-		const targets: SpellTargets = [
+		const targets: TargetBindings = [
 			{ slot: "target-1", target: { type: "permanent", id: creature.id } },
 		];
 		perform(
@@ -92,19 +179,27 @@ describe("target bindings and choices", () => {
 		const target: EntityRef = { type: "permanent", id: creature.id };
 		const controller = ChoiceController.record(passingAgents());
 		expect(
-			controller.chooseTarget(state, 0, spell.id, creatureTarget, [target]),
+			controller.chooseTarget(
+				state,
+				0,
+				announcement(spell.id),
+				creatureTarget,
+				[target],
+			),
 		).toEqual(target);
 		const transcript = JSON.parse(JSON.stringify(controller.transcript()));
 		const replay = ChoiceController.replay(transcript);
 		expect(
-			replay.chooseTarget(state, 0, spell.id, creatureTarget, [target]),
+			replay.chooseTarget(state, 0, announcement(spell.id), creatureTarget, [
+				target,
+			]),
 		).toEqual(target);
 		replay.assertComplete();
 		expect(() =>
 			ChoiceController.replay(transcript).chooseTarget(
 				state,
 				0,
-				spell.id,
+				announcement(spell.id),
 				creatureTarget,
 				[{ type: "player", player: 1 }],
 			),
@@ -112,38 +207,9 @@ describe("target bindings and choices", () => {
 	});
 });
 
-// This definition follows cards/cardsfolder/d/doom_blade.txt. Its Forge
-// syntax is outside the importer subset.
-registerCard({
-	id: "target-test-doom-blade",
-	name: "Doom Blade",
-	types: ["instant"],
-	colors: ["b"],
-	manaCost: { c: 1, b: 1 },
-	spell: {
-		id: "spell",
-		text: "Destroy target nonblack creature.",
-		targets: [
-			{
-				...creatureTarget,
-				legal: {
-					kind: "permanent",
-					selector: {
-						kind: "all",
-						selectors: [
-							{ kind: "type", type: "creature" },
-							{ kind: "not", selector: { kind: "color", color: "b" } },
-						],
-					},
-				},
-			},
-		],
-		effects: [{ kind: "destroy", target: "target-1" }],
-	},
-});
 // Synthetic: reproduces Giant Growth's shape (a targeted temporary P/T spell
 // effect) to check the engine's own pre-payment defense in
-// spellTargetDefinition. The importer rejects Giant Growth's real definition
+// requiredTargetDefinition. The importer rejects Giant Growth's real definition
 // outright (see test/forge-import.test.ts); this is not a claim that Giant
 // Growth is supported.
 registerCard({
@@ -159,7 +225,7 @@ registerCard({
 		effects: [
 			{
 				kind: "modify-pt",
-				target: "target-1",
+				targetSlot: "target-1",
 				power: 3,
 				toughness: 3,
 				duration: "until-end-of-turn",
@@ -181,6 +247,25 @@ registerCard({
 			applies: (v) => v.types.includes("creature"),
 			modify: (v) => {
 				v.types = ["artifact"];
+			},
+		},
+	],
+});
+
+// Synthetic fixture isolates a layer-5 change, for Doom Blade's colour restriction.
+registerCard({
+	id: "target-test-black-creatures",
+	name: "Test creature colour change",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	statics: [
+		{
+			layer: "5-color-changing",
+			text: "Creatures are black.",
+			applies: (v) => v.types.includes("creature"),
+			modify: (v) => {
+				v.colors = ["b"];
 			},
 		},
 	],
@@ -275,24 +360,57 @@ describe("single-target spell casting", () => {
 		}
 	});
 
-	test("deferred selectors and P/T effects fail before payment", () => {
-		for (const cardId of [
-			"target-test-doom-blade",
-			"target-test-deferred-pt",
-		]) {
-			const { state, spell } = setupCast(cardId);
-			spawnPermanent(state, "grizzly-bears", 1);
-			const before = structuredClone(state);
-			expect(() =>
-				executeCastAction(
-					state,
-					0,
-					{ kind: "cast", card: spell.id },
-					passingAgents(),
-				),
-			).toThrow(/not implemented/);
-			expect(state).toEqual(before);
-		}
+	test("Doom Blade's colour restriction decides its candidates", () => {
+		const { state, spell } = setupCast("doom-blade");
+		const bears = spawnPermanent(state, "grizzly-bears", 1);
+		const blackened = spawnPermanent(state, "target-test-black-creatures", 1);
+		expect(getObservableActions(state, 0)).not.toContainEqual({
+			kind: "cast",
+			card: spell.id,
+		});
+
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: blackened.id,
+				from: "battlefield",
+				to: "graveyard",
+				cause: "effect",
+				toController: 1,
+			},
+			passingAgents(),
+		);
+		castAt(state, spell.id, { type: "permanent", id: bears.id });
+		settlePriority(state, passingAgents());
+		expect(state.objects.has(bears.id)).toBe(false);
+	});
+
+	test("a target that turns black before Doom Blade resolves is illegal", () => {
+		const { state, spell } = setupCast("doom-blade");
+		const bears = spawnPermanent(state, "grizzly-bears", 1);
+		castAt(state, spell.id, { type: "permanent", id: bears.id });
+		spawnPermanent(state, "target-test-black-creatures", 1);
+		settlePriority(state, passingAgents());
+		expect(state.battlefield).toContain(bears.id);
+		expect(state.log.some((line) => line.includes("[illegal target]"))).toBe(
+			true,
+		);
+	});
+
+	test("a deferred P/T effect fails before payment", () => {
+		const { state, spell } = setupCast("target-test-deferred-pt");
+		spawnPermanent(state, "grizzly-bears", 1);
+		const before = structuredClone(state);
+		expect(() =>
+			executeCastAction(
+				state,
+				0,
+				{ kind: "cast", card: spell.id },
+				passingAgents(),
+			),
+		).toThrow(/not implemented/);
+		expect(state).toEqual(before);
 	});
 
 	test("Murder resolves through the destroy pipeline, including indestructible", () => {

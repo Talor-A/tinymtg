@@ -1197,27 +1197,24 @@ function eid(id: string): EffectId {
 }
 
 /**
- * What a resolving ability still needs to know about its own source once the
- * source may be gone (CR 113.7a, CR 608.2h). Only the fields the supported
- * effects actually read are kept; this is not general last known information.
+ * Approximation of last known information (CR 113.7a, CR 608.2h): only the
+ * source's controller, colors, and lifelink are retained for damage effects.
+ * TODO: replace this projection with the engine's characteristic snapshot
+ * types before extending effects that read a departed source.
  */
 export interface SourceLastKnown {
-	name: string;
 	controller: PlayerId;
 	colors: Color[];
 	lifelink: boolean;
 }
 
-/**
- * A trigger that has triggered but has not yet been put on the stack. It has
- * no targets yet: those are chosen when it goes on the stack (CR 603.3d).
- */
+/** A trigger not yet on the stack, so not yet targeted (CR 603.3d). */
 export interface PendingTrigger {
 	source: ObjectId;
 	triggerId: TriggeredAbilityId;
 	controller: PlayerId;
 	text: string;
-	/** Copied off the trigger definition, so a later text change cannot reach it. */
+	/** Copied off the trigger definition, which outlives it. */
 	targetDefinitions: TargetDef[];
 	effects: EffectDef[];
 	sourceLastKnown: SourceLastKnown | null;
@@ -1267,10 +1264,10 @@ export type PriorityAction =
 	| PlayLandAction;
 
 /**
- * An ability on the stack carries everything its resolution needs: the target
- * restrictions it was announced under, the targets chosen then, and its own
- * instructions. Nothing here is looked up again from the source object or the
- * card registry, because CR 113.7a lets the source leave in the meantime.
+ * An ability on the stack carries everything its resolution needs: the
+ * restrictions it was announced under, the targets chosen then, and its
+ * instructions. CR 113.7a lets the source leave in the meantime, so none of it
+ * is read back off the source object or the card registry.
  */
 interface AbilityStackItemBase {
 	id: StackItemId;
@@ -1842,10 +1839,9 @@ export interface TargetDef {
 }
 
 /**
- * What a target restriction is read relative to. `controller` is the
- * controller of the spell or ability, which is what "you" means in a
- * restriction — never the source's current controller, which a control-change
- * effect can move independently (CR 109.5).
+ * What a target restriction is read relative to. `controller` is the spell or
+ * ability's controller, which is what "you" means in a restriction; it is not
+ * the source's current controller.
  */
 export interface TargetContext {
 	controller: PlayerId;
@@ -4283,9 +4279,8 @@ function enqueueTrigger(
 ): void {
 	const controller = controllerOf(source);
 	assertDefined(controller);
-	// The definition is copied rather than referenced: the pending trigger and
-	// the stack item built from it outlive the source, and must not be able to
-	// write back into the registry's card definitions.
+	// Copied, not referenced: the pending trigger and the stack item built from
+	// it outlive the source and must not write back into the card registry.
 	state.pendingTriggers.push({
 		source: source.id,
 		triggerId,
@@ -4477,6 +4472,41 @@ function detectTriggers(
 				enqueueTrigger(state, abilitySource, triggerId, trigger);
 			}
 		}
+	}
+}
+
+/**
+ * Capture the limited SourceLastKnown approximation before departure for
+ * waiting abilities. This does not preserve a full characteristic snapshot.
+ */
+function recordSourceDeparture(
+	state: GameState,
+	before: ReadContext,
+	id: ObjectId,
+	from: Zone,
+): void {
+	if (from !== "battlefield" && from !== "stack") return;
+	const waiting = [
+		...state.pendingTriggers,
+		...state.stack.filter(
+			(entry): entry is TriggeredAbilityStackItem | ActivatedAbilityStackItem =>
+				entry.kind !== "spell",
+		),
+	].filter((item) => item.source === id);
+	if (waiting.length === 0) return;
+
+	const snapshot = readObject(before, id);
+	assert(
+		snapshot.kind === "permanent" || snapshot.kind === "spell",
+		"an ability source left a zone it could not have been an ability source in",
+	);
+	const characteristics = snapshot.currentCharacteristics;
+	for (const item of waiting) {
+		item.sourceLastKnown = {
+			controller: snapshot.controller,
+			colors: [...characteristics.colors],
+			lifelink: characteristics.keywords.includes("lifelink"),
+		};
 	}
 }
 
@@ -5139,55 +5169,58 @@ function putPendingTriggersOnStack(
 		 */
 		return;
 	}
+	// CR 603.3b: the active player's triggers go on the stack first, each player
+	// ordering their own. The non-active player therefore orders and targets
+	// with the active player's items already on the stack.
 	const nonactivePlayer = (1 - active) as PlayerId;
-	const ordered: PendingTrigger[] = [];
 	for (const controller of [active, nonactivePlayer] as const) {
 		const controlled = state.pendingTriggers.filter(
 			(pending) => pending.controller === controller,
 		);
-		ordered.push(...choices.chooseTriggerOrder(state, controller, controlled));
-	}
-	for (const pending of ordered) {
-		// CR 603.3d: targets are chosen now, as the ability is put on the stack,
-		// not when the event that triggered it happened. Each item is finished
-		// before the next one starts, so an earlier trigger's targets are visible
-		// to a later trigger's choice.
-		const target = requiredTargetDefinition(
-			pending.targetDefinitions,
-			pending.effects,
-		);
-		let targets: TargetBindings = [];
-		if (target) {
-			const ctx = { controller: pending.controller, source: pending.source };
-			const candidates = legalTargets(createReadContext(state), target, ctx);
-			if (candidates.length === 0) {
-				// CR 603.3d: with no legal choice the ability is simply removed. It
-				// never waits on the stack for one to appear.
-				log(state, `  [illegal target] ${pending.text} is removed`);
-				continue;
+		for (const pending of choices.chooseTriggerOrder(
+			state,
+			controller,
+			controlled,
+		)) {
+			// CR 603.3d: targets are chosen as the ability is put on the stack,
+			// not when the event that triggered it happened.
+			const target = requiredTargetDefinition(
+				pending.targetDefinitions,
+				pending.effects,
+			);
+			let targets: TargetBindings = [];
+			if (target) {
+				const ctx = { controller: pending.controller, source: pending.source };
+				const candidates = legalTargets(createReadContext(state), target, ctx);
+				if (candidates.length === 0) {
+					// CR 603.3d: with no legal choice the ability is removed rather
+					// than waiting on the stack for one to appear.
+					log(state, `  [illegal target] ${pending.text} is removed`);
+					continue;
+				}
+				const chosen = choices.chooseTarget(
+					state,
+					pending.controller,
+					{ announcing: "triggered ability", source: pending.source },
+					target,
+					candidates,
+				);
+				assert(
+					isLegalTarget(createReadContext(state), target, chosen, ctx),
+					"chooseTarget returned a target outside its own candidate list",
+				);
+				targets = [{ slot: target.id, target: chosen }];
 			}
-			const chosen = choices.chooseTarget(
-				state,
-				pending.controller,
-				{ announcing: "triggered ability", source: pending.source },
-				target,
-				candidates,
-			);
-			assert(
-				isLegalTarget(createReadContext(state), target, chosen, ctx),
-				"chooseTarget returned a target outside its own candidate list",
-			);
-			targets = [{ slot: target.id, target: chosen }];
+			const item: TriggeredAbilityStackItem = {
+				id: state.nextStackItemId++ as StackItemId,
+				kind: "triggered ability",
+				...pending,
+				targets,
+			};
+			state.stack.push(item);
+			state.revision++;
+			log(state, `  [stack] ${item.text}`);
 		}
-		const item: TriggeredAbilityStackItem = {
-			id: state.nextStackItemId++ as StackItemId,
-			kind: "triggered ability",
-			...pending,
-			targets,
-		};
-		state.stack.push(item);
-		state.revision++;
-		log(state, `  [stack] ${item.text}`);
 	}
 	state.pendingTriggers.length = 0;
 }
@@ -5329,10 +5362,10 @@ function resolveSpell(
 }
 
 /**
- * CR 608.2n for an ability: unlike a spell it moves to no zone, it simply
- * ceases to exist, and only as the *final* part of its resolution. Staying on
- * the stack throughout is what lets an ability that removes its own source
- * still receive that departure's last known information (CR 113.7a).
+ * CR 608.2n: unlike a spell, an ability moves to no zone; it ceases to exist as
+ * the final part of its own resolution. Remaining on the stack until then is
+ * what lets an ability that removes its own source still receive that
+ * departure's last known information.
  */
 function resolveStackAbility(
 	state: GameState,
@@ -5341,11 +5374,11 @@ function resolveStackAbility(
 ): void {
 	log(state, `  [resolve] ${entry.text}`);
 
-	const target = entry.targetDefinitions[0] ?? null;
 	assert(
 		entry.targetDefinitions.length <= 1,
 		"multiple target slots are not implemented",
 	);
+	const target = entry.targetDefinitions[0] ?? null;
 	assert(
 		entry.targets.length === (target ? 1 : 0),
 		"ability target binding count disagrees with its captured definition",
@@ -5399,11 +5432,8 @@ interface ResolutionSource {
 }
 
 /**
- * CR 608.2h: an effect that reads its own source uses the source's current
- * information while the source is still where the effect expects it, and its
- * last known information once it is not. The ability's own controller is a
- * separate thing and is never taken from here — a control-change effect moves
- * a permanent without moving abilities already on the stack (CR 109.5).
+ * Read the live source, or the limited SourceLastKnown approximation after
+ * departure. The ability's controller is captured separately.
  */
 function sourceInformation(
 	state: GameState,
@@ -5418,7 +5448,6 @@ function sourceInformation(
 		);
 		const characteristics = snapshot.currentCharacteristics;
 		return {
-			name: characteristics.name,
 			controller: object.controller,
 			colors: [...characteristics.colors],
 			lifelink: characteristics.keywords.includes("lifelink"),
@@ -5477,9 +5506,8 @@ function resolveEffects(
 }
 
 /**
- * Turns one definition-time instruction into the concrete event it performs.
- * `bound` is the target chosen for the effect's slot, which only the targeting
- * effects have.
+ * Turns one definition-time instruction into the event it performs. `bound` is
+ * the target chosen for the effect's slot, which only targeting effects have.
  */
 function effectToEvent(
 	state: GameState,
@@ -5527,9 +5555,8 @@ function effectToEvent(
 		}
 		case "damage": {
 			assertDefined(bound, "damage target is unbound");
-			// CR 119.3 / CR 702.15b: the life a lifelink source gains goes to that
-			// *source's* controller, which a control-change effect can move away
-			// from the controller of the ability that is dealing the damage.
+			// CR 119.3: lifelink life goes to the controller of the damage source,
+			// which need not be the controller of the ability.
 			const source = sourceInformation(state, item);
 			return {
 				kind: "damage",
@@ -5947,6 +5974,23 @@ export function executeAbilityAction(
 	activateAbilityIn(state, priorityPlayer, action, asChoiceController(source));
 }
 
+/**
+ * Puts a checkpoint's contents back while `state` keeps the identity its caller
+ * holds. The checkpoint is a `structuredClone`, so nothing it hands back is
+ * shared with the state being rolled back.
+ *
+ * The derived-view caches are dropped as well: they are keyed by state object
+ * and revision number, and rolling the revision back means a later legitimate
+ * mutation can reach a number a view from the abandoned branch was cached
+ * under.
+ */
+function restoreCheckpoint(state: GameState, checkpoint: GameState): void {
+	Object.assign(state, checkpoint);
+	GAME_VIEW_CACHE.delete(state);
+	PLAYER_GAME_VIEW_CACHE.delete(state);
+	PLAYER_VIEW_CACHE.delete(state);
+}
+
 function activateAbilityIn(
 	state: GameState,
 	priorityPlayer: PlayerId,
@@ -6068,10 +6112,7 @@ function activateAbilityIn(
 		// illegal, strictly before the tap cost below is paid. Nothing above this
 		// point has mutated the game, so a refused activation leaves no trace.
 		targetDefinitions = structuredClone(ability.targets);
-		const target = requiredTargetDefinition(
-			targetDefinitions,
-			ability.effects,
-		);
+		const target = requiredTargetDefinition(targetDefinitions, ability.effects);
 		if (target) {
 			const ctx = { controller: priorityPlayer, source: object.id };
 			const candidates = legalTargets(createReadContext(state), target, ctx);
@@ -6095,6 +6136,36 @@ function activateAbilityIn(
 			targets = [{ slot: target.id, target: chosen }];
 		}
 	}
+	// CR 733.1: activation is the one action the engine cannot fully validate
+	// before mutating, because CR 602.2b puts the ability on the stack before
+	// its cost is paid. A checkpoint here is what lets an unpaid cost rewind
+	// everything the attempt did, including the announcement itself.
+	const checkpoint = structuredClone(state);
+
+	// The ability is announced before payment so that it is already on the stack
+	// to receive its source's last known information when paying the cost is
+	// what removes the source. A mana ability never uses the stack.
+	const item: ActivatedAbilityStackItem | null =
+		ability.kind === "activated"
+			? {
+					id: state.nextStackItemId++ as StackItemId,
+					kind: "activated ability",
+					source: object.id,
+					abilityId: action.ability,
+					controller: priorityPlayer,
+					text: ability.text,
+					targetDefinitions,
+					targets,
+					effects: structuredClone(ability.effects),
+					sourceLastKnown: null,
+				}
+			: null;
+	if (item) {
+		state.stack.push(item);
+		state.revision++;
+		log(state, `  [stack] ${item.text}`);
+	}
+
 	const scope = newScope();
 	const payment = performIn(
 		state,
@@ -6111,6 +6182,7 @@ function activateAbilityIn(
 				event.ref.object === object.id,
 		)
 	) {
+		restoreCheckpoint(state, checkpoint);
 		throw new IllegalAbilityActivationError(
 			`the tap cost for ability ${action.ability} was not paid`,
 		);
@@ -6118,22 +6190,6 @@ function activateAbilityIn(
 	if (ability.kind === "mana") {
 		log(state, `  [mana ability] ${ability.text}`);
 		for (const event of events) performIn(state, event, choices, scope, 0);
-	} else {
-		const item: ActivatedAbilityStackItem = {
-			id: state.nextStackItemId++ as StackItemId,
-			kind: "activated ability",
-			source: object.id,
-			abilityId: action.ability,
-			controller: priorityPlayer,
-			text: ability.text,
-			targetDefinitions,
-			targets,
-			effects: structuredClone(ability.effects),
-			sourceLastKnown: null,
-		};
-		state.stack.push(item);
-		state.revision++;
-		log(state, `  [stack] ${item.text}`);
 	}
 }
 

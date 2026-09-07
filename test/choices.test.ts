@@ -360,6 +360,9 @@ describe("choice transcripts", () => {
 				source: 1 as ObjectId,
 				triggerId: abilityId("triggered", "ajanis-mantra", 0),
 				controller: 0,
+				targetDefinitions: [],
+				targets: [],
+				sourceLastKnown: null,
 				text: "gain 1 life",
 				effects: [
 					{
@@ -422,6 +425,9 @@ describe("choice transcripts", () => {
 				source: 1 as ObjectId,
 				triggerId: abilityId("triggered", "ajanis-mantra", 0),
 				controller: 0,
+				targetDefinitions: [],
+				targets: [],
+				sourceLastKnown: null,
 				text: "gain 1 life",
 				effects: [
 					{

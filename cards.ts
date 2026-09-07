@@ -292,6 +292,7 @@ export const AJANIS_MANTRA = registerCard({
 			id: "upkeep-life",
 			text: "At the beginning of your upkeep, you may gain 1 life.",
 			condition: { kind: "begin step", player: "you", step: "upkeep" },
+			targets: [],
 			effects: [
 				{
 					kind: "may",
@@ -325,6 +326,7 @@ export const ARASHIN_CLERIC = registerCard({
 				to: "battlefield",
 				selector: "self",
 			},
+			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 3 }],
 		},
 	],

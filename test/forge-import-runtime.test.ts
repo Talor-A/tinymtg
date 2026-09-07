@@ -109,6 +109,26 @@ Oracle:
 	registerCard(result.card);
 }
 
+/**
+ * Synthetic: an optional trigger that also targets, to pin down the order of
+ * the two decisions — the target is chosen when the ability goes on the stack,
+ * the "may" only when it resolves.
+ */
+{
+	const text = `Name:Test Optional Targeted
+ManaCost:1 R
+Types:Enchantment
+T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigZap | OptionalDecider$ You | TriggerDescription$ x
+SVar:TrigZap:DB$ DealDamage | ValidTgts$ Creature | NumDmg$ 2 | SubAbility$ TrigGain
+SVar:TrigGain:DB$ GainLife | Defined$ You | LifeAmount$ 2
+Oracle:
+`;
+	const result = importForgeCard(text, { id: "rt-test-optional-targeted" });
+	if (!result.ok)
+		throw new Error("expected synthetic optional-targeted fixture to import");
+	registerCard(result.card);
+}
+
 function atUpkeepOf(state: GameState, player: PlayerId): boolean {
 	return isTurnStep(state, "upkeep") && activePlayer(state) === player;
 }
@@ -207,6 +227,40 @@ describe("forge-import runtime: triggers", () => {
 		advanceUntil(decline, declineAgents, (next) => atUpkeepOf(next, ALICE));
 		expect(decline.players[ALICE].life, "neither effect applied").toBe(20);
 		expect(decline.players[ALICE].hand.length).toBe(declineHandBefore);
+	});
+
+	test("an optional targeted trigger picks its target before it asks the question", () => {
+		for (const accepted of [true, false]) {
+			const state = newGame();
+			const agents: SyncAgents = [
+				new ScriptedAgent([], [accepted]),
+				new ScriptedAgent(),
+			];
+			spawnPermanent(state, "rt-test-optional-targeted", ALICE);
+			const bears = spawnPermanent(state, "rt-grizzly-bears", BOB);
+			stockLibraries(state);
+			advanceUntil(state, agents, (next) => atUpkeepOf(next, ALICE));
+
+			// 2 damage is lethal to a 2/2, so accepting kills it outright.
+			expect(state.objects.has(bears.id)).toBe(!accepted);
+			expect(state.players[ALICE].life).toBe(accepted ? 22 : 20);
+		}
+	});
+
+	test("an optional targeted trigger with no legal target is never put on the stack", () => {
+		const state = newGame();
+		// The agent would say yes; it is never asked, because there is no creature
+		// for the trigger to target when it would go on the stack.
+		const agents: SyncAgents = [
+			new ScriptedAgent([], [true]),
+			new ScriptedAgent(),
+		];
+		spawnPermanent(state, "rt-test-optional-targeted", ALICE);
+		stockLibraries(state);
+		advanceUntil(state, agents, (next) => atUpkeepOf(next, ALICE));
+
+		expect(state.players[ALICE].life).toBe(20);
+		expect(state.stack).toHaveLength(0);
 	});
 });
 

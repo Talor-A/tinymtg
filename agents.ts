@@ -148,7 +148,7 @@ export class KeyboardAgent implements SyncAgent {
 				break;
 			case "target":
 				console.log(
-					`\n[Player ${request.player}: choose target for spell #${request.context.card}]`,
+					`\n[Player ${request.player}: choose target for ${request.context.announcing} from #${request.context.source}]`,
 				);
 				break;
 			case "ownHand":

@@ -21,13 +21,11 @@ import {
 	registerCard,
 	spawnCard,
 	spawnPermanent,
-	turnLocation,
 } from "../index.ts";
 import {
 	type SyncAgents as Agents,
 	ALICE,
 	advanceUntil,
-	atMain,
 	BOB,
 	passingAgents,
 	seedLibraries,
@@ -50,6 +48,7 @@ registerCard({
 				to: "battlefield",
 				selector: "self",
 			},
+			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 3 }],
 		},
 	],
@@ -67,6 +66,9 @@ function occupyStack(state: GameState): void {
 		source: source.id,
 		triggerId: abilityId("triggered", "ajanis-mantra", 0),
 		controller: ALICE,
+		targetDefinitions: [],
+		targets: [],
+		sourceLastKnown: null,
 		text: "At the beginning of your upkeep, you may gain 1 life.",
 		effects: [{ kind: "gain-life", player: "you", amount: 1 }],
 	});

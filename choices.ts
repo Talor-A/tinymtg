@@ -59,9 +59,18 @@ export interface PriorityActionChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
+/**
+ * `announcing` keeps the three announcement paths distinguishable to an agent:
+ * a spell being cast, an ability being activated, and a triggered ability
+ * being put on the stack ask for a target under different rules.
+ */
 export interface TargetChoiceRequest extends ChoiceRequestBase {
 	kind: "target";
-	context: { card: ObjectId; definition: TargetDef };
+	context: {
+		announcing: "spell" | "activated ability" | "triggered ability";
+		source: ObjectId;
+		definition: TargetDef;
+	};
 }
 
 export interface TriggerOrderChoiceRequest extends ChoiceRequestBase {
@@ -631,7 +640,10 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 	chooseTarget(
 		state: GameState,
 		player: PlayerId,
-		card: ObjectId,
+		announcement: {
+			announcing: TargetChoiceRequest["context"]["announcing"];
+			source: ObjectId;
+		},
 		definition: TargetDef,
 		targets: EntityRef[],
 	): EntityRef {
@@ -642,7 +654,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		const request = this.request({
 			kind: "target",
 			player,
-			context: { card, definition },
+			context: { ...announcement, definition },
 			options: targets.map((target) => ({
 				id: targetOptionId(target),
 				label:

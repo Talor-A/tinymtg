@@ -66,6 +66,7 @@ const COMMUNAL_INSTRUCTION = registerCard({
 				to: "battlefield",
 				selector: "self",
 			},
+			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 3 }],
 		},
 	],

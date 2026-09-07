@@ -16,15 +16,17 @@
  * the concrete subset documented in the acceptance matrix in README.md lowers.
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
- * temporary P/T effects; random or multi-card discard; targeted activated
- * abilities; alternate/additional costs on spells or activations other than
- * a bare tap-self; X/hybrid/Phyrexian/snow mana and dynamic amounts; target
- * selectors other than `Any`/`Player`/bare creature-type; more than one spell
- * ability, or a spell ability on a permanent card; conditions, alternate
- * "unless" costs, or new target declarations on a `SubAbility`/`Execute`
- * continuation; alternate/specialize faces, `Variant:` patches, and `Draft:`
- * actions; and any `Card.Self`-containing selector inside a global
- * (`ActiveZones$`) replacement (see `lowerReplacement`).
+ * temporary P/T effects; random or multi-card discard; alternate/additional
+ * costs on spells or activations other than a bare tap-self;
+ * X/hybrid/Phyrexian/snow mana and dynamic amounts; more than one target slot,
+ * or an optional one; selector restrictions outside card type, supertype,
+ * color, and controller (so hexproof, shroud, protection, and combat- or
+ * zone-dependent restrictions all reject); more than one spell ability, or a
+ * spell ability on a permanent card; conditions, alternate "unless" costs, or
+ * new target declarations on a `SubAbility`/`Execute` continuation;
+ * alternate/specialize faces, `Variant:` patches, and `Draft:` actions; and any
+ * `Card.Self`-containing selector inside a global (`ActiveZones$`) replacement
+ * (see `lowerReplacement`).
  */
 import type {
 	ForgeAbilityRecord,
@@ -48,9 +50,6 @@ import type {
 	EffectDef,
 	GameEvent,
 	ManaPool,
-	PermanentView,
-	PlayerId,
-	ReadonlyGameState,
 	ReplacementDef,
 	SpellAbilityDef,
 	Supertype,
@@ -58,7 +57,7 @@ import type {
 	TargetSelectorDef,
 	TriggerDef,
 } from "./index.ts";
-import { defineCard, etbPreview } from "./index.ts";
+import { defineCard, etbPreview, selectorMatches } from "./index.ts";
 
 export interface ImportIssue {
 	code: string;
@@ -226,6 +225,28 @@ function combineSelectors(
 	return selectors.length === 1 && only ? only : { kind, selectors };
 }
 
+/**
+ * One `.`-separated restriction following the base, such as the `nonBlack` of
+ * `Creature.nonBlack`. Only this closed vocabulary lowers; every other Forge
+ * restriction (zone, combat state, counters, subtype-as-modifier) rejects the
+ * card rather than being approximated.
+ */
+function parseSelectorModifier(modifier: string): TargetSelectorDef | null {
+	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
+	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
+	const negated = modifier.startsWith("non");
+	const word = (negated ? modifier.slice(3) : modifier).toLowerCase();
+	const color = COLOR_WORDS.get(word);
+	const type = [...CARD_TYPES].find((candidate) => candidate === word);
+	const supertype = [...SUPERTYPES].find((candidate) => candidate === word);
+	let selector: TargetSelectorDef | null = null;
+	if (color) selector = { kind: "color", color };
+	else if (type) selector = { kind: "type", type };
+	else if (supertype) selector = { kind: "supertype", supertype };
+	if (!selector) return null;
+	return negated ? { kind: "not", selector } : selector;
+}
+
 function parseSelectorPart(value: string): TargetSelectorDef | null {
 	if (value === "Card.Self" || value === "Self") return { kind: "self" };
 	const pieces = value.split(".");
@@ -239,11 +260,9 @@ function parseSelectorPart(value: string): TargetSelectorDef | null {
 	else if (base && base !== "Card" && base !== "Permanent")
 		parts.push({ kind: "subtype", subtype: base });
 	for (const modifier of pieces) {
-		if (modifier === "YouCtrl")
-			parts.push({ kind: "controller", player: "you" });
-		else if (modifier === "OppCtrl")
-			parts.push({ kind: "controller", player: "opponent" });
-		else return null;
+		const parsed = parseSelectorModifier(modifier);
+		if (!parsed) return null;
+		parts.push(parsed);
 	}
 	return parts.length > 0 ? combineSelectors("all", parts) : null;
 }
@@ -257,7 +276,49 @@ function parseSelector(value: string): TargetSelectorDef | null {
 		: null;
 }
 
-/** `ValidTgts$`/`Choices$`-shaped values, restricted to what casting/targeting supports. */
+/** The one target slot the engine supports; every lowered effect refers to it. */
+const TARGET_SLOT = "target-1";
+
+/**
+ * A targeting effect and its ability's `ValidTgts$` have to agree, or the
+ * engine would resolve an effect against a target nobody checked.
+ */
+function checkEffectTargetSlots(
+	effects: EffectDef[],
+	targets: TargetDef[],
+	where: { nodeId?: string; line?: number },
+): ImportIssue | null {
+	for (const effect of effects) {
+		if (effect.kind === "may") {
+			const inner = checkEffectTargetSlots(effect.effects, targets, where);
+			if (inner) return inner;
+			continue;
+		}
+		if (effect.kind !== "damage" && effect.kind !== "destroy") continue;
+		const target = targets[0];
+		if (targets.length !== 1 || !target || effect.targetSlot !== target.id) {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"damage/destroy effects must reference the declared target slot",
+				where,
+			);
+		}
+		if (effect.kind === "destroy" && target.legal.kind !== "permanent") {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"Destroy requires a permanent target",
+				where,
+			);
+		}
+	}
+	return null;
+}
+
+/**
+ * `ValidTgts$`-shaped values. Anything `parseSelector` accepts is a permanent
+ * restriction the engine can check; `Any` and `Player` are the two forms that
+ * are not object restrictions at all.
+ */
 function parseTarget(value: string | undefined): TargetDef[] | null {
 	if (value === undefined) return [];
 	let legal: TargetDef["legal"];
@@ -265,11 +326,10 @@ function parseTarget(value: string | undefined): TargetDef[] | null {
 	else if (value === "Player") legal = { kind: "player" };
 	else {
 		const selector = parseSelector(value);
-		if (!selector || selector.kind !== "type" || selector.type !== "creature")
-			return null;
+		if (!selector) return null;
 		legal = { kind: "permanent", selector };
 	}
-	return [{ id: "target-1", min: 1, max: 1, legal }];
+	return [{ id: TARGET_SLOT, min: 1, max: 1, legal }];
 }
 
 /* ------------------------------------------------------------------------- */
@@ -278,14 +338,11 @@ function parseTarget(value: string | undefined): TargetDef[] | null {
 
 const COMMON_EFFECT_PARAMS = ["spelldescription", "subability", "cost"];
 
-type EffectChainContext = "spell" | "activated" | "trigger";
-
 function parseSingleEffect(
 	params: ForgeParamList,
 	discriminatorLower: string,
 	api: string,
 	where: { nodeId?: string; line?: number },
-	context: EffectChainContext,
 ): Exclude<EffectDef, { kind: "may" }> | ImportIssue {
 	switch (api) {
 		case "gainlife":
@@ -367,12 +424,6 @@ function parseSingleEffect(
 			return { kind: "discard", selector: "any", amount: 1, player: who };
 		}
 		case "dealdamage": {
-			if (context !== "spell")
-				return issue(
-					"UNSUPPORTED_EFFECT",
-					"DealDamage is only supported on spells",
-					where,
-				);
 			const badParams = checkParams(
 				params,
 				new Set([
@@ -388,15 +439,9 @@ function parseSingleEffect(
 			const amount = positiveInteger(getForgeParam(params, "NumDmg"));
 			if (!amount)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported NumDmg", where);
-			return { kind: "damage", target: "target-1", amount };
+			return { kind: "damage", targetSlot: TARGET_SLOT, amount };
 		}
 		case "destroy": {
-			if (context !== "spell")
-				return issue(
-					"UNSUPPORTED_EFFECT",
-					"Destroy is only supported on spells",
-					where,
-				);
 			const badParams = checkParams(
 				params,
 				new Set([
@@ -408,7 +453,7 @@ function parseSingleEffect(
 				where,
 			);
 			if (badParams) return badParams;
-			return { kind: "destroy", target: "target-1" };
+			return { kind: "destroy", targetSlot: TARGET_SLOT };
 		}
 		default:
 			return issue(
@@ -446,8 +491,7 @@ function discriminator(
 	};
 }
 
-const CHAIN_FORBIDDEN_AFTER_ROOT = [
-	"validtgts",
+const CHAIN_FORBIDDEN = [
 	"cost",
 	"unlesscost",
 	"conditiondefined",
@@ -456,8 +500,10 @@ const CHAIN_FORBIDDEN_AFTER_ROOT = [
 
 /**
  * Follows `SubAbility$`/`Execute$` chains through face-local SVars.
- * `rejectAtRoot` additionally forbids costs/targets/conditions on the first
- * link, for trigger `Execute$` chains (triggers never carry these).
+ * `rejectAtRoot` additionally forbids costs and conditions on the first link,
+ * for trigger `Execute$` chains (triggers never carry these). A new target
+ * declaration is forbidden on every continuation, and allowed only at a root:
+ * an ability declares its targets once, where it is announced.
  */
 function lowerEffectChain(
 	face: ForgeFaceAst,
@@ -465,7 +511,6 @@ function lowerEffectChain(
 	rootWhere: { nodeId?: string; line?: number },
 	rejectAtRoot: boolean,
 	rootTokens: readonly (typeof ABILITY_DISCRIMINATOR_TOKENS)[number][],
-	context: EffectChainContext,
 ): { effects: EffectDef[]; usedSVarNames: string[] } | ImportIssue {
 	const effects: EffectDef[] = [];
 	const usedSVarNames: string[] = [];
@@ -474,8 +519,15 @@ function lowerEffectChain(
 	const seen = new Set<string>();
 	let depth = 0;
 	for (;;) {
+		if (depth > 0 && current.effectiveLower.validtgts !== undefined) {
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				"validtgts is not supported on a sub-ability continuation",
+				where,
+			);
+		}
 		if (depth > 0 || rejectAtRoot) {
-			for (const key of CHAIN_FORBIDDEN_AFTER_ROOT) {
+			for (const key of CHAIN_FORBIDDEN) {
 				if (current.effectiveLower[key] !== undefined) {
 					return issue(
 						"UNSUPPORTED_EFFECT",
@@ -500,7 +552,6 @@ function lowerEffectChain(
 			disc.token.toLowerCase(),
 			disc.api,
 			where,
-			context,
 		);
 		if ("code" in effect) return effect;
 		effects.push(effect);
@@ -551,45 +602,6 @@ function lowerEffectChain(
 /* Continuous effects and replacements                                       */
 /* ------------------------------------------------------------------------- */
 
-function selectorMatches(
-	selector: TargetSelectorDef,
-	view: PermanentView,
-	sourceController: PlayerId,
-	sourceId: number | null,
-): boolean {
-	switch (selector.kind) {
-		case "self":
-			return sourceId !== null && view.id === sourceId;
-		case "type":
-			return view.types.includes(selector.type);
-		case "supertype":
-			return view.supertypes.includes(selector.supertype);
-		case "subtype":
-			return view.subtypes.includes(selector.subtype);
-		case "color":
-			return view.colors.includes(selector.color);
-		case "controller":
-			return selector.player === "you"
-				? view.controller === sourceController
-				: view.controller !== sourceController;
-		case "all":
-			return selector.selectors.every((part) =>
-				selectorMatches(part, view, sourceController, sourceId),
-			);
-		case "any":
-			return selector.selectors.some((part) =>
-				selectorMatches(part, view, sourceController, sourceId),
-			);
-		case "not":
-			return !selectorMatches(
-				selector.selector,
-				view,
-				sourceController,
-				sourceId,
-			);
-	}
-}
-
 function lowerStatic(
 	record:
 		| ForgeAbilityRecord
@@ -626,7 +638,10 @@ function lowerStatic(
 		applies(view, _state, source) {
 			return (
 				source.zone === "battlefield" &&
-				selectorMatches(selector, view, source.controller, source.id)
+				selectorMatches(selector, view, {
+					controller: source.controller,
+					id: source.id,
+				})
 			);
 		},
 		modify(view) {
@@ -794,12 +809,10 @@ function lowerReplacement(
 				ev.entersTapped
 			)
 				return false;
-			return selectorMatches(
-				selector,
-				etbPreview(ctx.state, ev),
-				ctx.controller,
-				ctx.self.id,
-			);
+			return selectorMatches(selector, etbPreview(ctx.state, ev), {
+				controller: ctx.controller,
+				id: ctx.self.id,
+			});
 		},
 		replace: (ev: GameEvent) =>
 			ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
@@ -864,7 +877,6 @@ function lowerTrigger(
 		{ nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
 		true,
 		["DB"],
-		"trigger",
 	);
 	if ("code" in chain) return chain;
 	for (const n of chain.usedSVarNames) used.add(n);
@@ -877,6 +889,16 @@ function lowerTrigger(
 				},
 			]
 		: chain.effects;
+
+	// The trigger declares its targets on the executed ability, not on the T:
+	// line, and the engine chooses them when the ability goes on the stack.
+	const targets = parseTarget(
+		getForgeParam(executeSVar.parsed.params, "ValidTgts"),
+	);
+	if (!targets)
+		return issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where);
+	const slotIssue = checkEffectTargetSlots(effects, targets, where);
+	if (slotIssue) return slotIssue;
 
 	switch (mode) {
 		case "ChangesZone": {
@@ -912,6 +934,7 @@ function lowerTrigger(
 					to: "battlefield",
 					selector: "self",
 				},
+				targets,
 				effects,
 			};
 		}
@@ -944,6 +967,7 @@ function lowerTrigger(
 				id: execute,
 				text,
 				condition: { kind: "begin step", player: "you", step: "upkeep" },
+				targets,
 				effects,
 			};
 		}
@@ -964,6 +988,7 @@ function lowerTrigger(
 				id: execute,
 				text,
 				condition: { kind: "declare attackers", selector: "self" },
+				targets,
 				effects,
 			};
 		}
@@ -1440,18 +1465,6 @@ export function lowerForgeCard(
 			continue;
 		}
 
-		if (
-			disc.token === "AB" &&
-			getForgeParam(params, "ValidTgts") !== undefined
-		) {
-			return reject(
-				issue(
-					"UNSUPPORTED_TARGET",
-					"targeted activated abilities are not supported",
-					where,
-				),
-			);
-		}
 		if (disc.token === "AB" && getForgeParam(params, "Cost") !== "T") {
 			return reject(
 				issue(
@@ -1489,7 +1502,6 @@ export function lowerForgeCard(
 			where,
 			false,
 			disc.token === "SP" ? ["SP"] : ["AB"],
-			disc.token === "SP" ? "spell" : "activated",
 		);
 		if ("code" in chain) return reject(chain);
 		const targets = parseTarget(getForgeParam(params, "ValidTgts"));
@@ -1497,28 +1509,8 @@ export function lowerForgeCard(
 			return reject(
 				issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where),
 			);
-		for (const effect of chain.effects) {
-			if (effect.kind !== "damage" && effect.kind !== "destroy") continue;
-			const target = targets[0];
-			if (targets.length !== 1 || !target || effect.target !== target.id) {
-				return reject(
-					issue(
-						"UNSUPPORTED_TARGET",
-						"damage/destroy effects must reference the declared target slot",
-						where,
-					),
-				);
-			}
-			if (effect.kind === "destroy" && target.legal.kind !== "permanent") {
-				return reject(
-					issue(
-						"UNSUPPORTED_TARGET",
-						"Destroy requires a creature/permanent target",
-						where,
-					),
-				);
-			}
-		}
+		const slotIssue = checkEffectTargetSlots(chain.effects, targets, where);
+		if (slotIssue) return reject(slotIssue);
 		const description = getForgeParam(params, "SpellDescription");
 		if (!description)
 			return reject(
@@ -1619,9 +1611,11 @@ export function lowerForgeCard(
 		hasAttackEffect.value === "TRUE"
 	)
 		usedSVarNames.add("hasattackeffect");
+	// PlayMain1 tells Forge's AI to cast the card before combat, which only says
+	// anything about a card that does something once it is on the battlefield.
 	const playMain1 = lookupForgeSVar(face, "PlayMain1")?.parsed;
 	if (
-		statics.length > 0 &&
+		(statics.length > 0 || triggers.length > 0) &&
 		playMain1?.kind === "scalar" &&
 		playMain1.value === "TRUE"
 	)
