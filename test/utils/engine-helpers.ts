@@ -147,6 +147,20 @@ export function created(result: { created: ObjectId[] }): ObjectId {
 	if (id === undefined) throw new Error("nothing created");
 	return id;
 }
+/** start a game, skipping pregame shuffle / deal / mulligan. */
+export function newInProgressGame(seed = 0) {
+	const state = newGame(seed);
+	state.turnScheduler = {
+		nextAction: { kind: "finishPreGameStep" },
+		// start the game after opening hand actions.
+		progress: { kind: "pregame", step: "opening hand actions" },
+		pendingTurns: [],
+		nextRegularPlayer: 0 as PlayerId,
+		remainingSteps: [],
+		remainingPregameSteps: [],
+		nextId: 0,
+	};
+}
 
 /**
  * Registers a card straight from the Forge card database, through the strict

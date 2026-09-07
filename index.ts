@@ -179,8 +179,10 @@ type SchedulerCommand =
 	| { kind: "finishPhase" };
 
 interface TurnScheduler {
-	/** The next serializable unit of scheduler control flow. */
-	command: SchedulerCommand;
+	/**
+	 * what the turn scheduler should do next.
+	 */
+	nextAction: SchedulerCommand;
 	/** The only externally observable turn locations. */
 	progress: GameProgress;
 	/** Only exceptional turns are queued. The front is taken next. */
@@ -200,7 +202,10 @@ export function turnLocation(state: ReadonlyGameState): TurnLocation | null {
 	return progress.kind === "inTurn" ? progress.location : null;
 }
 
-/** Whose turn it is, or null before the first turn of the game begins. */
+/**
+ * Whose turn it is, or null before the first turn of the game begins.
+ * TODO: support pregame active player.
+ */
 export function activePlayer(state: ReadonlyGameState): PlayerId | null {
 	const progress = state.turnScheduler.progress;
 	return progress.kind === "inTurn" ? progress.turn.player : null;
@@ -2238,7 +2243,7 @@ export function newGame(seed = 0): GameState {
 		blockAssignments: [],
 		completedTurns: 0,
 		turnScheduler: {
-			command: { kind: "advancePreGameStep" },
+			nextAction: { kind: "advancePreGameStep" },
 			progress: { kind: "notStarted" },
 			pendingTurns: [],
 			nextRegularPlayer: 0 as PlayerId,
@@ -5138,6 +5143,7 @@ function resolveSpell(
 
 	// CR 608.2m: an instant or sorcery follows its own instructions and is then
 	// put into its owner's graveyard as the last step of resolution.
+	// TODO: "instants and sorceries you control have lifelink", which needs characteristics.
 	const definition = card(object.representation.cardId).spell;
 	assertDefined(
 		definition,
@@ -6515,18 +6521,18 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 	state.revision++;
 	const scheduler = state.turnScheduler;
 	for (let transition = 0; transition < 64; transition++) {
-		const command = scheduler.command;
+		const command = scheduler.nextAction;
 
 		switch (command.kind) {
 			case "advancePreGameStep": {
 				const step = scheduler.remainingPregameSteps.shift();
 				if (!step) {
-					scheduler.command = { kind: "advanceTurn" };
+					scheduler.nextAction = { kind: "advanceTurn" };
 					continue;
 				}
 				scheduler.progress = { kind: "pregame", step };
 				performPreGameActions(state, choices, step);
-				scheduler.command = { kind: "finishPreGameStep" };
+				scheduler.nextAction = { kind: "finishPreGameStep" };
 				// A pre-game step is a rules-defined location, exactly like a turn's
 				// step. Unlike one, CR 103 opens no priority window, so there is no
 				// priority() call before returning.
@@ -6535,7 +6541,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 
 			case "finishPreGameStep": {
 				assert(scheduler.progress.kind === "pregame");
-				scheduler.command = { kind: "advancePreGameStep" };
+				scheduler.nextAction = { kind: "advancePreGameStep" };
 				continue;
 			}
 
@@ -6561,7 +6567,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 						(ev) => ev.kind === "begin turn" && ev.turnId === turn.id,
 					)
 				) {
-					scheduler.command = { kind: "advanceTurn" };
+					scheduler.nextAction = { kind: "advanceTurn" };
 					continue;
 				}
 
@@ -6570,7 +6576,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				scheduler.progress = { kind: "inTurn", turn, location: null };
 				state.players[turn.player].landsPlayed = 0;
 				scheduler.remainingSteps = [];
-				scheduler.command = { kind: "advancePhase", turn };
+				scheduler.nextAction = { kind: "advancePhase", turn };
 				continue;
 			}
 
@@ -6580,7 +6586,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				if (!phase) {
 					scheduler.remainingSteps = [];
 					state.completedTurns++;
-					scheduler.command = { kind: "advanceTurn" };
+					scheduler.nextAction = { kind: "advanceTurn" };
 					continue;
 				}
 
@@ -6610,7 +6616,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 						(ev) => ev.kind === "begin phase" && ev.phaseId === phase.id,
 					)
 				) {
-					scheduler.command = { kind: "advancePhase", turn };
+					scheduler.nextAction = { kind: "advancePhase", turn };
 					continue;
 				}
 
@@ -6622,13 +6628,13 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 						turn,
 						location: { kind: "mainPhase", phase, role },
 					};
-					scheduler.command = { kind: "finishPhase" };
+					scheduler.nextAction = { kind: "finishPhase" };
 					priority(state, choices);
 					return;
 				}
 
 				scheduler.remainingSteps = makeSteps(state, phase);
-				scheduler.command = { kind: "advanceStep", turn, phase };
+				scheduler.nextAction = { kind: "advanceStep", turn, phase };
 				continue;
 			}
 
@@ -6636,7 +6642,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				const { turn, phase } = command;
 				const step = scheduler.remainingSteps.shift();
 				if (!step) {
-					scheduler.command = { kind: "finishPhase" };
+					scheduler.nextAction = { kind: "finishPhase" };
 					continue;
 				}
 
@@ -6659,7 +6665,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 						(ev) => ev.kind === "begin step" && ev.stepId === step.id,
 					)
 				) {
-					scheduler.command = { kind: "advanceStep", turn, phase };
+					scheduler.nextAction = { kind: "advanceStep", turn, phase };
 					continue;
 				}
 
@@ -6668,7 +6674,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 					turn,
 					location: { kind: "step", phase, step },
 				};
-				scheduler.command = { kind: "finishStep" };
+				scheduler.nextAction = { kind: "finishStep" };
 				performTurnBasedActions(state, choices, step, turn.player);
 				// Untap has no priority window. Cleanup normally has none, but the
 				// priority helper opens one if something triggered.
@@ -6681,7 +6687,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				assert(progress.kind === "inTurn");
 				assert(progress.location?.kind === "step");
 				emptyManaPools(state);
-				scheduler.command = {
+				scheduler.nextAction = {
 					kind: "advanceStep",
 					turn: progress.turn,
 					phase: progress.location.phase,
@@ -6694,7 +6700,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				assert(progress.kind === "inTurn");
 				emptyManaPools(state);
 				scheduler.remainingSteps = [];
-				scheduler.command = {
+				scheduler.nextAction = {
 					kind: "advancePhase",
 					turn: progress.turn,
 				};
