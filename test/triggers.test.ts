@@ -12,13 +12,14 @@ import {
 	abilityId,
 	activePlayer,
 	ChoiceController,
+	createReadContext,
 	isTurnStep,
 	newGame,
 	perform,
+	readObject,
 	settlePriority,
 	spawnCard,
 	spawnPermanent,
-	view,
 } from "../index.ts";
 import {
 	type SyncAgents as Agents,
@@ -144,7 +145,9 @@ describe("triggered abilities", () => {
 		);
 
 		const entered = created(result);
-		expect(view(state, entered).name).toBe("Arashin Cleric");
+		expect(
+			readObject(createReadContext(state), entered).currentCharacteristics.name,
+		).toBe("Arashin Cleric");
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(state.pendingTriggers[0]).toMatchObject({
 			source: entered,

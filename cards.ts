@@ -75,7 +75,9 @@ function isCreatureRecipient(ctx: EffectCtx, ev: GameEvent): boolean {
 		);
 	}
 	if (ev.kind === "change zone")
-		return etbPreview(ctx.state, ev).types.includes("creature");
+		return etbPreview(ctx.state, ev).currentCharacteristics.types.includes(
+			"creature",
+		);
 	return false;
 }
 
@@ -601,7 +603,8 @@ export const BABY_MYCOSYNTH = registerCard({
 			layer: "4-type-changing",
 			text: "All permanents are artifacts in addition to their other types.",
 			applies: (v, _s, src) =>
-				src.zone === "battlefield" && !v.types.includes("artifact"),
+				src.zone === "battlefield" &&
+				!v.currentCharacteristics.types.includes("artifact"),
 			modify: (v) => {
 				v.types.push("artifact");
 			},
@@ -632,7 +635,10 @@ export const ROOT_MAZE = registerCard({
 				if (ev.entersTapped) return false;
 				// Preview, not the printed card: Mycosynth Lattice can make this an artifact.
 				const v = etbPreview(ctx.state, ev);
-				return v.types.includes("artifact") || v.types.includes("land");
+				return (
+					v.currentCharacteristics.types.includes("artifact") ||
+					v.currentCharacteristics.types.includes("land")
+				);
 			},
 			replace: (ev) =>
 				ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],

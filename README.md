@@ -150,8 +150,8 @@ battles) are not implemented.
 ### Combat damage
 
 At the combat damage turn-based action, every permanent still on the
-battlefield with `attacking === true` deals damage equal to its current
-`view()` power to the opposing player — this is a two-player-only engine, so
+battlefield with `attacking === true` deals damage equal to its current derived
+power to the opposing player — this is a two-player-only engine, so
 the attacker's controller's opponent is always the recipient. Damage is
 snapshotted for all still-attacking permanents in battlefield order before
 any of it is dealt (approximating CR 510.2's simultaneous assignment) and

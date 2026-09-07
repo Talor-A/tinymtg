@@ -7,16 +7,17 @@ import type { GameState, ObjectId, PlayerId } from "../index.ts";
 import {
 	abilityId,
 	activePlayer,
+	createReadContext,
 	executeAbilityAction,
 	isTurnStep,
 	newGame,
 	perform,
 	permanent,
+	readObject,
 	registerCard,
 	settlePriority,
 	spawnCard,
 	spawnPermanent,
-	view,
 } from "../index.ts";
 import {
 	ALICE,
@@ -271,8 +272,12 @@ describe("forge-import runtime: statics and replacements", () => {
 		const mine = spawnPermanent(state, "rt-grizzly-bears", ALICE);
 		const theirs = spawnPermanent(state, "rt-grizzly-bears", BOB);
 
-		expect(view(state, mine.id)).toMatchObject({ power: 3, toughness: 3 });
-		expect(view(state, theirs.id)).toMatchObject({ power: 2, toughness: 2 });
+		expect(
+			readObject(createReadContext(state), mine.id).currentCharacteristics,
+		).toMatchObject({ power: 3, toughness: 3 });
+		expect(
+			readObject(createReadContext(state), theirs.id).currentCharacteristics,
+		).toMatchObject({ power: 2, toughness: 2 });
 	});
 
 	test("Root Maze's imported replacement taps entering artifacts and lands but not creatures", () => {
@@ -316,7 +321,9 @@ describe("forge-import runtime: statics and replacements", () => {
 
 		const dog = enterFromHand(state, "rt-faithful-watchdog", ALICE, agents);
 		expect(permanent(state, dog).counters).toEqual({ "+1/+1": 3 });
-		expect(view(state, dog)).toMatchObject({
+		expect(
+			readObject(createReadContext(state), dog).currentCharacteristics,
+		).toMatchObject({
 			power: 3,
 			toughness: 3,
 			keywords: ["vigilance"],
@@ -401,9 +408,15 @@ describe("forge-import runtime: registry and clone integrity", () => {
 		spawnPermanent(state, "rt-root-maze", ALICE);
 		const bear = spawnPermanent(state, "rt-grizzly-bears", ALICE);
 
-		const before = view(state, bear.id);
+		const before = readObject(
+			createReadContext(state),
+			bear.id,
+		).currentCharacteristics;
 		const cloned = structuredClone(state);
-		const after = view(cloned, bear.id);
+		const after = readObject(
+			createReadContext(cloned),
+			bear.id,
+		).currentCharacteristics;
 
 		expect(after).toEqual(before);
 		expect(after).toMatchObject({ power: 3, toughness: 3 });

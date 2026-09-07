@@ -19,7 +19,6 @@ import {
 	spawnCard,
 	spawnPermanent,
 	spawnToken,
-	view,
 } from "../index.ts";
 
 const P1 = 0 as PlayerId;
@@ -77,7 +76,7 @@ const COMMUNAL_INSTRUCTION = registerCard({
 			applies: (v, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				v.types.includes("creature") &&
+				v.currentCharacteristics.types.includes("creature") &&
 				v.controller === source.controller,
 			modify: (v) => {
 				v.abilities.activated.push(abilityId("activated", GRANT_CARD, 0));
@@ -104,7 +103,12 @@ const SWAP_SOURCE = registerCard({
 		{
 			layer: "7d-swap-power-toughness",
 			text: "Each creature with power 4 or greater has its power and toughness switched.",
-			applies: (v) => v.types.includes("creature") && v.power >= 4,
+			applies: (v) => {
+				const characteristics = v.currentCharacteristics;
+				return (
+					characteristics.kind === "creature" && characteristics.power >= 4
+				);
+			},
 			modify: (v) => {
 				if (v.kind !== "creature") return;
 				const power = v.power;
@@ -442,10 +446,10 @@ describe("derived game views", () => {
 			kind: "permanent",
 			currentCharacteristics: { name: arbitraryName },
 		});
-		expect(() => view(state, token.id)).not.toThrow();
-		expect(view(state, token.id)).toMatchObject({
-			name: arbitraryName,
-			cardId: null,
+		expect(() => readObject(createReadContext(state), token.id)).not.toThrow();
+		expect(readObject(createReadContext(state), token.id)).toMatchObject({
+			currentCharacteristics: { name: arbitraryName },
+			representation: { kind: "token" },
 		});
 		expect(physicalCardId(token)).toBe(null);
 
@@ -470,7 +474,10 @@ describe("derived game views", () => {
 		const copiedId = result.created[0];
 		expect(copiedId).toBeDefined();
 		if (copiedId === undefined) return;
-		expect(view(state, copiedId).name).toBe(arbitraryName);
+		expect(
+			readObject(createReadContext(state), copiedId).currentCharacteristics
+				.name,
+		).toBe(arbitraryName);
 		expect(physicalCardId(token)).toBe(null);
 	});
 
@@ -573,7 +580,10 @@ describe("derived game views", () => {
 			"baby-mycosynth-lattice:0",
 		]);
 		expect(physicalCardId(token)).toBe(null);
-		expect(view(state, bears.id).types).toContain("artifact");
+		expect(
+			readObject(createReadContext(state), bears.id).currentCharacteristics
+				.types,
+		).toContain("artifact");
 		expect(() => structuredClone(state)).not.toThrow();
 		expect(() => buildGameView(structuredClone(state))).not.toThrow();
 		const result = await advanceWithReplay(state, agents);
@@ -639,7 +649,7 @@ registerCard({
 			applies: (v, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				v.types.includes("creature") &&
+				v.currentCharacteristics.types.includes("creature") &&
 				v.controller === source.controller,
 			modify: (v) => {
 				v.abilities.replacement.push(abilityId("replacement", WARD_CARD, 0));
@@ -966,7 +976,8 @@ const GRAVEYARD_ANTHEM = registerCard({
 			functionsFrom: ["graveyard"],
 			affects: ["battlefield"],
 			applies: (v, _state, source) =>
-				v.types.includes("creature") && v.controller === source.owner,
+				v.currentCharacteristics.types.includes("creature") &&
+				v.controller === source.owner,
 			modify: (v) => {
 				if (v.kind !== "creature") return;
 				v.power += 1;
@@ -980,18 +991,22 @@ describe("functionsFrom and affects are separate questions", () => {
 	test("an anthem functions from the graveyard and affects the battlefield", () => {
 		const state = newGame();
 		const bear = spawnPermanent(state, "grizzly-bears", P1);
-		expect(view(state, bear.id).power).toBe(2);
+		expect(
+			readObject(createReadContext(state), bear.id).currentCharacteristics,
+		).toMatchObject({ power: 2 });
 
 		spawnCard(state, GRAVEYARD_ANTHEM.id, P1, "graveyard");
-		expect(view(state, bear.id).power).toBe(3);
-		expect(view(state, bear.id).toughness).toBe(3);
+		expect(
+			readObject(createReadContext(state), bear.id).currentCharacteristics,
+		).toMatchObject({ power: 3, toughness: 3 });
 	});
 
 	test("the same anthem does nothing from the battlefield", () => {
 		const state = newGame();
 		const bear = spawnPermanent(state, "grizzly-bears", P1);
 		spawnPermanent(state, GRAVEYARD_ANTHEM.id, P1);
-		expect(view(state, bear.id).power).toBe(2);
-		expect(view(state, bear.id).toughness).toBe(2);
+		expect(
+			readObject(createReadContext(state), bear.id).currentCharacteristics,
+		).toMatchObject({ power: 2, toughness: 2 });
 	});
 });

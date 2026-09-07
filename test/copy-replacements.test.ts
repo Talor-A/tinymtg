@@ -21,7 +21,6 @@ import {
 	spawnCard,
 	spawnPermanent,
 	spawnToken,
-	view,
 } from "../index.ts";
 
 const P1 = 0 as PlayerId;
@@ -219,7 +218,9 @@ describe("copied enter-the-battlefield replacements", () => {
 		const entered = enter(state, clone.id);
 		const copy = permanent(state, entered);
 
-		expect(view(state, entered).name).toBe("Entry Guard");
+		expect(
+			readObject(createReadContext(state), entered).currentCharacteristics.name,
+		).toBe("Entry Guard");
 		// The replacement reached the event during the Clone's own entry, not
 		// afterwards: both fields are written by `moveObject`, not by any later
 		// mutation.
@@ -259,7 +260,10 @@ describe("copied enter-the-battlefield replacements", () => {
 			tapped,
 			enter(tapped, spawnCard(tapped, "clone", P1, "hand").id),
 		);
-		expect(view(tapped, sentinelCopy.id).name).toBe("Rusted Sentinel");
+		expect(
+			readObject(createReadContext(tapped), sentinelCopy.id)
+				.currentCharacteristics.name,
+		).toBe("Rusted Sentinel");
 		expect(sentinelCopy.tapped, "copied entersTapped applied").toBe(true);
 		expect(sentinelCopy.representation, "still physically a Clone").toEqual({
 			kind: "card",
@@ -272,7 +276,10 @@ describe("copied enter-the-battlefield replacements", () => {
 			counters,
 			enter(counters, spawnCard(counters, "clone", P1, "hand").id),
 		);
-		expect(view(counters, ballistaCopy.id).name).toBe("Walking Ballista");
+		expect(
+			readObject(createReadContext(counters), ballistaCopy.id)
+				.currentCharacteristics.name,
+		).toBe("Walking Ballista");
 		expect(ballistaCopy.counters["+1/+1"], "copied entersWith applied").toBe(2);
 	});
 
@@ -284,7 +291,10 @@ describe("copied enter-the-battlefield replacements", () => {
 		const mimic = spawnCard(state, MIMIC, P1, "hand");
 		const entered = permanent(state, enter(state, mimic.id));
 
-		expect(view(state, entered.id).name).toBe("Plain Bear");
+		expect(
+			readObject(createReadContext(state), entered.id).currentCharacteristics
+				.name,
+		).toBe("Plain Bear");
 		expect(entered.tapped, "the mimic's own entersTapped was copied away").toBe(
 			false,
 		);
@@ -304,7 +314,10 @@ describe("copied enter-the-battlefield replacements", () => {
 		const mimic = spawnCard(state, MIMIC, P1, "hand");
 		const entered = permanent(state, enter(state, mimic.id));
 
-		expect(view(state, entered.id).name).toBe("Entry Guard");
+		expect(
+			readObject(createReadContext(state), entered.id).currentCharacteristics
+				.name,
+		).toBe("Entry Guard");
 		expect(entered.tapped).toBe(true);
 		expect(entered.counters["+1/+1"], "applied exactly once").toBe(1);
 	});
@@ -340,7 +353,10 @@ describe("copied entry replacements across tokens and copy chains", () => {
 			state,
 			enter(state, spawnCard(state, "clone", P1, "hand").id),
 		);
-		expect(view(state, entered.id).name).toBe("Guard Token");
+		expect(
+			readObject(createReadContext(state), entered.id).currentCharacteristics
+				.name,
+		).toBe("Guard Token");
 		expect(entered.tapped).toBe(true);
 		expect(entered.counters["+1/+1"]).toBe(1);
 	});
@@ -366,7 +382,9 @@ describe("copied entry replacements across tokens and copy chains", () => {
 		leave(state, guard.id);
 		const second = enter(state, spawnCard(state, "clone", P1, "hand").id);
 
-		expect(view(state, second).name).toBe("Entry Guard");
+		expect(
+			readObject(createReadContext(state), second).currentCharacteristics.name,
+		).toBe("Entry Guard");
 		expect(permanent(state, second).tapped).toBe(true);
 		expect(permanent(state, second).counters["+1/+1"]).toBe(1);
 		const read = createReadContext(state);
@@ -383,7 +401,9 @@ describe("physical identity and serialization of copied entry replacements", () 
 		const state = newGame();
 		spawnPermanent(state, GUARD, P1);
 		const entered = enter(state, spawnCard(state, "clone", P1, "hand").id);
-		expect(view(state, entered).name).toBe("Entry Guard");
+		expect(
+			readObject(createReadContext(state), entered).currentCharacteristics.name,
+		).toBe("Entry Guard");
 
 		const inGraveyard = leave(state, entered);
 		expect(state.objects.get(inGraveyard)).toMatchObject({

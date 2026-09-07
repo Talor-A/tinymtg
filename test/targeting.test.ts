@@ -9,6 +9,7 @@ import {
 	buildPlayerView,
 	ChoiceController,
 	ChoiceReplayMismatchError,
+	createReadContext,
 	type EntityRef,
 	executeCastAction,
 	type GameState,
@@ -18,6 +19,7 @@ import {
 	newGame,
 	type ObjectId,
 	perform,
+	readObject,
 	registerCard,
 	selectorMatches,
 	settlePriority,
@@ -27,7 +29,6 @@ import {
 	type TargetDef,
 	type TargetSelectorDef,
 	turnLocation,
-	view,
 } from "../index.ts";
 import {
 	advanceUntil,
@@ -66,8 +67,12 @@ describe("target selectors", () => {
 		const swamp = spawnPermanent(state, "swamp", 1);
 		const mine = { controller: 0 as const, id: bears.id };
 
-		const matches = (selector: TargetSelectorDef, id: ObjectId) =>
-			selectorMatches(selector, view(state, id), mine);
+		const matches = (selector: TargetSelectorDef, id: ObjectId) => {
+			const snapshot = readObject(createReadContext(state), id);
+			if (snapshot.kind !== "permanent")
+				throw new Error("expected a permanent");
+			return selectorMatches(selector, snapshot, mine);
+		};
 
 		expect(matches({ kind: "self" }, bears.id)).toBe(true);
 		expect(matches({ kind: "self" }, swamp.id)).toBe(false);
@@ -244,7 +249,7 @@ registerCard({
 		{
 			layer: "4-type-changing",
 			text: "Creatures are noncreature artifacts.",
-			applies: (v) => v.types.includes("creature"),
+			applies: (v) => v.currentCharacteristics.types.includes("creature"),
 			modify: (v) => {
 				v.types = ["artifact"];
 			},
@@ -263,7 +268,7 @@ registerCard({
 		{
 			layer: "5-color-changing",
 			text: "Creatures are black.",
-			applies: (v) => v.types.includes("creature"),
+			applies: (v) => v.currentCharacteristics.types.includes("creature"),
 			modify: (v) => {
 				v.colors = ["b"];
 			},
@@ -282,7 +287,7 @@ registerCard({
 		{
 			layer: "4-type-changing",
 			text: "Creatures are planeswalkers.",
-			applies: (v) => v.types.includes("creature"),
+			applies: (v) => v.currentCharacteristics.types.includes("creature"),
 			modify: (v) => {
 				v.types = ["planeswalker"];
 			},

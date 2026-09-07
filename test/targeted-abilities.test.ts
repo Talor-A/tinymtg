@@ -100,7 +100,7 @@ registerCard({
 		{
 			layer: "6-ability-changing",
 			text: "Creatures have lifelink.",
-			applies: (v) => v.types.includes("creature"),
+			applies: (v) => v.currentCharacteristics.types.includes("creature"),
 			modify: (v) => {
 				v.keywords.push("lifelink");
 			},
@@ -118,7 +118,7 @@ registerCard({
 		{
 			layer: "5-color-changing",
 			text: "Creatures are red.",
-			applies: (v) => v.types.includes("creature"),
+			applies: (v) => v.currentCharacteristics.types.includes("creature"),
 			modify: (v) => {
 				v.colors = ["r"];
 			},

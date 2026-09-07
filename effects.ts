@@ -19,7 +19,9 @@ const gatherSpecimens: EffectFactory = (params) => {
 		applies(ev, ctx) {
 			if (ev.kind !== "change zone" || ev.to !== "battlefield") return false;
 			if (ev.toController === you) return false;
-			return etbPreview(ctx.state, ev).types.includes("creature");
+			return etbPreview(ctx.state, ev).currentCharacteristics.types.includes(
+				"creature",
+			);
 		},
 		replace: (ev) =>
 			ev.kind === "change zone" ? [{ ...ev, toController: you }] : [ev],

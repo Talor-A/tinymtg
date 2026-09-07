@@ -29,13 +29,14 @@ import type {
 } from "./index.ts";
 import {
 	advance,
+	createReadContext,
 	gameOver,
 	newGame,
 	permanent,
+	readObject,
 	spawnCard,
 	spawnPermanent,
 	turnLocation,
-	view,
 	winner,
 } from "./index.ts";
 
@@ -112,17 +113,23 @@ function lifeBar(life: number, max = 20): string {
 
 function creatureBadge(state: GameState, id: ObjectId): string {
 	const p = permanent(state, id);
-	const v = view(state, id);
+	const snapshot = readObject(createReadContext(state), id);
+	if (snapshot.kind !== "permanent") throw new Error("expected a permanent");
+	const characteristics = snapshot.currentCharacteristics;
+	if (characteristics.kind !== "creature")
+		throw new Error("expected a creature");
 	const flags = [
 		p.tapped ? dim("(tapped)") : "",
 		p.attacking ? red("⚔") : "",
-		v.keywords.includes("indestructible") ? cyan("[indestructible]") : "",
-		v.keywords.includes("lifelink") ? green("[lifelink]") : "",
+		characteristics.keywords.includes("indestructible")
+			? cyan("[indestructible]")
+			: "",
+		characteristics.keywords.includes("lifelink") ? green("[lifelink]") : "",
 		p.damage > 0 ? yellow(`${p.damage}dmg`) : "",
 	]
 		.filter(Boolean)
 		.join(" ");
-	return `${bold(v.name)} ${dim(`${v.power}/${v.toughness}`)} ${flags}`.trim();
+	return `${bold(characteristics.name)} ${dim(`${characteristics.power}/${characteristics.toughness}`)} ${flags}`.trim();
 }
 
 function printBoard(state: GameState): void {
@@ -132,14 +139,18 @@ function printBoard(state: GameState): void {
 		console.log(`  ${name}  ${lifeBar(player.life)}`);
 		const creatures = state.battlefield.filter((id) => {
 			const perm = permanent(state, id);
+			const snapshot = readObject(createReadContext(state), id);
 			return (
-				perm.controller === pid && view(state, id).types.includes("creature")
+				perm.controller === pid &&
+				snapshot.currentCharacteristics.types.includes("creature")
 			);
 		});
 		const permanents = state.battlefield.filter((id) => {
 			const perm = permanent(state, id);
+			const snapshot = readObject(createReadContext(state), id);
 			return (
-				perm.controller === pid && !view(state, id).types.includes("creature")
+				perm.controller === pid &&
+				!snapshot.currentCharacteristics.types.includes("creature")
 			);
 		});
 		if (creatures.length === 0 && permanents.length === 0) {
@@ -149,7 +160,8 @@ function printBoard(state: GameState): void {
 			console.log(`    ${creatureBadge(state, id)}`);
 		}
 		for (const id of permanents) {
-			console.log(`    ${dim(view(state, id).name)}`);
+			const snapshot = readObject(createReadContext(state), id);
+			console.log(`    ${dim(snapshot.currentCharacteristics.name)}`);
 		}
 	}
 }
@@ -347,7 +359,7 @@ async function main(): Promise<void> {
 	// "much bigger creature" to attack into: nobody blocks, no damage event is
 	// ever produced, the Furnace replacement never fires, and Darksteel Myr is
 	// never dealt damage. The "indestructible holds" line below is read off
-	// view().keywords as a badge rather than earned by anything the engine did.
+	// its derived keywords as a badge rather than earned by anything the engine did.
 	// Darksteel Myr is also 0/1, so even with a blocker present it would assign
 	// 0 damage and take none from an unblocked swing.
 	//

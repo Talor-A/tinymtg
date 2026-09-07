@@ -782,7 +782,7 @@ interface SpellSnapshot extends SnapshotBase {
 		  };
 }
 
-interface PermanentSnapshot extends SnapshotBase {
+export interface PermanentSnapshot extends SnapshotBase {
 	kind: "permanent";
 	zone: "battlefield";
 	controller: PlayerId;
@@ -1083,7 +1083,11 @@ function buildFilteredGameView(
 						const current = copiable.get(objectId);
 						assertDefined(current, "copiable values not found");
 						if (
-							!ability.applies(evaluationView(subject, current), state, source)
+							!ability.applies(
+								continuousEffectEvaluation(subject, current),
+								state,
+								source,
+							)
 						)
 							continue;
 						const next = cloneCharacteristics(current);
@@ -1095,7 +1099,13 @@ function buildFilteredGameView(
 
 					const current = characteristics.get(objectId);
 					assertDefined(current, "characteristics not found");
-					if (!ability.applies(evaluationView(subject, current), state, source))
+					if (
+						!ability.applies(
+							continuousEffectEvaluation(subject, current),
+							state,
+							source,
+						)
+					)
 						continue;
 					const next = cloneCharacteristics(current);
 					ability.modify(next, state, source);
@@ -1865,20 +1875,21 @@ export interface TargetContext {
  */
 export function selectorMatches(
 	selector: TargetSelectorDef,
-	object: PermanentView,
+	object: DeepReadOnly<PermanentSnapshot | ContinuousEffectEvaluation>,
 	source: { controller: PlayerId; id: ObjectId | null },
 ): boolean {
+	const characteristics = object.currentCharacteristics;
 	switch (selector.kind) {
 		case "self":
-			return source.id !== null && object.id === source.id;
+			return source.id !== null && object.objectId === source.id;
 		case "type":
-			return object.types.includes(selector.type);
+			return characteristics.types.includes(selector.type);
 		case "supertype":
-			return object.supertypes.includes(selector.supertype);
+			return characteristics.supertypes.includes(selector.supertype);
 		case "subtype":
-			return object.subtypes.includes(selector.subtype);
+			return characteristics.subtypes.includes(selector.subtype);
 		case "color":
-			return object.colors.includes(selector.color);
+			return characteristics.colors.includes(selector.color);
 		case "controller":
 			// An object with no controller matches neither "you" nor "opponent".
 			if (object.controller === null) return false;
@@ -2766,7 +2777,7 @@ export interface ContinuousEffect {
 
 	/** `source` is the concrete object granting the effect. */
 	applies(
-		view: PermanentView,
+		snapshot: DeepReadOnly<ContinuousEffectEvaluation>,
 		state: ReadonlyGameState,
 		source: DeepReadOnly<GameObject>,
 	): boolean;
@@ -2864,7 +2875,7 @@ export type ContinuousEffectLayer = (typeof CONTINUOUS_EFFECT_LAYERS)[number];
 export function etbPreview(
 	state: ReadonlyGameState,
 	ev: ZoneChangeEvent,
-): PermanentView {
+): PermanentSnapshot {
 	const source = maybeObject(state, ev.object);
 	assertDefined(source);
 	// Clone only mutable state containers; card definitions contain callbacks and
@@ -2904,7 +2915,7 @@ export function etbPreview(
 	assertDefined(id);
 	const snapshot = readObject(createReadContext(preview), id);
 	assert(snapshot.kind === "permanent");
-	return flattenSnapshot(snapshot);
+	return snapshot;
 }
 
 const GAME_VIEW_CACHE = new WeakMap<
@@ -3103,70 +3114,27 @@ export function effectiveCharacteristics(
 	return snapshot.currentCharacteristics;
 }
 
-export interface PermanentView {
-	readonly name: string;
-	readonly manaCost: CardDefManaCost;
-	readonly colors: readonly Color[];
-	readonly supertypes: readonly Supertype[];
-	readonly types: readonly CardType[];
-	readonly subtypes: readonly string[];
-	readonly keywords: readonly Keyword[];
-	readonly abilities: DeepReadOnly<BaseCharacteristicsSnapshot["abilities"]>;
-	readonly id: ObjectId;
+export interface ContinuousEffectEvaluation {
+	readonly objectId: ObjectId;
 	readonly cardId: string | null;
 	readonly owner: PlayerId;
 	readonly controller: PlayerId | null;
 	readonly zone: Zone;
-	readonly counters: CounterBag;
-	readonly tapped: boolean;
-	/** Noncreatures expose zero for compatibility; use types to narrow rules logic. */
-	readonly power: number;
-	readonly toughness: number;
+	readonly currentCharacteristics: DeepReadOnly<CharacteristicsSnapshot>;
 }
-export type ObjectView = PermanentView;
 
-function evaluationView(
+function continuousEffectEvaluation(
 	object: DeepReadOnly<GameObject>,
 	characteristics: DeepReadOnly<CharacteristicsSnapshot>,
-): PermanentView {
+): ContinuousEffectEvaluation {
 	const cardId = physicalCardId(object);
 	return {
-		...characteristics,
-		id: object.id,
+		objectId: object.id,
 		cardId,
 		owner: object.owner,
 		controller: controllerOf(object),
 		zone: object.zone,
-		counters: object.kind === "permanent" ? { ...object.counters } : {},
-		tapped: object.kind === "permanent" ? object.tapped : false,
-		power: "power" in characteristics ? characteristics.power : 0,
-		toughness: "toughness" in characteristics ? characteristics.toughness : 0,
-	};
-}
-
-function flattenSnapshot(snapshot: GameObjectSnapshot): PermanentView {
-	const cardId =
-		snapshot.kind === "card"
-			? snapshot.cardId
-			: snapshot.kind === "spell" && snapshot.representation.kind === "card"
-				? snapshot.representation.cardId
-				: snapshot.kind === "permanent" &&
-						snapshot.representation.kind === "card"
-					? snapshot.representation.cardId
-					: null;
-	const characteristics = snapshot.currentCharacteristics;
-	return {
-		...characteristics,
-		id: snapshot.objectId,
-		cardId,
-		owner: snapshot.owner,
-		controller: snapshot.controller,
-		zone: snapshot.zone,
-		counters: snapshot.kind === "permanent" ? { ...snapshot.counters } : {},
-		tapped: snapshot.kind === "permanent" ? snapshot.tapped : false,
-		power: characteristics.kind === "creature" ? characteristics.power : 0,
-		toughness:
-			characteristics.kind === "creature" ? characteristics.toughness : 0,
+		currentCharacteristics: characteristics,
 	};
 }
 
@@ -3186,11 +3154,6 @@ export function lethalDamage(
 	const characteristics = snapshot.currentCharacteristics;
 	if (characteristics.kind !== "creature") return false;
 	return characteristics.toughness > 0 && o.damage >= characteristics.toughness;
-}
-
-/** Compatibility boundary: build a fresh explicit view for one read. */
-export function view(state: ReadonlyGameState, id: ObjectId): ObjectView {
-	return flattenSnapshot(readObject(createReadContext(state), id));
 }
 
 /* ------------------------------------------------------------------ *
@@ -4147,12 +4110,13 @@ function checkStateBasedActionsIn(
 			assert(snapshot.kind === "permanent");
 			const characteristics = snapshot.currentCharacteristics;
 			if (characteristics.kind !== "creature") continue;
-			const v = flattenSnapshot(snapshot);
-
 			// 704.5f. If a creature has toughness 0 or less, it's put into its
 			// owner's graveyard. Regeneration can't replace this event.
 			if (characteristics.toughness <= 0) {
-				log(state, `  SBA: ${name(state, id)} has toughness ${v.toughness}`);
+				log(
+					state,
+					`  SBA: ${name(state, id)} has toughness ${characteristics.toughness}`,
+				);
 				performIn(
 					state,
 					{
@@ -5616,7 +5580,7 @@ function effectToEvent(
  * priority, everything else only at sorcery speed.
  */
 function doTimingRestrictionsAllowCast(
-	pv: PermanentView,
+	characteristics: DeepReadOnly<CharacteristicsSnapshot>,
 	state: GameState,
 	player: PlayerId,
 ): boolean {
@@ -5626,10 +5590,13 @@ function doTimingRestrictionsAllowCast(
 	);
 	// TODO: "you may cast x as though it had flash"
 
-	assert(pv.types.length > 0, "object has no types");
+	assert(characteristics.types.length > 0, "object has no types");
 
-	if (pv.types.includes("instant")) {
-		assert(pv.types.length === 1, "instant type must be the only type");
+	if (characteristics.types.includes("instant")) {
+		assert(
+			characteristics.types.length === 1,
+			"instant type must be the only type",
+		);
 		return true;
 	}
 
@@ -5786,15 +5753,15 @@ function isLegalTarget(
 	// CR 608.2b: a target that left the zone it was targeted in is illegal, and
 	// the object that replaced it is a different object with a different id.
 	if (snapshot?.kind !== "permanent") return false;
-	const object = flattenSnapshot(snapshot);
 	if (definition.legal.kind === "any-target") {
 		// CR 115.4: "any target" is a creature, a planeswalker, a battle, or a
 		// player; the engine has no battles.
 		return (
-			object.types.includes("creature") || object.types.includes("planeswalker")
+			snapshot.currentCharacteristics.types.includes("creature") ||
+			snapshot.currentCharacteristics.types.includes("planeswalker")
 		);
 	}
-	return selectorMatches(definition.legal.selector, object, {
+	return selectorMatches(definition.legal.selector, snapshot, {
 		controller: ctx.controller,
 		id: ctx.source,
 	});
@@ -5834,22 +5801,33 @@ function canCast(
 	assert(object.zone === "hand");
 	assert(object.owner === player);
 
-	const pv = flattenSnapshot(readObject(read, object.id));
+	const snapshot = readObject(read, object.id);
+	assert(snapshot.kind === "card");
+	const characteristics = snapshot.currentCharacteristics;
 
 	// CR 202.1: a card with no mana cost cannot be cast without an alternative
 	// cost, and the engine has none.
-	if (pv.manaCost === "none") return false;
+	if (characteristics.manaCost === "none") return false;
 
 	// CR 305.1: lands are played as a special action, never cast.
-	if (pv.types.includes("land")) return false;
+	if (characteristics.types.includes("land")) return false;
 
-	if (!doTimingRestrictionsAllowCast(pv, state, player)) return false;
+	if (!doTimingRestrictionsAllowCast(characteristics, state, player))
+		return false;
 
-	if (planManaPayment(state.players[player].manaPool, pv.manaCost) === null)
+	if (
+		planManaPayment(
+			state.players[player].manaPool,
+			characteristics.manaCost,
+		) === null
+	)
 		return false;
 	const definition = card(object.cardId).spell;
-	if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
-		assertDefined(definition, `${pv.name} has no spell definition`);
+	if (characteristics.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
+		assertDefined(
+			definition,
+			`${characteristics.name} has no spell definition`,
+		);
 		const target = requiredTargetDefinition(
 			definition.targets,
 			definition.effects,
@@ -6255,36 +6233,43 @@ function castSpellIn(
 	}
 
 	const read = createReadContext(state);
-	const pv = flattenSnapshot(readObject(read, action.card));
+	const snapshot = readObject(read, action.card);
+	assert(snapshot.kind === "card");
+	const characteristics = snapshot.currentCharacteristics;
 
-	if (pv.manaCost === "none") {
+	if (characteristics.manaCost === "none") {
 		throw new IllegalCastError(
-			`${pv.name} has no mana cost and cannot be cast`,
+			`${characteristics.name} has no mana cost and cannot be cast`,
 		);
 	}
-	if (pv.types.includes("land")) {
-		throw new IllegalCastError(`${pv.name} is a land and is played, not cast`);
-	}
-	if (!doTimingRestrictionsAllowCast(pv, state, priorityPlayer)) {
+	if (characteristics.types.includes("land")) {
 		throw new IllegalCastError(
-			`P${priorityPlayer} cannot cast ${pv.name} at this time`,
+			`${characteristics.name} is a land and is played, not cast`,
+		);
+	}
+	if (!doTimingRestrictionsAllowCast(characteristics, state, priorityPlayer)) {
+		throw new IllegalCastError(
+			`P${priorityPlayer} cannot cast ${characteristics.name} at this time`,
 		);
 	}
 
 	const payment = planManaPayment(
 		state.players[priorityPlayer].manaPool,
-		pv.manaCost,
+		characteristics.manaCost,
 	);
 	if (!payment) {
 		throw new IllegalCastError(
-			`P${priorityPlayer} cannot pay ${pv.name}'s mana cost from their mana pool`,
+			`P${priorityPlayer} cannot pay ${characteristics.name}'s mana cost from their mana pool`,
 		);
 	}
 
 	const definition = card(object.cardId).spell;
 	let targets: TargetBindings = [];
-	if (pv.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
-		assertDefined(definition, `${pv.name} has no spell definition`);
+	if (characteristics.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
+		assertDefined(
+			definition,
+			`${characteristics.name} has no spell definition`,
+		);
 		const target = requiredTargetDefinition(
 			definition.targets,
 			definition.effects,
@@ -6293,7 +6278,9 @@ function castSpellIn(
 			const ctx = { controller: priorityPlayer, source: action.card };
 			const candidates = legalTargets(read, target, ctx);
 			if (candidates.length === 0)
-				throw new IllegalCastError(`${pv.name} has no legal target`);
+				throw new IllegalCastError(
+					`${characteristics.name} has no legal target`,
+				);
 			const chosen = choices.chooseTarget(
 				state,
 				priorityPlayer,
@@ -6303,7 +6290,7 @@ function castSpellIn(
 			);
 			if (!isLegalTarget(createReadContext(state), target, chosen, ctx)) {
 				throw new IllegalCastError(
-					`${pv.name}'s chosen target is no longer legal`,
+					`${characteristics.name}'s chosen target is no longer legal`,
 				);
 			}
 			targets = [{ slot: target.id, target: chosen }];
@@ -6336,7 +6323,7 @@ function castSpellIn(
 			)
 				.filter(Boolean)
 				.join(" ") || "nothing"
-		} for ${pv.name}`,
+		} for ${characteristics.name}`,
 	);
 
 	performIn(

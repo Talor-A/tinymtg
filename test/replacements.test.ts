@@ -5,12 +5,13 @@ import type { GameState, ObjectId } from "../index.ts";
 import {
 	addFloating,
 	affectedPlayer,
+	createReadContext,
 	newGame,
 	perform,
 	permanent,
+	readObject,
 	spawnCard,
 	spawnPermanent,
-	view,
 } from "../index.ts";
 import {
 	type SyncAgents as Agents,
@@ -143,9 +144,10 @@ describe("replacement effects that add counters as a permanent enters", () => {
 		seasonFirst.state.log.length = 0;
 		expect(seasonFirst.counters, "Season then Scales").toBe(5);
 		expect(
-			view(scalesFirst.state, scalesFirst.entered).power,
+			readObject(createReadContext(scalesFirst.state), scalesFirst.entered)
+				.currentCharacteristics,
 			"Ballista power with 6 counters",
-		).toBe(6);
+		).toMatchObject({ power: 6 });
 	});
 });
 
@@ -453,9 +455,10 @@ describe("interacting effects as permanents enter", () => {
 			kind: "card",
 			cardId: "clone",
 		});
-		expect(view(state, entered).name, "entered as a copy of Ballista").toBe(
-			"Walking Ballista",
-		);
+		expect(
+			readObject(createReadContext(state), entered).currentCharacteristics.name,
+			"entered as a copy of Ballista",
+		).toBe("Walking Ballista");
 		// The copy picks up the copied card's printed ETB self-replacement, which is
 		// the generally correct behavior. KNOWN DIVERGENCE: real Walking Ballista
 		// enters with X counters and a copy has X=0, so real Magic gives 0 here. The
