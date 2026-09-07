@@ -2965,19 +2965,9 @@ const PLAYER_VIEW_CACHE = new WeakMap<
 	}
 >();
 
-const PLAYER_GAME_VIEW_CACHE = new WeakMap<
-	object,
-	{ revision: number; view: GameView }
->();
-
-function cachedPlayerGameView(
-	state: ReadonlyGameState,
-	revision: number,
-): GameView {
+function playerGameView(state: ReadonlyGameState, revision: number): GameView {
 	const complete = GAME_VIEW_CACHE.get(state);
 	if (complete?.revision === revision) return complete.view;
-	const cached = PLAYER_GAME_VIEW_CACHE.get(state);
-	if (cached?.revision === revision) return cached.view;
 
 	// Libraries expose counts only, so deriving snapshots for every card there
 	// would add substantial work to each agent decision without adding data.
@@ -2985,9 +2975,7 @@ function cachedPlayerGameView(
 	for (const object of state.objects.values()) {
 		if (object.zone !== "library") visibleObjects.add(object.id);
 	}
-	const view = buildFilteredGameView(state, visibleObjects);
-	PLAYER_GAME_VIEW_CACHE.set(state, { revision, view });
-	return view;
+	return buildFilteredGameView(state, visibleObjects);
 }
 
 function deepFreeze<T>(value: T): DeepReadOnly<T> {
@@ -3015,7 +3003,7 @@ export function buildPlayerView(
 	const read: ReadContext = {
 		state,
 		revision,
-		view: cachedPlayerGameView(state, revision),
+		view: playerGameView(state, revision),
 	};
 	const objectSnapshot = (id: ObjectId): PlayerObjectView => {
 		const snapshot = read.view.objects.get(id);
@@ -5978,7 +5966,6 @@ export function executeAbilityAction(
 function restoreCheckpoint(state: GameState, checkpoint: GameState): void {
 	Object.assign(state, checkpoint);
 	GAME_VIEW_CACHE.delete(state);
-	PLAYER_GAME_VIEW_CACHE.delete(state);
 	PLAYER_VIEW_CACHE.delete(state);
 }
 
