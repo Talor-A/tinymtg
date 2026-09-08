@@ -70,6 +70,9 @@ const POSITIVE_FIXTURES = [
 	"c/clone",
 	"b/benalish_veteran",
 	"u/unsummon",
+	"b/boar_q_pine",
+	"d/deeproot_champion",
+	"s/spellgorger_weird",
 	"t/third_path_iconoclast",
 ];
 
@@ -608,6 +611,29 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				},
 				targets: [],
 				effects: [{ kind: "draw", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
+	test("self PutCounter lowers to a source-counter effect", () => {
+		const result = importFixture("d/deeproot_champion");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigPutCounter",
+				text: expect.any(String),
+				condition: {
+					kind: "cast",
+					player: "you",
+					selector: {
+						kind: "not",
+						selector: { kind: "type", type: "creature" },
+					},
+				},
+				targets: [],
+				effects: [
+					{ kind: "add-counters-to-source", counter: "+1/+1", amount: 1 },
+				],
 			},
 		]);
 	});

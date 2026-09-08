@@ -149,6 +149,7 @@ Black Widow, Natasha Romanoff
 Blade of the Sixth Pride
 Blanchwood Treefolk
 Blazing Hellhound
+Blessed Spirits
 Blighted Cataract
 Blighted Gorge
 Blighted Shaman
@@ -161,6 +162,7 @@ Blood Vassal
 Bloodfire Mentor
 Bloodrage Brawler
 Boa Constrictor
+Boar-q-pine
 Bog Imp
 Bog Initiate
 Bogstomper
@@ -213,6 +215,7 @@ Capital Guard
 Captain of Umbar
 Captain's Call
 Caravan Hurda
+Carnivorous Moss-Beast
 Carrion Ants
 Carrion Crow
 Carrion Screecher
@@ -241,6 +244,7 @@ Child of Thorns
 Chill to the Bone
 Chrome Cat
 Cinder Storm
+Citanul Druid
 Clarion Cathars
 Cleansing Screech
 Cliffhaven Sell-Sword
@@ -337,6 +341,7 @@ Deadeye Duelist
 Deadly Visit
 Deathmark
 Dedicated Martyr
+Deeproot Champion
 Defense Force Aggressor
 Defiant Khenra
 Deliberate
@@ -541,6 +546,7 @@ Fountain of Youth
 Fracture
 Frenzied Raptor
 Fresh Volunteers
+Fretwork Colony
 Friendly Ghost
 Frog-Squirrels
 Frost Ogre
@@ -915,6 +921,7 @@ Mistral Charger
 Moaning Spirit
 Mogg Fanatic
 Mogg Raider
+Mold Adder
 Molten Tributary
 Moment of Triumph
 Monk Realist
@@ -1077,6 +1084,7 @@ Quicksilver Fisher
 Quicksilver, Pietro Maximoff
 Quiet Purity
 Quilled Slagwurm
+Quirion Dryad
 Radiant Fountain
 Radiant Grove
 Ragefire
@@ -1102,6 +1110,7 @@ Ravaging Horde
 Ravenous Baboons
 Ravenous Baloth
 Ravenous Chupacabra
+Ravenous Harpy
 Ravenous Lindwurm
 Ray of Dissolution
 Razorfield Thresher
@@ -1340,6 +1349,8 @@ Spark Reaper
 Sparkmage Apprentice
 Spectral Reserves
 Spectral Shepherd
+Spellgorger Weird
+Sphinx of Magosi
 Spike Jester
 Spin Out
 Spinal Villain
@@ -1356,6 +1367,7 @@ Spotted Griffin
 Spring of Eternal Peace
 Springmane Cervin
 Springsage Ritual
+Sprite Dragon
 Sprout
 Squire
 Sram, Senior Edificer
@@ -1549,6 +1561,7 @@ Underground Sea
 Unexplained Disappearance
 Unfriendly Fire
 Unhallowed Phalanx
+Unholy Officiant
 Unsubtle Mockery
 Unsummon
 Unyaro Bee Sting
@@ -1697,4 +1710,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1694`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1707`;

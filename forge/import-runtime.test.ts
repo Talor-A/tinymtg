@@ -81,6 +81,20 @@ registerRuntimeFixture("c/clone", "rt-clone");
 registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
 registerCardFixture("d/darksteel_relic");
 
+{
+	const text = `Name:Test Self Counter
+ManaCost:1 G
+Types:Creature Shaman
+PT:1/1
+T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigPutCounter | TriggerDescription$ x
+SVar:TrigPutCounter:DB$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1
+Oracle:
+`;
+	const result = importForgeCard(text, { id: "rt-test-self-counter" });
+	if (!result.ok) throw new Error("expected self-counter fixture to import");
+	registerCard(result.card);
+}
+
 function chooseCopyAs(choice: ObjectId | null): SyncAgent {
 	const fallback = new ScriptedAgent();
 	return {
@@ -250,6 +264,20 @@ describe("forge-import runtime: triggers", () => {
 
 		expect(state.players[ALICE].life).toBe(22);
 		expect(state.players[BOB].life).toBe(18);
+	});
+
+	test("a self PutCounter trigger adds its counter to its source", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		const source = spawnPermanent(state, "rt-test-self-counter", ALICE);
+		stockLibraries(state);
+
+		advanceUntil(state, agents, (next) => atUpkeepOf(next, ALICE));
+
+		expect(permanent(state, source.id).counters).toEqual({ "+1/+1": 1 });
+		expect(
+			readObject(createReadContext(state), source.id).currentCharacteristics,
+		).toMatchObject({ power: 2, toughness: 2 });
 	});
 
 	test("Necrogen Mists makes the player whose upkeep began discard", () => {

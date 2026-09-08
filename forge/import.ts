@@ -49,6 +49,7 @@ import type {
 	ManaPool,
 	ManaType,
 	ObjectId,
+	ObjectSelectorDef,
 	ReadContext,
 	RelativeEffectPlayer,
 	ReplacementEffectDefinition,
@@ -56,7 +57,6 @@ import type {
 	StaticAbilityDefinition,
 	Supertype,
 	TargetDef,
-	ObjectSelectorDef,
 	TriggerEffectPlayer,
 	TriggeredAbilityDefinition,
 	ValidPlayer,
@@ -702,6 +702,35 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				);
 			}
 			return { kind: "return to hand", targetSlot: TARGET_SLOT };
+		}
+		case "putcounter": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"countertype",
+					"counternum",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const counter = COUNTER_NAMES.get(
+				getForgeParam(params, "CounterType") ?? "",
+			);
+			const amount = positiveInteger(getForgeParam(params, "CounterNum"));
+			if (
+				getForgeParam(params, "Defined") !== "Self" ||
+				counter === undefined ||
+				amount === null
+			)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"PutCounter requires Defined$ Self, a supported CounterType$, and a positive CounterNum$",
+					where,
+				);
+			return { kind: "add-counters-to-source", counter, amount };
 		}
 		case "token": {
 			const badParams = checkParams(
@@ -2430,6 +2459,21 @@ export function lowerForgeCard(
 
 	// Recognized non-referenced SVars, kept exactly as data by design (AI hints /
 	// deck-building metadata), scoped to when the feature they describe is present.
+	const buffedBy = lookupForgeSVar(face, "BuffedBy")?.parsed;
+	// `BuffedBy` is an AI/deck-building hint. PutCounter cast triggers carry
+	// their complete rules in the trigger and executed SVar, so retain this
+	// conventional hint only when that trigger is present.
+	if (
+		triggers.some(
+			(trigger) =>
+				trigger.condition.kind === "cast" &&
+				trigger.effects.some(
+					(effect) => effect.kind === "add-counters-to-source",
+				),
+		) &&
+		buffedBy?.kind === "scalar"
+	)
+		usedSVarNames.add("buffedby");
 	const hasAttackEffect = lookupForgeSVar(face, "HasAttackEffect")?.parsed;
 	if (
 		triggers.some((t) => t.condition.kind === "declare attackers") &&

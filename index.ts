@@ -2045,6 +2045,12 @@ export type EffectDef<
 	| { kind: "damage"; targetSlot: string; amount: number }
 	| { kind: "destroy"; targetSlot: string }
 	| { kind: "counter"; targetSlot: string }
+	| {
+			/** Put counters on the object that created this effect. */
+			kind: "add-counters-to-source";
+			counter: PermanentCounter;
+			amount: number;
+	  }
 	| { kind: "return to hand"; targetSlot: string }
 	| {
 			kind: "sacrifice";
@@ -6486,6 +6492,25 @@ function resolveEffects(
 			);
 			continue;
 		}
+		if (effect.kind === "add-counters-to-source") {
+			// A source that has left the battlefield cannot receive counters.
+			const source = maybePermanent(state, item.source);
+			if (!source) continue;
+			performIn(
+				state,
+				{
+					kind: "add counters",
+					target: { type: "permanent", id: source.id },
+					counter: effect.counter,
+					amount: effect.amount,
+					source: item.source,
+				},
+				choices,
+				scope,
+				0,
+			);
+			continue;
+		}
 		if (effect.kind === "modify-pt") {
 			let slot: string;
 			let subject: EntityRef;
@@ -6651,6 +6676,8 @@ function effectToEvent(
 				spell: bound.id,
 				source: item.source,
 			};
+		case "add-counters-to-source":
+			throw new Error("source counter effects resolve directly");
 		case "return to hand": {
 			assert(
 				bound !== null && bound.type === "permanent",
