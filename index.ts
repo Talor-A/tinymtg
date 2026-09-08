@@ -2276,9 +2276,17 @@ export function selectorMatches(
 export interface SpellAbilityDef {
 	id: string;
 	text: string;
+	additionalCost?: SpellAdditionalCostDef;
 	targets: TargetDef[];
 	effects: EffectDef[];
 }
+
+/** The one required additional spell cost currently supported. */
+export type SpellAdditionalCostDef = {
+	kind: "sacrifice";
+	selector: { kind: "type"; type: "creature" };
+	amount: 1;
+};
 
 export interface SacrificeActivationCost {
 	selector: ObjectSelectorDef;
@@ -7123,6 +7131,7 @@ function canCast(
 	)
 		return false;
 	const definition = card(object.cardId).spell;
+	const additionalCost = definition?.additionalCost;
 	if (characteristics.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
 		assertDefined(
 			definition,
@@ -7143,6 +7152,17 @@ function canCast(
 			!definition?.targets.length,
 			"targeted permanent spells are not implemented",
 		);
+	}
+	if (additionalCost) {
+		assert(additionalCost.kind === "sacrifice");
+		assert(additionalCost.amount === 1);
+		if (
+			legalSacrifices(read, player, additionalCost.selector, {
+				controller: player,
+				source: object.id,
+			}).length === 0
+		)
+			return false;
 	}
 	return true;
 }
@@ -7765,6 +7785,7 @@ function castSpellIn(
 
 	const definition = card(object.cardId).spell;
 	let target: TargetDef | null = null;
+	const additionalCost = definition?.additionalCost ?? null;
 	if (characteristics.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
 		assertDefined(
 			definition,
@@ -7776,6 +7797,20 @@ function castSpellIn(
 			!definition?.targets.length,
 			"targeted permanent spells are not implemented",
 		);
+	}
+	if (additionalCost) {
+		assert(additionalCost.kind === "sacrifice");
+		assert(additionalCost.amount === 1);
+		if (
+			legalSacrifices(read, priorityPlayer, additionalCost.selector, {
+				controller: priorityPlayer,
+				source: action.card,
+			}).length === 0
+		) {
+			throw new IllegalCastError(
+				`${characteristics.name} has no creature that can pay its additional cost`,
+			);
+		}
 	}
 
 	// CR 601.2a moves the card to the stack before CR 601.2c chooses targets and
@@ -7858,10 +7893,32 @@ function castSpellIn(
 				);
 			}
 			entry.targets = [{ slot: target.id, target: structuredClone(chosen) }];
+			state.revision++;
+		}
+
+		let sacrificePayment: ObjectId | null = null;
+		if (additionalCost) {
+			const candidates = legalSacrifices(
+				createReadContext(state),
+				priorityPlayer,
+				additionalCost.selector,
+				{ controller: priorityPlayer, source: spellId },
+			);
+			if (candidates.length === 0) {
+				throw new IllegalCastError(
+					`${characteristics.name} has no creature that can pay its additional cost`,
+				);
+			}
+			sacrificePayment = choices.chooseSacrifice(
+				state,
+				priorityPlayer,
+				candidates,
+			);
 		}
 
 		// Spending mana is a cost, not an event, so nothing may replace or trigger
-		// off it. It is still inside the announcement transaction.
+		// off it. It shares the announcement transaction with the replaceable
+		// sacrifice payment below.
 		const pool = state.players[priorityPlayer].manaPool;
 		for (const type of MANA_TYPES) {
 			const spent = payment[type] ?? 0;
@@ -7882,6 +7939,27 @@ function castSpellIn(
 					.join(" ") || "nothing"
 			} for ${characteristics.name}`,
 		);
+
+		if (additionalCost) {
+			assertDefined(sacrificePayment);
+			const sacrifice = performIn(
+				state,
+				{ kind: "sacrifice", object: sacrificePayment },
+				choices,
+				newScope(),
+				0,
+			);
+			if (
+				!sacrifice.executed.some(
+					(event) =>
+						event.kind === "sacrifice" && event.object === sacrificePayment,
+				)
+			) {
+				throw new IllegalCastError(
+					`${characteristics.name}'s additional sacrifice cost was not paid`,
+				);
+			}
+		}
 
 		castSpell = spellId;
 	} catch (error) {
