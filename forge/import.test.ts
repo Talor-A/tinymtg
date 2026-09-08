@@ -83,6 +83,7 @@ const POSITIVE_FIXTURES = [
 	"t/third_path_iconoclast",
 	"t/temple_of_epiphany",
 	"i/impulse",
+	"t/thrashing_brontodon",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -1216,6 +1217,51 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				},
 				targets: [],
 				effects: [{ kind: "scry", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
+	test("Thrashing Brontodon lowers its complete sacrifice-to-destroy ability", () => {
+		const result = importFixture("t/thrashing_brontodon");
+		if (!result.ok) throw new Error("expected Thrashing Brontodon to import");
+		expect(result.card).toMatchObject({
+			name: "Thrashing Brontodon",
+			manaCost: { n: 1, g: 2 },
+			types: ["creature"],
+			subtypes: ["Dinosaur"],
+			power: 3,
+			toughness: 4,
+		});
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: "Destroy target artifact or enchantment.",
+				cost: {
+					mana: { n: 1 },
+					tapSelf: false,
+					sacrifice: { selector: { kind: "self" }, amount: 1 },
+				},
+				targets: [
+					{
+						id: "target-1",
+						min: 1,
+						max: 1,
+						legal: {
+							kind: "permanent",
+							selector: {
+								kind: "any",
+								selectors: [
+									{ kind: "type", type: "artifact" },
+									{ kind: "type", type: "enchantment" },
+								],
+							},
+						},
+					},
+				],
+				effects: [
+					{ kind: "destroy", object: { targetSlot: "target-1" } },
+				],
 			},
 		]);
 	});

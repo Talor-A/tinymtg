@@ -58,6 +58,7 @@ registerCardFixture("b/benalish_veteran");
 registerCardFixture("z/zof_shade");
 registerCardFixture("u/unsummon");
 registerCardFixture("i/impulse");
+registerCardFixture("t/thrashing_brontodon");
 registerCardFixture("m/monastery_swiftspear");
 registerCardFixture("t/thor_odinson");
 

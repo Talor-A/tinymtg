@@ -76,6 +76,10 @@ registerRuntimeFixture("v/village_rites", "rt-village-rites");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
+registerRuntimeFixture(
+	"t/thrashing_brontodon",
+	"rt-thrashing-brontodon",
+);
 registerRuntimeFixture("s/selfless_savior", "rt-selfless-savior");
 registerRuntimeFixture("b/blazing_hellhound", "rt-blazing-hellhound");
 registerRuntimeFixture(
@@ -1111,6 +1115,46 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(state.players[ALICE].library[0]).toBe(top.id);
 		expect(state.stack).toHaveLength(0);
 	});
+
+	for (const [targetCard, targetType] of [
+		["rt-timeless-lotus", "artifact"],
+		["rt-glorious-anthem", "enchantment"],
+	] as const) {
+		test(`Thrashing Brontodon sacrifices itself to destroy a target ${targetType}`, () => {
+			const state = setupMain();
+			const brontodon = spawnPermanent(
+				state,
+				"rt-thrashing-brontodon",
+				ALICE,
+			);
+			const target = spawnPermanent(state, targetCard, BOB);
+			const ability = abilityId(
+				"activated",
+				"rt-thrashing-brontodon",
+				0,
+			);
+			state.players[ALICE].manaPool.c = 1;
+			const alice = new ScriptedAgent();
+			alice.targetChoices.push({ type: "permanent", id: target.id });
+
+			executeAbilityAction(
+				state,
+				ALICE,
+				{ kind: "activate ability", source: brontodon.id, ability },
+				[alice, new ScriptedAgent()],
+			);
+
+			expect(state.players[ALICE].manaPool.c).toBe(0);
+			expect(state.battlefield).not.toContain(brontodon.id);
+			expect(state.battlefield).toContain(target.id);
+			expect(state.stack).toHaveLength(1);
+
+			settlePriority(state, passingAgents());
+
+			expect(state.battlefield).not.toContain(target.id);
+			expect(state.stack).toHaveLength(0);
+		});
+	}
 
 	test("Selfless Savior sacrifices itself to grant another creature indestructible", () => {
 		const state = setupMain();

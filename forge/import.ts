@@ -830,6 +830,9 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					discriminatorLower,
 					"validtgts",
 					"tgtprompt",
+					// AILogic controls only Forge's automated-player timing. It does
+					// not change the destroy instruction the engine executes.
+					"ailogic",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
