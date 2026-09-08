@@ -368,7 +368,9 @@ function bagAfterRemoval<C extends string>(
  */
 export type PlayerRef = { type: "player"; player: PlayerId };
 export type PermanentRef = { type: "permanent"; id: ObjectId };
-export type EntityRef = PlayerRef | PermanentRef;
+export type SpellRef = { type: "spell"; id: ObjectId };
+export type DamageTargetRef = PlayerRef | PermanentRef;
+export type EntityRef = PlayerRef | PermanentRef | SpellRef;
 
 interface EventCommon {
 	/**
@@ -466,7 +468,7 @@ interface DamageEvent extends EventCommon {
 	source: ObjectId;
 	sourceController: PlayerId;
 	sourceColors: Color[];
-	target: EntityRef;
+	target: DamageTargetRef;
 	amount: number;
 	combat: boolean;
 	deathtouch: boolean;
@@ -495,6 +497,13 @@ interface DestroyEvent extends EventCommon {
 	kind: "destroy";
 	object: ObjectId;
 	noRegen: boolean;
+	source?: ObjectId;
+}
+
+/** CR 701.5a: countering a spell removes it from the stack without resolving it. */
+interface CounterEvent extends EventCommon {
+	kind: "counter";
+	spell: ObjectId;
 	source?: ObjectId;
 }
 
@@ -544,6 +553,7 @@ type MoveCause =
 	| "discard"
 	| "mill"
 	| "destroy"
+	| "counter"
 	| "sacrifice"
 	| "sba"
 	| "cast"
@@ -677,6 +687,7 @@ export type GameEvent =
 	| DiscardEvent
 	| DamageEvent
 	| DestroyEvent
+	| CounterEvent
 	| SacrificeEvent
 	| RegenerateEvent
 	| ZoneChangeEvent
@@ -1832,6 +1843,7 @@ export type EffectDef<
 	  }
 	| { kind: "damage"; targetSlot: string; amount: number }
 	| { kind: "destroy"; targetSlot: string }
+	| { kind: "counter"; targetSlot: string }
 	| {
 			kind: "sacrifice";
 			/** A relative player, or the player bound to a target slot. */
@@ -1971,6 +1983,7 @@ export interface TargetDef {
 	max: number;
 	legal:
 		| { kind: "player" }
+		| { kind: "spell" }
 		| { kind: "permanent"; selector: TargetSelectorDef }
 		| { kind: "any-target" };
 }
@@ -3644,6 +3657,8 @@ export function affectedPlayer(
 				? ev.target.player
 				: affectedObjectPlayer(state, ev.target.id);
 
+		case "counter":
+			return affectedObjectPlayer(state, ev.spell);
 		case "destroy":
 		case "sacrifice":
 		case "regenerate":
@@ -4056,6 +4071,8 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 		}
 		case "destroy":
 			return `destroy(${name(state, ev.object)})`;
+		case "counter":
+			return `counter(${name(state, ev.spell)})`;
 		case "sacrifice":
 			return `sacrifice(${name(state, ev.object)})`;
 		case "regenerate":
@@ -5063,6 +5080,39 @@ function executeIn(
 			break;
 		}
 
+		case "counter": {
+			const spell = maybeObject(state, ev.spell);
+			if (spell?.kind !== "spell" || spell.zone !== "stack") {
+				happened = false;
+				break;
+			}
+			const movement = performIn(
+				state,
+				{
+					kind: "change zone",
+					object: spell.id,
+					from: "stack",
+					to: "graveyard",
+					cause: "counter",
+					toController: spell.controller,
+				},
+				choices,
+				scope,
+				depth + 1,
+			);
+			childResults.push(movement);
+			// Replacing the destination does not undo the counter. The spell was
+			// countered if the movement from the stack happened at all.
+			happened = movement.executed.some(
+				(child) =>
+					child.kind === "change zone" &&
+					child.object === spell.id &&
+					child.from === "stack" &&
+					child.cause === "counter",
+			);
+			break;
+		}
+
 		case "sacrifice": {
 			const o = maybePermanent(state, ev.object);
 			if (o?.zone !== "battlefield") {
@@ -5827,12 +5877,17 @@ function resolveEffects(
 		if (
 			effect.kind === "damage" ||
 			effect.kind === "destroy" ||
+			effect.kind === "counter" ||
 			sacrificeTarget !== null
 		) {
 			let targetSlot: string;
 			if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
 			else {
-				assert(effect.kind === "damage" || effect.kind === "destroy");
+				assert(
+					effect.kind === "damage" ||
+						effect.kind === "destroy" ||
+						effect.kind === "counter",
+				);
 				targetSlot = effect.targetSlot;
 			}
 			const binding = item.targets[0];
@@ -5957,7 +6012,10 @@ function effectToEvent(
 			throw new Error("unexpected discard effect kind");
 		}
 		case "damage": {
-			assertDefined(bound, "damage target is unbound");
+			assert(
+				bound?.type === "player" || bound?.type === "permanent",
+				"damage target must be a player or permanent",
+			);
 			// CR 119.3: lifelink life goes to the controller of the damage source,
 			// which need not be the controller of the ability.
 			const source = sourceInformation(state, item);
@@ -5984,6 +6042,16 @@ function effectToEvent(
 				object: bound.id,
 				source: item.source,
 				noRegen: false,
+			};
+		case "counter":
+			assert(
+				bound !== null && bound.type === "spell",
+				"counter requires a bound spell target",
+			);
+			return {
+				kind: "counter",
+				spell: bound.id,
+				source: item.source,
 			};
 		case "sacrifice":
 			throw new Error("sacrifice effects are resolved with a player choice");
@@ -6146,6 +6214,7 @@ function requiredTargetDefinition(
 		if (
 			effect.kind !== "damage" &&
 			effect.kind !== "destroy" &&
+			effect.kind !== "counter" &&
 			effect.kind !== "sacrifice"
 		)
 			return;
@@ -6156,7 +6225,11 @@ function requiredTargetDefinition(
 		let targetSlot: string;
 		if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
 		else {
-			assert(effect.kind === "damage" || effect.kind === "destroy");
+			assert(
+				effect.kind === "damage" ||
+					effect.kind === "destroy" ||
+					effect.kind === "counter",
+			);
 			targetSlot = effect.targetSlot;
 		}
 		assert(
@@ -6168,6 +6241,9 @@ function requiredTargetDefinition(
 				target.legal.kind === "permanent",
 				"destroy requires a permanent target",
 			);
+		}
+		if (effect.kind === "counter") {
+			assert(target.legal.kind === "spell", "counter requires a spell target");
 		}
 		if (effect.kind === "sacrifice") {
 			assert(
@@ -6203,7 +6279,13 @@ function isLegalTarget(
 			!read.state.players[target.player].won
 		);
 	}
-	if (definition.legal.kind === "player") return false;
+	if (target.type === "spell") {
+		if (definition.legal.kind !== "spell") return false;
+		const snapshot = read.view.objects.get(target.id);
+		return snapshot?.kind === "spell";
+	}
+	if (definition.legal.kind === "player" || definition.legal.kind === "spell")
+		return false;
 	const snapshot = read.view.objects.get(target.id);
 	// CR 608.2b: a target that left the zone it was targeted in is illegal, and
 	// the object that replaced it is a different object with a different id.
@@ -6230,6 +6312,9 @@ function legalTargets(
 	const candidates: EntityRef[] = [
 		{ type: "player", player: 0 },
 		{ type: "player", player: 1 },
+		...read.state.stack.flatMap((entry): EntityRef[] =>
+			entry.kind === "spell" ? [{ type: "spell", id: entry.objectId }] : [],
+		),
 		...read.state.battlefield.map(
 			(id): EntityRef => ({ type: "permanent", id }),
 		),
@@ -6688,6 +6773,7 @@ function activateAbilityIn(
 				effect.kind === "lose-life" ||
 				effect.kind === "damage" ||
 				effect.kind === "destroy" ||
+				effect.kind === "counter" ||
 				effect.kind === "sacrifice"
 			) {
 				continue;
@@ -7315,7 +7401,7 @@ function performTurnBasedActions(
 			const damageEvent = (
 				source: PermanentObject,
 				characteristics: CreatureCharacteristicsSnapshot,
-				target: EntityRef,
+				target: DamageTargetRef,
 				amount: number,
 			): DamageEvent => ({
 				kind: "damage",

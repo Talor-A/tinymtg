@@ -5,6 +5,7 @@ exports[`the accepted-card list matches its snapshot: accepted card names 1`] = 
 A.I.M. Bot
 Aardvark Sloth
 Abbey Griffin
+Absorb
 Acolyte of Aclazotz
 Adult Gold Dragon
 Adventurer's Inn
@@ -163,6 +164,7 @@ Cabal Evangel
 Cackling Fiend
 Caelorna, Coral Tyrant
 Canal Monitor
+Cancel
 Candy Trail
 Canopy Gorger
 Canopy Spider
@@ -215,6 +217,7 @@ Concentrate
 Concentrated Fire
 Concordia Pegasus
 Contaminated Aquifer
+Contradict
 Copper Myr
 Coral Commando
 Coral Eel
@@ -222,6 +225,7 @@ Coral Merfolk
 Corrupt Eunuchs
 Council of Advisors
 Counsel of the Soratami
+Counterspell
 Courier Griffin
 Courier Hawk
 Courier's Capsule
@@ -291,6 +295,7 @@ Dimir Signet
 Direct Hit
 Diregraf Ghoul
 Disenchant
+Dismiss
 Dispeller's Capsule
 Disruptor Pistol
 Divination
@@ -357,6 +362,8 @@ Enhanced Awareness
 Enormous Baloth
 Enraged Killbot
 Erratic Visionary
+Ertai, Wizard Adept
+Ertai, the Corrupted
 Esper Cormorants
 Essence Drain
 Essence Extraction
@@ -373,9 +380,11 @@ Exultant Skymarcher
 Eye of Ramos
 Facet Reader
 Faerie Seer
+Failed Inspection
 Faithbearer Paladin
 Faithful Watchdog
 Falkenrath Reaver
+Fall of the Gavel
 Fanatical Firebrand
 Fateful End
 Fearless Halberdier
@@ -705,6 +714,7 @@ Mawcor
 Memnite
 Memorial to Genius
 Memorial to War
+Memory Drain
 Meng Huo's Horde
 Merchant of Secrets
 Merfolk Looter
@@ -889,6 +899,7 @@ Reckless Barbarian
 Reckless Reveler
 Reclaiming Vines
 Redwood Treefolk
+Refute
 Regal Unicorn
 Regathan Firecat
 Renegade Demon
@@ -1361,4 +1372,4 @@ Zuko's Offense
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1358`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1369`;

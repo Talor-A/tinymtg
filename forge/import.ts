@@ -354,12 +354,17 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			if (inner) return inner;
 			continue;
 		}
-		if (effect.kind !== "damage" && effect.kind !== "destroy") continue;
+		if (
+			effect.kind !== "damage" &&
+			effect.kind !== "destroy" &&
+			effect.kind !== "counter"
+		)
+			continue;
 		const target = targets[0];
 		if (targets.length !== 1 || !target || effect.targetSlot !== target.id) {
 			return issue(
 				"UNSUPPORTED_TARGET",
-				"damage/destroy effects must reference the declared target slot",
+				"targeted effects must reference the declared target slot",
 				where,
 			);
 		}
@@ -367,6 +372,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			return issue(
 				"UNSUPPORTED_TARGET",
 				"Destroy requires a permanent target",
+				where,
+			);
+		}
+		if (effect.kind === "counter" && target.legal.kind !== "spell") {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"Counter requires a spell target",
 				where,
 			);
 		}
@@ -379,10 +391,15 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
  * restriction the engine can check; `Any` and `Player` are the two forms that
  * are not object restrictions at all.
  */
-function parseTarget(value: string | undefined): TargetDef[] | null {
+function parseTarget(
+	value: string | undefined,
+	targetType?: string,
+): TargetDef[] | null {
 	if (value === undefined) return [];
 	let legal: TargetDef["legal"];
-	if (value === "Any") legal = { kind: "any-target" };
+	if (value === "Card" && targetType === "Spell") legal = { kind: "spell" };
+	else if (targetType !== undefined) return null;
+	else if (value === "Any") legal = { kind: "any-target" };
 	else if (value === "Player") legal = { kind: "player" };
 	else {
 		const selector = parseSelector(value);
@@ -537,6 +554,21 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			);
 			if (badParams) return badParams;
 			return { kind: "destroy", targetSlot: TARGET_SLOT };
+		}
+		case "counter": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"validtgts",
+					"tgtprompt",
+					"targettype",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			return { kind: "counter", targetSlot: TARGET_SLOT };
 		}
 		default:
 			return issue(
@@ -1868,7 +1900,10 @@ export function lowerForgeCard(
 			player,
 		);
 		if ("code" in chain) return reject(chain);
-		const targets = parseTarget(getForgeParam(params, "ValidTgts"));
+		const targets = parseTarget(
+			getForgeParam(params, "ValidTgts"),
+			getForgeParam(params, "TargetType"),
+		);
 		if (!targets)
 			return reject(
 				issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where),

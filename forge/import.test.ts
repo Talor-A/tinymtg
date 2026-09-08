@@ -64,6 +64,7 @@ const POSITIVE_FIXTURES = [
 	"v/viscera_seer",
 	"b/blazing_hellhound",
 	"a/acolyte_of_aclazotz",
+	"c/counterspell",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -248,6 +249,27 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				},
 			],
 			effects: [{ kind: "destroy", targetSlot: "target-1" }],
+		});
+	});
+
+	test("Counterspell lowers a spell target and counter effect", () => {
+		const result = importFixture("c/counterspell");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card).toMatchObject({
+			name: "Counterspell",
+			types: ["instant"],
+			manaCost: { u: 2 },
+			spell: {
+				targets: [
+					{
+						id: "target-1",
+						min: 1,
+						max: 1,
+						legal: { kind: "spell" },
+					},
+				],
+				effects: [{ kind: "counter", targetSlot: "target-1" }],
+			},
 		});
 	});
 

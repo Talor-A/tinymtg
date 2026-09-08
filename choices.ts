@@ -1103,7 +1103,6 @@ export function asChoiceController(
 }
 
 export function targetOptionId(target: EntityRef): string {
-	return target.type === "player"
-		? `player:${target.player}`
-		: `permanent:${target.id}`;
+	if (target.type === "player") return `player:${target.player}`;
+	return `${target.type}:${target.id}`;
 }

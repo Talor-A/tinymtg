@@ -91,11 +91,12 @@ optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional
 single-permanent sacrifice, including `Creature.Other` to exclude the source,
 semicolon-separated alternatives, and `CARDNAME` for the source itself (e.g.
 Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with
-life/draw/discard-one-chosen-card, damage, and destroy effects; spells,
+life/draw/discard-one-chosen-card, damage, destroy, and counter effects; spells,
 activated abilities, and triggered abilities with at most one required target
-(`Any`, `Player`, or a `ValidTgts$` selector whose base is a card type, a
-subtype, `Card`, or `Permanent`, followed by `YouCtrl`, `OppCtrl`, or a color,
-card type, or supertype word that may carry Forge's `non` prefix — so
+(`Any`, `Player`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
+`ValidTgts$` selector whose base is a card type, a subtype, `Card`, or
+`Permanent`, followed by `YouCtrl`, `OppCtrl`, or a color, card type, or
+supertype word that may carry Forge's `non` prefix — so
 `Creature.nonBlack` lowers, while `Creature.attacking` does not); simple self-entry,
 upkeep, and self-attack triggers, including one optional (`may`) wrapper around
 a trigger's whole (possibly multi-step) effect sequence; and fixed
@@ -193,7 +194,7 @@ Sacrifice effects and costs currently support one permanent at a time. Multiple 
 ### Targeting
 
 Spells, activated abilities, and triggered abilities may each declare at most
-one required target. A target is a player, or a permanent matching a
+one required target. A target is a player, a spell, or a permanent matching a
 restriction built from card type, supertype, subtype, color, controller, and
 the source itself, combined with all/any/not. `any-target` accepts a player, a
 creature, or a planeswalker. Restrictions are always evaluated against current
@@ -233,11 +234,11 @@ engine does not support planeswalkers yet. Battles are outside the card-type
 model. Mana abilities must run before casting, and payment still precedes the
 move to the stack.
 
-Multiple or optional targets, stack/graveyard targets, and temporary P/T
-effects remain deferred, as do hexproof, shroud, and protection: those are not
-in the `Keyword` union, so no target is ever illegal because of them and the
-importer rejects cards that have them. Unsupported target declarations and
-temporary P/T spell effects raise assertions before payment. Target-choice
-requests use the same replay protocol as other agent choices.
+Multiple or optional targets, non-spell stack targets, graveyard targets, and
+temporary P/T effects remain deferred, as do hexproof, shroud, and protection:
+those are not in the `Keyword` union, so no target is ever illegal because of
+them and the importer rejects cards that have them. Unsupported target
+declarations and temporary P/T spell effects raise assertions before payment.
+Target-choice requests use the same replay protocol as other agent choices.
 
 `perform()` injects a rules event directly, and `settlePriority()` resolves the current priority window directly. They are useful for focused rules tests and integrations, but do not represent player actions supported by the normal gameplay loop.
