@@ -143,8 +143,9 @@ const COLOR_WORDS = new Map<string, Color>([
  * The fixed symbols accepted in `Produced$` values. Colorless belongs here but
  * never in {@link COLOR_WORDS}: `Produced$ C` makes colorless mana, while a
  * card producing it is not thereby any color. A space-separated list of these
- * symbols produces every listed symbol; `Any`, `Combo ...`, variables, and
- * other Forge forms still reject rather than becoming modal choices.
+ * symbols produces every listed symbol. `Combo` followed by two or more
+ * distinct fixed symbols is a modal choice of exactly one of them; `Any`,
+ * variables, dynamic amounts, and other Forge forms still reject.
  */
 const PRODUCED_MANA_SYMBOLS = new Map<string, ManaType>([
 	["W", "w"],
@@ -2597,11 +2598,14 @@ export function lowerForgeCard(
 			if (badParams) return reject(badParams);
 			assert(activationCost !== undefined && !("code" in activationCost));
 			const produced = getForgeParam(params, "Produced");
+			const modal = produced?.startsWith("Combo ") ?? false;
 			// Forge's fixed multi-mana form is exactly a space-separated list of
-			// printed symbols. Keep this strict so choice (`Any`, `Combo ...`),
-			// variable (`Chosen`), compact (`WU`), and malformed forms do not get
-			// mistaken for deterministic production.
-			const producedSymbols = produced?.split(" ") ?? [];
+			// printed symbols. `Combo` uses the same symbol list for mutually
+			// exclusive choices. Keep both forms strict so `Any`, variables,
+			// compact (`WU`), and malformed separators cannot change meaning.
+			const producedSymbols = modal
+				? (produced?.slice("Combo ".length).split(" ") ?? [])
+				: (produced?.split(" ") ?? []);
 			const producedTypes: ManaType[] = [];
 			for (const symbol of producedSymbols) {
 				const type = PRODUCED_MANA_SYMBOLS.get(symbol);
@@ -2627,6 +2631,40 @@ export function lowerForgeCard(
 			}
 
 			const amountText = getForgeParam(params, "Amount");
+			if (modal) {
+				if (
+					producedTypes.length < 2 ||
+					new Set(producedTypes).size !== producedTypes.length ||
+					(amountText !== undefined && amountText !== "1")
+				) {
+					return reject(
+						issue(
+							"UNSUPPORTED_EFFECT",
+							`unsupported produced mana ${produced ?? "(none)"}`,
+							where,
+						),
+					);
+				}
+				const [first, second, ...rest] = producedTypes.map((type) =>
+					fullMana(type),
+				);
+				assert(
+					first !== undefined && second !== undefined,
+					"a validated Combo produces at least two distinct symbols",
+				);
+				activatedCount += 1;
+				activatedAbilities.push({
+					kind: "mana",
+					id: `activated-${activatedCount}`,
+					text:
+						getForgeParam(params, "SpellDescription") ??
+						`Add ${producedSymbols.map((symbol) => `{${symbol}}`).join(" or ")}.`,
+					cost: activationCost,
+					manaOptions: [first, second, ...rest],
+				});
+				continue;
+			}
+
 			// A `Count$`/SVar amount (Urza's Tower) lands here: the symbol is
 			// fine, the quantity is the part the engine cannot yet express. Lists
 			// encode their quantities by repeating symbols, so an additional

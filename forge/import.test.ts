@@ -79,6 +79,7 @@ const POSITIVE_FIXTURES = [
 	"f/firebrand_archer",
 	"k/kessig_flamebreather",
 	"t/third_path_iconoclast",
+	"t/temple_of_epiphany",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -187,6 +188,27 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 						player: "you",
 						mana: { w: 0, u: 0, b: 0, r: 0, g: 0, c: 1 },
 					},
+				],
+			},
+		]);
+	});
+
+	test("Temple of Epiphany lowers Combo U R as one modal mana ability", () => {
+		const result = importFixture("t/temple_of_epiphany");
+		if (!result.ok) throw new Error("expected Temple of Epiphany to import");
+		expect(result.card.entersTapped).toBe(true);
+		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+			{ kind: "scry", player: "you", amount: 1 },
+		]);
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "mana",
+				id: "activated-1",
+				text: "Add {U} or {R}.",
+				cost: { mana: "zero", tapSelf: true },
+				manaOptions: [
+					{ w: 0, u: 1, b: 0, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 0, r: 1, g: 0, c: 0 },
 				],
 			},
 		]);
@@ -1953,10 +1975,12 @@ describe("lowerForgeCard: hardening regressions", () => {
 			expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 	});
 
-	test("rejects choice, variable, malformed, and unsupported Produced$ forms with diagnostics", () => {
+	test("rejects open-ended, variable, malformed, and unsupported Produced$ forms with diagnostics", () => {
 		for (const produced of [
-			"Any", // choice
-			"Combo W U", // modal choice
+			"Any", // open-ended choice
+			"Combo Any", // open-ended modal choice
+			"Combo W", // a modal choice needs at least two outcomes
+			"Combo W W", // outcomes must be distinct
 			"Chosen", // variable
 			"W  U", // malformed fixed-list separator
 			"WU", // unsupported compact form

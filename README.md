@@ -88,7 +88,9 @@ form (`K:ETBReplacement:Copy:DBCopy:Optional` with `DB$ Clone | Choices$
 Creature.Other`) lowers to a replay-safe, non-targeting choice; basic-land mana abilities
 are synthesized from subtype (Forge omits explicit `A:` lines for those); mana
 abilities producing fixed mana, including colorless (`Produced$ C`, e.g.
-Wastes); activated abilities whose costs contain fixed generic/WUBRG mana,
+Wastes), and modal one-mana choices between two or more distinct fixed symbols
+(`Produced$ Combo U R`, e.g. Temple of Epiphany); activated abilities whose
+costs contain fixed generic/WUBRG mana,
 optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional
 single-permanent sacrifice, including `Creature.Other` to exclude the source,
 semicolon-separated alternatives, and `CARDNAME` for the source itself (e.g.

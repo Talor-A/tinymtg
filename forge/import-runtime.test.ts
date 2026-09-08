@@ -81,6 +81,7 @@ registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("i/icy_manipulator", "rt-icy-manipulator");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
+registerRuntimeFixture("t/temple_of_epiphany", "rt-temple-of-epiphany");
 registerRuntimeFixture("c/clone", "rt-clone");
 registerRuntimeFixture("b/blood_pact", "rt-blood-pact");
 registerRuntimeFixture("t/tome_scour", "rt-tome-scour");
@@ -861,6 +862,81 @@ describe("forge-import runtime: activated abilities", () => {
 		});
 		expect(state.stack).toHaveLength(0);
 	});
+
+	// Both branches of `Produced$ Combo U R` are exercised: the ability offers
+	// exactly the two printed symbols, and the pool receives only the chosen one.
+	for (const [chosenLabel, expectedPool] of [
+		["Add {U}.", { w: 0, u: 1, b: 0, r: 0, g: 0, c: 0 }],
+		["Add {R}.", { w: 0, u: 0, b: 0, r: 1, g: 0, c: 0 }],
+	] as const) {
+		test(`Temple of Epiphany enters tapped, scries one, and taps for ${chosenLabel}`, () => {
+			const state = newGame();
+			const alice = new ScriptedAgent();
+			// The end of a library array is its top, so `scried` is the card the
+			// scry looks at and `deeper` stays untouched beneath it.
+			const deeper = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+			const scried = spawnCard(state, "forest", ALICE, "library").id;
+			alice.scryChoices.push({ top: [], bottom: [scried] });
+			const offeredLabels: string[][] = [];
+			const chooseColor: SyncAgent = {
+				choose(view, request) {
+					if (request.kind === "mana") {
+						offeredLabels.push(request.options.map((option) => option.label));
+						const chosen = request.options.find(
+							(option) => option.label === chosenLabel,
+						);
+						if (!chosen) {
+							throw new Error(`no ${chosenLabel} option was offered`);
+						}
+						return { optionId: chosen.id };
+					}
+					return alice.choose(view, request);
+				},
+			};
+			const agents: SyncAgents = [chooseColor, new ScriptedAgent()];
+			beginFirstTurn(state, agents);
+
+			const temple = enterFromHand(
+				state,
+				"rt-temple-of-epiphany",
+				ALICE,
+				agents,
+			);
+			expect(permanent(state, temple).tapped).toBe(true);
+			expect(state.pendingTriggers).toHaveLength(1);
+
+			settlePriority(state, agents);
+			// The enters-tapped replacement and the scry trigger are independent:
+			// the trigger must have resolved and consumed the scripted scry.
+			expect(alice.scryChoices).toHaveLength(0);
+			expect(state.players[ALICE].library[0]).toBe(scried);
+			expect(state.players[ALICE].library.at(-1)).toBe(deeper);
+
+			perform(
+				state,
+				{ kind: "untap", ref: { kind: "object", object: temple } },
+				agents,
+			);
+			expect(permanent(state, temple).tapped).toBe(false);
+
+			executeAbilityAction(
+				state,
+				ALICE,
+				{
+					kind: "activate ability",
+					source: temple,
+					ability: abilityId("activated", "rt-temple-of-epiphany", 0),
+				},
+				agents,
+			);
+
+			expect(offeredLabels).toEqual([["Add {U}.", "Add {R}."]]);
+			expect(permanent(state, temple).tapped).toBe(true);
+			expect(state.players[ALICE].manaPool).toEqual(expectedPool);
+			// A mana ability never uses the stack (CR 605.3a).
+			expect(state.stack).toHaveLength(0);
+		});
+	}
 
 	test("Llanowar Elves' imported mana ability taps and adds green mana immediately", () => {
 		const state = setupMain();
