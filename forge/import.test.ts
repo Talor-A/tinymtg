@@ -1953,3 +1953,97 @@ describe("lowerForgeCard: bridge contract", () => {
 		expect(() => name(state, obj.id)).toThrow(/unknown card/);
 	});
 });
+
+describe("lowerForgeCard: ChangesZone dies triggers", () => {
+	/** A dies trigger whose executed ability is a plain, already-supported effect. */
+	function diesCard(lines: {
+		origin: string;
+		destination: string;
+		validCard: string;
+		extra?: string;
+	}): string {
+		return [
+			"Name:Probe",
+			"ManaCost:1 B",
+			"Types:Creature Human",
+			"PT:1/1",
+			`T:Mode$ ChangesZone | Origin$ ${lines.origin} | Destination$ ${lines.destination} | ValidCard$ ${lines.validCard} | Execute$ TrigGain | TriggerDescription$ d`,
+			"SVar:TrigGain:DB$ GainLife | Defined$ You | LifeAmount$ 1",
+			...(lines.extra ? [lines.extra] : []),
+			"Oracle:",
+			"",
+		].join("\n");
+	}
+
+	test("Battlefield to Graveyard lowers to a self dies condition", () => {
+		const result = importText(
+			diesCard({
+				origin: "Battlefield",
+				destination: "Graveyard",
+				validCard: "Card.Self",
+			}),
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.triggered[0]?.condition).toEqual({
+			kind: "change zone",
+			from: "battlefield",
+			to: "graveyard",
+			selector: { kind: "self" },
+		});
+	});
+
+	test("rejects a dies trigger that watches other creatures", () => {
+		const result = importText(
+			diesCard({
+				origin: "Battlefield",
+				destination: "Graveyard",
+				validCard: "Creature.Other",
+			}),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects battlefield departures to zones other than the graveyard", () => {
+		for (const destination of ["Exile", "Hand", "Any"]) {
+			const result = importText(
+				diesCard({
+					origin: "Battlefield",
+					destination,
+					validCard: "Card.Self",
+				}),
+			);
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		}
+	});
+
+	test("SacMe is retained as an AI hint on a card that has a dies trigger", () => {
+		const result = importText(
+			diesCard({
+				origin: "Battlefield",
+				destination: "Graveyard",
+				validCard: "Card.Self",
+				extra: "SVar:SacMe:2",
+			}),
+		);
+		expect(result.ok).toBe(true);
+	});
+
+	test("SacMe on a card with no dies trigger is still an unused SVar", () => {
+		const result = importText(
+			diesCard({
+				origin: "Any",
+				destination: "Battlefield",
+				validCard: "Card.Self",
+				extra: "SVar:SacMe:2",
+			}),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_REFERENCE");
+	});
+});

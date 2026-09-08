@@ -1615,9 +1615,16 @@ function lowerTrigger(
 			if (badParams) return badParams;
 			const triggerZones = getForgeParam(params, "TriggerZones");
 			const secondary = getForgeParam(params, "Secondary");
+			const origin = getForgeParam(params, "Origin");
+			const destination = getForgeParam(params, "Destination");
+			// The trigger watches the battlefield either way: an
+			// enters-the-battlefield trigger from any zone, or a dies trigger on
+			// the permanent itself. Forge omits TriggerZones on the latter,
+			// which matches the engine's battlefield-by-default functionsFrom.
+			const etb = origin === "Any" && destination === "Battlefield";
+			const dies = origin === "Battlefield" && destination === "Graveyard";
 			if (
-				getForgeParam(params, "Origin") !== "Any" ||
-				getForgeParam(params, "Destination") !== "Battlefield" ||
+				!(etb || dies) ||
 				(triggerZones !== undefined && triggerZones !== "Battlefield") ||
 				(secondary !== undefined && secondary !== "True")
 			)
@@ -1634,15 +1641,31 @@ function lowerTrigger(
 					"ChangesZone requires a supported ValidCard$ selector",
 					where,
 				);
+			// The engine only resolves battlefield-origin triggers for the
+			// departing permanent itself; anything wider throws at trigger time,
+			// so reject it here instead of importing a card that cannot die.
+			if (dies && selector.kind !== "self")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"only Card.Self dies triggers are supported",
+					where,
+				);
 			return {
 				id: execute,
 				text,
-				condition: {
-					kind: "change zone",
-					from: "any",
-					to: "battlefield",
-					selector,
-				},
+				condition: dies
+					? {
+							kind: "change zone",
+							from: "battlefield",
+							to: "graveyard",
+							selector,
+						}
+					: {
+							kind: "change zone",
+							from: "any",
+							to: "battlefield",
+							selector,
+						},
 				targets,
 				effects,
 			};
@@ -2625,6 +2648,20 @@ export function lowerForgeCard(
 		playMain1.value === "TRUE"
 	)
 		usedSVarNames.add("playmain1");
+	// SacMe ranks how eagerly Forge's AI sacrifices the card, which only says
+	// anything about a card that wants to be in the graveyard. A dies trigger is
+	// the supported shape that gives it that reason.
+	const sacMe = lookupForgeSVar(face, "SacMe")?.parsed;
+	if (
+		triggers.some(
+			(trigger) =>
+				trigger.condition.kind === "change zone" &&
+				trigger.condition.from === "battlefield",
+		) &&
+		sacMe?.kind === "scalar" &&
+		/^[0-9]+$/.test(sacMe.value)
+	)
+		usedSVarNames.add("sacme");
 	const nonCombatPriority = lookupForgeSVar(face, "NonCombatPriority")?.parsed;
 	if (
 		activatedAbilities.length > 0 &&

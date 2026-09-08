@@ -83,6 +83,7 @@ registerRuntimeFixture("f/firebrand_archer", "rt-firebrand-archer");
 registerRuntimeFixture("k/kessig_flamebreather", "rt-kessig-flamebreather");
 registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
 registerRuntimeFixture("f/flayed_one", "rt-flayed-one");
+registerRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter");
 registerCardFixture("d/darksteel_relic");
 
 {
@@ -399,6 +400,49 @@ describe("forge-import runtime: triggers", () => {
 			expect(state.objects.has(bears.id)).toBe(!accepted);
 			expect(state.players[ALICE].life).toBe(accepted ? 22 : 20);
 		}
+	});
+
+	test("Doomed Dissenter's imported dies trigger makes a 2/2 black Zombie for its controller", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+
+		const dissenter = spawnPermanent(state, "rt-doomed-dissenter", ALICE);
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: dissenter.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "effect",
+			},
+			agents,
+		);
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(state.battlefield).toHaveLength(0);
+
+		settlePriority(state, agents);
+
+		expect(state.battlefield).toHaveLength(1);
+		const zombieId = state.battlefield[0];
+		if (zombieId === undefined) throw new Error("no token was created");
+		const zombie = permanent(state, zombieId);
+		expect(zombie.token).toBe(true);
+		expect(zombie.controller).toBe(ALICE);
+		const characteristics = readObject(
+			createReadContext(state),
+			zombieId,
+		).currentCharacteristics;
+		expect(characteristics.name).toBe("Zombie Token");
+		expect(characteristics.colors).toEqual(["b"]);
+		expect(characteristics.subtypes).toEqual(["Zombie"]);
+		expect(characteristics.kind === "creature" && characteristics.power).toBe(
+			2,
+		);
+		expect(
+			characteristics.kind === "creature" && characteristics.toughness,
+		).toBe(2);
 	});
 
 	test("an optional targeted trigger with no legal target is never put on the stack", () => {
