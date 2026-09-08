@@ -2071,6 +2071,12 @@ export type EffectDef<
 			mana: ManaAmount;
 	  }
 	| {
+			kind: "create-token";
+			controller: Player;
+			characteristics: CharacteristicsSnapshot;
+			amount: number;
+	  }
+	| {
 			kind: "may";
 			decider: RelativeEffectPlayer;
 			effects: EffectDef<Player>[];
@@ -6575,6 +6581,17 @@ function effectToEvent(
 				player: relativeEffectPlayer(item, effect.player),
 				amount: effect.amount,
 			};
+		case "create-token":
+			assert(
+				Number.isSafeInteger(effect.amount) && effect.amount >= 1,
+				"token amount must be a positive safe integer",
+			);
+			return {
+				kind: "create token",
+				controller: relativeEffectPlayer(item, effect.controller),
+				characteristics: cloneCharacteristics(effect.characteristics),
+				amount: effect.amount,
+			};
 		case "discard": {
 			assert(
 				effect.amount === 1,
@@ -7392,7 +7409,8 @@ function activateAbilityIn(
 				effect.kind === "destroy" ||
 				effect.kind === "counter" ||
 				effect.kind === "modify-pt" ||
-				effect.kind === "sacrifice"
+				effect.kind === "sacrifice" ||
+				effect.kind === "create-token"
 			) {
 				continue;
 			}

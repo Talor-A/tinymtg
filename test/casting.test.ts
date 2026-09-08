@@ -506,6 +506,36 @@ describe("casting onto the stack", () => {
 		expect(creatureState.pendingTriggers).toHaveLength(0);
 	});
 
+	test("Third Path Iconoclast creates its Forge-defined token", () => {
+		const state = setupMain();
+		spawnPermanent(state, "third-path-iconoclast", ALICE);
+		const instant = spawnCard(state, "test-free-instant", ALICE, "hand");
+
+		executeCastAction(state, ALICE, castAction(instant.id), passingAgents());
+		settlePriority(state, passingAgents());
+
+		const token = state.battlefield
+			.map((id) => state.objects.get(id))
+			.find(
+				(object) =>
+					object?.kind === "permanent" &&
+					object.representation.kind === "token",
+			);
+		expect(token).toMatchObject({
+			kind: "permanent",
+			representation: {
+				kind: "token",
+				createdValues: {
+					name: "Soldier Token",
+					types: ["artifact", "creature"],
+					subtypes: ["Soldier"],
+					power: 1,
+					toughness: 1,
+				},
+			},
+		});
+	});
+
 	test("a Forge-imported Beast Whisperer trigger resolves before its creature spell", () => {
 		const state = setupMain();
 		spawnPermanent(state, "beast-whisperer", ALICE);

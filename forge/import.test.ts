@@ -69,6 +69,7 @@ const POSITIVE_FIXTURES = [
 	"c/clone",
 	"b/benalish_veteran",
 	"u/unsummon",
+	"t/third_path_iconoclast",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -741,6 +742,51 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				"SpellCast requires a supported ValidCard$ selector",
 			);
 		}
+	});
+
+	test("Third Path Iconoclast embeds characteristics from its token script", () => {
+		const result = importFixture("t/third_path_iconoclast");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+			{
+				kind: "create-token",
+				controller: "you",
+				amount: 1,
+				characteristics: {
+					kind: "creature",
+					name: "Soldier Token",
+					manaCost: "none",
+					colors: [],
+					supertypes: [],
+					types: ["artifact", "creature"],
+					subtypes: ["Soldier"],
+					keywords: [],
+					abilities: {
+						static: [],
+						activated: [],
+						triggered: [],
+						replacement: [],
+						prohibition: [],
+					},
+					power: 1,
+					toughness: 1,
+				},
+			},
+		]);
+	});
+
+	test("a missing TokenScript$ reference is an invariant failure", () => {
+		const text = [
+			"Name:Missing Token Maker",
+			"ManaCost:1 W",
+			"Types:Sorcery",
+			"A:SP$ Token | TokenScript$ token_script_that_is_not_vendored",
+			"Oracle:",
+			"",
+		].join("\n");
+		expect(() => importForgeCard(text, { id: "missing-token-maker" })).toThrow(
+			"missing Forge token script token_script_that_is_not_vendored",
+		);
 	});
 
 	test("Raging Goblin keeps Haste", () => {

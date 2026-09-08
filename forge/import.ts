@@ -40,6 +40,7 @@ import type {
 	CardDef,
 	CardDefInput,
 	CardType,
+	CharacteristicsSnapshot,
 	Color,
 	EffectDef,
 	GameEvent,
@@ -61,6 +62,7 @@ import type {
 	ValidPlayer,
 } from "../index.ts";
 import {
+	characteristicsFromCardDef,
 	cloneCharacteristics,
 	defineCard,
 	etbPreview,
@@ -77,6 +79,7 @@ import type {
 	ForgeSVarRecord,
 } from "./ast.ts";
 import { getForgeParam, lookupForgeSVar, parseForgeCardScript } from "./ast.ts";
+import { forgeTokenScript } from "./token-corpus.ts";
 
 export interface ImportIssue {
 	code: string;
@@ -443,6 +446,44 @@ function parseTarget(
 
 const COMMON_EFFECT_PARAMS = ["spelldescription", "subability", "cost"];
 
+function fixedTokenCharacteristics(
+	scriptId: string,
+	where: { nodeId?: string; line?: number },
+): CharacteristicsSnapshot | ImportIssue {
+	if (!/^[A-Za-z0-9_]+$/.test(scriptId))
+		return issue(
+			"UNSUPPORTED_PARAMETER",
+			`unsupported TokenScript$ value ${scriptId}`,
+			where,
+		);
+
+	// TokenScript$ is a foreign key, not an encoded characteristic list.
+	// forgeTokenScript asserts that the vendored token corpus contains it.
+	const imported = importForgeCard(forgeTokenScript(scriptId), {
+		id: `forge-token-${scriptId.toLowerCase()}`,
+	});
+	if (!imported.ok)
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			`unsupported Forge token script ${scriptId}: ${imported.diagnostics
+				.map((diagnostic) => diagnostic.message)
+				.join("; ")}`,
+			where,
+		);
+	if (
+		imported.card.spell ||
+		Object.values(imported.card.printedAbilities).some(
+			(abilities) => abilities.length > 0,
+		)
+	)
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			`Forge token script ${scriptId} has abilities`,
+			where,
+		);
+	return characteristicsFromCardDef(imported.card);
+}
+
 function parseSingleEffect<Player extends TriggerEffectPlayer>(
 	params: ForgeParamList,
 	discriminatorLower: string,
@@ -654,6 +695,56 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				);
 			}
 			return { kind: "return to hand", targetSlot: TARGET_SLOT };
+		}
+		case "token": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"tokenscript",
+					"tokenowner",
+					"tokenamount",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const scriptId = getForgeParam(params, "TokenScript");
+			if (!scriptId)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"Token requires TokenScript$",
+					where,
+				);
+			const owner = getForgeParam(params, "TokenOwner");
+			if (owner !== undefined && owner !== "You")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					`unsupported TokenOwner$ ${owner}`,
+					where,
+				);
+			const controller = parsePlayer(owner);
+			if (!controller)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"unsupported token controller",
+					where,
+				);
+			const amount = positiveInteger(getForgeParam(params, "TokenAmount"), 1);
+			if (!amount)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"TokenAmount$ must be a positive integer",
+					where,
+				);
+			const characteristics = fixedTokenCharacteristics(scriptId, where);
+			if ("code" in characteristics) return characteristics;
+			return {
+				kind: "create-token",
+				controller,
+				characteristics,
+				amount,
+			};
 		}
 		case "pump": {
 			const badParams = checkParams(
