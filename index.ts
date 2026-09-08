@@ -984,7 +984,9 @@ function printedCharacteristics(
 	return values;
 }
 
-function characteristicsFromCardDef(def: CardDef): CharacteristicsSnapshot {
+export function characteristicsFromCardDef(
+	def: CardDef,
+): CharacteristicsSnapshot {
 	return cloneCharacteristics(printedCharacteristics(def));
 }
 
