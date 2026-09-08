@@ -50,6 +50,7 @@ registerCardFixture("a/acolyte_of_aclazotz");
 registerCardFixture("c/counterspell");
 registerCardFixture("b/beast_whisperer");
 registerCardFixture("s/staff_of_the_death_magus");
+registerCardFixture("s/student_of_ojutai");
 registerCardFixture("c/clone");
 registerCardFixture("b/benalish_veteran");
 registerCardFixture("z/zof_shade");

@@ -469,6 +469,43 @@ describe("casting onto the stack", () => {
 		);
 	});
 
+	test("Student of Ojutai triggers only for a noncreature spell", () => {
+		const noncreatureState = setupMain();
+		spawnPermanent(noncreatureState, "student-of-ojutai", ALICE);
+		const instant = spawnCard(
+			noncreatureState,
+			"test-free-instant",
+			ALICE,
+			"hand",
+		);
+		executeCastAction(
+			noncreatureState,
+			ALICE,
+			castAction(instant.id),
+			passingAgents(),
+		);
+		expect(noncreatureState.pendingTriggers).toHaveLength(1);
+		expect(noncreatureState.pendingTriggers[0]?.triggerId).toBe(
+			abilityId("triggered", "student-of-ojutai", 0),
+		);
+
+		const creatureState = setupMain();
+		spawnPermanent(creatureState, "student-of-ojutai", ALICE);
+		const creature = spawnCard(
+			creatureState,
+			"test-free-creature",
+			ALICE,
+			"hand",
+		);
+		executeCastAction(
+			creatureState,
+			ALICE,
+			castAction(creature.id),
+			passingAgents(),
+		);
+		expect(creatureState.pendingTriggers).toHaveLength(0);
+	});
+
 	test("a Forge-imported Beast Whisperer trigger resolves before its creature spell", () => {
 		const state = setupMain();
 		spawnPermanent(state, "beast-whisperer", ALICE);
