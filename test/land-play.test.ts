@@ -205,9 +205,8 @@ describe("land action observability", () => {
 				kind: "change zone",
 				object: exploration.id,
 				from: "battlefield",
-				to: "graveyard",
+				destination: { zone: "graveyard" },
 				cause: "effect",
-				toController: ALICE,
 			},
 			passingAgents(),
 		);

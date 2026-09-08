@@ -536,18 +536,23 @@ interface RegenerateEvent extends EventCommon {
 	object: ObjectId;
 }
 
-interface ZoneChangeEventBase extends EventCommon {
-	/** Choices installed atomically when this movement creates a spell. */
-	spellTargets?: TargetBindings;
-	kind: "change zone";
-	object: ObjectId;
-	to: Zone;
-	cause: MoveCause;
-	/** Who it will be controlled by if `to === 'battlefield'`. Drives CR 616.1's chooser. */
-	toController: PlayerId;
-	// --- fields only meaningful when entering the battlefield (CR 614.1c-d) ---
-	entersTapped?: boolean;
-	entersWithCounters?: PermanentCounterBag;
+/**
+ * Where a movement is taking the object, together with the data that only that
+ * destination can use.
+ *
+ * Nesting the destination-specific fields inside the destination is what makes
+ * the impossible combinations unrepresentable: a card headed for a graveyard
+ * has nowhere to carry a controller or ETB counters, and a replacement effect
+ * that changes the destination necessarily drops the data the old destination
+ * carried with it.
+ */
+interface BattlefieldDestination {
+	zone: "battlefield";
+	/** Who the object will be controlled by. Drives CR 616.1's chooser. */
+	controller: PlayerId;
+	// --- CR 614.1c-d: replacements that modify how the object enters ---
+	tapped?: boolean;
+	counters?: PermanentCounterBag;
 	/**
 	 * Serializable copiable-values override set by copy-tier replacements
 	 * (CR 616.1c). It carries the copied object's ability *references*, which is
@@ -555,12 +560,47 @@ interface ZoneChangeEventBase extends EventCommon {
 	 * this a copy of" to find the copied abilities' implementations.
 	 */
 	copiableOverride?: CharacteristicsSnapshot;
-	toBottom?: boolean;
+}
+
+interface StackDestination {
+	zone: "stack";
+	/** Who the spell will be controlled by (CR 601.2a). */
+	controller: PlayerId;
+	/** Choices installed atomically when this movement creates the spell. */
+	targets: TargetBindings;
+}
+
+interface LibraryDestination {
+	zone: "library";
+	/** CR 401.1: a library is ordered, so an arrival needs an end to arrive at. */
+	position: "top" | "bottom";
+}
+
+/**
+ * CR 400.3: an object in a hand, graveyard, or exile has an owner and no
+ * controller, and those zones are unordered. Nothing else is needed to put an
+ * object there.
+ */
+interface OwnedZoneDestination {
+	zone: "hand" | "graveyard" | "exile";
+}
+
+type ZoneChangeDestination =
+	| BattlefieldDestination
+	| StackDestination
+	| LibraryDestination
+	| OwnedZoneDestination;
+
+interface ZoneChangeEventBase extends EventCommon {
+	kind: "change zone";
+	object: ObjectId;
+	cause: MoveCause;
 }
 
 /** An existing object moving from one zone to another. */
 interface ObjectZoneChangeEvent extends ZoneChangeEventBase {
 	from: Zone;
+	destination: ZoneChangeDestination;
 	createdToken?: never;
 }
 
@@ -573,7 +613,9 @@ interface ObjectZoneChangeEvent extends ZoneChangeEventBase {
  */
 interface TokenZoneChangeEvent extends ZoneChangeEventBase {
 	from: null;
-	to: "battlefield";
+	/** Token creation is always an effect doing it (CR 111.1). */
+	cause: "effect";
+	destination: BattlefieldDestination;
 	createdToken: {
 		values: CharacteristicsSnapshot;
 		/** Scratch for the token's own replacement abilities during this event. */
@@ -582,6 +624,15 @@ interface TokenZoneChangeEvent extends ZoneChangeEventBase {
 }
 
 type ZoneChangeEvent = ObjectZoneChangeEvent | TokenZoneChangeEvent;
+
+/**
+ * A zone change that is putting its object onto the battlefield, which is the
+ * only shape whose destination parameters exist. Checking
+ * `ev.destination.zone === "battlefield"` narrows to this.
+ */
+export type BattlefieldEntryEvent = ZoneChangeEvent & {
+	destination: BattlefieldDestination;
+};
 
 type MoveCause =
 	| "cast"
@@ -2404,7 +2455,7 @@ function printedEntryReplacements(
 	const out: ReplacementEffectDefinition[] = [];
 	const entersSelf = (ev: GameEvent, ctx: EffectCtx): boolean =>
 		ev.kind === "change zone" &&
-		ev.to === "battlefield" &&
+		ev.destination.zone === "battlefield" &&
 		ctx.self !== null &&
 		ev.object === ctx.self.id;
 
@@ -2415,9 +2466,14 @@ function printedEntryReplacements(
 			layer: "other",
 			functionsFrom: "any",
 			applies: (ev, ctx) =>
-				entersSelf(ev, ctx) && ev.kind === "change zone" && !ev.entersTapped,
+				entersSelf(ev, ctx) &&
+				ev.kind === "change zone" &&
+				ev.destination.zone === "battlefield" &&
+				!ev.destination.tapped,
 			replace: (ev) =>
-				ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
+				ev.kind === "change zone" && ev.destination.zone === "battlefield"
+					? [{ ...ev, destination: { ...ev.destination, tapped: true } }]
+					: [ev],
 		});
 	}
 
@@ -2431,10 +2487,19 @@ function printedEntryReplacements(
 			applies: (ev, ctx) =>
 				entersSelf(ev, ctx) &&
 				ev.kind === "change zone" &&
-				ev.entersWithCounters === undefined,
+				ev.destination.zone === "battlefield" &&
+				ev.destination.counters === undefined,
 			replace: (ev) =>
-				ev.kind === "change zone"
-					? [{ ...ev, entersWithCounters: { ...entersWith } }]
+				ev.kind === "change zone" && ev.destination.zone === "battlefield"
+					? [
+							{
+								...ev,
+								destination: {
+									...ev.destination,
+									counters: { ...entersWith },
+								},
+							},
+						]
 					: [ev],
 		});
 	}
@@ -3254,6 +3319,10 @@ export function etbPreview(
 	state: ReadonlyGameState,
 	ev: ZoneChangeEvent,
 ): PermanentSnapshot {
+	assert(
+		ev.destination.zone === "battlefield",
+		"an ETB preview requires a battlefield destination",
+	);
 	// Clone only mutable state containers; card definitions contain callbacks and
 	// therefore cannot pass through structuredClone.
 	const preview: GameState = {
@@ -3291,19 +3360,23 @@ export function etbPreview(
 		preview.objects.set(id, {
 			kind: "permanent",
 			id,
-			owner: ev.toController,
-			controller: ev.toController,
+			owner: ev.destination.controller,
+			controller: ev.destination.controller,
 			zone: "battlefield",
 			representation: {
 				kind: "token",
 				createdValues: cloneCharacteristics(ev.createdToken.values),
 			},
-			...(ev.copiableOverride
-				? { copiableOverride: cloneCharacteristics(ev.copiableOverride) }
+			...(ev.destination.copiableOverride
+				? {
+						copiableOverride: cloneCharacteristics(
+							ev.destination.copiableOverride,
+						),
+					}
 				: {}),
-			tapped: ev.entersTapped ?? false,
+			tapped: ev.destination.tapped ?? false,
 			summoningSick: true,
-			counters: { ...ev.entersWithCounters },
+			counters: { ...ev.destination.counters },
 			effectData: {},
 			damage: 0,
 			attacking: false,
@@ -3314,12 +3387,7 @@ export function etbPreview(
 		preview.battlefield.push(id);
 	} else {
 		assertDefined(maybeObject(state, ev.object));
-		id = moveObject(preview, ev.object, ev.from, "battlefield", {
-			toController: ev.toController,
-			tapped: ev.entersTapped,
-			counters: ev.entersWithCounters,
-			copiableOverride: ev.copiableOverride,
-		});
+		id = moveObject(preview, ev.object, ev.from, ev.destination);
 	}
 	const snapshot = readObject(createReadContext(preview), id);
 	assert(snapshot.kind === "permanent");
@@ -3671,7 +3739,7 @@ export function prepareEffectData(state: GameState): void {
 
 /** The object this event is about to put onto the battlefield, if any. */
 function enteringObject(ev: GameEvent | undefined): ObjectId | null {
-	return ev?.kind === "change zone" && ev.to === "battlefield"
+	return ev?.kind === "change zone" && ev.destination.zone === "battlefield"
 		? ev.object
 		: null;
 }
@@ -3697,7 +3765,8 @@ function incomingReplacementRefs(
 	object: DeepReadOnly<GameObject> | null,
 	ev: ZoneChangeEvent,
 ): readonly ReplacementAbilityId[] {
-	if (ev.copiableOverride) return ev.copiableOverride.abilities.replacement;
+	if (ev.destination.zone === "battlefield" && ev.destination.copiableOverride)
+		return ev.destination.copiableOverride.abilities.replacement;
 	if (ev.from === null) return ev.createdToken.values.abilities.replacement;
 	assertDefined(object);
 	return abilityReferencesOf(view, object).replacement;
@@ -3749,7 +3818,11 @@ export function collectReplacements(
 		}
 	}
 
-	if (entering !== null && ev?.kind === "change zone") {
+	if (
+		entering !== null &&
+		ev?.kind === "change zone" &&
+		ev.destination.zone === "battlefield"
+	) {
 		const canonical = maybeObject(state, entering);
 		if (ev.from === null) {
 			assert(
@@ -3763,16 +3836,16 @@ export function collectReplacements(
 				? {
 						kind: "permanent",
 						id: ev.object,
-						owner: ev.toController,
-						controller: ev.toController,
+						owner: ev.destination.controller,
+						controller: ev.destination.controller,
 						zone: "battlefield",
 						representation: {
 							kind: "token",
 							createdValues: ev.createdToken.values,
 						},
-						tapped: ev.entersTapped ?? false,
+						tapped: ev.destination.tapped ?? false,
 						summoningSick: true,
-						counters: { ...ev.entersWithCounters },
+						counters: { ...ev.destination.counters },
 						effectData: ev.createdToken.effectData,
 						damage: 0,
 						attacking: false,
@@ -3786,7 +3859,7 @@ export function collectReplacements(
 		// whether the object gets there on its own or as a copy.
 		if (o) {
 			const displayName =
-				ev.copiableOverride?.name ??
+				ev.destination.copiableOverride?.name ??
 				(ev.from === null ? ev.createdToken.values.name : viewName(view, o.id));
 			for (const id of incomingReplacementRefs(view, o, ev)) {
 				const def = getAbilityDefinition("replacement", id);
@@ -3796,7 +3869,7 @@ export function collectReplacements(
 					def,
 					source: o,
 					// CR 616.1b has already settled who it enters under.
-					controller: ev.toController,
+					controller: ev.destination.controller,
 					data: effectDataFor(o, id),
 					label: `${displayName}#${o.id} — ${def.text}`,
 				});
@@ -3824,17 +3897,28 @@ export function collectReplacements(
 					functionsFrom: "any",
 					text: "If a creature would enter the battlefield under an opponent's control this turn, it enters under your control instead.",
 					applies(ev, ctx) {
-						if (ev.kind !== "change zone" || ev.to !== "battlefield")
+						if (
+							ev.kind !== "change zone" ||
+							ev.destination.zone !== "battlefield"
+						)
 							return false;
-						if (ev.toController === effect.controller) return false;
+						if (ev.destination.controller === effect.controller) return false;
 						return etbPreview(
 							ctx.state,
 							ev,
 						).currentCharacteristics.types.includes("creature");
 					},
 					replace: (ev) =>
-						ev.kind === "change zone"
-							? [{ ...ev, toController: effect.controller }]
+						ev.kind === "change zone" && ev.destination.zone === "battlefield"
+							? [
+									{
+										...ev,
+										destination: {
+											...ev.destination,
+											controller: effect.controller,
+										},
+									},
+								]
 							: [ev],
 				};
 				break;
@@ -3998,11 +4082,11 @@ export function affectedPlayer(
 			return ev.player;
 
 		case "change zone": {
-			if (ev.from === null) return ev.toController;
+			if (ev.from === null) return ev.destination.controller;
 			const o = maybeObject(state, ev.object);
 			assertDefined(o);
 			if (ev.from === "battlefield") return controllerOf(o) ?? o.owner;
-			if (ev.to === "stack") return ev.toController;
+			if (ev.destination.zone === "stack") return ev.destination.controller;
 
 			// Objects on the battlefield / stack have a controller; cards elsewhere
 			// don't, so their owner chooses. For a card entering the battlefield we
@@ -4240,20 +4324,21 @@ function resolveReplacements(
  * object.
  * ------------------------------------------------------------------ */
 
+/**
+ * Move `id` out of `from` and into `destination`, replacing it with the new
+ * object CR 400.7 says the movement creates.
+ *
+ * The destination is the same discriminated union the zone-change event
+ * carries, so this cannot be handed a controller for a graveyard arrival or a
+ * library position for a battlefield arrival.
+ */
 function moveObject(
 	state: GameState,
 	id: ObjectId,
 	from: Zone,
-	to: Zone,
-	opts: {
-		toController: PlayerId;
-		tapped?: boolean;
-		counters?: PermanentCounterBag;
-		copiableOverride?: CharacteristicsSnapshot;
-		toBottom?: boolean;
-		spellTargets?: TargetBindings;
-	},
+	destination: ZoneChangeDestination,
 ): ObjectId {
+	const to = destination.zone;
 	const old = maybeObject(state, id);
 	assert(old, `cannot move missing object ${id}`);
 	assert(
@@ -4284,7 +4369,7 @@ function moveObject(
 				: null;
 	const freshId = state.nextObjectId++ as ObjectId;
 	let fresh: GameObject;
-	if (to === "battlefield") {
+	if (destination.zone === "battlefield") {
 		let representation: PermanentObject["representation"];
 		if (tokenValues) {
 			representation = { kind: "token", createdValues: tokenValues };
@@ -4296,17 +4381,19 @@ function moveObject(
 			kind: "permanent",
 			id: freshId,
 			owner: old.owner,
-			controller: opts.toController,
+			controller: destination.controller,
 			zone: "battlefield",
 			representation,
-			...(opts.copiableOverride
+			...(destination.copiableOverride
 				? {
-						copiableOverride: cloneCharacteristics(opts.copiableOverride),
+						copiableOverride: cloneCharacteristics(
+							destination.copiableOverride,
+						),
 					}
 				: {}),
-			tapped: opts.tapped ?? false,
+			tapped: destination.tapped ?? false,
 			summoningSick: true,
-			counters: { ...opts.counters },
+			counters: { ...destination.counters },
 			effectData: {},
 			damage: 0,
 			attacking: false,
@@ -4314,13 +4401,13 @@ function moveObject(
 			token: tokenValues !== null,
 			attributes: {},
 		};
-	} else if (to === "stack") {
+	} else if (destination.zone === "stack") {
 		assert(printedId, "tokens cannot become spells");
 		fresh = {
 			kind: "spell",
 			id: freshId,
 			owner: old.owner,
-			controller: opts.toController,
+			controller: destination.controller,
 			zone: "stack",
 			representation: { kind: "card", cardId: printedId },
 			effectData: {},
@@ -4330,7 +4417,7 @@ function moveObject(
 			kind: "nonbattlefield-token",
 			id: freshId,
 			owner: old.owner,
-			zone: to,
+			zone: destination.zone,
 			createdValues: tokenValues,
 			effectData: {},
 		};
@@ -4340,13 +4427,13 @@ function moveObject(
 			kind: "card",
 			id: freshId,
 			owner: old.owner,
-			zone: to,
+			zone: destination.zone,
 			cardId: printedId,
 			effectData: {},
 		};
 	}
 	state.objects.set(fresh.id, fresh);
-	if (to === "stack") {
+	if (destination.zone === "stack") {
 		assert(
 			fresh.kind === "spell",
 			"only spells can enter the stack as objects",
@@ -4354,11 +4441,12 @@ function moveObject(
 		state.stack.push({
 			kind: "spell",
 			objectId: fresh.id,
-			targets: structuredClone(opts.spellTargets ?? []),
+			targets: structuredClone(destination.targets),
 		});
 	} else {
-		const dst = mutableZoneList(state, to, fresh.owner);
-		if (to === "library" && opts.toBottom) dst.unshift(fresh.id);
+		const dst = mutableZoneList(state, destination.zone, fresh.owner);
+		if (destination.zone === "library" && destination.position === "bottom")
+			dst.unshift(fresh.id);
 		else dst.push(fresh.id);
 	}
 	log(
@@ -4406,19 +4494,26 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 		case "regenerate":
 			return `regenerate(${name(state, ev.object)})`;
 		case "change zone": {
-			const extras = [
-				ev.entersTapped ? "tapped" : "",
-				ev.entersWithCounters ? JSON.stringify(ev.entersWithCounters) : "",
-				ev.copiableOverride
-					? `copiableOverride=${ev.copiableOverride.name}`
-					: "",
-			]
+			const to = ev.destination;
+			const extras = (
+				to.zone === "battlefield"
+					? [
+							to.tapped ? "tapped" : "",
+							to.counters ? JSON.stringify(to.counters) : "",
+							to.copiableOverride
+								? `copiableOverride=${to.copiableOverride.name}`
+								: "",
+						]
+					: to.zone === "library"
+						? [to.position]
+						: []
+			)
 				.filter(Boolean)
 				.join(" ");
 			const objectName =
 				ev.from === null ? ev.createdToken.values.name : name(state, ev.object);
 			const from = ev.from ?? "creation";
-			return `move(${objectName}#${ev.object}: ${from}->${ev.to}${extras ? ` ${extras}` : ""})`;
+			return `move(${objectName}#${ev.object}: ${from}->${to.zone}${extras ? ` ${extras}` : ""})`;
 		}
 		case "add counters":
 			return `counters(${ev.amount}x ${ev.counter} on ${name(state, ev.target.id)})`;
@@ -4684,9 +4779,8 @@ function checkStateBasedActionsIn(
 						kind: "change zone",
 						object: id,
 						from: "battlefield",
-						to: "graveyard",
+						destination: { zone: "graveyard" },
 						cause: "sba",
-						toController: o.controller,
 					},
 					choices,
 					newScope(),
@@ -4922,7 +5016,8 @@ function triggerMatches(
 		case "change zone": {
 			assert(ev.kind === "change zone");
 			if (condition.from !== "any" && ev.from !== condition.from) return false;
-			if (condition.to !== "any" && ev.to !== condition.to) return false;
+			if (condition.to !== "any" && ev.destination.zone !== condition.to)
+				return false;
 
 			if (condition.from === "battlefield") {
 				// The exact self-death form is detected from the pre-event context. A
@@ -5029,10 +5124,11 @@ function selfDeathTriggerCandidates(
 		const condition = trigger.condition;
 		if (condition.kind !== "change zone" || condition.from !== "battlefield")
 			continue;
-		if (condition.to !== "any" && condition.to !== ev.to) continue;
+		if (condition.to !== "any" && condition.to !== ev.destination.zone)
+			continue;
 
 		if (
-			ev.to !== "graveyard" ||
+			ev.destination.zone !== "graveyard" ||
 			condition.to !== "graveyard" ||
 			condition.selector.kind !== "self"
 		) {
@@ -5200,9 +5296,8 @@ function executeIn(
 						kind: "change zone",
 						object: top,
 						from: "library",
-						to: "hand",
+						destination: { zone: "hand" },
 						cause: "draw",
-						toController: ev.player,
 					},
 					choices,
 					scope,
@@ -5228,9 +5323,8 @@ function executeIn(
 							kind: "change zone",
 							object: top,
 							from: "library",
-							to: "graveyard",
+							destination: { zone: "graveyard" },
 							cause: "mill",
-							toController: ev.player,
 						},
 						choices,
 						scope,
@@ -5306,9 +5400,8 @@ function executeIn(
 							kind: "change zone",
 							object: id,
 							from: "library",
-							to: "graveyard",
+							destination: { zone: "graveyard" },
 							cause: "surveil",
-							toController: ev.player,
 						},
 						choices,
 						scope,
@@ -5360,9 +5453,8 @@ function executeIn(
 								kind: "change zone",
 								object: id,
 								from: "hand",
-								to: "graveyard",
+								destination: { zone: "graveyard" },
 								cause: "discard",
-								toController: ev.player,
 							},
 							choices,
 							scope,
@@ -5385,9 +5477,8 @@ function executeIn(
 						kind: "change zone",
 						object: chosen,
 						from: "hand",
-						to: "graveyard",
+						destination: { zone: "graveyard" },
 						cause: "discard",
-						toController: ev.player,
 					},
 					choices,
 					scope,
@@ -5460,9 +5551,8 @@ function executeIn(
 					kind: "change zone",
 					object: spell.id,
 					from: "stack",
-					to: "graveyard",
+					destination: { zone: "graveyard" },
 					cause: "counter",
-					toController: spell.controller,
 				},
 				choices,
 				scope,
@@ -5495,9 +5585,8 @@ function executeIn(
 					kind: "change zone",
 					object: o.id,
 					from: "battlefield",
-					to: "graveyard",
+					destination: { zone: "graveyard" },
 					cause: "sacrifice",
-					toController: snapshot.controller,
 				},
 				choices,
 				scope,
@@ -5530,9 +5619,8 @@ function executeIn(
 					kind: "change zone",
 					object: o.id,
 					from: "battlefield",
-					to: "graveyard",
+					destination: { zone: "graveyard" },
 					cause: "destroy",
-					toController: snapshot.controller,
 				},
 				choices,
 				scope,
@@ -5544,7 +5632,7 @@ function executeIn(
 					child.kind === "change zone" &&
 					child.object === o.id &&
 					child.from === "battlefield" &&
-					child.to === "graveyard" &&
+					child.destination.zone === "graveyard" &&
 					child.cause === "destroy",
 			);
 			break;
@@ -5580,19 +5668,23 @@ function executeIn(
 				state.objects.set(newId, {
 					kind: "permanent",
 					id: newId,
-					owner: ev.toController,
-					controller: ev.toController,
+					owner: ev.destination.controller,
+					controller: ev.destination.controller,
 					zone: "battlefield",
 					representation: {
 						kind: "token",
 						createdValues: cloneCharacteristics(ev.createdToken.values),
 					},
-					...(ev.copiableOverride
-						? { copiableOverride: cloneCharacteristics(ev.copiableOverride) }
+					...(ev.destination.copiableOverride
+						? {
+								copiableOverride: cloneCharacteristics(
+									ev.destination.copiableOverride,
+								),
+							}
 						: {}),
-					tapped: ev.entersTapped ?? false,
+					tapped: ev.destination.tapped ?? false,
 					summoningSick: true,
-					counters: { ...ev.entersWithCounters },
+					counters: { ...ev.destination.counters },
 					effectData: {},
 					damage: 0,
 					attacking: false,
@@ -5607,14 +5699,7 @@ function executeIn(
 				);
 			} else {
 				recordSourceDeparture(state, before, ev.object, ev.from);
-				newId = moveObject(state, ev.object, ev.from, ev.to, {
-					toController: ev.toController,
-					tapped: ev.entersTapped,
-					counters: ev.entersWithCounters,
-					copiableOverride: ev.copiableOverride,
-					toBottom: ev.toBottom,
-					spellTargets: ev.spellTargets,
-				});
+				newId = moveObject(state, ev.object, ev.from, ev.destination);
 			}
 			created.push(newId);
 			break;
@@ -5759,9 +5844,9 @@ function executeIn(
 							kind: "change zone",
 							object: tokenId,
 							from: null,
-							to: "battlefield",
+							destination: { zone: "battlefield", controller: ev.controller },
 							cause: "effect",
-							toController: ev.controller,
+
 							createdToken: {
 								values: cloneCharacteristics(ev.characteristics),
 								effectData: {},
@@ -6092,9 +6177,8 @@ function resolveSpell(
 				kind: "change zone",
 				object: object.id,
 				from: "stack",
-				to: "battlefield",
+				destination: { zone: "battlefield", controller: object.controller },
 				cause: "resolve",
-				toController: object.controller,
 			},
 			choices,
 			newScope(),
@@ -6153,9 +6237,8 @@ function resolveSpell(
 			kind: "change zone",
 			object: object.id,
 			from: "stack",
-			to: "graveyard",
+			destination: { zone: "graveyard" },
 			cause: legal ? "resolve" : "illegal target",
-			toController: object.controller,
 		},
 		choices,
 		newScope(),
@@ -6561,13 +6644,9 @@ function effectToEvent(
 			return {
 				kind: "change zone",
 				from: "battlefield",
-				to: "hand",
+				destination: { zone: "hand" },
 				cause: "resolve",
-				// `toController` only decides who controls the object when it
-				// enters the battlefield or the stack; a card in a hand has an
-				// owner and no controller. The owner is the honest value here,
-				// since that is whose hand it returns to (CR 400.3).
-				toController: object.owner,
+				// CR 400.3: a card in a hand has an owner and no controller.
 				object: bound.id,
 			};
 		}
@@ -7628,10 +7707,12 @@ function castSpellIn(
 			kind: "change zone",
 			object: action.card,
 			from: "hand",
-			to: "stack",
+			destination: {
+				zone: "stack",
+				controller: priorityPlayer,
+				targets: targets,
+			},
 			cause: "cast",
-			toController: priorityPlayer,
-			spellTargets: targets,
 		},
 		choices,
 		newScope(),
@@ -7722,9 +7803,8 @@ function playLandIn(
 			kind: "change zone",
 			object: action.card,
 			from: "hand",
-			to: "battlefield",
+			destination: { zone: "battlefield", controller: priorityPlayer },
 			cause: "play land",
-			toController: priorityPlayer,
 		},
 		choices,
 		newScope(),

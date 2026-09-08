@@ -71,10 +71,10 @@ function eventCounters(ev: GameEvent): PermanentCounterBag | null {
 	}
 	if (
 		ev.kind === "change zone" &&
-		ev.to === "battlefield" &&
-		ev.entersWithCounters
+		ev.destination.zone === "battlefield" &&
+		ev.destination.counters
 	) {
-		return ev.entersWithCounters;
+		return ev.destination.counters;
 	}
 	return null;
 }
@@ -82,7 +82,8 @@ function eventCounters(ev: GameEvent): PermanentCounterBag | null {
 function withCounters(ev: GameEvent, bag: PermanentCounterBag): GameEvent[] {
 	if (ev.kind === "add counters")
 		return [{ ...ev, amount: bag[ev.counter] ?? 0 }];
-	if (ev.kind === "change zone") return [{ ...ev, entersWithCounters: bag }];
+	if (ev.kind === "change zone" && ev.destination.zone === "battlefield")
+		return [{ ...ev, destination: { ...ev.destination, counters: bag } }];
 	return [ev];
 }
 
@@ -94,8 +95,8 @@ function counterRecipientController(
 	if (ev.kind === "add counters") {
 		return maybePermanent(state, ev.target.id)?.controller ?? null;
 	}
-	if (ev.kind === "change zone" && ev.to === "battlefield")
-		return ev.toController;
+	if (ev.kind === "change zone" && ev.destination.zone === "battlefield")
+		return ev.destination.controller;
 	return null;
 }
 
@@ -107,7 +108,7 @@ function isCreatureRecipient(ctx: EffectCtx, ev: GameEvent): boolean {
 			snapshot.currentCharacteristics.types.includes("creature")
 		);
 	}
-	if (ev.kind === "change zone")
+	if (ev.kind === "change zone" && ev.destination.zone === "battlefield")
 		return etbPreview(ctx.state, ev).currentCharacteristics.types.includes(
 			"creature",
 		);
@@ -157,14 +158,14 @@ export const HARDENED_SCALES = registerCard({
 			layer: "other",
 			text: "If one or more +1/+1 counters would be put on a creature you control, that many plus one are put instead.",
 			applies(ev, ctx) {
-				if (ev.kind !== "change zone") return false;
-				if (ev.to !== "battlefield") return false;
+				if (ev.kind !== "change zone" || ev.destination.zone !== "battlefield")
+					return false;
 
 				if (!onBattlefield(ctx)) return false;
-				if (!ev.entersWithCounters) return false;
-				if (!ev.entersWithCounters["+1/+1"]) return false;
-				if (ev.entersWithCounters["+1/+1"] === 0) return false;
-				if (ev.toController !== ctx.controller) return false;
+				if (!ev.destination.counters) return false;
+				if (!ev.destination.counters["+1/+1"]) return false;
+				if (ev.destination.counters["+1/+1"] === 0) return false;
+				if (ev.destination.controller !== ctx.controller) return false;
 				return isCreatureRecipient(ctx, ev);
 			},
 			replace(ev) {
@@ -299,7 +300,7 @@ export const AESTHIR_GLIDER = registerCard({
  * ------------------------------------------------------------------ */
 
 function goingToGraveyard(ev: GameEvent): boolean {
-	return ev.kind === "change zone" && ev.to === "graveyard";
+	return ev.kind === "change zone" && ev.destination.zone === "graveyard";
 }
 
 // This is the graveyard-replacement half of Rest in Peace. The real card's
@@ -321,7 +322,7 @@ export const BABY_REST_IN_PEACE = registerCard({
 			applies: (ev, ctx) => onBattlefield(ctx) && goingToGraveyard(ev),
 			replace: (ev) =>
 				ev.kind === "change zone" && ev.from !== null
-					? [{ ...ev, to: "exile" }]
+					? [{ ...ev, destination: { zone: "exile" } }]
 					: [ev],
 		},
 	],
@@ -348,7 +349,7 @@ export const BABY_LEYLINE_OF_THE_VOID = registerCard({
 				if (
 					!onBattlefield(ctx) ||
 					ev.kind !== "change zone" ||
-					ev.to !== "graveyard"
+					ev.destination.zone !== "graveyard"
 				)
 					return false;
 				const o = maybeObject(ctx.state, ev.object);
@@ -356,7 +357,7 @@ export const BABY_LEYLINE_OF_THE_VOID = registerCard({
 			},
 			replace: (ev) =>
 				ev.kind === "change zone" && ev.from !== null
-					? [{ ...ev, to: "exile" }]
+					? [{ ...ev, destination: { zone: "exile" } }]
 					: [ev],
 		},
 	],
@@ -562,9 +563,9 @@ export const TEST_FORCED_COPY = registerCard({
 			text: "TEST ONLY: unconditionally enters as a copy of the first creature on the battlefield. Not real card text.",
 			applies: (ev, ctx) =>
 				ev.kind === "change zone" &&
-				ev.to === "battlefield" &&
+				ev.destination.zone === "battlefield" &&
 				ev.object === ctx.self?.id &&
-				ev.copiableOverride === undefined &&
+				ev.destination.copiableOverride === undefined &&
 				pickForcedCopyTarget(ctx.read) !== null,
 			replace(ev, ctx) {
 				if (ev.kind !== "change zone") return [ev];
@@ -572,8 +573,16 @@ export const TEST_FORCED_COPY = registerCard({
 				// The copiable values carry the copied object's ability references,
 				// which is the whole of what this fixture acquires. No card identity
 				// comes along: it stays physically this test card.
-				return target
-					? [{ ...ev, copiableOverride: cloneCharacteristics(target) }]
+				return target && ev.destination.zone === "battlefield"
+					? [
+							{
+								...ev,
+								destination: {
+									...ev.destination,
+									copiableOverride: cloneCharacteristics(target),
+								},
+							},
+						]
 					: [ev];
 			},
 		},
@@ -744,7 +753,8 @@ export const TEST_KALITAS_REPLACEMENT = registerCard({
 			text: "If a nontoken creature an opponent controls would die, instead exile it and create a 2/2 black Zombie token.",
 			applies(ev, ctx) {
 				if (!onBattlefield(ctx) || ev.kind !== "change zone") return false;
-				if (ev.from !== "battlefield" || ev.to !== "graveyard") return false;
+				if (ev.from !== "battlefield" || ev.destination.zone !== "graveyard")
+					return false;
 				const o = maybePermanent(ctx.state, ev.object);
 				if (!o || o.token || o.controller === ctx.controller) return false;
 				const snapshot = readObject(ctx.read, o.id);
@@ -756,7 +766,7 @@ export const TEST_KALITAS_REPLACEMENT = registerCard({
 			replace(ev, ctx) {
 				if (ev.kind !== "change zone" || ev.from === null) return [ev];
 				return [
-					{ ...ev, to: "exile" },
+					{ ...ev, destination: { zone: "exile" } },
 					{
 						kind: "create token",
 						controller: ctx.controller,

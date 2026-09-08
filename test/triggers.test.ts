@@ -221,9 +221,8 @@ describe("triggered abilities", () => {
 				kind: "change zone",
 				object: clone.id,
 				from: "hand",
-				to: "battlefield",
+				destination: { zone: "battlefield", controller: ALICE },
 				cause: "resolve",
-				toController: ALICE,
 			},
 			agents,
 		);
@@ -253,9 +252,8 @@ describe("triggered abilities", () => {
 			kind: "change zone",
 			object: cleric.id,
 			from: "hand",
-			to: "battlefield",
+			destination: { zone: "battlefield", controller: ALICE },
 			cause: "resolve",
-			toController: ALICE,
 		} satisfies GameEvent;
 		perform(state, triggeringEvent, agents);
 
@@ -327,9 +325,8 @@ describe("triggered abilities", () => {
 			kind: "change zone",
 			object: source.id,
 			from: "battlefield",
-			to: "graveyard",
+			destination: { zone: "graveyard" },
 			cause: "sacrifice",
-			toController: BOB,
 		} satisfies GameEvent;
 		const result = perform(state, triggeringEvent, agents);
 
@@ -427,9 +424,8 @@ describe("triggered abilities", () => {
 				kind: "change zone",
 				object: source.id,
 				from: "battlefield",
-				to: "graveyard",
+				destination: { zone: "graveyard" },
 				cause: "destroy",
-				toController: ALICE,
 			},
 			agents,
 		);
@@ -438,7 +434,7 @@ describe("triggered abilities", () => {
 		expect(result.executed[0]).toMatchObject({
 			kind: "change zone",
 			from: "battlefield",
-			to: "exile",
+			destination: { zone: "exile" },
 		});
 		expect(state.pendingTriggers).toHaveLength(0);
 	});
@@ -456,9 +452,8 @@ describe("triggered abilities", () => {
 						kind: "change zone",
 						object: source.id,
 						from: "battlefield",
-						to: "graveyard",
+						destination: { zone: "graveyard" },
 						cause: "destroy",
-						toController: ALICE,
 					},
 					passingAgents(),
 				),
@@ -477,9 +472,8 @@ describe("triggered abilities", () => {
 				kind: "change zone",
 				object: cleric.id,
 				from: "hand",
-				to: "battlefield",
+				destination: { zone: "battlefield", controller: ALICE },
 				cause: "resolve",
-				toController: ALICE,
 			},
 			agents,
 		);

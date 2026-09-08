@@ -211,9 +211,8 @@ describe("player views", () => {
 				kind: "change zone",
 				object: spellCard.id,
 				from: "hand",
-				to: "stack",
+				destination: { zone: "stack", controller: 0, targets: [] },
 				cause: "cast",
-				toController: 0,
 			},
 			[new ScriptedAgent(), new ScriptedAgent()],
 		);

@@ -180,9 +180,8 @@ function enterFromHand(
 			kind: "change zone",
 			object: card.id,
 			from: "hand",
-			to: "battlefield",
+			destination: { zone: "battlefield", controller: controller },
 			cause: "resolve",
-			toController: controller,
 		},
 		agents,
 	);

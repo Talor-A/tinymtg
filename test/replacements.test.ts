@@ -78,7 +78,7 @@ describe("destroy event success", () => {
 			kind: "change zone",
 			object: bears.id,
 			from: "battlefield",
-			to: "graveyard",
+			destination: { zone: "graveyard" },
 			cause: "destroy",
 		});
 		expect(result.executed[1]).toEqual({
@@ -128,7 +128,7 @@ describe("destroy event success", () => {
 			kind: "change zone",
 			object: bears.id,
 			from: "battlefield",
-			to: "exile",
+			destination: { zone: "exile" },
 			cause: "destroy",
 		});
 		expect(state.players[ALICE].graveyard).toHaveLength(0);
@@ -161,9 +161,8 @@ describe("replacement effects that add counters as a permanent enters", () => {
 				kind: "change zone",
 				object: fixtureCard.id,
 				from: "hand",
-				to: "battlefield",
+				destination: { zone: "battlefield", controller: ALICE },
 				cause: "resolve",
-				toController: ALICE,
 			},
 			agents,
 		);
@@ -416,9 +415,8 @@ describe("effects that inspect a permanent as it enters", () => {
 				kind: "change zone",
 				object: bearsCard.id,
 				from: "hand",
-				to: "battlefield",
+				destination: { zone: "battlefield", controller: ALICE },
 				cause: "resolve",
-				toController: ALICE,
 			},
 			agents,
 		);
@@ -435,9 +433,8 @@ describe("effects that inspect a permanent as it enters", () => {
 				kind: "change zone",
 				object: bears2.id,
 				from: "hand",
-				to: "battlefield",
+				destination: { zone: "battlefield", controller: ALICE },
 				cause: "resolve",
-				toController: ALICE,
 			},
 			agents,
 		);
@@ -463,9 +460,8 @@ describe("interacting effects as permanents enter", () => {
 				kind: "change zone",
 				object: bears.id,
 				from: "hand",
-				to: "battlefield",
+				destination: { zone: "battlefield", controller: BOB },
 				cause: "resolve",
-				toController: BOB,
 			},
 			agents,
 		);
@@ -488,9 +484,8 @@ describe("interacting effects as permanents enter", () => {
 				kind: "change zone",
 				object: clone.id,
 				from: "hand",
-				to: "battlefield",
+				destination: { zone: "battlefield", controller: ALICE },
 				cause: "resolve",
-				toController: ALICE,
 			},
 			agents,
 		);
@@ -526,9 +521,8 @@ describe("Clone's optional copy replacement", () => {
 			kind: "change zone" as const,
 			object,
 			from: "hand" as const,
-			to: "battlefield" as const,
+			destination: { zone: "battlefield" as const, controller: ALICE },
 			cause: "resolve" as const,
-			toController: ALICE,
 		};
 	}
 
@@ -578,9 +572,13 @@ describe("Clone's optional copy replacement", () => {
 			alice,
 			chooseCopyAs(selected.id),
 		]);
+		const event = cloneEvent(clone.id);
 		const result = perform(
 			state,
-			{ ...cloneEvent(clone.id), toController: BOB },
+			{
+				...event,
+				destination: { ...event.destination, controller: BOB },
+			},
 			recorder,
 		);
 

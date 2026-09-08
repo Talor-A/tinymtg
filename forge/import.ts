@@ -1047,9 +1047,9 @@ function lowerCopyEtbKeyword(
 		applies(ev, ctx) {
 			return (
 				ev.kind === "change zone" &&
-				ev.to === "battlefield" &&
+				ev.destination.zone === "battlefield" &&
 				ev.object === ctx.self?.id &&
-				ev.copiableOverride === undefined &&
+				ev.destination.copiableOverride === undefined &&
 				copyableCreatureCandidates(ctx.read).length > 0
 			);
 		},
@@ -1069,10 +1069,14 @@ function lowerCopyEtbKeyword(
 				target.kind === "permanent",
 				"copy-as candidate must be a permanent",
 			);
+			assert(ev.destination.zone === "battlefield");
 			return [
 				{
 					...ev,
-					copiableOverride: cloneCharacteristics(target.copiableValues),
+					destination: {
+						...ev.destination,
+						copiableOverride: cloneCharacteristics(target.copiableValues),
+					},
 				},
 			];
 		},
@@ -1228,8 +1232,8 @@ function lowerReplacement(
 			if (
 				ctx.self?.zone !== "battlefield" ||
 				ev.kind !== "change zone" ||
-				ev.to !== "battlefield" ||
-				ev.entersTapped
+				ev.destination.zone !== "battlefield" ||
+				ev.destination.tapped
 			)
 				return false;
 			return selectorMatches(selector, etbPreview(ctx.state, ev), {
@@ -1238,7 +1242,9 @@ function lowerReplacement(
 			});
 		},
 		replace: (ev: GameEvent) =>
-			ev.kind === "change zone" ? [{ ...ev, entersTapped: true }] : [ev],
+			ev.kind === "change zone" && ev.destination.zone === "battlefield"
+				? [{ ...ev, destination: { ...ev.destination, tapped: true } }]
+				: [ev],
 	};
 	return { kind: "global", def };
 }

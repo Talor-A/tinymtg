@@ -180,7 +180,7 @@ describe("sacrifice action", () => {
 			kind: "change zone",
 			object: creature.id,
 			from: "battlefield",
-			to: "graveyard",
+			destination: { zone: "graveyard" },
 			cause: "sacrifice",
 		});
 		expect(result.executed[1]).toEqual({
@@ -205,7 +205,7 @@ describe("sacrifice action", () => {
 		expect(result.executed[0]).toMatchObject({
 			kind: "change zone",
 			from: "battlefield",
-			to: "exile",
+			destination: { zone: "exile" },
 			cause: "sacrifice",
 		});
 		expect(result.executed[1]).toMatchObject({ kind: "sacrifice" });

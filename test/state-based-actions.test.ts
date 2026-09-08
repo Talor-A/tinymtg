@@ -112,9 +112,8 @@ describe("tokens leaving the battlefield", () => {
 				kind: "change zone",
 				object: token.id,
 				from: "battlefield",
-				to: "graveyard",
+				destination: { zone: "graveyard" },
 				cause: "sacrifice",
-				toController: ALICE,
 			},
 			agents,
 		);

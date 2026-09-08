@@ -58,17 +58,20 @@ registerCard({
 			text: "Entry Guard enters tapped and with a +1/+1 counter on it.",
 			applies: (ev, ctx) =>
 				ev.kind === "change zone" &&
-				ev.to === "battlefield" &&
+				ev.destination.zone === "battlefield" &&
 				ev.object === ctx.self?.id,
 			replace: (ev) =>
-				ev.kind === "change zone"
+				ev.kind === "change zone" && ev.destination.zone === "battlefield"
 					? [
 							{
 								...ev,
-								entersTapped: true,
-								entersWithCounters: {
-									...ev.entersWithCounters,
-									"+1/+1": (ev.entersWithCounters?.["+1/+1"] ?? 0) + 1,
+								destination: {
+									...ev.destination,
+									tapped: true,
+									counters: {
+										...ev.destination.counters,
+										"+1/+1": (ev.destination.counters?.["+1/+1"] ?? 0) + 1,
+									},
 								},
 							},
 						]
@@ -112,14 +115,24 @@ registerCard({
 			text: "Test Mimic enters as a copy of a creature on the battlefield.",
 			applies: (ev, ctx) =>
 				ev.kind === "change zone" &&
-				ev.to === "battlefield" &&
+				ev.destination.zone === "battlefield" &&
 				ev.object === ctx.self?.id &&
-				ev.copiableOverride === undefined &&
+				ev.destination.copiableOverride === undefined &&
 				firstCreature(ctx.read) !== null,
 			replace(ev, ctx) {
 				const target = firstCreature(ctx.read);
-				return ev.kind === "change zone" && target
-					? [{ ...ev, copiableOverride: cloneCharacteristics(target) }]
+				return ev.kind === "change zone" &&
+					ev.destination.zone === "battlefield" &&
+					target
+					? [
+							{
+								...ev,
+								destination: {
+									...ev.destination,
+									copiableOverride: cloneCharacteristics(target),
+								},
+							},
+						]
 					: [ev];
 			},
 		},
@@ -180,9 +193,8 @@ function enter(
 			kind: "change zone",
 			object,
 			from,
-			to: "battlefield",
+			destination: { zone: "battlefield", controller: P1 },
 			cause: "resolve",
-			toController: P1,
 		},
 		agents,
 	);
@@ -198,9 +210,8 @@ function leave(state: GameState, object: ObjectId): ObjectId {
 			kind: "change zone",
 			object,
 			from: "battlefield",
-			to: "graveyard",
+			destination: { zone: "graveyard" },
 			cause: "effect",
-			toController: P1,
 		},
 		agents,
 	);

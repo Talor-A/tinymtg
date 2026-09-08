@@ -881,9 +881,8 @@ describe("targetless activated abilities", () => {
 				kind: "change zone",
 				object: looter.id,
 				from: "battlefield",
-				to: "graveyard",
+				destination: { zone: "graveyard" },
 				cause: "destroy",
-				toController: ALICE,
 			},
 			passingAgents(),
 		);
