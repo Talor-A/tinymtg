@@ -81,6 +81,10 @@ registerRuntimeFixture(
 	"rt-thrashing-brontodon",
 );
 registerRuntimeFixture("c/cathar_commando", "rt-cathar-commando");
+registerRuntimeFixture(
+	"r/resolute_reinforcements",
+	"rt-resolute-reinforcements",
+);
 registerRuntimeFixture("s/selfless_savior", "rt-selfless-savior");
 registerRuntimeFixture("b/blazing_hellhound", "rt-blazing-hellhound");
 registerRuntimeFixture(
@@ -265,6 +269,48 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].graveyard.map((id) => name(state, id))).toEqual(
 			["Forest", "Forest", "Forest"],
 		);
+	});
+
+	test("Resolute Reinforcements casts during an opponent's turn and creates its Soldier", () => {
+		const state = setupMain();
+		expect(activePlayer(state)).toBe(ALICE);
+		const card = spawnCard(state, "rt-resolute-reinforcements", BOB, "hand");
+		state.players[BOB].manaPool.c = 1;
+		state.players[BOB].manaPool.w = 1;
+
+		expect(getObservableActions(state, BOB)).toContainEqual({
+			kind: "cast",
+			card: card.id,
+		});
+		const caster = new ScriptedAgent([], [], [{ kind: "cast", card: card.id }]);
+		settlePriority(state, [new ScriptedAgent(), caster]);
+
+		expect(caster.priorityActions).toHaveLength(0);
+		expect(state.players[BOB].manaPool).toMatchObject({ c: 0, w: 0 });
+		const reinforcements = state.battlefield.filter(
+			(id) => name(state, id) === "Resolute Reinforcements",
+		);
+		const soldiers = state.battlefield.filter(
+			(id) => name(state, id) === "Soldier Token",
+		);
+		expect(reinforcements).toHaveLength(1);
+		expect(soldiers).toHaveLength(1);
+		const soldier = soldiers[0];
+		if (soldier === undefined) throw new Error("Soldier token was not created");
+		expect(permanent(state, soldier)).toMatchObject({
+			token: true,
+			controller: BOB,
+		});
+		expect(
+			readObject(createReadContext(state), soldier).currentCharacteristics,
+		).toMatchObject({
+			kind: "creature",
+			colors: ["w"],
+			types: ["creature"],
+			subtypes: ["Soldier"],
+			power: 1,
+			toughness: 1,
+		});
 	});
 
 	test("Timberland Guide's imported ETB trigger puts a counter on its chosen creature", () => {

@@ -85,6 +85,7 @@ const POSITIVE_FIXTURES = [
 	"i/impulse",
 	"t/thrashing_brontodon",
 	"c/cathar_commando",
+	"r/resolute_reinforcements",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -1307,6 +1308,59 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					},
 				],
 				effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
+			},
+		]);
+	});
+
+	test("Resolute Reinforcements lowers Flash and its complete token trigger", () => {
+		const result = importFixture("r/resolute_reinforcements");
+		if (!result.ok) throw new Error("expected Resolute Reinforcements to import");
+		expect(result.card).toMatchObject({
+			name: "Resolute Reinforcements",
+			manaCost: { n: 1, w: 1 },
+			types: ["creature"],
+			subtypes: ["Human", "Soldier"],
+			keywords: ["flash"],
+			power: 1,
+			toughness: 1,
+		});
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigToken",
+				text: "When CARDNAME enters, create a 1/1 white Soldier creature token.",
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: { kind: "self" },
+				},
+				targets: [],
+				effects: [
+					{
+						kind: "create-token",
+						controller: "you",
+						amount: 1,
+						characteristics: {
+							kind: "creature",
+							name: "Soldier Token",
+							manaCost: "none",
+							colors: ["w"],
+							supertypes: [],
+							types: ["creature"],
+							subtypes: ["Soldier"],
+							keywords: [],
+							abilities: {
+								static: [],
+								activated: [],
+								triggered: [],
+								replacement: [],
+								prohibition: [],
+							},
+							power: 1,
+							toughness: 1,
+						},
+					},
+				],
 			},
 		]);
 	});
