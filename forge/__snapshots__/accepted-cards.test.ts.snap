@@ -69,6 +69,7 @@ Ancient Crab
 Ancient Craving
 Ancient Den
 Ancient Spring
+Angel of Despair
 Angel of Light
 Angel of Mercy
 Angel's Mercy
@@ -217,6 +218,7 @@ Boltwave
 Bombard
 Bond Beetle
 Bonebreaker Giant
+Boomerang
 Boomerang, Blade Flinger
 Border Guard
 Border Patrol
@@ -436,6 +438,7 @@ Demystify
 Deranged Outcast
 Desecration Plague
 Desert Drake
+Desert Twister
 Desolate Lighthouse
 Desolate Mire
 Desperate Bloodseeker
@@ -585,6 +588,7 @@ Explosive Impact
 Explosive Shot
 Expose to Daylight
 Exultant Skymarcher
+Eye of Nowhere
 Eye of Ramos
 Eyeblight Cullers
 Facet Reader
@@ -830,6 +834,7 @@ Happy Hogan, Dauntless Driver
 Harmonize
 Harrier Griffin
 Harrier Naga
+Harrier Strix
 Harrowing Journey
 Haru-Onna
 Hatching Plans
@@ -1227,6 +1232,7 @@ Nest Robber
 Nether Horror
 Nettle Swine
 Nettletooth Djinn
+Network Disruptor
 Neurok Replica
 New Benalia
 Nexus Wardens
@@ -1445,12 +1451,14 @@ Redwood Treefolk
 Refute
 Regal Unicorn
 Regathan Firecat
+Regress
 Reki, the History of Kamigawa
 Release the Dogs
 Relic Barrier
 Reliquary Monk
 Renegade Demon
 Renegade Troops
+Renegade's Getaway
 Renowned Weaver
 Repulse
 Repulsor Rays
@@ -1552,6 +1560,7 @@ Scarwood Treefolk
 Scathe Zombies
 Scavenger Folk
 Scavenging Scarab
+Scepter of Dominance
 Scepter of Insight
 Scion of Ugin
 Scorching Shot
@@ -1895,6 +1904,7 @@ Temple of Mystery
 Temple of Plenty
 Temple of Silence
 Temple of Triumph
+Temporal Adept
 Temur Banner
 Tenement Crasher
 Teroh's Faithful
@@ -2019,7 +2029,9 @@ Unexplained Disappearance
 Unfriendly Fire
 Unhallowed Phalanx
 Unholy Officiant
+Universal Solvent
 University Campus
+Unstable Obelisk
 Unsubtle Mockery
 Unsummon
 Unyaro Bee Sting
@@ -2070,6 +2082,7 @@ Vicious Hunger
 Vigilant Baloth
 Vigilante Justice
 Village Rites
+Vindicate
 Viridescent Bog
 Viridian Shaman
 Viridian Zealot
@@ -2203,4 +2216,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2200`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2213`;

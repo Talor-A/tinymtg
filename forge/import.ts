@@ -511,6 +511,7 @@ function parseTarget(
 	else if (targetType !== undefined) return null;
 	else if (value === "Any") legal = { kind: "any-target" };
 	else if (value === "Player") legal = { kind: "player" };
+	else if (value === "Permanent") legal = { kind: "permanent" };
 	else if (value === "Creature.Other+YouCtrl") {
 		legal = {
 			kind: "permanent",

@@ -68,6 +68,7 @@ registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
 registerRuntimeFixture("a/arcanis_the_omnipotent", "rt-arcanis");
 registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
+registerRuntimeFixture("n/network_disruptor", "rt-network-disruptor");
 registerRuntimeFixture("p/preordain", "rt-preordain");
 registerRuntimeFixture("c/consider", "rt-consider");
 registerRuntimeFixture("v/village_rites", "rt-village-rites");
@@ -274,6 +275,32 @@ describe("forge-import runtime: triggers", () => {
 		expect(
 			readObject(createReadContext(state), target.id).currentCharacteristics,
 		).toMatchObject({ power: 3, toughness: 3 });
+	});
+
+	test("Network Disruptor's imported ETB trigger taps any target permanent and keeps flying", () => {
+		const state = newGame();
+		const alice = new ScriptedAgent();
+		const agents: SyncAgents = [alice, new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+		const land = spawnPermanent(state, "forest", BOB);
+		const groundCreature = spawnPermanent(state, "rt-grizzly-bears", BOB);
+		alice.targetChoices.push({ type: "permanent", id: land.id });
+
+		const disruptor = enterFromHand(
+			state,
+			"rt-network-disruptor",
+			ALICE,
+			agents,
+		);
+
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(permanent(state, land.id).tapped).toBe(false);
+		settlePriority(state, agents);
+		expect(permanent(state, land.id).tapped).toBe(true);
+		expect(alice.targetChoices).toHaveLength(0);
+		expect(eligibleBlockers(state, BOB, disruptor)).not.toContain(
+			groundCreature.id,
+		);
 	});
 
 	test("Ajani's Mantra's imported upkeep trigger fires only for its controller, and its choice is genuinely optional", () => {

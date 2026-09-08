@@ -2251,7 +2251,11 @@ export interface TargetDef {
 	legal:
 		| { kind: "player" }
 		| { kind: "spell" }
-		| { kind: "permanent"; selector: ObjectSelectorDef }
+		| {
+				kind: "permanent";
+				/** Omitted when every permanent is legal. */
+				selector?: ObjectSelectorDef;
+		  }
 		| { kind: "any-target" };
 }
 
@@ -7231,10 +7235,13 @@ function isLegalTarget(
 			snapshot.currentCharacteristics.types.includes("planeswalker")
 		);
 	}
-	return selectorMatches(definition.legal.selector, snapshot, {
-		controller: ctx.controller,
-		id: ctx.source,
-	});
+	return (
+		definition.legal.selector === undefined ||
+		selectorMatches(definition.legal.selector, snapshot, {
+			controller: ctx.controller,
+			id: ctx.source,
+		})
+	);
 }
 
 function legalTargets(

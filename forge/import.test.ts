@@ -42,6 +42,7 @@ const POSITIVE_FIXTURES = [
 	"a/arcanis_the_omnipotent",
 	"a/ajanis_mantra",
 	"n/necrogen_mists",
+	"n/network_disruptor",
 	"s/seizan_perverter_of_truth",
 	"h/herald_of_faith",
 	"g/glorious_anthem",
@@ -419,6 +420,41 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 								],
 							},
 						},
+					},
+				],
+				effects: [{ kind: "tap", object: { targetSlot: "target-1" } }],
+			},
+		]);
+	});
+
+	test("Network Disruptor lowers its unrestricted permanent target", () => {
+		const result = importFixture("n/network_disruptor");
+		if (!result.ok) throw new Error("expected Network Disruptor to import");
+		expect(result.card).toMatchObject({
+			name: "Network Disruptor",
+			manaCost: { u: 1 },
+			types: ["artifact", "creature"],
+			subtypes: ["Moonfolk", "Rogue"],
+			power: 1,
+			toughness: 1,
+			keywords: ["flying"],
+		});
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigTap",
+				text: "When CARDNAME enters, tap target permanent.",
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: { kind: "self" },
+				},
+				targets: [
+					{
+						id: "target-1",
+						min: 1,
+						max: 1,
+						legal: { kind: "permanent" },
 					},
 				],
 				effects: [{ kind: "tap", object: { targetSlot: "target-1" } }],
