@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { name, newGame, spawnCard } from "../index.ts";
+import { CLUE_TOKEN } from "../tokens.ts";
 import { parseForgeCardScript } from "./ast.ts";
 import { importForgeCard, lowerForgeCard } from "./import.ts";
 
@@ -93,6 +94,7 @@ const POSITIVE_FIXTURES = [
 	"t/thrashing_brontodon",
 	"c/cathar_commando",
 	"r/resolute_reinforcements",
+	"t/thraben_inspector",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -783,6 +785,66 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
 			{ kind: "gain-life", player: "you", amount: 2 },
 		]);
+	});
+
+	test("Thraben Inspector keeps its characteristics and investigates when it enters", () => {
+		const result = importFixture("t/thraben_inspector");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card).toMatchObject({
+			name: "Thraben Inspector",
+			types: ["creature"],
+			subtypes: ["Human", "Soldier"],
+			colors: ["w"],
+			manaCost: { w: 1 },
+			power: 1,
+			toughness: 2,
+		});
+		const trigger = result.card.abilityDefinitions.triggered[0];
+		expect(trigger).toEqual({
+			id: "TrigInvestigate",
+			text: 'When CARDNAME enters, investigate. (Create a Clue token. It\'s an artifact with "{2}, Sacrifice this token: Draw a card.")',
+			condition: {
+				kind: "change zone",
+				from: "any",
+				to: "battlefield",
+				selector: { kind: "self" },
+			},
+			targets: [],
+			effects: [
+				{
+					kind: "create-token",
+					controller: "you",
+					characteristics: CLUE_TOKEN,
+					amount: 1,
+				},
+			],
+		});
+		if (trigger?.effects[0]?.kind !== "create-token") {
+			throw new Error("expected a create-token effect");
+		}
+		expect(trigger.effects[0].characteristics).not.toBe(CLUE_TOKEN);
+	});
+
+	test("Investigate rejects parameters outside the supported one-Clue form", () => {
+		for (const parameter of ["Num$ 2", "Defined$ Opponent"]) {
+			const result = importText(
+				[
+					"Name:Decorated Investigator",
+					"ManaCost:W",
+					"Types:Creature Human Soldier",
+					"PT:1/2",
+					"T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigInvestigate | TriggerDescription$ x",
+					`SVar:TrigInvestigate:DB$ Investigate | ${parameter}`,
+					"Oracle:",
+					"",
+				].join("\n"),
+			);
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]).toMatchObject({
+				code: "UNSUPPORTED_PARAMETER",
+			});
+		}
 	});
 
 	test("Arashin Cleric's self-entry trigger implicitly targets you", () => {

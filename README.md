@@ -99,9 +99,10 @@ Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with
 life/draw/discard-one-chosen-card, scry, surveil, and fixed hidden `Dig` forms
 such as Sleight of Hand, Impulse, and Stock Up, which put a card-defined
 number into hand (defaulting Forge's omitted `ChangeNum$` to one) and order the
-rest on the bottom; damage, destroy, counter, targeted or
-self-directed fixed counter placement (including Forge's omitted `Defined$`
-default for a nontargeted permanent ability), and return-to-hand effects; spells,
+rest on the bottom; the unmodified `Investigate` effect, which creates one
+canonical Clue token for the ability's controller; damage, destroy, counter,
+targeted or self-directed fixed counter placement (including Forge's omitted
+`Defined$` default for a nontargeted permanent ability), and return-to-hand effects; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, `Opponent`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
 `ValidTgts$` selector whose base is a card type, a subtype, `Card`, or
@@ -116,8 +117,9 @@ P/T statics. See the acceptance matrix in `forge/import.test.ts` for the exact
 fixtures this is checked against, and
 the "Deferred / explicitly unsupported" list at the top of `forge-import.ts`
 for what is intentionally out of scope (other `Dig` forms, including dynamic
-amounts and non-bottom dispositions; random/multi-card discard, alternate
-costs, hexproof/shroud/protection, and more).
+amounts and non-bottom dispositions; `Investigate` with an explicit count or
+player; random/multi-card discard, alternate costs, hexproof/shroud/protection,
+and more).
 
 The engine's own selector vocabulary is wider than the spellings the bridge
 accepts: `TargetSelectorDef` covers the source itself, card type, supertype,

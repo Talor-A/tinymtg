@@ -20,7 +20,7 @@
  * blinking, or exile); random or multi-card discard; alternate/additional
  * costs on spells, and activation costs other than fixed generic/coloured mana,
  * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
- * and dynamic amounts;
+ * and dynamic amounts; `Investigate` with an explicit count or player;
  * more than one target slot,
  * or an optional one; selector modifiers outside `YouCtrl`/`OppCtrl`, the exact
  * target form `Creature.Other+YouCtrl`, and `non`-prefixable color, card type,
@@ -74,6 +74,7 @@ import {
 	readObject,
 	selectorMatches,
 } from "../index.ts";
+import { CLUE_TOKEN } from "../tokens.ts";
 import type {
 	ForgeAbilityRecord,
 	ForgeCardAst,
@@ -731,6 +732,24 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				);
 			}
 			return { kind: "choose-from-top", player: who, amount, keep };
+		}
+		case "investigate": {
+			const badParams = checkParams(
+				params,
+				new Set([discriminatorLower, ...COMMON_EFFECT_PARAMS]),
+				where,
+			);
+			if (badParams) return badParams;
+			// With no Defined$ or Num$, Forge's Investigate API means its
+			// controller investigates once. Explicit variants reject above.
+			const controller = parsePlayer(undefined);
+			assert(controller !== null, "default effect player must be supported");
+			return {
+				kind: "create-token",
+				controller,
+				characteristics: cloneCharacteristics(CLUE_TOKEN),
+				amount: 1,
+			};
 		}
 		case "draw": {
 			const badParams = checkParams(

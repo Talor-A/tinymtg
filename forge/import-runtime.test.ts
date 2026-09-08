@@ -111,6 +111,7 @@ registerRuntimeFixture("m/mire_triton", "rt-mire-triton");
 registerRuntimeFixture("b/baleful_strix", "rt-baleful-strix");
 registerRuntimeFixture("p/pierce_strider", "rt-pierce-strider");
 registerRuntimeFixture("e/etched_familiar", "rt-etched-familiar");
+registerRuntimeFixture("t/thraben_inspector", "rt-thraben-inspector");
 registerRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter");
 registerRuntimeFixture("t/timberland_guide", "rt-timberland-guide");
 registerCardFixture("d/darksteel_relic");
@@ -369,6 +370,43 @@ describe("forge-import runtime: triggers", () => {
 		expect(targetOptions).toEqual(["Player 1"]);
 		expect(state.players[ALICE].life).toBe(20);
 		expect(state.players[BOB].life).toBe(17);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Thraben Inspector's imported ETB trigger creates one usable Clue", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		stockLibraries(state);
+		beginFirstTurn(state, agents);
+
+		const inspector = enterFromHand(
+			state,
+			"rt-thraben-inspector",
+			ALICE,
+			agents,
+		);
+		expect(state.battlefield).toEqual([inspector]);
+		expect(state.pendingTriggers).toHaveLength(1);
+
+		settlePriority(state, agents);
+		const clues = state.battlefield.filter(
+			(id) => name(state, id) === "Clue Token",
+		);
+		expect(clues).toHaveLength(1);
+		const clue = clues[0];
+		if (clue === undefined) throw new Error("Thraben Inspector made no Clue");
+		expect(permanent(state, clue)).toMatchObject({
+			controller: ALICE,
+			token: true,
+		});
+		expect(
+			readObject(createReadContext(state), clue).currentCharacteristics,
+		).toMatchObject({
+			types: ["artifact"],
+			subtypes: ["Clue"],
+			abilities: { activated: [abilityId("activated", "clue-token", 0)] },
+		});
+		expect(state.pendingTriggers).toHaveLength(0);
 		expect(state.stack).toHaveLength(0);
 	});
 
