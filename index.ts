@@ -2243,6 +2243,7 @@ export type Keyword =
 	| "reach"
 	| "haste"
 	| "vigilance"
+	| "flash"
 	/** A triggered ability keyword; see {@link printedKeywordTriggers}. */
 	| "prowess";
 
@@ -7002,9 +7003,9 @@ function effectToEvent(
 }
 
 /**
- * CR 601.3 / CR 307.1: when a spell may be *begun*. The engine has no flash and
- * no "as though" effects, so the whole rule is: instants any time you have
- * priority, everything else only at sorcery speed.
+ * CR 601.3 / CR 702.8: when a spell may be *begun*. Instants and spells with
+ * flash may be cast whenever their controller has priority. The engine has no
+ * "as though" effects; every other spell is restricted to sorcery timing.
  */
 function doTimingRestrictionsAllowCast(
 	characteristics: DeepReadOnly<CharacteristicsSnapshot>,
@@ -7026,6 +7027,7 @@ function doTimingRestrictionsAllowCast(
 		);
 		return true;
 	}
+	if (characteristics.keywords.includes("flash")) return true;
 
 	// CR 307.1: sorcery timing. A main phase of your own turn, with the stack
 	// empty. Every non-instant card type shares this restriction, so unlike the

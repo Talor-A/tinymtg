@@ -84,6 +84,7 @@ const POSITIVE_FIXTURES = [
 	"t/temple_of_epiphany",
 	"i/impulse",
 	"t/thrashing_brontodon",
+	"c/cathar_commando",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -1262,6 +1263,50 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				effects: [
 					{ kind: "destroy", object: { targetSlot: "target-1" } },
 				],
+			},
+		]);
+	});
+
+	test("Cathar Commando lowers Flash and its complete sacrifice-to-destroy ability", () => {
+		const result = importFixture("c/cathar_commando");
+		if (!result.ok) throw new Error("expected Cathar Commando to import");
+		expect(result.card).toMatchObject({
+			name: "Cathar Commando",
+			manaCost: { n: 1, w: 1 },
+			types: ["creature"],
+			subtypes: ["Human", "Soldier"],
+			keywords: ["flash"],
+			power: 3,
+			toughness: 1,
+		});
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: "Destroy target artifact or enchantment.",
+				cost: {
+					mana: { n: 1 },
+					tapSelf: false,
+					sacrifice: { selector: { kind: "self" }, amount: 1 },
+				},
+				targets: [
+					{
+						id: "target-1",
+						min: 1,
+						max: 1,
+						legal: {
+							kind: "permanent",
+							selector: {
+								kind: "any",
+								selectors: [
+									{ kind: "type", type: "artifact" },
+									{ kind: "type", type: "enchantment" },
+								],
+							},
+						},
+					},
+				],
+				effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
 			},
 		]);
 	});

@@ -123,7 +123,7 @@ subtype, color, and controller, combined with all/any/not to any depth. A
 hand-written card definition can use all of it.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 2,234 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 2,284 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.

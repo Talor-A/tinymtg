@@ -80,6 +80,7 @@ registerRuntimeFixture(
 	"t/thrashing_brontodon",
 	"rt-thrashing-brontodon",
 );
+registerRuntimeFixture("c/cathar_commando", "rt-cathar-commando");
 registerRuntimeFixture("s/selfless_savior", "rt-selfless-savior");
 registerRuntimeFixture("b/blazing_hellhound", "rt-blazing-hellhound");
 registerRuntimeFixture(
@@ -1114,6 +1115,45 @@ describe("forge-import runtime: activated abilities", () => {
 		settlePriority(state, [alice, new ScriptedAgent()]);
 		expect(state.players[ALICE].library[0]).toBe(top.id);
 		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Cathar Commando casts during an opponent's turn, then sacrifices itself to destroy", () => {
+		const state = setupMain();
+		expect(activePlayer(state)).toBe(ALICE);
+		const card = spawnCard(state, "rt-cathar-commando", BOB, "hand");
+		const target = spawnPermanent(state, "rt-glorious-anthem", ALICE);
+		state.players[BOB].manaPool.c = 2;
+		state.players[BOB].manaPool.w = 1;
+
+		expect(getObservableActions(state, BOB)).toContainEqual({
+			kind: "cast",
+			card: card.id,
+		});
+		const caster = new ScriptedAgent([], [], [{ kind: "cast", card: card.id }]);
+		settlePriority(state, [new ScriptedAgent(), caster]);
+		expect(caster.priorityActions).toHaveLength(0);
+		expect(state.players[BOB].manaPool).toMatchObject({ c: 1, w: 0 });
+
+		const commando = state.battlefield.find(
+			(id) => name(state, id) === "Cathar Commando",
+		);
+		if (commando === undefined)
+			throw new Error("Cathar Commando did not resolve to the battlefield");
+		const ability = abilityId("activated", "rt-cathar-commando", 0);
+		const bob = new ScriptedAgent();
+		bob.targetChoices.push({ type: "permanent", id: target.id });
+		executeAbilityAction(
+			state,
+			BOB,
+			{ kind: "activate ability", source: commando, ability },
+			[new ScriptedAgent(), bob],
+		);
+
+		expect(state.players[BOB].manaPool.c).toBe(0);
+		expect(state.battlefield).not.toContain(commando);
+		expect(state.battlefield).toContain(target.id);
+		settlePriority(state, passingAgents());
+		expect(state.battlefield).not.toContain(target.id);
 	});
 
 	for (const [targetCard, targetType] of [
