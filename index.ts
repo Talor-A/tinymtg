@@ -691,8 +691,8 @@ interface BeginStepEvent extends EventCommon {
 interface CreateTokenEvent extends EventCommon {
 	kind: "create token";
 	controller: PlayerId;
-	/** Registry definition used to construct the token's characteristic snapshot. */
-	tokenDefinitionId: string;
+	/** The characteristics stated by the token-creating instruction (CR 111.4). */
+	characteristics: CharacteristicsSnapshot;
 	amount: number;
 }
 
@@ -2680,11 +2680,11 @@ export function spawnPermanent(
 export function spawnToken(
 	state: GameState,
 	owner: PlayerId,
-	attributes: CharacteristicsSnapshot,
+	characteristics: CharacteristicsSnapshot,
 ): PermanentObject {
 	return spawnOnBattlefield(state, owner, {
 		kind: "token",
-		createdValues: attributes,
+		createdValues: characteristics,
 	});
 }
 
@@ -4238,7 +4238,7 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 		case "begin phase":
 			return `beginPhase(P${ev.player}, ${ev.phase})`;
 		case "create token":
-			return `token(${ev.amount}x ${ev.tokenDefinitionId} for P${ev.controller})`;
+			return `token(${ev.amount}x ${ev.characteristics.name} for P${ev.controller})`;
 		case "lose game":
 			return `loseGame(P${ev.player}: ${ev.reason})`;
 		case "declare attackers":
@@ -5529,7 +5529,7 @@ function executeIn(
 							cause: "effect",
 							toController: ev.controller,
 							createdToken: {
-								values: characteristicsFromCardDef(card(ev.tokenDefinitionId)),
+								values: cloneCharacteristics(ev.characteristics),
 								effectData: {},
 							},
 						},

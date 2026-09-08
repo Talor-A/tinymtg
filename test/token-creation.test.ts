@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import "../cards.ts";
 import {
+	abilityId,
+	type CharacteristicsSnapshot,
 	createReadContext,
 	newGame,
 	perform,
@@ -11,13 +13,23 @@ import {
 } from "../index.ts";
 import { ALICE, BOB, created, passingAgents } from "./utils/engine-helpers.ts";
 
-registerCard({
-	id: "test-artifact-token",
+const TEST_ARTIFACT_TOKEN: CharacteristicsSnapshot = {
+	kind: "non-creature",
 	name: "Test Artifact Token",
-	types: ["artifact"],
-	colors: [],
 	manaCost: "none",
-});
+	colors: [],
+	supertypes: [],
+	types: ["artifact"],
+	subtypes: [],
+	keywords: [],
+	abilities: {
+		static: [],
+		activated: [],
+		triggered: [],
+		replacement: [],
+		prohibition: [],
+	},
+};
 
 registerCard({
 	id: "test-trigger-token",
@@ -43,6 +55,46 @@ registerCard({
 	],
 });
 
+const TEST_TRIGGER_TOKEN: CharacteristicsSnapshot = {
+	kind: "creature",
+	name: "Test Trigger Token",
+	manaCost: "none",
+	colors: ["w"],
+	supertypes: [],
+	types: ["creature"],
+	subtypes: [],
+	keywords: [],
+	abilities: {
+		static: [],
+		activated: [],
+		triggered: [abilityId("triggered", "test-trigger-token", 0)],
+		replacement: [],
+		prohibition: [],
+	},
+	power: 1,
+	toughness: 1,
+};
+
+const COPY_TOKEN: CharacteristicsSnapshot = {
+	kind: "creature",
+	name: "Clone Token",
+	manaCost: "none",
+	colors: ["u"],
+	supertypes: [],
+	types: ["creature"],
+	subtypes: ["Shapeshifter"],
+	keywords: [],
+	abilities: {
+		static: [],
+		activated: [],
+		triggered: [],
+		replacement: [abilityId("replacement", "clone", 0)],
+		prohibition: [],
+	},
+	power: 0,
+	toughness: 0,
+};
+
 describe("token creation", () => {
 	test("runs enter-the-battlefield replacements before materializing the token", () => {
 		const state = newGame();
@@ -53,7 +105,7 @@ describe("token creation", () => {
 			{
 				kind: "create token",
 				controller: ALICE,
-				tokenDefinitionId: "test-artifact-token",
+				characteristics: TEST_ARTIFACT_TOKEN,
 				amount: 1,
 			},
 			passingAgents(),
@@ -78,7 +130,7 @@ describe("token creation", () => {
 			{
 				kind: "create token",
 				controller: ALICE,
-				tokenDefinitionId: "test-trigger-token",
+				characteristics: TEST_TRIGGER_TOKEN,
 				amount: 1,
 			},
 			passingAgents(),
@@ -102,7 +154,7 @@ describe("token creation", () => {
 			{
 				kind: "create token",
 				controller: ALICE,
-				tokenDefinitionId: "clone",
+				characteristics: COPY_TOKEN,
 				amount: 1,
 			},
 			passingAgents(),
@@ -128,7 +180,7 @@ describe("token creation", () => {
 			{
 				kind: "create token",
 				controller: ALICE,
-				tokenDefinitionId: "test-artifact-token",
+				characteristics: TEST_ARTIFACT_TOKEN,
 				amount: 1,
 			},
 			passingAgents(),

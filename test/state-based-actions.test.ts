@@ -3,12 +3,14 @@ import { ScriptedAgent } from "../agents.ts";
 import "../cards.ts"; // side effect: registers the card database
 import {
 	addFloating,
+	type CharacteristicsSnapshot,
 	checkStateBasedActions,
 	newGame,
 	perform,
 	permanent,
 	physicalCardId,
 	spawnPermanent,
+	spawnToken,
 } from "../index.ts";
 import {
 	type SyncAgents as Agents,
@@ -16,6 +18,26 @@ import {
 	BOB,
 	created,
 } from "./utils/engine-helpers.ts";
+
+const ZOMBIE_TOKEN: CharacteristicsSnapshot = {
+	kind: "creature",
+	name: "Zombie Token",
+	manaCost: "none",
+	colors: ["b"],
+	supertypes: [],
+	types: ["creature"],
+	subtypes: ["Zombie"],
+	keywords: [],
+	abilities: {
+		static: [],
+		activated: [],
+		triggered: [],
+		replacement: [],
+		prohibition: [],
+	},
+	power: 2,
+	toughness: 2,
+};
 
 describe("indestructible permanents", () => {
 	test("a failed destruction attempt doesn't consume a regeneration shield", () => {
@@ -77,9 +99,7 @@ describe("indestructible permanents", () => {
 describe("tokens leaving the battlefield", () => {
 	test("a token on the battlefield has no physical card ID", () => {
 		const state = newGame();
-		const token = spawnPermanent(state, "zombie-token", ALICE, {
-			token: true,
-		});
+		const token = spawnToken(state, ALICE, ZOMBIE_TOKEN);
 
 		expect(physicalCardId(token)).toBe(null);
 	});
@@ -87,9 +107,7 @@ describe("tokens leaving the battlefield", () => {
 	test("the zone change happens before the token ceases to exist as an SBA", () => {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const token = spawnPermanent(state, "zombie-token", ALICE, {
-			token: true,
-		});
+		const token = spawnToken(state, ALICE, ZOMBIE_TOKEN);
 
 		const result = perform(
 			state,
@@ -113,7 +131,7 @@ describe("tokens leaving the battlefield", () => {
 		if (!moved) return;
 		expect(physicalCardId(moved)).toBe(null);
 		if (moved.kind !== "nonbattlefield-token") return;
-		expect(moved.createdValues.name).toBe("Zombie");
+		expect(moved.createdValues.name).toBe("Zombie Token");
 
 		checkStateBasedActions(state, agents);
 		expect(state.objects.has(movedId)).toBe(false);

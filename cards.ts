@@ -283,17 +283,6 @@ export const AESTHIR_GLIDER = registerCard({
 		},
 	],
 });
-export const SAPROLING_TOKEN = registerCard({
-	id: "saproling-token",
-	name: "Saproling",
-	types: ["creature"],
-	subtypes: ["Saproling"],
-	colors: ["g"],
-	manaCost: "none",
-	power: 1,
-	toughness: 1,
-});
-
 /* ------------------------------------------------------------------ *
  * Zone-change replacement — the classic two-hate-cards conflict
  * ------------------------------------------------------------------ */
@@ -694,17 +683,6 @@ export function gatherSpecimens(you: PlayerId): {
  * pipeline to recurse and to carry the applied-set forward.
  * ------------------------------------------------------------------ */
 
-export const ZOMBIE_TOKEN = registerCard({
-	id: "zombie-token",
-	name: "Zombie",
-	types: ["creature"],
-	subtypes: ["Zombie"],
-	colors: ["b"],
-	manaCost: "none",
-	power: 2,
-	toughness: 2,
-});
-
 export const KALITAS = registerCard({
 	id: "kalitas",
 	name: "Kalitas, Traitor of Ghet",
@@ -741,8 +719,26 @@ export const KALITAS = registerCard({
 					{
 						kind: "create token",
 						controller: ctx.controller,
-						tokenDefinitionId: "zombie-token",
 						amount: 1,
+						characteristics: {
+							kind: "creature",
+							name: "Zombie Token",
+							manaCost: "none",
+							colors: ["b"],
+							supertypes: [],
+							types: ["creature"],
+							subtypes: ["Zombie"],
+							keywords: [],
+							abilities: {
+								static: [],
+								activated: [],
+								triggered: [],
+								replacement: [],
+								prohibition: [],
+							},
+							power: 2,
+							toughness: 2,
+						},
 					},
 				];
 			},

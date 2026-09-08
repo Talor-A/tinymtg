@@ -177,12 +177,20 @@ describe("when two effects change where a destroyed creature goes", () => {
 
 		const kalitasFirst = kalitasVsRip(["kalitas"]);
 		kalitasFirst.log.length = 0;
-		expect(
-			kalitasFirst.battlefield.filter(
-				(id) => permanent(kalitasFirst, id).representation.kind === "token",
-			).length,
-			"ALICE picks Kalitas: P0 gets a Zombie",
-		).toBe(1);
+		const tokens = kalitasFirst.battlefield.filter(
+			(id) => permanent(kalitasFirst, id).representation.kind === "token",
+		);
+		expect(tokens.length, "ALICE picks Kalitas: P0 gets a Zombie").toBe(1);
+		const tokenId = tokens[0];
+		if (tokenId === undefined)
+			throw new Error("Kalitas did not create a token");
+		const token = readObject(createReadContext(kalitasFirst), tokenId);
+		expect(token.currentCharacteristics).toMatchObject({
+			name: "Zombie Token",
+			subtypes: ["Zombie"],
+			power: 2,
+			toughness: 2,
+		});
 	});
 });
 
