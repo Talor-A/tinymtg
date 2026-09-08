@@ -670,7 +670,12 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				},
 				targets: [],
 				effects: [
-					{ kind: "add-counters-to-source", counter: "+1/+1", amount: 1 },
+					{
+						kind: "add counters",
+						object: "source",
+						counter: "+1/+1",
+						amount: 1,
+					},
 				],
 			},
 		]);

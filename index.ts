@@ -2054,8 +2054,9 @@ export type EffectDef<
 	| { kind: "destroy"; object: TargetSlotRef }
 	| { kind: "counter"; spell: TargetSlotRef }
 	| {
-			/** Put counters on the object that created this effect. */
-			kind: "add-counters-to-source";
+			kind: "add counters";
+			/** The permanent receiving the counters. */
+			object: "source" | TargetSlotRef;
 			counter: PermanentCounter;
 			amount: number;
 	  }
@@ -6440,7 +6441,8 @@ function resolveEffects(
 		const objectTarget =
 			(effect.kind === "destroy" ||
 				effect.kind === "return to hand" ||
-				effect.kind === "modify-pt") &&
+				effect.kind === "modify-pt" ||
+				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
 				: null;
@@ -6499,7 +6501,7 @@ function resolveEffects(
 			);
 			continue;
 		}
-		if (effect.kind === "add-counters-to-source") {
+		if (effect.kind === "add counters" && effect.object === "source") {
 			// A source that has left the battlefield cannot receive counters.
 			const source = maybePermanent(state, item.source);
 			if (!source) continue;
@@ -6706,8 +6708,18 @@ function effectToEvent(
 				spell: subject.id,
 				source: item.source,
 			};
-		case "add-counters-to-source":
-			throw new Error("source counter effects resolve directly");
+		case "add counters":
+			assert(
+				subject !== null && subject.type === "permanent",
+				"add counters requires a permanent object",
+			);
+			return {
+				kind: "add counters",
+				target: subject,
+				counter: effect.counter,
+				amount: effect.amount,
+				source: item.source,
+			};
 		case "return to hand": {
 			assert(
 				subject !== null && subject.type === "permanent",
@@ -6883,7 +6895,9 @@ function requiredTargetDefinition(
 		// An effect on its own source declares no target, so there is no slot to
 		// check it against.
 		if (
-			(effect.kind === "modify-pt" || effect.kind === "return to hand") &&
+			(effect.kind === "modify-pt" ||
+				effect.kind === "return to hand" ||
+				effect.kind === "add counters") &&
 			effect.object === "source"
 		)
 			return;
@@ -6897,6 +6911,7 @@ function requiredTargetDefinition(
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt" &&
+			effect.kind !== "add counters" &&
 			effect.kind !== "sacrifice"
 		)
 			return;
@@ -6907,7 +6922,8 @@ function requiredTargetDefinition(
 		const objectTarget =
 			(effect.kind === "destroy" ||
 				effect.kind === "return to hand" ||
-				effect.kind === "modify-pt") &&
+				effect.kind === "modify-pt" ||
+				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
 				: null;
@@ -6941,6 +6957,12 @@ function requiredTargetDefinition(
 			assert(
 				target.legal.kind === "permanent",
 				"temporary P/T change requires a permanent target",
+			);
+		}
+		if (effect.kind === "add counters") {
+			assert(
+				target.legal.kind === "permanent",
+				"adding counters requires a permanent target",
 			);
 		}
 		if (effect.kind === "sacrifice") {
@@ -7475,6 +7497,7 @@ function activateAbilityIn(
 				effect.kind === "counter" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
+				effect.kind === "add counters" ||
 				effect.kind === "sacrifice" ||
 				effect.kind === "create-token"
 			) {

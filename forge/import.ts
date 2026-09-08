@@ -379,19 +379,23 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			effect.kind !== "destroy" &&
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
-			effect.kind !== "modify-pt"
+			effect.kind !== "modify-pt" &&
+			effect.kind !== "add counters"
 		)
 			continue;
 		const objectTarget =
 			(effect.kind === "destroy" ||
 				effect.kind === "return to hand" ||
-				effect.kind === "modify-pt") &&
+				effect.kind === "modify-pt" ||
+				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
 				: null;
 		// An effect on its own source declares no target to check.
 		if (
-			(effect.kind === "return to hand" || effect.kind === "modify-pt") &&
+			(effect.kind === "return to hand" ||
+				effect.kind === "modify-pt" ||
+				effect.kind === "add counters") &&
 			effect.object === "source"
 		)
 			continue;
@@ -434,6 +438,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			return issue(
 				"UNSUPPORTED_TARGET",
 				"Pump requires a permanent target",
+				where,
+			);
+		}
+		if (effect.kind === "add counters" && target.legal.kind !== "permanent") {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"PutCounter requires a permanent target",
 				where,
 			);
 		}
@@ -785,7 +796,7 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					"PutCounter requires Defined$ Self, a supported CounterType$, and a positive CounterNum$",
 					where,
 				);
-			return { kind: "add-counters-to-source", counter, amount };
+			return { kind: "add counters", object: "source", counter, amount };
 		}
 		case "token": {
 			const badParams = checkParams(
@@ -2529,8 +2540,7 @@ export function lowerForgeCard(
 				trigger.condition.kind === "cast" &&
 				trigger.effects.some(
 					(effect) =>
-						effect.kind === "add-counters-to-source" ||
-						effect.kind === "damage",
+						effect.kind === "add counters" || effect.kind === "damage",
 				),
 		) &&
 		buffedBy?.kind === "scalar"
