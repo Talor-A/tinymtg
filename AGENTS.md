@@ -24,5 +24,4 @@ absolute correctness. Coding standards:
 
 ## Engine Implementation
 
-The engine is approximately 6k lines, with a final target of < 10k lines. This 
-is not very large, and the engine can be understood completely from one file.
+index.ts is not very large, the engine can be understood completely from one file.
