@@ -2241,6 +2241,7 @@ export type Keyword =
 	| "lifelink"
 	| "flying"
 	| "reach"
+	| "defender"
 	| "haste"
 	| "vigilance"
 	| "flash"
@@ -3193,8 +3194,8 @@ export function permanentsInPlay(
 /**
  * The single source of truth for who may be declared as an attacker (CR 508.1a):
  * a creature controlled by the declaring player, untapped, currently on the
- * battlefield, and not affected by summoning sickness. Battlefield order is
- * preserved.
+ * battlefield, without defender, and not affected by summoning sickness.
+ * Battlefield order is preserved.
  */
 export function eligibleAttackers(
 	state: ReadonlyGameState,
@@ -3210,6 +3211,7 @@ export function eligibleAttackers(
 			!object.tapped &&
 			snapshot?.kind === "permanent" &&
 			snapshot.currentCharacteristics.types.includes("creature") &&
+			!snapshot.currentCharacteristics.keywords.includes("defender") &&
 			(!object.summoningSick ||
 				snapshot.currentCharacteristics.keywords.includes("haste"))
 		);

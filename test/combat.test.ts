@@ -34,6 +34,7 @@ registerCardFixture("f/flying_men");
 registerCardFixture("g/giant_spider");
 registerCardFixture("r/raging_goblin");
 registerCardFixture("s/stealer_of_secrets");
+registerCardFixture("w/wall_of_omens");
 
 /** One attacker-eligible creature plus enough library to survive a full turn. */
 function setupAttackTurn(cardId: string): {
@@ -127,6 +128,28 @@ describe("declaring attackers", () => {
 			permanent(state, stayHome.id).tapped,
 			"not declared: untouched",
 		).toBe(false);
+	});
+
+	test("a creature with defender is neither offered nor accepted as an attacker", () => {
+		const { state, agents } = declareAttackersSetup();
+		const defender = spawnPermanent(state, "wall-of-omens", ALICE, {
+			summoningSick: false,
+		});
+
+		expect(eligibleAttackers(state, ALICE)).not.toContain(defender.id);
+		expect(() =>
+			perform(
+				state,
+				{
+					kind: "declare attackers",
+					player: ALICE,
+					attackers: [defender.id],
+				},
+				agents,
+			),
+		).toThrow(IllegalAttackDeclarationError);
+		expect(permanent(state, defender.id).attacking).toBe(false);
+		expect(permanent(state, defender.id).tapped).toBe(false);
 	});
 
 	test("rejects a tapped creature", () => {

@@ -156,17 +156,16 @@ of eligible creatures and commits it atomically:
 - this is deliberately a two-player-only engine, so the defending player is
   always the other player — there is no `AttackTarget` or defending-player
   state;
-- every creature the active player controls is treated as if it had haste, so
-  any untapped controlled creature is eligible regardless of how long it has
-  been under that control (no summoning-sickness or continuous-control
-  tracking);
+- an untapped creature the active player controls is eligible if it does not
+  have defender and either began its controller's turn under their control or
+  has haste;
 - selected attackers become tapped and `attacking` until end of combat, when
   `attacking` (and `blocking`) is cleared on every permanent;
 - an illegal declaration (wrong step, wrong player, duplicate IDs, or an
   ineligible ID) throws `IllegalAttackDeclarationError` and changes nothing.
 
-Attack restrictions, requirements, and costs, and non-player defenders (e.g.
-planeswalkers and battles) are not implemented. The defending player may assign
+Other attack restrictions, requirements, and costs, and non-player defenders
+(e.g. planeswalkers and battles) are not implemented. The defending player may assign
 each untapped creature they control to at most one attacker, with multiple
 blockers allowed on one attacker. Aesthir Glider's unconditional self
 restriction changes blocker eligibility. A creature with flying can be blocked
