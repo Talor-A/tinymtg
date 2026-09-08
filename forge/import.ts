@@ -16,7 +16,7 @@
  * the concrete subset documented in the acceptance matrix in README.md lowers.
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
- * temporary P/T effects; random or multi-card discard; alternate/additional
+ * random or multi-card discard; alternate/additional
  * costs on spells, and activation costs other than fixed generic/coloured mana,
  * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
  * and dynamic amounts;
@@ -362,11 +362,18 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 		if (
 			effect.kind !== "damage" &&
 			effect.kind !== "destroy" &&
-			effect.kind !== "counter"
+			effect.kind !== "counter" &&
+			effect.kind !== "modify-pt"
 		)
 			continue;
+		let effectSlot: string;
+		if (effect.kind === "modify-pt") {
+			// An effect on its own source declares no target to check.
+			if (effect.object === "source") continue;
+			effectSlot = effect.object.targetSlot;
+		} else effectSlot = effect.targetSlot;
 		const target = targets[0];
-		if (targets.length !== 1 || !target || effect.targetSlot !== target.id) {
+		if (targets.length !== 1 || !target || effectSlot !== target.id) {
 			return issue(
 				"UNSUPPORTED_TARGET",
 				"targeted effects must reference the declared target slot",
@@ -384,6 +391,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			return issue(
 				"UNSUPPORTED_TARGET",
 				"Counter requires a spell target",
+				where,
+			);
+		}
+		if (effect.kind === "modify-pt" && target.legal.kind !== "permanent") {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"Pump requires a permanent target",
 				where,
 			);
 		}
@@ -574,6 +588,58 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			);
 			if (badParams) return badParams;
 			return { kind: "counter", targetSlot: TARGET_SLOT };
+		}
+		case "pump": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"validtgts",
+					"tgtprompt",
+					"numatt",
+					"numdef",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const power = signedInteger(getForgeParam(params, "NumAtt"));
+			const toughness = signedInteger(getForgeParam(params, "NumDef"));
+			if (power === null || toughness === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"Pump requires fixed NumAtt and NumDef values",
+					where,
+				);
+			// `Defined$ Self` pumps the ability's own source ("it gets +1/+1");
+			// `ValidTgts$` pumps a chosen target. Anything else -- both, neither,
+			// or another Defined -- is outside the supported subset.
+			const defined = getForgeParam(params, "Defined");
+			const validTargets = getForgeParam(params, "ValidTgts");
+			if (defined === "Self" && validTargets === undefined) {
+				return {
+					kind: "modify-pt",
+					object: "source",
+					power,
+					toughness,
+					duration: "until-end-of-turn",
+				};
+			}
+			if (defined === undefined && validTargets !== undefined) {
+				return {
+					kind: "modify-pt",
+					object: { targetSlot: TARGET_SLOT },
+					power,
+					toughness,
+					duration: "until-end-of-turn",
+				};
+			}
+			return issue(
+				"UNSUPPORTED_PARAMETER",
+				"Pump must either define Self or declare targets",
+				where,
+			);
 		}
 		default:
 			return issue(

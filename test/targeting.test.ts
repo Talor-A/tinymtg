@@ -230,7 +230,7 @@ registerCard({
 		effects: [
 			{
 				kind: "modify-pt",
-				targetSlot: "target-1",
+				object: { targetSlot: "target-1" },
 				power: 3,
 				toughness: 3,
 				duration: "until-end-of-turn",
@@ -403,19 +403,30 @@ describe("single-target spell casting", () => {
 		);
 	});
 
-	test("a deferred P/T effect fails before payment", () => {
+	test("a temporary P/T effect resolves into the layer system", () => {
 		const { state, spell } = setupCast("target-test-deferred-pt");
-		spawnPermanent(state, "grizzly-bears", 1);
-		const before = structuredClone(state);
-		expect(() =>
-			executeCastAction(
-				state,
-				0,
-				{ kind: "cast", card: spell.id },
-				passingAgents(),
-			),
-		).toThrow(/not implemented/);
-		expect(state).toEqual(before);
+		const bears = spawnPermanent(state, "grizzly-bears", 1);
+		castAt(state, spell.id, { type: "permanent", id: bears.id });
+		settlePriority(state, passingAgents());
+
+		const snapshot = readObject(createReadContext(state), bears.id);
+		expect(snapshot.currentCharacteristics).toMatchObject({
+			kind: "creature",
+			power: 5,
+			toughness: 5,
+		});
+		expect(state.temporaryEffects).toHaveLength(1);
+		// The record references the effect that created it; the +3/+3 lives in
+		// that definition, not denormalized into game state.
+		expect(state.temporaryEffects[0]).toMatchObject({
+			source: {
+				origin: "spell-effect",
+				cardId: "target-test-deferred-pt",
+				effectIndex: 0,
+			},
+			bindings: { "target-1": { type: "permanent", id: bears.id } },
+			duration: "until-end-of-turn",
+		});
 	});
 
 	test("Murder resolves through the destroy pipeline, including indestructible", () => {

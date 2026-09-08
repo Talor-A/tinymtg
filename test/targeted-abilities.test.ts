@@ -1,15 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { prismaticStrands } from "../cards.ts";
 import {
 	type ActivatedAbilityDef,
 	type Agent,
 	type AnyActivatedAbilityDefinition,
 	abilityId,
-	addFloating,
+	addTemporaryEffect,
 	advanceWithReplay,
 	ChoiceController,
 	type ChoiceRequest,
+	createReadContext,
 	type EntityRef,
 	executeAbilityAction,
 	type GameState,
@@ -22,6 +23,7 @@ import {
 	type PlayerId,
 	type PlayerView,
 	perform,
+	readObject,
 	registerCard,
 	type SyncAgent,
 	settlePriority,
@@ -364,6 +366,39 @@ function activateAt(
 	expect(agents[0].targetChoices).toHaveLength(0);
 }
 
+describe("self-pumping activated abilities", () => {
+	test("Zof Shade's activated pump applies through the layer system", () => {
+		const state = mainPhaseGame();
+		const shade = spawnPermanent(state, "zof-shade", 0);
+		state.players[0].manaPool.b = 1;
+		state.players[0].manaPool.c = 2;
+
+		const read = () =>
+			readObject(createReadContext(state), shade.id).currentCharacteristics;
+		expect(read()).toMatchObject({ power: 2, toughness: 2 });
+
+		executeAbilityAction(
+			state,
+			0,
+			{
+				kind: "activate ability",
+				source: shade.id,
+				ability: abilityId("activated", "zof-shade", 0),
+			},
+			passingAgents(),
+		);
+		settlePriority(state, passingAgents());
+
+		// The bonus comes from the ability's own definition, reached through the
+		// temporary effect's reference to it.
+		expect(read()).toMatchObject({ power: 4, toughness: 4 });
+		expect(state.temporaryEffects).toHaveLength(1);
+		expect(state.temporaryEffects[0]).toMatchObject({
+			source: { origin: "ability-effect", category: "activated" },
+		});
+	});
+});
+
 describe("targeted activated abilities", () => {
 	test("Prodigal Sorcerer offers every any-target and damages the one chosen", () => {
 		const state = mainPhaseGame();
@@ -562,7 +597,7 @@ describe("an ability outliving its source", () => {
 		// The source is blue when activated and red when it leaves.
 		spawnPermanent(state, "test-red-creatures", 0);
 		// "Prevent all damage red sources would deal this turn."
-		addFloating(state, 1, "prismaticStrands", { color: "r" });
+		addTemporaryEffect(state, 1, prismaticStrands("r"));
 		perform(
 			state,
 			{ kind: "destroy", object: pinger.id, noRegen: false },

@@ -4,6 +4,7 @@ import "../cards.ts";
 import type { GameState, ObjectId } from "../index.ts";
 import {
 	advance,
+	createReadContext,
 	eligibleAttackers,
 	eligibleBlockers,
 	gameOver,
@@ -13,6 +14,7 @@ import {
 	newGame,
 	perform,
 	permanent,
+	readObject,
 	spawnCard,
 	spawnPermanent,
 	winner,
@@ -674,6 +676,26 @@ describe("declaring attackers during normal progression", () => {
 			permanent(state, attacker.id).tapped,
 			"tapped is untouched by end combat",
 		).toBe(true);
+	});
+
+	test("a self-pumping attack trigger applies before combat damage", () => {
+		const { state, attacker: veteran } = setupAttackTurn("benalish-veteran");
+		const agents: Agents = [
+			new ScriptedAgent([], [], [], [[veteran.id]]),
+			new ScriptedAgent(),
+		];
+
+		playOneTurn(state, agents);
+
+		// A 2/2 that pumps itself to 3/3 on attack deals 3.
+		expect(state.players[BOB].life).toBe(17);
+		// The bonus is gone once the turn ends, and the printed 2/2 is back.
+		expect(
+			readObject(createReadContext(state), veteran.id).currentCharacteristics,
+		).toMatchObject({ power: 2, toughness: 2 });
+		expect(state.temporaryEffects).toHaveLength(0);
+		expect(state.pendingTriggers).toHaveLength(0);
+		expect(state.stack).toHaveLength(0);
 	});
 
 	test("a creature not selected to attack stays untapped and unattacking", () => {

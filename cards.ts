@@ -4,6 +4,7 @@ import type {
 	Color,
 	EffectCtx,
 	GameEvent,
+	NewTemporaryEffect,
 	ObjectId,
 	PermanentCounter,
 	PermanentCounterBag,
@@ -49,6 +50,8 @@ registerCardFixture("a/acolyte_of_aclazotz");
 registerCardFixture("c/counterspell");
 registerCardFixture("b/beast_whisperer");
 registerCardFixture("c/clone");
+registerCardFixture("b/benalish_veteran");
+registerCardFixture("z/zof_shade");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family
@@ -663,38 +666,47 @@ export function preventNextDamageShield(
 		| { type: "player"; player: PlayerId }
 		| { type: "permanent"; id: ObjectId },
 	n: number,
-): { factory: string; params: Record<string, number | string> } {
+): NewTemporaryEffect {
 	return {
-		factory: "preventNextDamage",
-		params:
-			target.type === "player"
-				? { targetType: "player", targetPlayer: target.player, amount: n }
-				: { targetType: "permanent", targetId: target.id, amount: n },
+		source: {
+			origin: "builtin",
+			builtin: { kind: "prevent-next-damage", target, remaining: n },
+		},
+		bindings: {},
 	};
 }
 
 /** Prismatic Strands: prevent all damage sources of the chosen color would deal. */
-export function prismaticStrands(color: Color): {
-	factory: string;
-	params: Record<string, number | string>;
-} {
-	return { factory: "prismaticStrands", params: { color } };
+export function prismaticStrands(color: Color): NewTemporaryEffect {
+	return {
+		source: {
+			origin: "builtin",
+			builtin: { kind: "prevent-color-damage", color },
+		},
+		bindings: {},
+	};
 }
 
 /** "The next time this creature would be destroyed this turn, regenerate it instead." */
-export function regenerationShield(target: ObjectId): {
-	factory: string;
-	params: Record<string, number | string>;
-} {
-	return { factory: "regenerationShield", params: { target } };
+export function regenerationShield(target: ObjectId): NewTemporaryEffect {
+	return {
+		source: {
+			origin: "builtin",
+			builtin: { kind: "regeneration-shield", target, used: false },
+		},
+		bindings: {},
+	};
 }
 
 /** Gather Specimens — the control-changing tier (CR 616.1b). */
-export function gatherSpecimens(you: PlayerId): {
-	factory: string;
-	params: Record<string, number | string>;
-} {
-	return { factory: "gatherSpecimens", params: { you } };
+export function gatherSpecimens(): NewTemporaryEffect {
+	return {
+		source: {
+			origin: "builtin",
+			builtin: { kind: "control-entering-creatures" },
+		},
+		bindings: {},
+	};
 }
 
 /* ------------------------------------------------------------------ *

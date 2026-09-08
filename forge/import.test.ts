@@ -67,6 +67,7 @@ const POSITIVE_FIXTURES = [
 	"c/counterspell",
 	"b/beast_whisperer",
 	"c/clone",
+	"b/benalish_veteran",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -802,6 +803,31 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			},
 		]);
 	});
+
+	test("Giant Growth lowers to a temporary P/T instruction", () => {
+		const result = importFixture("g/giant_growth");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.spell).toMatchObject({
+			targets: [
+				{
+					id: "target-1",
+					legal: {
+						kind: "permanent",
+						selector: { kind: "type", type: "creature" },
+					},
+				},
+			],
+			effects: [
+				{
+					kind: "modify-pt",
+					object: { targetSlot: "target-1" },
+					power: 3,
+					toughness: 3,
+					duration: "until-end-of-turn",
+				},
+			],
+		});
+	});
 });
 
 /* ------------------------------------------------------------------------- */
@@ -809,7 +835,6 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 /* ------------------------------------------------------------------------- */
 
 const NEGATIVE_FIXTURES = [
-	"g/giant_growth",
 	"b/blind_obedience",
 	"w/walking_ballista",
 	"r/rest_in_peace",

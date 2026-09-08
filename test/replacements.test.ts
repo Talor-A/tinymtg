@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts"; // side effect: registers the card database
+import {
+	gatherSpecimens,
+	preventNextDamageShield,
+	prismaticStrands,
+	regenerationShield,
+} from "../cards.ts"; // also a side effect: registers the card database
 import type { Agent, GameState, ObjectId, SyncAgent } from "../index.ts";
 import {
-	addFloating,
+	addTemporaryEffect,
 	affectedPlayer,
 	ChoiceController,
 	ChoicePendingError,
@@ -90,13 +95,7 @@ describe("destroy event success", () => {
 			tapped: false,
 		});
 		permanent(state, bears.id).damage = 2;
-		addFloating(
-			state,
-			ALICE,
-			"regenerationShield",
-			{ target: bears.id },
-			{ data: { used: 0 } },
-		);
+		addTemporaryEffect(state, ALICE, regenerationShield(bears.id));
 
 		const result = perform(
 			state,
@@ -284,12 +283,10 @@ describe("choosing between damage replacement and prevention effects", () => {
 		];
 		spawnPermanent(state, "furnace-of-rath", ALICE);
 		const source = spawnPermanent(state, "eager-cadet", ALICE);
-		addFloating(
+		addTemporaryEffect(
 			state,
 			BOB,
-			"preventNextDamage",
-			{ targetType: "player", targetPlayer: BOB, amount: 3 },
-			{ data: { remaining: 3 } },
+			preventNextDamageShield({ type: "player", player: BOB }, 3),
 		);
 		perform(
 			state,
@@ -333,14 +330,10 @@ describe("choosing between damage replacement and prevention effects", () => {
 		];
 		spawnPermanent(state, "furnace-of-rath", ALICE);
 		const pyro = spawnPermanent(state, "eager-cadet", 0);
-		addFloating(
+		addTemporaryEffect(
 			state,
 			BOB,
-			"preventNextDamage",
-			{ targetType: "player", targetPlayer: BOB, amount: 3 },
-			{
-				data: { remaining: 3 },
-			},
+			preventNextDamageShield({ type: "player", player: BOB }, 3),
 		);
 		perform(
 			state,
@@ -387,7 +380,7 @@ describe("choosing between damage replacement and prevention effects", () => {
 		);
 		expect(state.players[1].life, "ALICE life untouched").toBe(20);
 
-		addFloating(state, 1, "prismaticStrands", { color: "r" });
+		addTemporaryEffect(state, 1, prismaticStrands("r"));
 		perform(
 			state,
 			{
@@ -461,7 +454,7 @@ describe("interacting effects as permanents enter", () => {
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		spawnPermanent(state, "root-maze", 0);
 		spawnPermanent(state, "baby-mycosynth-lattice", 0);
-		addFloating(state, 0, "gatherSpecimens", { you: 0 });
+		addTemporaryEffect(state, 0, gatherSpecimens());
 		const bears = spawnCard(state, "grizzly-bears", 1, "hand");
 
 		const r = perform(

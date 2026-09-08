@@ -7,7 +7,6 @@ import {
 	type ChoiceSource,
 	type ChoiceTranscript,
 } from "./choices.ts";
-import * as EFFECTS from "./effects";
 import { includes } from "./lib/array.ts";
 
 export {
@@ -1246,6 +1245,24 @@ function buildFilteredGameView(
 			}
 		}
 
+		if (layer === "7c-modify-power-toughness") {
+			for (const effect of state.temporaryEffects) {
+				const definition = temporaryEffectDefinition(effect);
+				if (definition?.kind !== "modify-pt") continue;
+				const slot =
+					definition.object === "source"
+						? SELF_SLOT
+						: definition.object.targetSlot;
+				const bound = effect.bindings[slot];
+				assertDefined(bound, `temporary P/T effect has no binding for ${slot}`);
+				if (bound.type !== "permanent") continue;
+				const current = characteristics.get(bound.id);
+				if (!current || current.kind !== "creature") continue;
+				current.power += definition.power;
+				current.toughness += definition.toughness;
+			}
+		}
+
 		// CR 613.4: +1/+1 and -1/-1 counters apply in layer 7c, so they are
 		// scheduled by the layer list like everything else -- notably before the
 		// 7d swap.
@@ -1480,7 +1497,7 @@ export interface GameState {
 	stack: StackEntry[];
 	/** Trigger occurrences waiting for the next time a player would receive priority. */
 	pendingTriggers: PendingTrigger[];
-	floating: FloatingEffect[];
+	temporaryEffects: TemporaryEffect[];
 	/** Block declarations for the current combat, in damage-assignment order. */
 	blockAssignments: BlockAssignment[];
 	/** Turns whose phases have all been consumed; 0 during the first turn. */
@@ -1814,44 +1831,128 @@ export interface BoundProhibition {
 }
 
 /* ------------------------------------------------------------------ *
- * Floating Effects
+ * Temporary continuous effects
  *
- * These are effects that are not attached to a specific object. Generally,
- * they are something like: "prevent the next N damage", or "until end of turn,
- * replace X with Y".
- *
- * TODO: specific rules reference.
+ * A resolving spell or ability can create a continuous effect that is not an
+ * ability of an object (CR 611.2). Keep its rules data directly in game state.
+ * The discriminant says which rules consumer interprets it: the layer walk
+ * handles characteristic changes and the replacement pipeline handles
+ * replacement and prevention effects.
  * ------------------------------------------------------------------ */
 
-interface FloatingEffect {
+interface TemporaryEffectCommon {
 	id: EffectId;
 	controller: PlayerId;
-	expires: "endOfTurn" | "never";
-	/** Consumed shields set this; expired effects are swept out of the registry. */
-	expired: boolean;
-	factory: keyof typeof EFFECTS;
-	params: Record<string, number | string>;
-	/** Mutable scratch space for shields ("prevent the next N damage"). */
-	data: Record<string, number>;
+	duration: "until-end-of-turn";
 }
 
-export function addFloating(
+/**
+ * Where a temporary effect's definition lives, as serializable data.
+ *
+ * A resolving spell or ability creates the effect, so it always has a source
+ * to point back at: `spell-effect` names the very `EffectDef` that created it,
+ * the same `cardId:index` scheme {@link AbilityId} uses for possessed
+ * abilities. The definition stays in the registry and is never cloned, so a
+ * new card that pumps or shields is registry data rather than a new engine
+ * variant.
+ *
+ * `builtin` covers the small set of engine-authored effects that no card
+ * creates yet. These are the prevention and control effects carried over from
+ * the old floating-effect registry; nothing but tests constructs them today.
+ * A card that needs one should gain a spell effect instead of extending this.
+ */
+export type TemporaryEffectSource =
+	| { origin: "spell-effect"; cardId: string; effectIndex: number }
+	| {
+			origin: "ability-effect";
+			category: "triggered" | "activated";
+			abilityId: string;
+			effectIndex: number;
+	  }
+	| { origin: "builtin"; builtin: BuiltinTemporaryEffect };
+
+export type BuiltinTemporaryEffect =
+	| { kind: "prevent-next-damage"; target: EntityRef; remaining: number }
+	| { kind: "prevent-color-damage"; color: Color }
+	| { kind: "regeneration-shield"; target: ObjectId; used: boolean }
+	| { kind: "control-entering-creatures" };
+
+/**
+ * One instantiation of a continuous effect that is not possessed by an object
+ * (CR 611.2). The definition comes from {@link TemporaryEffectSource}; this
+ * record carries only what is specific to this instance: who controls it, when
+ * it ends, and the targets its creating effect bound.
+ *
+ * Which rules consumer reads it follows from the definition, not from a field
+ * here: a characteristic-changing `EffectDef` is applied by the layer walk, and
+ * a replacement definition is offered to the replacement pipeline.
+ */
+export type TemporaryEffect = TemporaryEffectCommon & {
+	source: TemporaryEffectSource;
+	/**
+	 * What the creating effect resolved its subjects to, by target slot.
+	 *
+	 * An effect that names its own source ("it gets +1/+1") binds
+	 * {@link SELF_SLOT}: the object is resolved once, when the effect is
+	 * created, because the source may leave the battlefield before the layer
+	 * walk next runs and the bonus outlives it either way.
+	 */
+	bindings: Record<string, EntityRef>;
+};
+
+/** Binding key for an effect that affects the object that created it. */
+export const SELF_SLOT = "self";
+
+export type NewTemporaryEffect = Omit<
+	TemporaryEffect,
+	keyof TemporaryEffectCommon
+>;
+
+export function addTemporaryEffect(
 	state: GameState,
 	controller: PlayerId,
-	factory: keyof typeof EFFECTS,
-	params: Record<string, number | string> = {},
-	opts: { expires?: "endOfTurn" | "never"; data?: Record<string, number> } = {},
+	effect: NewTemporaryEffect,
 ): void {
 	state.revision++;
-	state.floating.push({
-		id: eid(`floating:${state.nextObjectId++}`),
+	state.temporaryEffects.push({
+		id: eid(`temporary:${state.nextObjectId++}`),
 		controller,
-		expires: opts.expires ?? "endOfTurn",
-		expired: false,
-		factory,
-		params,
-		data: opts.data ?? {},
+		duration: "until-end-of-turn",
+		...effect,
 	});
+}
+
+/**
+ * The `EffectDef` a spell-effect-sourced temporary effect was created by.
+ *
+ * Returns null for builtin effects, which have no card definition behind them.
+ */
+export function temporaryEffectDefinition(
+	effect: TemporaryEffect,
+): EffectDef<TriggerEffectPlayer> | null {
+	const source = effect.source;
+	if (source.origin === "builtin") return null;
+	const effects: EffectDef<TriggerEffectPlayer>[] = (() => {
+		if (source.origin === "spell-effect") {
+			const spell = card(source.cardId).spell;
+			assertDefined(
+				spell,
+				`temporary effect source ${source.cardId} has no spell definition`,
+			);
+			return spell.effects;
+		}
+		const ability = getAbilityDefinition(
+			source.category,
+			source.abilityId as AbilityId<"triggered" | "activated">,
+		);
+		// Mana abilities declare `effects?: never`, so they cannot be the source
+		// of a temporary effect.
+		assertDefined(ability.effects, "ability source has no effects");
+		return ability.effects;
+	})();
+	const definition = effects[source.effectIndex];
+	assertDefined(definition, "unknown temporary effect definition");
+	return definition;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1892,7 +1993,12 @@ export type EffectDef<
 	  }
 	| {
 			kind: "modify-pt";
-			targetSlot: string;
+			/**
+			 * What gets the bonus: the object whose effect this is ("it gets
+			 * +1/+1"), or the creature bound to a declared target slot ("target
+			 * creature gets +3/+3").
+			 */
+			object: "source" | { targetSlot: string };
 			power: number;
 			toughness: number;
 			duration: "until-end-of-turn";
@@ -2564,7 +2670,7 @@ export function newGame(seed = 0): GameState {
 		battlefield: [],
 		stack: [],
 		pendingTriggers: [],
-		floating: [],
+		temporaryEffects: [],
 		blockAssignments: [],
 		completedTurns: 0,
 		turnScheduler: {
@@ -3171,7 +3277,7 @@ export function etbPreview(
 		pendingTriggers: state.pendingTriggers.map(
 			(trigger) => structuredClone(trigger) as PendingTrigger,
 		),
-		floating: [...state.floating] as FloatingEffect[],
+		temporaryEffects: state.temporaryEffects.map((effect) => ({ ...effect })),
 		log: [],
 	};
 	let id: ObjectId;
@@ -3697,19 +3803,114 @@ export function collectReplacements(
 		}
 	}
 
-	for (const fx of state.floating) {
-		if (fx.expired) continue;
-		const factory = EFFECTS[fx.factory];
-		if (!factory)
-			throw new Error(`unknown floating effect factory: ${fx.factory}`);
-		const def = factory(fx.params);
+	for (const effect of state.temporaryEffects) {
+		// A spell-effect-sourced temporary effect is defined by an `EffectDef`.
+		// None of those are replacement effects today -- `modify-pt` is a
+		// characteristic change the layer walk applies -- so only builtins reach
+		// the replacement pipeline.
+		if (effect.source.origin !== "builtin") continue;
+		// `collectReplacements` reads a ReadonlyGameState, but a consumed shield
+		// has to record its own consumption. `onApplied` runs only while the
+		// live state is being mutated, so the write is safe; the cast is what
+		// makes it expressible.
+		const builtin = effect.source.builtin as BuiltinTemporaryEffect;
+		let def: ReplacementEffectDefinition;
+		switch (builtin.kind) {
+			case "control-entering-creatures":
+				def = {
+					label: `control-entering-creatures:${effect.controller}`,
+					layer: "control",
+					functionsFrom: "any",
+					text: "If a creature would enter the battlefield under an opponent's control this turn, it enters under your control instead.",
+					applies(ev, ctx) {
+						if (ev.kind !== "change zone" || ev.to !== "battlefield")
+							return false;
+						if (ev.toController === effect.controller) return false;
+						return etbPreview(
+							ctx.state,
+							ev,
+						).currentCharacteristics.types.includes("creature");
+					},
+					replace: (ev) =>
+						ev.kind === "change zone"
+							? [{ ...ev, toController: effect.controller }]
+							: [ev],
+				};
+				break;
+			case "prevent-next-damage": {
+				const target = builtin.target;
+				def = {
+					label: `prevent-next-damage:${builtin.remaining}`,
+					layer: "other",
+					isPreventionEffect: true,
+					functionsFrom: "any",
+					text: `Prevent the next ${builtin.remaining} damage that would be dealt to ${
+						target.type === "player" ? `P${target.player}` : `#${target.id}`
+					} this turn.`,
+					applies(ev) {
+						if (ev.kind !== "damage" || ev.amount <= 0) return false;
+						if (builtin.remaining <= 0) return false;
+						return target.type === "player"
+							? ev.target.type === "player" &&
+									ev.target.player === target.player
+							: ev.target.type === "permanent" && ev.target.id === target.id;
+					},
+					replace(ev) {
+						if (ev.kind !== "damage") return [ev];
+						const remaining =
+							ev.amount - Math.min(ev.amount, builtin.remaining);
+						return remaining > 0 ? [{ ...ev, amount: remaining }] : [];
+					},
+					onApplied(ev) {
+						assert(ev.kind === "damage");
+						// Mutable instance state lives on the record, not the definition.
+						builtin.remaining = Math.max(0, builtin.remaining - ev.amount);
+					},
+				};
+				break;
+			}
+			case "prevent-color-damage":
+				def = {
+					label: `prevent-color-damage:${builtin.color}`,
+					layer: "other",
+					isPreventionEffect: true,
+					functionsFrom: "any",
+					text: `Prevent all damage that ${builtin.color} sources would deal this turn.`,
+					applies: (ev) =>
+						ev.kind === "damage" && ev.sourceColors.includes(builtin.color),
+					replace: () => [],
+				};
+				break;
+			case "regeneration-shield":
+				def = {
+					label: `regeneration-shield:${builtin.target}`,
+					layer: "other",
+					functionsFrom: "any",
+					text: `Regeneration shield on #${builtin.target}.`,
+					applies: (ev) =>
+						ev.kind === "destroy" &&
+						ev.object === builtin.target &&
+						!ev.noRegen &&
+						!builtin.used,
+					replace: (ev) =>
+						ev.kind === "destroy"
+							? [{ kind: "regenerate", object: ev.object }]
+							: [ev],
+					onApplied: () => {
+						builtin.used = true;
+					},
+				};
+				break;
+			default:
+				assertNever(builtin);
+		}
 		out.push({
-			id: fx.id,
+			id: effect.id,
 			def,
 			source: null,
-			controller: fx.controller,
-			data: fx.data,
-			label: `(floating) ${def.text}`,
+			controller: effect.controller,
+			data: {},
+			label: `(temporary) ${def.text}`,
 		});
 	}
 
@@ -4432,18 +4633,19 @@ function checkStateBasedActionsIn(
 
 		// Prefilter for the permanent SBAs below. Skipping the sweep is only sound
 		// because every continuous effect in the engine comes from a *static
-		// ability* possessed by some object: floating effects are `ReplacementDef`s
-		// and cannot change characteristics. If a floating continuous effect ever
-		// exists (say, "target creature gets -3/-3 until end of turn"), this
-		// prefilter will silently stop noticing creatures that died to it, and
-		// `hasCharacteristicChangingStatic` must grow to cover `state.floating`.
+		// ability* possessed by some object, or from a temporary P/T effect created
+		// by a resolving spell or ability.
 		const hasCharacteristicChangingStatic = anyPossessedCharacteristicStatic(
 			state,
 			(effect) => includes(CHARACTERISTIC_CHANGING_LAYERS, effect.layer),
 		);
+		const hasTemporaryPtChange = state.temporaryEffects.some(
+			(effect) => temporaryEffectDefinition(effect)?.kind === "modify-pt",
+		);
 
 		const needsPermanentSbas =
 			hasCharacteristicChangingStatic ||
+			hasTemporaryPtChange ||
 			state.battlefield.some((id) => {
 				const object = maybePermanent(state, id);
 				if (!object) return false;
@@ -6043,6 +6245,43 @@ function sourceInformation(
 	return lastKnown;
 }
 
+/**
+ * Where the effects being resolved are defined, as a serializable reference a
+ * temporary effect can hold.
+ *
+ * A spell points at its card's `spell.effects`; an ability points at its own
+ * `cardId:index` registry entry, which is where its effects live.
+ */
+function resolvingEffectSource(
+	state: GameState,
+	item: ResolutionSource,
+	effectIndex: number,
+): TemporaryEffectSource {
+	const ability = item.ability;
+	if (ability) {
+		return {
+			origin: "ability-effect",
+			category:
+				ability.kind === "triggered ability" ? "triggered" : "activated",
+			abilityId:
+				ability.kind === "triggered ability"
+					? ability.triggerId
+					: ability.abilityId,
+			effectIndex,
+		};
+	}
+	const object = maybeObject(state, item.source);
+	assert(
+		object?.kind === "spell" && object.representation.kind === "card",
+		"a temporary effect must come from a card spell or an ability",
+	);
+	return {
+		origin: "spell-effect",
+		cardId: object.representation.cardId,
+		effectIndex,
+	};
+}
+
 function resolveEffects(
 	state: GameState,
 	choices: AnyChoiceController,
@@ -6050,7 +6289,7 @@ function resolveEffects(
 	effects: EffectDef<TriggerEffectPlayer>[],
 	scope: Scope,
 ): void {
-	for (const effect of effects) {
+	for (const [effectIndex, effect] of effects.entries()) {
 		if (effect.kind === "may") {
 			const decider =
 				effect.decider === "you"
@@ -6073,20 +6312,27 @@ function resolveEffects(
 			effect.kind === "sacrifice" && typeof effect.player !== "string"
 				? effect.player
 				: null;
+		const modifyPtSlot =
+			effect.kind === "modify-pt" && effect.object !== "source"
+				? effect.object.targetSlot
+				: null;
 		if (
 			effect.kind === "damage" ||
 			effect.kind === "destroy" ||
 			effect.kind === "counter" ||
+			modifyPtSlot !== null ||
 			sacrificeTarget !== null
 		) {
 			let targetSlot: string;
 			if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
+			else if (modifyPtSlot !== null) targetSlot = modifyPtSlot;
 			else {
 				assert(
 					effect.kind === "damage" ||
 						effect.kind === "destroy" ||
 						effect.kind === "counter",
 				);
+
 				targetSlot = effect.targetSlot;
 			}
 			const binding = item.targets[0];
@@ -6129,6 +6375,33 @@ function resolveEffects(
 				scope,
 				0,
 			);
+			continue;
+		}
+		if (effect.kind === "modify-pt") {
+			let slot: string;
+			let subject: EntityRef;
+			if (effect.object === "source") {
+				// "It gets +1/+1": the bonus applies to the object the ability is
+				// on. An instruction affecting its source does nothing if that
+				// object has already left the battlefield.
+				const self = maybePermanent(state, item.source);
+				if (!self) continue;
+				slot = SELF_SLOT;
+				subject = { type: "permanent", id: self.id };
+			} else {
+				assert(
+					bound?.type === "permanent",
+					"temporary P/T effect requires a bound permanent target",
+				);
+				slot = effect.object.targetSlot;
+				subject = bound;
+			}
+			// The effect keeps a reference to the definition that created it, so
+			// its power/toughness are never denormalized into game state.
+			addTemporaryEffect(state, item.controller, {
+				source: resolvingEffectSource(state, item, effectIndex),
+				bindings: { [slot]: subject },
+			});
 			continue;
 		}
 		performIn(
@@ -6255,7 +6528,9 @@ function effectToEvent(
 		case "sacrifice":
 			throw new Error("sacrifice effects are resolved with a player choice");
 		case "modify-pt":
-			throw new Error("temporary P/T effects are not implemented");
+			throw new Error(
+				"temporary P/T effects resolve without creating an event",
+			);
 		case "add-mana":
 			return {
 				kind: "add mana",
@@ -6399,10 +6674,6 @@ function requiredTargetDefinition(
 			for (const inner of effect.effects) check(inner);
 			return;
 		}
-		assert(
-			effect.kind !== "modify-pt",
-			"temporary P/T effects are not implemented",
-		);
 		if (effect.kind === "sacrifice" && typeof effect.player === "string") {
 			assert(
 				effect.amount === 1,
@@ -6410,10 +6681,14 @@ function requiredTargetDefinition(
 			);
 			return;
 		}
+		// An effect on its own source declares no target, so there is no slot to
+		// check it against.
+		if (effect.kind === "modify-pt" && effect.object === "source") return;
 		if (
 			effect.kind !== "damage" &&
 			effect.kind !== "destroy" &&
 			effect.kind !== "counter" &&
+			effect.kind !== "modify-pt" &&
 			effect.kind !== "sacrifice"
 		)
 			return;
@@ -6423,7 +6698,10 @@ function requiredTargetDefinition(
 				: null;
 		let targetSlot: string;
 		if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
-		else {
+		else if (effect.kind === "modify-pt") {
+			assert(effect.object !== "source", "self effects return above");
+			targetSlot = effect.object.targetSlot;
+		} else {
 			assert(
 				effect.kind === "damage" ||
 					effect.kind === "destroy" ||
@@ -6443,6 +6721,12 @@ function requiredTargetDefinition(
 		}
 		if (effect.kind === "counter") {
 			assert(target.legal.kind === "spell", "counter requires a spell target");
+		}
+		if (effect.kind === "modify-pt") {
+			assert(
+				target.legal.kind === "permanent",
+				"temporary P/T change requires a permanent target",
+			);
 		}
 		if (effect.kind === "sacrifice") {
 			assert(
@@ -6973,6 +7257,7 @@ function activateAbilityIn(
 				effect.kind === "damage" ||
 				effect.kind === "destroy" ||
 				effect.kind === "counter" ||
+				effect.kind === "modify-pt" ||
 				effect.kind === "sacrifice"
 			) {
 				continue;
@@ -7562,8 +7847,8 @@ function performTurnBasedActions(
 			// This is only the noninteractive part of CR 514. Repeated cleanup
 			// steps still need to be added when SBAs or triggers occur here.
 			for (const id of state.battlefield) permanent(state, id).damage = 0;
-			state.floating = state.floating.filter(
-				(f) => !f.expired && f.expires !== "endOfTurn",
+			state.temporaryEffects = state.temporaryEffects.filter(
+				(effect) => effect.duration !== "until-end-of-turn",
 			);
 
 			break;

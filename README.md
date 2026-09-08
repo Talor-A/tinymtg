@@ -101,13 +101,12 @@ activated abilities, and triggered abilities with at most one required target
 supertype word that may carry Forge's `non` prefix — so
 `Creature.nonBlack` lowers, while `Creature.attacking` does not); simple self-entry,
 upkeep, and self-attack triggers, including one optional (`may`) wrapper around
-a trigger's whole (possibly multi-step) effect sequence; and fixed
-controlled-creature P/T statics. See the acceptance matrix in
+a trigger's whole (possibly multi-step) effect sequence; fixed temporary P/T
+spells; and fixed controlled-creature P/T statics. See the acceptance matrix in
 `test/forge-import.test.ts` for the exact fixtures this is checked against, and
 the "Deferred / explicitly unsupported" list at the top of `forge-import.ts`
-for what is intentionally out of scope (temporary P/T, random/multi-card
-discard, dynamic/X amounts, alternate costs, hexproof/shroud/protection, and
-more).
+for what is intentionally out of scope (random/multi-card discard, dynamic/X
+amounts, alternate costs, hexproof/shroud/protection, and more).
 
 The engine's own selector vocabulary is wider than the spellings the bridge
 accepts: `TargetSelectorDef` covers the source itself, card type, supertype,
@@ -236,11 +235,11 @@ engine does not support planeswalkers yet. Battles are outside the card-type
 model. Mana abilities must run before casting, and payment still precedes the
 move to the stack.
 
-Multiple or optional targets, non-spell stack targets, graveyard targets, and
-temporary P/T effects remain deferred, as do hexproof, shroud, and protection:
-those are not in the `Keyword` union, so no target is ever illegal because of
-them and the importer rejects cards that have them. Unsupported target
-declarations and temporary P/T spell effects raise assertions before payment.
-Target-choice requests use the same replay protocol as other agent choices.
+Multiple or optional targets, non-spell stack targets, and graveyard targets
+remain deferred, as do hexproof, shroud, and protection: those are not in the
+`Keyword` union, so no target is ever illegal because of them and the importer
+rejects cards that have them. Unsupported target declarations raise assertions
+before payment. Target-choice requests use the same replay protocol as other
+agent choices.
 
 `perform()` injects a rules event directly, and `settlePriority()` resolves the current priority window directly. They are useful for focused rules tests and integrations, but do not represent player actions supported by the normal gameplay loop.

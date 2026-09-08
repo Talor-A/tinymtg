@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts"; // side effect: registers the card database
+import { regenerationShield } from "../cards.ts"; // also a side effect: registers the card database
 import {
-	addFloating,
+	addTemporaryEffect,
 	type CharacteristicsSnapshot,
 	checkStateBasedActions,
 	newGame,
@@ -44,13 +44,7 @@ describe("indestructible permanents", () => {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		const myr = spawnPermanent(state, "darksteel-myr", ALICE);
-		addFloating(
-			state,
-			ALICE,
-			"regenerationShield",
-			{ target: myr.id },
-			{ data: { used: 0 } },
-		);
+		addTemporaryEffect(state, ALICE, regenerationShield(myr.id));
 
 		const result = perform(
 			state,
@@ -61,9 +55,12 @@ describe("indestructible permanents", () => {
 		expect(result.executed, "the prohibited event didn't execute").toEqual([]);
 		expect(state.battlefield.includes(myr.id), "Myr survived").toBe(true);
 		expect(
-			state.floating[0]?.data.used,
+			state.temporaryEffects[0]?.source.origin === "builtin" &&
+				state.temporaryEffects[0].source.builtin.kind ===
+					"regeneration-shield" &&
+				state.temporaryEffects[0].source.builtin.used,
 			"a non-self replacement can't apply to a prohibited event (CR 614.17c)",
-		).toBe(0);
+		).toBe(false);
 	});
 
 	test("lethal damage and deathtouch don't destroy them", () => {
@@ -145,13 +142,7 @@ describe("regenerating a creature", () => {
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		const bears = spawnPermanent(state, "grizzly-bears", 0);
 		const pyro = spawnPermanent(state, "eager-cadet", 1);
-		addFloating(
-			state,
-			0,
-			"regenerationShield",
-			{ target: bears.id },
-			{ data: { used: 0 } },
-		);
+		addTemporaryEffect(state, 0, regenerationShield(bears.id));
 
 		perform(
 			state,
