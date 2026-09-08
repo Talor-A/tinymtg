@@ -66,6 +66,7 @@ registerRuntimeFixture("r/root_maze", "rt-root-maze");
 registerRuntimeFixture("f/faithful_watchdog", "rt-faithful-watchdog");
 registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
 registerRuntimeFixture("w/wall_of_omens", "rt-wall-of-omens");
+registerRuntimeFixture("p/priest_of_ancient_lore", "rt-priest-of-ancient-lore");
 registerRuntimeFixture("a/arcanis_the_omnipotent", "rt-arcanis");
 registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
@@ -79,10 +80,7 @@ registerRuntimeFixture("v/village_rites", "rt-village-rites");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
-registerRuntimeFixture(
-	"t/thrashing_brontodon",
-	"rt-thrashing-brontodon",
-);
+registerRuntimeFixture("t/thrashing_brontodon", "rt-thrashing-brontodon");
 registerRuntimeFixture("c/cathar_commando", "rt-cathar-commando");
 registerRuntimeFixture(
 	"r/resolute_reinforcements",
@@ -90,10 +88,7 @@ registerRuntimeFixture(
 );
 registerRuntimeFixture("s/selfless_savior", "rt-selfless-savior");
 registerRuntimeFixture("b/blazing_hellhound", "rt-blazing-hellhound");
-registerRuntimeFixture(
-	"b/bartolome_del_presidio",
-	"rt-bartolome-del-presidio",
-);
+registerRuntimeFixture("b/bartolome_del_presidio", "rt-bartolome-del-presidio");
 registerRuntimeFixture("a/acolyte_of_aclazotz", "rt-acolyte-of-aclazotz");
 registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("i/icy_manipulator", "rt-icy-manipulator");
@@ -524,6 +519,24 @@ describe("forge-import runtime: triggers", () => {
 		expect(eligibleBlockers(state, BOB, disruptor)).not.toContain(
 			groundCreature.id,
 		);
+	});
+
+	test("Priest of Ancient Lore's imported ETB trigger gains life and draws", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		stockLibraries(state);
+		beginFirstTurn(state, agents);
+
+		enterFromHand(state, "rt-priest-of-ancient-lore", ALICE, agents);
+
+		expect(state.players[ALICE].life, "trigger has not resolved yet").toBe(20);
+		expect(state.players[ALICE].library).toHaveLength(3);
+		expect(state.pendingTriggers).toHaveLength(1);
+
+		settlePriority(state, agents);
+		expect(state.players[ALICE].life).toBe(21);
+		expect(state.players[ALICE].library).toHaveLength(2);
+		expect(state.stack).toHaveLength(0);
 	});
 
 	test("Ajani's Mantra's imported upkeep trigger fires only for its controller, and its choice is genuinely optional", () => {
@@ -1455,17 +1468,9 @@ describe("forge-import runtime: activated abilities", () => {
 	] as const) {
 		test(`Thrashing Brontodon sacrifices itself to destroy a target ${targetType}`, () => {
 			const state = setupMain();
-			const brontodon = spawnPermanent(
-				state,
-				"rt-thrashing-brontodon",
-				ALICE,
-			);
+			const brontodon = spawnPermanent(state, "rt-thrashing-brontodon", ALICE);
 			const target = spawnPermanent(state, targetCard, BOB);
-			const ability = abilityId(
-				"activated",
-				"rt-thrashing-brontodon",
-				0,
-			);
+			const ability = abilityId("activated", "rt-thrashing-brontodon", 0);
 			state.players[ALICE].manaPool.c = 1;
 			const alice = new ScriptedAgent();
 			alice.targetChoices.push({ type: "permanent", id: target.id });
@@ -1581,16 +1586,8 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Bartolomé sacrifices another artifact, then gets its counter on resolution", () => {
 		const state = setupMain();
-		const bartolome = spawnPermanent(
-			state,
-			"rt-bartolome-del-presidio",
-			ALICE,
-		);
-		const ability = abilityId(
-			"activated",
-			"rt-bartolome-del-presidio",
-			0,
-		);
+		const bartolome = spawnPermanent(state, "rt-bartolome-del-presidio", ALICE);
+		const ability = abilityId("activated", "rt-bartolome-del-presidio", 0);
 		expect(
 			getObservableActions(state, ALICE).some(
 				(action) =>

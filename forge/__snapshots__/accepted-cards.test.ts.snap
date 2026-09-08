@@ -371,6 +371,7 @@ Charity Extractor
 Child of Night
 Child of Thorns
 Chill to the Bone
+Chimney Rabble
 Chromatic Star
 Chrome Cat
 Chrome Prowler
@@ -453,6 +454,7 @@ Craw Wurm
 Crazed Skirge
 Creeping Mold
 Creosote Heath
+Crested Herdcaller
 Crimson Kobolds
 Crooked Custodian
 Crookshank Kobolds
@@ -739,6 +741,7 @@ Fan Bearer
 Fanatical Firebrand
 Fang of Shigeki
 Fangren Hunter
+Fateful Discovery
 Fateful End
 Fear of Lost Teeth
 Fearless Halberdier
@@ -1150,6 +1153,7 @@ Insomnia, Crown City
 Inspiration
 Inspired Insurgent
 Inspiring Cleric
+Inspiring Overseer
 Instant Ramen
 Introduction to Prophecy
 Intruding Soulrager
@@ -1254,6 +1258,7 @@ Knight Errant
 Knight Watch
 Knight of New Benalia
 Knight of the Keep
+Knight of the New Coalition
 Knight of the Tusk
 Knotvine Mystic
 Koala-Sheep
@@ -1663,8 +1668,10 @@ Preordain
 Prescient Chimera
 Pressure Point
 Prideful Parent
+Priest of Ancient Lore
 Priest of Iroas
 Primeval Bounty
+Primordial Pachyderm
 Primordial Sage
 Primordial Wurm
 Princess Lucrezia
@@ -1914,6 +1921,7 @@ Seagraf Skaab
 Seal of Cleansing
 Seal of Primordium
 Sear
+Searchlight Companion
 Searing Flesh
 Searing Spear
 Searing Wind
@@ -2497,6 +2505,7 @@ Viridescent Bog
 Viridian Acolyte
 Viridian Shaman
 Viridian Zealot
+Virus Beetle
 Viscera Seer
 Vithian Renegades
 Vitu-Ghazi, the City-Tree
@@ -2657,4 +2666,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2654`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2663`;

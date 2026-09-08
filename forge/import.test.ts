@@ -780,6 +780,42 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Priest of Ancient Lore defaults an omitted ChangesZone origin to any", () => {
+		const result = importFixture("p/priest_of_ancient_lore");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigLife",
+				text: expect.any(String),
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: { kind: "self" },
+				},
+				targets: [],
+				effects: [
+					{ kind: "gain-life", player: "you", amount: 1 },
+					{ kind: "draw", player: "you", amount: 1 },
+				],
+			},
+		]);
+
+		const unsupportedOrigin = importForgeCard(
+			cardText("p/priest_of_ancient_lore").replace(
+				"Mode$ ChangesZone |",
+				"Mode$ ChangesZone | Origin$ Graveyard |",
+			),
+			{ id: "priest-with-graveyard-origin" },
+		);
+		expect(unsupportedOrigin.ok).toBe(false);
+		if (unsupportedOrigin.ok) return;
+		expect(unsupportedOrigin.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message: "unsupported ChangesZone trigger shape",
+		});
+	});
+
 	test("Ajani's Mantra wraps its whole effect sequence in one optional choice", () => {
 		const result = importFixture("a/ajanis_mantra");
 		if (!result.ok) throw new Error("expected ok");
@@ -1487,9 +1523,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						},
 					},
 				],
-				effects: [
-					{ kind: "destroy", object: { targetSlot: "target-1" } },
-				],
+				effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
 			},
 		]);
 	});
@@ -1540,7 +1574,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 
 	test("Resolute Reinforcements lowers Flash and its complete token trigger", () => {
 		const result = importFixture("r/resolute_reinforcements");
-		if (!result.ok) throw new Error("expected Resolute Reinforcements to import");
+		if (!result.ok)
+			throw new Error("expected Resolute Reinforcements to import");
 		expect(result.card).toMatchObject({
 			name: "Resolute Reinforcements",
 			manaCost: { n: 1, w: 1 },

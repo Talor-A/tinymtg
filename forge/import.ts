@@ -1915,7 +1915,10 @@ function lowerTrigger(
 			// enters-the-battlefield trigger from any zone, or a dies trigger on
 			// the permanent itself. Forge omits TriggerZones on the latter,
 			// which matches the engine's battlefield-by-default functionsFrom.
-			const etb = origin === "Any" && destination === "Battlefield";
+			// Forge also omits Origin$ on some enters-the-battlefield triggers
+			// (Priest of Ancient Lore), which defaults to Any.
+			const etb =
+				(origin ?? "Any") === "Any" && destination === "Battlefield";
 			const dies = origin === "Battlefield" && destination === "Graveyard";
 			if (
 				!(etb || dies) ||
