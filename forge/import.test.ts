@@ -53,6 +53,7 @@ const POSITIVE_FIXTURES = [
 	"r/raging_goblin",
 	"f/faithful_watchdog",
 	"s/soulmender",
+	"k/kambal_consul_of_allocation",
 	"m/merfolk_looter",
 	"d/doom_blade",
 	"p/prodigal_sorcerer",
@@ -628,6 +629,30 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				},
 				targets: [],
 				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
+			},
+		]);
+	});
+
+	test("Kambal maps SpellCast TriggeredActivator to the casting player", () => {
+		const result = importFixture("k/kambal_consul_of_allocation");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigDrain",
+				text: expect.any(String),
+				condition: {
+					kind: "cast",
+					player: "opponent",
+					selector: {
+						kind: "not",
+						selector: { kind: "type", type: "creature" },
+					},
+				},
+				targets: [],
+				effects: [
+					{ kind: "lose-life", player: "triggering-player", amount: 2 },
+					{ kind: "gain-life", player: "you", amount: 2 },
+				],
 			},
 		]);
 	});

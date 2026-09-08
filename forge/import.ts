@@ -256,6 +256,13 @@ function triggerEffectPlayer(
 	return player(value);
 }
 
+function spellCastEffectPlayer(
+	value: string | undefined,
+): TriggerEffectPlayer | null {
+	if (value === "TriggeredActivator") return "triggering-player";
+	return triggerEffectPlayer(value);
+}
+
 /* ------------------------------------------------------------------------- */
 /* Selectors and targets                                                      */
 /* ------------------------------------------------------------------------- */
@@ -1397,7 +1404,7 @@ function lowerTrigger(
 		{ nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
 		true,
 		["DB"],
-		triggerEffectPlayer,
+		mode === "SpellCast" ? spellCastEffectPlayer : triggerEffectPlayer,
 	);
 	if ("code" in chain) return chain;
 	for (const n of chain.usedSVarNames) used.add(n);

@@ -663,6 +663,7 @@ Harmonize
 Harrier Naga
 Haunted Mire
 Havenwood Battleground
+Havoc
 Hawkeye, Clint Barton
 He's Dead, Jim
 Headless Horseman
@@ -775,6 +776,7 @@ Kalakscion, Hunger Tyrant
 Kaleidostone
 Kalonian Tusker
 Kamahl, Pit Fighter
+Kambal, Consul of Allocation
 Kami of Ancient Law
 Kami of Old Stone
 Karakas
@@ -1673,6 +1675,7 @@ Wyluli Wolf
 Yargle and Multani
 Yargle, Glutton of Urborg
 Yavimaya Sapherd
+Yawgmoth's Edict
 Yellow Scarves Troops
 Yeva's Forcemage
 Yoked Ox
@@ -1694,4 +1697,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1691`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1694`;

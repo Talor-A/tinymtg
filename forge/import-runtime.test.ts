@@ -78,6 +78,7 @@ registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
 registerRuntimeFixture("c/clone", "rt-clone");
+registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
 registerCardFixture("d/darksteel_relic");
 
 function chooseCopyAs(choice: ObjectId | null): SyncAgent {
@@ -226,6 +227,29 @@ describe("forge-import runtime: triggers", () => {
 		stockLibraries(decline);
 		advanceUntil(decline, declineAgents, (next) => atUpkeepOf(next, ALICE));
 		expect(decline.players[ALICE].life, "declined the optional gain").toBe(20);
+	});
+
+	test("Kambal makes the opponent who cast a noncreature spell lose life", () => {
+		const state = setupMain();
+		const agents = passingAgents();
+		spawnPermanent(state, "rt-kambal", ALICE);
+		const spell = spawnCard(state, "rt-consider", BOB, "hand");
+		perform(
+			state,
+			{
+				kind: "add mana",
+				source: spell.id,
+				player: BOB,
+				mana: { u: 1 },
+			},
+			agents,
+		);
+
+		executeCastAction(state, BOB, { kind: "cast", card: spell.id }, agents);
+		settlePriority(state, agents);
+
+		expect(state.players[ALICE].life).toBe(22);
+		expect(state.players[BOB].life).toBe(18);
 	});
 
 	test("Necrogen Mists makes the player whose upkeep began discard", () => {
