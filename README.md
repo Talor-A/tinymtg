@@ -78,8 +78,8 @@ accepted. A recognized keyword is never silently dropped: every root `A`, `T`,
 `R`, `S`, and `K` rule on a card either lowers or the whole card is rejected.
 
 The current subset covers: literal characteristics (name, mana cost, types,
-colors, P/T); the keywords Flying, Reach, Defender, Lifelink, Indestructible,
-and Vigilance;
+colors, P/T); the keywords Deathtouch, Flying, Reach, Defender, Lifelink,
+Indestructible, and Vigilance;
 literal entry-counter shorthand and both canonical enters-tapped `R:` forms —
 the self form (`ValidCard$ Card.Self`, e.g. Charcoal Diamond) lowers directly
 to `CardDefInput.entersTapped`, and the global form (a supported selector
@@ -190,8 +190,8 @@ status at damage time does not prevent it. Zero or negative power deals no
 damage.
 
 Interactive damage-assignment choices, first/double strike, trample, infect,
-deathtouch, attacking a specific target (planeswalkers, battles, or any
-non-player defender), and multiple combat damage steps are not implemented.
+attacking a specific target (planeswalkers, battles, or any non-player
+defender), and multiple combat damage steps are not implemented.
 
 ### Playing a land
 

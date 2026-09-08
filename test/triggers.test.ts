@@ -43,7 +43,7 @@ registerCard({
 	manaCost: { b: 1 },
 	power: 1,
 	toughness: 1,
-	keywords: ["lifelink"],
+	keywords: ["deathtouch", "lifelink"],
 	triggers: [
 		{
 			id: "self-death",
@@ -344,6 +344,7 @@ describe("triggered abilities", () => {
 			sourceLastKnown: {
 				controller: BOB,
 				colors: ["b"],
+				deathtouch: true,
 				lifelink: true,
 			},
 		});
@@ -368,6 +369,7 @@ describe("triggered abilities", () => {
 			sourceLastKnown: {
 				controller: BOB,
 				colors: ["b"],
+				deathtouch: true,
 				lifelink: true,
 			},
 		});
@@ -383,6 +385,41 @@ describe("triggered abilities", () => {
 		).toBe(22);
 		expect(state.pendingTriggers).toHaveLength(0);
 		expect(state.stack).toHaveLength(0);
+	});
+
+	test("departed sources retain deathtouch for noncombat damage", () => {
+		const state = newGame();
+		const alice = new ScriptedAgent();
+		const bob = new ScriptedAgent();
+		const agents: Agents = [alice, bob];
+		beginFirstTurn(state, agents);
+		const source = spawnPermanent(state, "test-self-death-pinger", ALICE);
+		const target = spawnPermanent(state, "grizzly-bears", BOB, {
+			counters: { "+1/+1": 1 },
+		});
+		alice.targetChoices.push({ type: "permanent", id: target.id });
+
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: source.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "sacrifice",
+			},
+			agents,
+		);
+		settlePriority(state, agents);
+
+		expect(
+			state.objects.has(target.id),
+			"two damage from a departed deathtouch source destroys a 3/3",
+		).toBe(false);
+		expect(
+			state.players[ALICE].life,
+			"lifelink also uses last known info",
+		).toBe(22);
 	});
 
 	test.each(["destroy", "state-based action"] as const)(

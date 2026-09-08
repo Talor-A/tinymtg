@@ -85,6 +85,7 @@ const POSITIVE_FIXTURES = [
 	"t/temple_of_epiphany",
 	"i/impulse",
 	"s/stock_up",
+	"m/mire_triton",
 	"t/thrashing_brontodon",
 	"c/cathar_commando",
 	"r/resolute_reinforcements",
@@ -635,6 +636,29 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		if (!defaulted.ok) return;
 		expect(defaulted.card.spell?.effects).toEqual([
 			{ kind: "mill", player: "opponent", amount: 1 },
+		]);
+	});
+
+	test("Mire Triton keeps deathtouch and sequences its complete ETB trigger", () => {
+		const result = importFixture("m/mire_triton");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.keywords).toEqual(["deathtouch"]);
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigMill",
+				text: expect.any(String),
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: { kind: "self" },
+				},
+				targets: [],
+				effects: [
+					{ kind: "mill", player: "you", amount: 2 },
+					{ kind: "gain-life", player: "you", amount: 2 },
+				],
+			},
 		]);
 	});
 

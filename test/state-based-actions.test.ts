@@ -78,6 +78,10 @@ describe("indestructible permanents", () => {
 
 		expect(state.battlefield.includes(lethal.id)).toBe(true);
 		expect(state.battlefield.includes(deathtouched.id)).toBe(true);
+		expect(
+			permanent(state, deathtouched.id).attributes.deathtouched,
+			"the next SBA check must not reuse old deathtouch damage",
+		).toBeUndefined();
 	});
 
 	test("zero toughness still puts them into the graveyard", () => {

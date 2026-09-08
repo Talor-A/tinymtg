@@ -1465,13 +1465,14 @@ function eid(id: string): EffectId {
 
 /**
  * Approximation of last known information (CR 113.7a, CR 608.2h): only the
- * source's controller, colors, and lifelink are retained for damage effects.
- * TODO: replace this projection with the engine's characteristic snapshot
- * types before extending effects that read a departed source.
+ * source's controller, colors, deathtouch, and lifelink are retained for damage
+ * effects. TODO: replace this projection with the engine's characteristic
+ * snapshot types before extending effects that read a departed source.
  */
 export interface SourceLastKnown {
 	controller: PlayerId;
 	colors: Color[];
+	deathtouch: boolean;
 	lifelink: boolean;
 }
 
@@ -2240,6 +2241,7 @@ export interface TriggeredAbilityDefinition {
 
 export type Keyword =
 	| "indestructible"
+	| "deathtouch"
 	| "lifelink"
 	| "flying"
 	| "reach"
@@ -4747,6 +4749,11 @@ function checkStateBasedActionsIn(
 ): void {
 	for (let pass = 0; pass < 32; pass++) {
 		let acted = false;
+		const deathtouchedSinceLastCheck = new Set<ObjectId>();
+		for (const id of state.battlefield) {
+			if (maybePermanent(state, id)?.attributes.deathtouched)
+				deathtouchedSinceLastCheck.add(id);
+		}
 
 		for (const p of state.players) {
 			//   704.5a. If a player has 0 or less life, that player loses the game.
@@ -4905,7 +4912,8 @@ function checkStateBasedActionsIn(
 			state.battlefield.some((id) => {
 				const object = maybePermanent(state, id);
 				if (!object) return false;
-				if (object.damage > 0 || object.attributes.deathtouched) return true;
+				if (object.damage > 0 || deathtouchedSinceLastCheck.has(id))
+					return true;
 				if (object.counters["+1/+1"] || object.counters["-1/-1"]) return true;
 				const initial = initialCharacteristics(object);
 				return "toughness" in initial && initial.toughness <= 0;
@@ -4951,7 +4959,7 @@ function checkStateBasedActionsIn(
 			// on it, and the total damage marked on it is greater than or equal to its
 			// toughness, that creature has been dealt lethal damage and is destroyed.
 			// Regeneration can replace this event.
-			if (lethalDamage(sbaRead, id) || o.attributes.deathtouched) {
+			if (lethalDamage(sbaRead, id) || deathtouchedSinceLastCheck.has(id)) {
 				const destroy: DestroyEvent = {
 					kind: "destroy",
 					object: id,
@@ -4994,6 +5002,15 @@ function checkStateBasedActionsIn(
 				sbaRead = createReadContext(state);
 			}
 		}
+
+		let clearedDeathtouch = false;
+		for (const id of deathtouchedSinceLastCheck) {
+			const object = maybePermanent(state, id);
+			if (!object?.attributes.deathtouched) continue;
+			delete object.attributes.deathtouched;
+			clearedDeathtouch = true;
+		}
+		if (clearedDeathtouch) state.revision++;
 
 		if (!acted) return;
 	}
@@ -5309,6 +5326,8 @@ function selfDeathTriggerCandidates(
 				sourceLastKnown: {
 					controller,
 					colors: [...snapshot.currentCharacteristics.colors],
+					deathtouch:
+						snapshot.currentCharacteristics.keywords.includes("deathtouch"),
 					lifelink:
 						snapshot.currentCharacteristics.keywords.includes("lifelink"),
 				},
@@ -5360,6 +5379,7 @@ function recordSourceDeparture(
 		item.sourceLastKnown = {
 			controller: snapshot.controller,
 			colors: [...characteristics.colors],
+			deathtouch: characteristics.keywords.includes("deathtouch"),
 			lifelink: characteristics.keywords.includes("lifelink"),
 		};
 	}
@@ -6573,6 +6593,7 @@ function sourceInformation(
 		return {
 			controller: object.controller,
 			colors: [...characteristics.colors],
+			deathtouch: characteristics.keywords.includes("deathtouch"),
 			lifelink: characteristics.keywords.includes("lifelink"),
 		};
 	}
@@ -6937,7 +6958,7 @@ function effectToEvent(
 				target,
 				amount: effect.amount,
 				combat: false,
-				deathtouch: false,
+				deathtouch: source.deathtouch,
 				lifelink: source.lifelink,
 				unpreventable: false,
 			};
@@ -8592,9 +8613,7 @@ function performTurnBasedActions(
 				target,
 				amount,
 				combat: true,
-				// The engine has no deathtouch keyword yet; false is correct until
-				// one is added.
-				deathtouch: false,
+				deathtouch: characteristics.keywords.includes("deathtouch"),
 				lifelink: characteristics.keywords.includes("lifelink"),
 				unpreventable: false,
 			});
@@ -8640,16 +8659,13 @@ function performTurnBasedActions(
 					assert(blockerSnapshot.kind === "permanent");
 					const blockerCharacteristics = blockerSnapshot.currentCharacteristics;
 					if (blockerCharacteristics.kind !== "creature") continue;
+					const lethalAmount = characteristics.keywords.includes("deathtouch")
+						? 1
+						: Math.max(0, blockerCharacteristics.toughness - blocker.damage);
 					const amount =
 						index === blockers.length - 1
 							? remaining
-							: Math.min(
-									remaining,
-									Math.max(
-										0,
-										blockerCharacteristics.toughness - blocker.damage,
-									),
-								);
+							: Math.min(remaining, lethalAmount);
 					if (amount > 0) {
 						events.push(
 							damageEvent(

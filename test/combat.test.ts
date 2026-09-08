@@ -35,6 +35,7 @@ registerCardFixture("g/giant_spider");
 registerCardFixture("r/raging_goblin");
 registerCardFixture("s/stealer_of_secrets");
 registerCardFixture("w/wall_of_omens");
+registerCardFixture("m/mire_triton");
 
 /** One attacker-eligible creature plus enough library to survive a full turn. */
 function setupAttackTurn(cardId: string): {
@@ -821,6 +822,32 @@ describe("dealing combat damage", () => {
 		expect(
 			state.objects.has(second.id),
 			"second blocker received remaining 1",
+		).toBe(false);
+	});
+
+	test("Mire Triton assigns one lethal deathtouch damage to each blocker", () => {
+		const { state, attacker } = setupAttackTurn("mire-triton");
+		const first = spawnPermanent(state, "grizzly-bears", BOB, {
+			counters: { "+1/+1": 1 },
+		});
+		const second = spawnPermanent(state, "grizzly-bears", BOB, {
+			counters: { "+1/+1": 1 },
+		});
+		const agents = attackAndBlock(attacker.id, [first.id, second.id]);
+
+		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+
+		expect(state.players[BOB].life).toBe(20);
+		expect(state.objects.has(attacker.id), "both blockers damaged Triton").toBe(
+			false,
+		);
+		expect(
+			state.objects.has(first.id),
+			"one deathtouch damage destroyed the first 3/3",
+		).toBe(false);
+		expect(
+			state.objects.has(second.id),
+			"one deathtouch damage destroyed the second 3/3",
 		).toBe(false);
 	});
 

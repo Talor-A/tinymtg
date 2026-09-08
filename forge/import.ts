@@ -156,6 +156,7 @@ const PRODUCED_MANA_SYMBOLS = new Map<string, ManaType>([
 	["C", "c"],
 ]);
 const BARE_KEYWORDS = new Map<string, Keyword>([
+	["Deathtouch", "deathtouch"],
 	["Flying", "flying"],
 	["Reach", "reach"],
 	["Defender", "defender"],

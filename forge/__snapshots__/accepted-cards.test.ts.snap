@@ -3,6 +3,7 @@
 exports[`the accepted-card list matches its snapshot: accepted card names 1`] = `
 "A-Dragonborn Looter
 A-Elderleaf Mentor
+A-Midnight Assassin
 A-Rockslide Sorcerer
 A.I.M. Bot
 A.I.M. Labs
@@ -12,6 +13,7 @@ Abbey Griffin
 Abraded Bluffs
 Absorb
 Abzan Banner
+Acidic Slime
 Acolyte of Aclazotz
 Acolyte of Xathrid
 Adaptive Shimmerer
@@ -31,6 +33,7 @@ Agent of Atlas
 Agent of Stromgald
 Aggressive Urge
 Agonizing Syphon
+Ahriman
 Air Elemental
 Airship Engine Room
 Ajani's Mantra
@@ -59,6 +62,7 @@ Amateur Hero
 Ambassador Laquatus
 Ambassador Oak
 Ambition's Cost
+Ambush Viper
 Amphin Cutthroat
 An-Havva Township
 Anaba Shaman
@@ -78,6 +82,7 @@ Angel's Mercy
 Angelheart Protector
 Angelic Wall
 Animal Sanctuary
+Ankle Biter
 Anointed Chorister
 Ant Queen
 Ant-Man, Scott Lang
@@ -148,6 +153,7 @@ Azusa, Lost but Seeking
 Badlands
 Balduvian Barbarians
 Balduvian Bears
+Baleful Strix
 Balshan Collaborator
 Bane Alley Blackguard
 Banehound
@@ -192,6 +198,7 @@ Birnin Zana Plaza
 Bishop's Soldier
 Bitterbloom Bearer
 Bitterbow Sharpshooters
+Black Waltz No. 3
 Black Widow, Natasha Romanoff
 Blade of the Sixth Pride
 Blanchwood Treefolk
@@ -277,6 +284,7 @@ Bull Cerodon
 Bulwark Giant
 Burglar Rat
 Burning Fields
+Burrog Banemaker
 Burrowing Razormaw
 Cabal Archon
 Cabal Evangel
@@ -422,6 +430,7 @@ Custodian of the Trove
 Cyclopean Snare
 Cyclops of One-Eyed Pass
 Cylian Elf
+Daggerback Basilisk
 Daggerclaw Imp
 Daggerdrome Imp
 Dakmor Bat
@@ -457,8 +466,10 @@ Daybreak Chaplain
 Daysquad Marshal
 Dazzling Ramparts
 Deadeye Duelist
+Deadly Recluse
 Deadly Visit
 Death Cultist
+Deathgaze Cockatrice
 Deathless Angel
 Deathmark
 Dedicated Martyr
@@ -517,6 +528,7 @@ Dragon Bell Monk
 Dragon Blood
 Dragon Fodder
 Dragon Moose
+Dragon Sniper
 Dragon Trainer
 Dragonborn Looter
 Dragoon's Wyvern
@@ -599,6 +611,7 @@ Enchantress's Presence
 Encroaching Wastes
 Energizer
 Enforcer Griffin
+Engine Rat
 Engulfing Eruption
 Enhanced Awareness
 Enlightened Maniac
@@ -645,6 +658,7 @@ Falkenrath Reaver
 Fall of the Gavel
 Fan Bearer
 Fanatical Firebrand
+Fang of Shigeki
 Fateful End
 Fear of Lost Teeth
 Fearless Halberdier
@@ -653,6 +667,7 @@ Felhide Minotaur
 Felidar Cub
 Fell
 Femeref Scouts
+Feral Abomination
 Feral Ferocity
 Feral Krushok
 Feral Maaka
@@ -772,10 +787,13 @@ Giant Cockroach
 Giant Growth
 Giant Mantis
 Giant Octopus
+Giant Scorpion
 Giant Spider
 Gibbering Barricade
 Gideon's Lawkeeper
+Gifted Aetherborn
 Gigantosaurus
+Gilacorn
 Gilded Sentinel
 Gin'tak Charge
 Glacial Floodplain
@@ -849,9 +867,11 @@ Grazing Whiptail
 Great Furnace
 Great Hart
 Great-Horn Krushok
+Greater Basilisk
 Greater Forgeling
 Greenweaver Druid
 Greenwood Sentinel
+Grendel, Spawn of Knull
 Grey Havens Navigator
 Griffin Sentinel
 Grim Backwoods
@@ -883,6 +903,7 @@ Hag of Syphoned Breath
 Hag of Twisted Visions
 Hammerhead, Maggia Boss
 Hand of Death
+Hand of Silumgar
 Hapless Researcher
 Happy Hogan, Dauntless Driver
 Harmonize
@@ -929,6 +950,7 @@ Highland Weald
 Hill Giant
 Hill Giant Herdgorger
 Hired Blade
+Hired Poisoner
 Hitchclaw Recluse
 Hithlain Knots
 Hive Stirrings
@@ -946,6 +968,7 @@ Hordeling Outburst
 Horizon Scholar
 Horn of Ramos
 Horned Turtle
+Hornet Queen
 Hornet Sting
 Hostile Minotaur
 Hour of Defeat
@@ -958,6 +981,7 @@ Hulking Cyclops
 Hulking Devil
 Hulking Goblin
 Hulking Ogre
+Hullcarver
 Hungry Ghoul
 Hungry Megasloth
 Hunted Witness
@@ -1076,6 +1100,7 @@ Keldon Necropolis
 Kelinore Bat
 Kemba's Skyguard
 Kessig Flamebreather
+Kessig Recluse
 Khalni Garden
 Kher Keep
 Killer Bees
@@ -1105,6 +1130,7 @@ Kozilek's Channeler
 Kraken Hatchling
 Krark-Clan Ironworks
 Krark-Clan Stoker
+Kraul Stinger
 Kraul Warrior
 Kree Commandos
 Krenko's Command
@@ -1155,6 +1181,7 @@ Llanowar Dead
 Llanowar Elves
 Llanowar Tribe
 Llanowar Visionary
+Locke Cole
 Lone Missionary
 Lonely Arroyo
 Looming Altisaur
@@ -1231,6 +1258,7 @@ Mesa Unicorn
 Metallic Sliver
 Metalspinner's Puzzleknot
 Meticulous Archive
+Midnight Assassin
 Midnight Haunting
 Might of Oaks
 Millennial Gargoyle
@@ -1238,6 +1266,7 @@ Mind Stone
 Mindeye Drake
 Minotaur Abomination
 Minotaur Warrior
+Mire Triton
 Misshapen Fiend
 Mist Raven
 Mistral Charger
@@ -1259,6 +1288,7 @@ Monstrous Growth
 Moon Heron
 Moon Sprite
 Moonglove Extract
+Moonglove Winnower
 Morgue Thrull
 Morgue Toad
 Moriok Reaver
@@ -1267,6 +1297,7 @@ Moroii
 Mortify
 Moss Diamond
 Moss Monster
+Moss Viper
 Mosscoat Goriak
 Mossfire Valley
 Mothrider Patrol
@@ -1275,6 +1306,7 @@ Mountain Bandit
 Mournful Zombie
 Muck Rats
 Mudbutton Torchrunner
+Mugato
 Murasa Brute
 Murder
 Murmuring Phantasm
@@ -1300,6 +1332,7 @@ Necrogen Scudder
 Necromancer's Assistant
 Needlepeak Spider
 Needleshot Gourna
+Needlethorn Drake
 Nema Siltlurker
 Nephalia Drownyard
 Nephalia Seakite
@@ -1337,6 +1370,8 @@ Notion Rain
 Nourish
 Novice Occultist
 Noxious Grasp
+Noxious Groodion
+Noxious Newt
 Noxious Toad
 Nuisance Engine
 Nutrient Block
@@ -1412,6 +1447,7 @@ Pendulum of Patterns
 Pensive Minotaur
 Perilous Myr
 Phantom Monster
+Pharika's Chosen
 Pharika's Cure
 Pheres-Band Centaurs
 Phyrexia's Core
@@ -1676,6 +1712,7 @@ Seashell Cameo
 Seaside Citadel
 Seaside Haven
 Seat of the Synod
+Sedge Scorpion
 Seer's Lantern
 Segovian Angel
 Seizan, Perverter of Truth
@@ -1863,6 +1900,7 @@ Sprite Dragon
 Sprout
 Squall Drifter
 Squire
+Squirrelanoids
 Sram, Senior Edificer
 Staff of Nin
 Staff of the Death Magus
@@ -1970,6 +2008,7 @@ Sythis, Harvest's Hand
 TCRI Building
 Taiga
 Taigam's Scheming
+Tajuru Blightblade
 Tajuru Snarecaster
 Take Up Arms
 Talarian Hook Spider
@@ -2033,6 +2072,7 @@ Third Path Savant
 Thor Odinson
 Thornglint Bridge
 Thornhide Wolves
+Thornweald Archer
 Thornwind Faeries
 Thornwood Falls
 Those Who Serve
@@ -2048,6 +2088,7 @@ Thundering Falls
 Thundering Giant
 Thundering Rebuke
 Thunderscape Apprentice
+Tidehollow Strix
 Tidepool Turtle
 Tidings
 Tigereye Cameo
@@ -2119,15 +2160,18 @@ Turtle Power!
 Turtle-Seals
 Tusked Colossodon
 Twin-Silk Spider
+Typhoid Rats
 Tyrant's Machine
 Tyrox, Saurid Tyrant
 Uktabi Faerie
 Uktabi Orangutan
+Ukud Cobra
 Umara Entangler
 Umbral Collar Zealot
 Unauthorized Exit
 Undead Minotaur
 Undercity Sewers
+Underdark Basilisk
 Underground Mortuary
 Underground Sea
 Undergrowth Leopard
@@ -2154,12 +2198,15 @@ Valakut Invoker
 Valiant Guard
 Valkyrior Skyrider
 Valorous Steed
+Vampire Champion
 Vampire Interloper
 Vampire Neonate
+Vampire Nighthawk
 Vampire Noble
 Vampire Opportunist
 Vampire Revenant
 Vampire Spawn
+Vampire of the Dire Moon
 Vampiric Feast
 Vampiric Spirit
 Vampiric Touch
@@ -2174,6 +2221,7 @@ Vedalken Mastermind
 Venerable Knight
 Venerable Lammasu
 Venerable Monk
+Venomous Hierophant
 Verdant Automaton
 Verdigris
 Verduran Enchantress
@@ -2290,6 +2338,7 @@ Windrider Patrol
 Windseeker Centaur
 Windurst, Federation Center
 Wing Commando
+Winged Coatl
 Winter Soldier, Bucky Barnes
 Winter's Grasp
 Winter's Intervention
@@ -2345,4 +2394,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2342`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2391`;

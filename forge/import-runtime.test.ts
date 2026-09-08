@@ -106,6 +106,7 @@ registerRuntimeFixture("f/firebrand_archer", "rt-firebrand-archer");
 registerRuntimeFixture("k/kessig_flamebreather", "rt-kessig-flamebreather");
 registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
 registerRuntimeFixture("f/flayed_one", "rt-flayed-one");
+registerRuntimeFixture("m/mire_triton", "rt-mire-triton");
 registerRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter");
 registerRuntimeFixture("t/timberland_guide", "rt-timberland-guide");
 registerCardFixture("d/darksteel_relic");
@@ -291,6 +292,27 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].graveyard.map((id) => name(state, id))).toEqual(
 			["Forest", "Forest", "Forest"],
 		);
+	});
+
+	test("Mire Triton's imported ETB mills two cards, then gains two life", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+		for (let i = 0; i < 4; i++) spawnCard(state, "forest", ALICE, "library");
+		const library = [...state.players[ALICE].library];
+		state.players[ALICE].life = 17;
+
+		enterFromHand(state, "rt-mire-triton", ALICE, agents);
+		expect(state.players[ALICE].library).toEqual(library);
+		expect(state.players[ALICE].life).toBe(17);
+		expect(state.pendingTriggers).toHaveLength(1);
+
+		settlePriority(state, agents);
+		expect(state.players[ALICE].library).toEqual(library.slice(0, -2));
+		expect(state.players[ALICE].graveyard.map((id) => name(state, id))).toEqual(
+			["Forest", "Forest"],
+		);
+		expect(state.players[ALICE].life).toBe(19);
 	});
 
 	test("Resolute Reinforcements casts during an opponent's turn and creates its Soldier", () => {
