@@ -84,6 +84,7 @@ const POSITIVE_FIXTURES = [
 	"t/third_path_iconoclast",
 	"t/temple_of_epiphany",
 	"i/impulse",
+	"s/sleight_of_hand",
 	"s/stock_up",
 	"m/mire_triton",
 	"b/baleful_strix",
@@ -530,8 +531,16 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
-	test("Dig reads both the looked-at and kept card counts from the card", () => {
+	test("Dig defaults an omitted ChangeNum to one and preserves explicit counts", () => {
 		const cases = [
+			{
+				fixture: "s/sleight_of_hand",
+				name: "Sleight of Hand",
+				manaCost: { u: 1 },
+				types: ["sorcery"],
+				amount: 2,
+				keep: 1,
+			},
 			{
 				fixture: "i/impulse",
 				name: "Impulse",

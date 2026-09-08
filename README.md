@@ -97,8 +97,9 @@ single-permanent sacrifice, including `Creature.Other` to exclude the source,
 semicolon-separated alternatives, and `CARDNAME` for the source itself (e.g.
 Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with
 life/draw/discard-one-chosen-card, scry, surveil, and fixed hidden `Dig` forms
-such as Impulse and Stock Up, which put a card-defined number into hand and
-order the rest on the bottom; damage, destroy, counter, targeted or
+such as Sleight of Hand, Impulse, and Stock Up, which put a card-defined
+number into hand (defaulting Forge's omitted `ChangeNum$` to one) and order the
+rest on the bottom; damage, destroy, counter, targeted or
 self-directed fixed counter placement (including Forge's omitted `Defined$`
 default for a nontargeted permanent ability), and return-to-hand effects; spells,
 activated abilities, and triggered abilities with at most one required target

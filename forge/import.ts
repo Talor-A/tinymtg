@@ -715,7 +715,7 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			if (badParams) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "DigNum"));
-			const keep = positiveInteger(getForgeParam(params, "ChangeNum"));
+			const keep = positiveInteger(getForgeParam(params, "ChangeNum"), 1);
 			const noReveal = getForgeParam(params, "NoReveal");
 			if (
 				who !== "you" ||

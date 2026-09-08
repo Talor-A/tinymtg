@@ -71,6 +71,7 @@ registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("n/network_disruptor", "rt-network-disruptor");
 registerRuntimeFixture("p/preordain", "rt-preordain");
+registerRuntimeFixture("s/sleight_of_hand", "rt-sleight-of-hand");
 registerRuntimeFixture("i/impulse", "rt-impulse");
 registerRuntimeFixture("s/stock_up", "rt-stock-up");
 registerRuntimeFixture("c/consider", "rt-consider");
@@ -877,6 +878,41 @@ describe("forge-import runtime: spell effects", () => {
 		expect(state.players[ALICE].library[0]).toBe(first);
 		expect(state.players[ALICE].library.at(-1)).toBe(bottom);
 		expect(agents[ALICE].scryChoices).toHaveLength(0);
+	});
+
+	test("Sleight of Hand keeps one chosen card when ChangeNum is omitted", () => {
+		const state = setupMain();
+		const existingLibrary = [...state.players[ALICE].library];
+		const bottomed = spawnCard(state, "forest", ALICE, "library").id;
+		const chosen = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+		const spell = spawnCard(state, "rt-sleight-of-hand", ALICE, "hand");
+		perform(
+			state,
+			{
+				kind: "add mana",
+				source: spell.id,
+				player: ALICE,
+				mana: { u: 1 },
+			},
+			passingAgents(),
+		);
+		const agents = passingAgents();
+		agents[ALICE].chooseFromTopChoices.push({
+			kept: [chosen],
+			bottom: [bottomed],
+		});
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		settlePriority(state, agents);
+
+		expect(state.players[ALICE].hand.map((id) => name(state, id))).toContain(
+			"Darksteel Relic",
+		);
+		expect(state.players[ALICE].library).toEqual([
+			bottomed,
+			...existingLibrary,
+		]);
+		expect(agents[ALICE].chooseFromTopChoices).toHaveLength(0);
 	});
 
 	test("Impulse puts the chosen top-four card into hand and the rest on the bottom in the chosen order", () => {

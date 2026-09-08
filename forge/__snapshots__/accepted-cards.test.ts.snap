@@ -1522,6 +1522,7 @@ Prizefighter Construct
 Prodigal Pyromancer
 Prodigal Sorcerer
 Prophet of the Peak
+Prophetic Bolt
 Protector of Gondor
 Prowling Caracal
 Pulse Tracker
@@ -1730,6 +1731,7 @@ Scrounger of Souls
 Scrubland
 Scryb Sprites
 Sea Eagle
+Sea Gate Oracle
 Sea Scryer
 Seacoast Drake
 Seagraf Skaab
@@ -1857,6 +1859,7 @@ Skyswirl Harrier
 Slagdrill Scrapper
 Slagwoods Bridge
 Sledding Otter-Penguin
+Sleight of Hand
 Slice in Twain
 Slingshot Goblin
 Slinking Skirge
@@ -2435,4 +2438,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2432`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2435`;
