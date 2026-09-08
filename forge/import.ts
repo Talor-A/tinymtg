@@ -17,8 +17,9 @@
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
  * temporary P/T effects; random or multi-card discard; alternate/additional
- * costs on spells, and activation costs other than fixed generic/coloured mana
- * and tap-self; X/colorless/hybrid/Phyrexian/snow mana and dynamic amounts;
+ * costs on spells, and activation costs other than fixed generic/coloured mana,
+ * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
+ * and dynamic amounts;
  * more than one target slot,
  * or an optional one; selector modifiers outside `YouCtrl`/`OppCtrl` and
  * `non`-prefixable color, card type, and supertype words (so hexproof, shroud,
@@ -1208,6 +1209,7 @@ function parseActivationCost(
 
 	const mana: Exclude<ActivationCost["mana"], "zero"> = {};
 	let tapSelf = false;
+	let sacrifice: ActivationCost["sacrifice"];
 	let sawZero = false;
 	let sawMana = false;
 	for (const term of text.split(" ")) {
@@ -1246,6 +1248,28 @@ function parseActivationCost(
 			const type = term.toLowerCase() as "w" | "u" | "b" | "r" | "g";
 			mana[type] = (mana[type] ?? 0) + 1;
 			sawMana = true;
+			continue;
+		}
+		const sacrificeMatch = term.match(/^Sac<1\/(.+)>$/);
+		if (sacrificeMatch) {
+			if (sacrifice) {
+				return issue(
+					"UNSUPPORTED_COST",
+					"multiple sacrifice activation costs are unsupported",
+					where,
+				);
+			}
+			const selectorText = sacrificeMatch[1];
+			assert(selectorText !== undefined);
+			const selector = parseSelector(selectorText);
+			if (!selector) {
+				return issue(
+					"UNSUPPORTED_COST",
+					`unsupported sacrifice selector ${selectorText}`,
+					where,
+				);
+			}
+			sacrifice = { selector, amount: 1 };
 			continue;
 		}
 		if (/^\d+$/.test(term)) {
@@ -1304,6 +1328,7 @@ function parseActivationCost(
 	return {
 		mana: sawMana ? mana : "zero",
 		tapSelf,
+		...(sacrifice ? { sacrifice } : {}),
 	};
 }
 

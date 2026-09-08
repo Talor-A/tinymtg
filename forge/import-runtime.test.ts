@@ -70,6 +70,7 @@ registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("p/preordain", "rt-preordain");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
+registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
 registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
@@ -516,6 +517,40 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(permanent(state, rod.id).tapped).toBe(true);
 		expect(state.players[ALICE].manaPool.c).toBe(0);
 		expect(state.players[BOB].life).toBe(19);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Viscera Seer's imported ability can sacrifice itself and scry", () => {
+		const state = setupMain();
+		const top = spawnCard(state, "forest", ALICE, "library");
+		const seer = spawnPermanent(state, "rt-viscera-seer", ALICE);
+		const ability = abilityId("activated", "rt-viscera-seer", 0);
+		const alice = new ScriptedAgent(
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[{ top: [], bottom: [top.id] }],
+			[seer.id],
+		);
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: seer.id, ability },
+			[alice, new ScriptedAgent()],
+		);
+
+		expect(state.battlefield).not.toContain(seer.id);
+		expect(state.players[ALICE].graveyard).toHaveLength(1);
+		expect(name(state, state.players[ALICE].graveyard[0] as ObjectId)).toBe(
+			"Viscera Seer",
+		);
+		expect(state.stack).toHaveLength(1);
+		settlePriority(state, [alice, new ScriptedAgent()]);
+		expect(state.players[ALICE].library[0]).toBe(top.id);
 		expect(state.stack).toHaveLength(0);
 	});
 

@@ -61,6 +61,7 @@ const POSITIVE_FIXTURES = [
 	"m/manic_vandal",
 	"t/timeless_lotus",
 	"w/wastes",
+	"v/viscera_seer",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -626,6 +627,28 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
+	test("Viscera Seer lowers a creature sacrifice cost and scry effect", () => {
+		const result = importFixture("v/viscera_seer");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: expect.any(String),
+				cost: {
+					mana: "zero",
+					tapSelf: false,
+					sacrifice: {
+						selector: { kind: "type", type: "creature" },
+						amount: 1,
+					},
+				},
+				targets: [],
+				effects: [{ kind: "scry", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
 	test("Merfolk Looter lowers to draw-then-discard-one, targetless", () => {
 		const result = importFixture("m/merfolk_looter");
 		if (!result.ok) throw new Error("expected ok");
@@ -800,15 +823,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 	});
 
 	test("rejects unsupported activation cost terms without dropping them", () => {
-		for (const term of [
-			"C",
-			"X",
-			"W/U",
-			"W/P",
-			"PayLife<2>",
-			"Discard<1>",
-			"Sac<1/Creature>",
-		]) {
+		for (const term of ["C", "X", "W/U", "W/P", "PayLife<2>", "Discard<1>"]) {
 			const result = importText(
 				`${BEARS}A:AB$ GainLife | Cost$ ${term} | Defined$ You | LifeAmount$ 1 | SpellDescription$ You gain 1 life.\n`,
 			);

@@ -43,6 +43,7 @@ registerCardFixture("a/arashin_cleric");
 registerCardFixture("r/rhox_war_monk");
 registerCardFixture("r/root_maze");
 registerCardFixture("r/revitalize");
+registerCardFixture("v/viscera_seer");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family
