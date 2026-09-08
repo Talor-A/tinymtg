@@ -67,6 +67,7 @@ const POSITIVE_FIXTURES = [
 	"w/wastes",
 	"v/viscera_seer",
 	"b/blazing_hellhound",
+	"b/bartolome_del_presidio",
 	"a/acolyte_of_aclazotz",
 	"c/counterspell",
 	"b/beast_whisperer",
@@ -856,6 +857,17 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		);
 	});
 
+	test("PutCounter's omitted subject default is not applied to a spell", () => {
+		const result = importText(
+			`Name:Subjectless Counter\nManaCost:G\nTypes:Instant\nA:SP$ PutCounter | CounterType$ P1P1 | CounterNum$ 1 | SpellDescription$ x\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.message).toBe(
+			"unsupported non-targeted PutCounter subject",
+		);
+	});
+
 	test("Student of Ojutai lowers its noncreature cast trigger", () => {
 		const result = importFixture("s/student_of_ojutai");
 		if (!result.ok) throw new Error("expected ok");
@@ -1197,6 +1209,62 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				amount: 1,
 			},
 		});
+	});
+
+	test("Bartolomé defaults its PutCounter recipient to itself", () => {
+		const result = importFixture("b/bartolome_del_presidio");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card).toMatchObject({
+			name: "Bartolomé del Presidio",
+			supertypes: ["legendary"],
+			types: ["creature"],
+			subtypes: ["Vampire", "Knight"],
+			manaCost: { w: 1, b: 1 },
+			power: 2,
+			toughness: 1,
+		});
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: "Put a +1/+1 counter on CARDNAME.",
+				cost: {
+					mana: "zero",
+					tapSelf: false,
+					sacrifice: {
+						selector: {
+							kind: "any",
+							selectors: [
+								{
+									kind: "all",
+									selectors: [
+										{ kind: "type", type: "creature" },
+										{ kind: "not", selector: { kind: "self" } },
+									],
+								},
+								{
+									kind: "all",
+									selectors: [
+										{ kind: "type", type: "artifact" },
+										{ kind: "not", selector: { kind: "self" } },
+									],
+								},
+							],
+						},
+						amount: 1,
+					},
+				},
+				targets: [],
+				effects: [
+					{
+						kind: "add counters",
+						object: "source",
+						counter: "+1/+1",
+						amount: 1,
+					},
+				],
+			},
+		]);
 	});
 
 	test("Acolyte of Aclazotz lowers its other-creature-or-artifact cost", () => {

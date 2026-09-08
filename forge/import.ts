@@ -937,10 +937,16 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					amount,
 				};
 			}
-			if (defined !== "Self")
+			// Forge defaults an omitted Defined$ to the source object when the
+			// ability declares no targets. Only permanent abilities can use that
+			// source as the recipient of counters.
+			if (
+				!allowSourceObject ||
+				(defined !== undefined && defined !== "Self")
+			)
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"non-targeted PutCounter requires Defined$ Self",
+					"unsupported non-targeted PutCounter subject",
 					where,
 				);
 			return { kind: "add counters", object: "source", counter, amount };

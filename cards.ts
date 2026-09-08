@@ -46,6 +46,7 @@ registerCardFixture("r/root_maze");
 registerCardFixture("r/revitalize");
 registerCardFixture("v/viscera_seer");
 registerCardFixture("b/blazing_hellhound");
+registerCardFixture("b/bartolome_del_presidio");
 registerCardFixture("a/acolyte_of_aclazotz");
 registerCardFixture("c/counterspell");
 registerCardFixture("b/beast_whisperer");

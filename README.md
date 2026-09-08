@@ -96,7 +96,8 @@ single-permanent sacrifice, including `Creature.Other` to exclude the source,
 semicolon-separated alternatives, and `CARDNAME` for the source itself (e.g.
 Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with
 life/draw/discard-one-chosen-card, damage, destroy, counter, targeted or
-self-directed fixed counter placement, and return-to-hand effects; spells,
+self-directed fixed counter placement (including Forge's omitted `Defined$`
+default for a nontargeted permanent ability), and return-to-hand effects; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
 `ValidTgts$` selector whose base is a card type, a subtype, `Card`, or

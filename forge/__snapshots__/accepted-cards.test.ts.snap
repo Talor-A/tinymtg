@@ -77,6 +77,7 @@ Angelheart Protector
 Animal Sanctuary
 Anointed Chorister
 Ant Queen
+Ant-Man, Scott Lang
 Antagonize
 Anthem of Champions
 Appetite for the Unnatural
@@ -153,6 +154,7 @@ Baron, Airship Kingdom
 Barony Vampire
 Barrage of Expendables
 Bartizan Bats
+Bartolomé del Presidio
 Basal Thrull
 Basilica Bell-Haunt
 Bastion Enforcer
@@ -194,12 +196,14 @@ Blinkmoth Well
 Blisterstick Shaman
 Blood Bairn
 Blood Glutton
+Blood Host
 Blood Pact
 Blood Pet
 Blood Vassal
 Bloodfell Caves
 Bloodfire Expert
 Bloodfire Mentor
+Bloodflow Connoisseur
 Bloodgift Demon
 Bloodhunter Bat
 Bloodrage Brawler
@@ -309,6 +313,7 @@ Child of Night
 Child of Thorns
 Chill to the Bone
 Chrome Cat
+Chronomaton
 Cinder Barrens
 Cinder Storm
 Citanul Druid
@@ -559,6 +564,7 @@ Enatu Golem
 Enchanted Prairie
 Enchantress's Presence
 Encroaching Wastes
+Energizer
 Enforcer Griffin
 Engulfing Eruption
 Enhanced Awareness
@@ -745,6 +751,7 @@ Gnarled Mass
 Gnawing Zombie
 Gnottvold Recluse
 Go for the Throat
+Gobbling Ooze
 Gobland
 Goblin Assailant
 Goblin Assault Team
@@ -828,6 +835,7 @@ Hag of Dark Duress
 Hag of Death's Legion
 Hag of Syphoned Breath
 Hag of Twisted Visions
+Hammerhead, Maggia Boss
 Hand of Death
 Hapless Researcher
 Happy Hogan, Dauntless Driver
@@ -901,6 +909,8 @@ Hulking Cyclops
 Hulking Devil
 Hulking Goblin
 Hulking Ogre
+Hungry Ghoul
+Hungry Megasloth
 Hunted Witness
 Hurloon Minotaur
 Hyena Pack
@@ -968,6 +978,7 @@ Jaya's Greeting
 Jayemdae Tome
 Jedit Ojanen
 Jedit's Dragoons
+Jenara, Asura of War
 Jerrard of the Closed Fist
 Jeskai Banner
 Jeskai Shrinekeeper
@@ -980,6 +991,7 @@ Jibbirik Omnivore
 Joraga Visionary
 Joven
 Jund Battlemage
+Jungle Delver
 Jungle Hollow
 Jungle Lion
 Jungle Shrine
@@ -1338,6 +1350,7 @@ Pharika's Cure
 Pheres-Band Centaurs
 Phyrexia's Core
 Phyrexian Arena
+Phyrexian Broodlings
 Phyrexian Gargantua
 Phyrexian Hulk
 Phyrexian Rager
@@ -1555,6 +1568,7 @@ Scalding Cauldron
 Scaldkin
 Scaled Wurm
 Scarblade Scout
+Scarland Thrinax
 Scarwood Goblins
 Scarwood Treefolk
 Scathe Zombies
@@ -1698,6 +1712,7 @@ Skysnare Spider
 Skyswirl Harrier
 Slagdrill Scrapper
 Slagwoods Bridge
+Sledding Otter-Penguin
 Slice in Twain
 Slingshot Goblin
 Slinking Skirge
@@ -1865,6 +1880,7 @@ Sworn Guardian
 Sylvan Brushstrider
 Sylvok Replica
 Symbol of Unsummoning
+Syndicate Trafficker
 Sythis, Harvest's Hand
 TCRI Building
 Taiga
@@ -2067,6 +2083,7 @@ Vedalken Mastermind
 Venerable Knight
 Venerable Lammasu
 Venerable Monk
+Verdant Automaton
 Verdigris
 Verduran Enchantress
 Vermin Gorger
@@ -2216,4 +2233,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2213`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2230`;

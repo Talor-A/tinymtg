@@ -77,6 +77,10 @@ registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
 registerRuntimeFixture("s/selfless_savior", "rt-selfless-savior");
 registerRuntimeFixture("b/blazing_hellhound", "rt-blazing-hellhound");
+registerRuntimeFixture(
+	"b/bartolome_del_presidio",
+	"rt-bartolome-del-presidio",
+);
 registerRuntimeFixture("a/acolyte_of_aclazotz", "rt-acolyte-of-aclazotz");
 registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("i/icy_manipulator", "rt-icy-manipulator");
@@ -1156,6 +1160,45 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(state.battlefield).not.toContain(fodder.id);
 		settlePriority(state, [alice, new ScriptedAgent()]);
 		expect(state.players[BOB].life).toBe(19);
+	});
+
+	test("Bartolomé sacrifices another artifact, then gets its counter on resolution", () => {
+		const state = setupMain();
+		const bartolome = spawnPermanent(
+			state,
+			"rt-bartolome-del-presidio",
+			ALICE,
+		);
+		const ability = abilityId(
+			"activated",
+			"rt-bartolome-del-presidio",
+			0,
+		);
+		expect(
+			getObservableActions(state, ALICE).some(
+				(action) =>
+					action.kind === "activate ability" && action.ability === ability,
+			),
+			"Bartolomé cannot pay the another-permanent cost with itself",
+		).toBe(false);
+
+		const relic = spawnPermanent(state, "darksteel-relic", ALICE);
+		const alice = new ScriptedAgent([], [], [], [], [], [], [], [relic.id]);
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: bartolome.id, ability },
+			[alice, new ScriptedAgent()],
+		);
+
+		expect(state.battlefield).toContain(bartolome.id);
+		expect(state.battlefield).not.toContain(relic.id);
+		expect(permanent(state, bartolome.id).counters["+1/+1"] ?? 0).toBe(0);
+		expect(state.stack).toHaveLength(1);
+
+		settlePriority(state, [alice, new ScriptedAgent()]);
+		expect(permanent(state, bartolome.id).counters["+1/+1"]).toBe(1);
+		expect(state.stack).toHaveLength(0);
 	});
 
 	test("Acolyte of Aclazotz sacrifices another artifact and drains its opponent", () => {
