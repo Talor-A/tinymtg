@@ -138,7 +138,7 @@ describe("destroy event success", () => {
 });
 
 describe("replacement effects that add counters as a permanent enters", () => {
-	function enterWalkingBallista(preferences: string[]): {
+	function enterCountersFixture(preferences: string[]): {
 		counters: number;
 		state: GameState;
 		entered: ObjectId;
@@ -150,12 +150,17 @@ describe("replacement effects that add counters as a permanent enters", () => {
 		];
 		spawnPermanent(state, "hardened-scales", ALICE);
 		spawnPermanent(state, "doubling-season", ALICE);
-		const ballistaCard = spawnCard(state, "walking-ballista", ALICE, "hand");
+		const fixtureCard = spawnCard(
+			state,
+			"test-enters-with-counters",
+			ALICE,
+			"hand",
+		);
 		const result = perform(
 			state,
 			{
 				kind: "change zone",
-				object: ballistaCard.id,
+				object: fixtureCard.id,
 				from: "hand",
 				to: "battlefield",
 				cause: "resolve",
@@ -171,26 +176,26 @@ describe("replacement effects that add counters as a permanent enters", () => {
 	}
 
 	test("the permanent's own effect applies before its controller orders the remaining effects", () => {
-		const scalesFirst = enterWalkingBallista(["hardened scales"]);
+		const scalesFirst = enterCountersFixture(["hardened scales"]);
 		// "enters with 2" is self-replacement and always applies first: 2 -> +1 -> x2
 		expect(scalesFirst.counters, "Scales then Season").toBe(6);
 
-		const seasonFirst = enterWalkingBallista(["doubling season"]);
+		const seasonFirst = enterCountersFixture(["doubling season"]);
 		seasonFirst.state.log.length = 0;
 		expect(seasonFirst.counters, "Season then Scales").toBe(5);
 		expect(
 			readObject(createReadContext(scalesFirst.state), scalesFirst.entered)
 				.currentCharacteristics,
-			"Ballista power with 6 counters",
+			"fixture power with 6 counters",
 		).toMatchObject({ power: 6 });
 	});
 });
 
 describe("when two effects change where a destroyed creature goes", () => {
-	function kalitasVsRip(p1Prefs: string[]): GameState {
+	function kalitasFixtureVsRip(p1Prefs: string[]): GameState {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent(p1Prefs)];
-		spawnPermanent(state, "kalitas", ALICE);
+		spawnPermanent(state, "test-kalitas-replacement", ALICE);
 		spawnPermanent(state, "baby-rest-in-peace", BOB);
 		const bears = spawnPermanent(state, "grizzly-bears", BOB);
 		perform(
@@ -201,7 +206,7 @@ describe("when two effects change where a destroyed creature goes", () => {
 		return state;
 	}
 	test("the creature's controller chooses which effect applies first", () => {
-		const ripFirst = kalitasVsRip(["rest in peace"]);
+		const ripFirst = kalitasFixtureVsRip(["rest in peace"]);
 		expect(
 			ripFirst.battlefield.filter(
 				(id) => permanent(ripFirst, id).representation.kind === "token",
@@ -210,16 +215,20 @@ describe("when two effects change where a destroyed creature goes", () => {
 		).toBe(0);
 		expect(ripFirst.players[BOB].exile.length, "bears exiled").toBe(1);
 
-		const kalitasFirst = kalitasVsRip(["kalitas"]);
-		kalitasFirst.log.length = 0;
-		const tokens = kalitasFirst.battlefield.filter(
-			(id) => permanent(kalitasFirst, id).representation.kind === "token",
+		const kalitasFixtureFirst = kalitasFixtureVsRip(["kalitas-style"]);
+		kalitasFixtureFirst.log.length = 0;
+		const tokens = kalitasFixtureFirst.battlefield.filter(
+			(id) =>
+				permanent(kalitasFixtureFirst, id).representation.kind === "token",
 		);
-		expect(tokens.length, "ALICE picks Kalitas: P0 gets a Zombie").toBe(1);
+		expect(
+			tokens.length,
+			"ALICE picks the Kalitas-style fixture: P0 gets a Zombie",
+		).toBe(1);
 		const tokenId = tokens[0];
 		if (tokenId === undefined)
-			throw new Error("Kalitas did not create a token");
-		const token = readObject(createReadContext(kalitasFirst), tokenId);
+			throw new Error("fixture did not create a token");
+		const token = readObject(createReadContext(kalitasFixtureFirst), tokenId);
 		expect(token.currentCharacteristics).toMatchObject({
 			name: "Zombie Token",
 			subtypes: ["Zombie"],
@@ -473,10 +482,10 @@ describe("interacting effects as permanents enter", () => {
 		expect(entered.owner, "ALICE still owns it").toBe(1);
 	});
 
-	test("test forced-copy fixture chooses what to copy before that card's own entry effect applies", () => {
+	test("the forced-copy fixture chooses what to copy before that card's own entry effect applies", () => {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "walking-ballista", 1, {
+		spawnPermanent(state, "test-enters-with-counters", 1, {
 			counters: { "+1/+1": 2 },
 		});
 		const clone = spawnCard(state, "test-forced-copy", 0, "hand");
@@ -496,20 +505,21 @@ describe("interacting effects as permanents enter", () => {
 		const copied = permanent(state, entered);
 		expect(
 			copied.representation,
-			"physical test forced-copy fixture card is retained",
+			"physical test fixture card is retained",
 		).toEqual({
 			kind: "card",
 			cardId: "test-forced-copy",
 		});
 		expect(
 			readObject(createReadContext(state), entered).currentCharacteristics.name,
-			"entered as a copy of Ballista",
-		).toBe("Walking Ballista");
+			"entered as a copy of the counters fixture",
+		).toBe("TEST ONLY — Enters With Counters");
 		// The copy picks up the copied card's printed ETB self-replacement, which is
-		// the generally correct behavior. KNOWN DIVERGENCE: real Walking Ballista
-		// enters with X counters and a copy has X=0, so real Magic gives 0 here. The
-		// fix is modeling X as a value chosen on resolution and stored on the event,
-		// not baked into the card definition — see notes.
+		// the generally correct behavior for a fixed entersWith count. This would not
+		// generalize to the real Walking Ballista: its X is chosen on resolution
+		// (mana paid), so a copy should see X=0, not the caster's X. Modeling that
+		// would mean storing the chosen X on the event rather than baking it into the
+		// card definition — out of scope for this fixture.
 		expect(
 			permanent(state, entered).counters["+1/+1"] ?? 0,
 			"copy inherits the copied card's printed ETB modifier",

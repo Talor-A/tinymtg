@@ -208,7 +208,7 @@ describe("triggered abilities", () => {
 		expect(replayedState).toEqual(recordedState);
 	});
 
-	test("test forced-copy fixture queues and resolves a copied ETB trigger from its characteristics", () => {
+	test("the forced-copy fixture queues and resolves a copied ETB trigger from its characteristics", () => {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(state, agents);

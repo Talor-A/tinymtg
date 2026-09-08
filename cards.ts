@@ -218,16 +218,20 @@ export const DOUBLING_SEASON = registerCard({
  * Self-replacement (CR 614.1c / 616.1a)
  * ------------------------------------------------------------------ */
 
-export const WALKING_BALLISTA = registerCard({
-	id: "walking-ballista",
-	name: "Walking Ballista",
+// Not the real Walking Ballista (cards/cardsfolder/w/walking_ballista.txt):
+// the real card enters with X counters read from the mana paid and has two
+// activated abilities (pay 4 to add a counter; remove a counter to ping).
+// Neither is implemented here — this fixture only exercises "enters with a
+// fixed number of +1/+1 counters" for CR 614.1c self-replacement tests.
+export const TEST_ENTERS_WITH_COUNTERS = registerCard({
+	id: "test-enters-with-counters",
+	name: "TEST ONLY — Enters With Counters",
 	types: ["artifact", "creature"],
 	subtypes: ["Construct"],
 	colors: [],
 	manaCost: "zero",
 	power: 0,
 	toughness: 0,
-	// X=2 baked in for the sketch; in a real engine this reads the cost paid.
 	entersWith: { "+1/+1": 2 },
 });
 
@@ -405,9 +409,15 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 	],
 });
 
-export const NECROPOTENCE = registerCard({
-	id: "necropotence",
-	name: "Necropotence",
+// Not the real Necropotence (cards/cardsfolder/n/necropotence.txt): the real
+// card's defining ability — paying life to exile cards from your library into
+// a delayed hand — and its graveyard-exile trigger are both missing. Only the
+// "skip your draw step" clause is implemented, which is the card's drawback,
+// not its function. This fixture exists to test the "skip" replacement
+// pattern (CR 614.10), not to stand in for Necropotence.
+export const TEST_SKIP_DRAW_STEP = registerCard({
+	id: "test-skip-draw-step",
+	name: "TEST ONLY — Skip Draw Step",
 	types: ["enchantment"],
 	colors: ["b"],
 	manaCost: {
@@ -415,9 +425,9 @@ export const NECROPOTENCE = registerCard({
 	},
 	replacements: [
 		{
-			label: "necro:skipdraw",
+			label: "skipdraw",
 			layer: "other",
-			text: "Skip your draw step.",
+			text: "TEST ONLY: skip your draw step.",
 			applies: (ev, ctx) =>
 				onBattlefield(ctx) &&
 				ev.kind === "begin step" &&
@@ -518,11 +528,17 @@ export const BABY_MYCOSYNTH = registerCard({
 
 /* ------------------------------------------------------------------ *
  * Copy tier (CR 616.1c)
+ *
+ * TEST_FORCED_COPY is not the real Clone (cards/cardsfolder/c/clone.txt):
+ * the real card is optional ("you may") and lets the controller choose which
+ * creature to copy. This fixture always copies, and deterministically picks
+ * the first creature on the battlefield, so it must never carry Clone's name
+ * or card id. Do not import the real Clone under this definition.
  * ------------------------------------------------------------------ */
 
 export const TEST_FORCED_COPY = registerCard({
 	id: "test-forced-copy",
-	name: "TEST ONLY — Forced First-Creature Copy",
+	name: "TEST ONLY — Forced Copy",
 	types: ["creature"],
 	subtypes: ["Shapeshifter"],
 	colors: ["u"],
@@ -534,21 +550,22 @@ export const TEST_FORCED_COPY = registerCard({
 	toughness: 0,
 	replacements: [
 		{
-			label: "test-forced-copy",
+			label: "forced-copy",
 			layer: "copy",
 			functionsFrom: "any",
-			text: "TEST ONLY — This enters as a copy of the first creature on the battlefield.",
+			text: "TEST ONLY: unconditionally enters as a copy of the first creature on the battlefield. Not real card text.",
 			applies: (ev, ctx) =>
 				ev.kind === "change zone" &&
 				ev.to === "battlefield" &&
 				ev.object === ctx.self?.id &&
 				ev.copiableOverride === undefined &&
-				pickFirstCreatureToCopy(ctx.read) !== null,
+				pickForcedCopyTarget(ctx.read) !== null,
 			replace(ev, ctx) {
 				if (ev.kind !== "change zone") return [ev];
-				const target = pickFirstCreatureToCopy(ctx.read);
-				// The copiable values carry the copied object's ability references.
-				// No card identity comes along: this remains the test fixture card.
+				const target = pickForcedCopyTarget(ctx.read);
+				// The copiable values carry the copied object's ability references,
+				// which is the whole of what this fixture acquires. No card identity
+				// comes along: it stays physically this test card.
 				return target
 					? [{ ...ev, copiableOverride: cloneCharacteristics(target) }]
 					: [ev];
@@ -557,8 +574,8 @@ export const TEST_FORCED_COPY = registerCard({
 	],
 });
 
-/** Deterministic test behavior; this is intentionally not a real card choice. */
-function pickFirstCreatureToCopy(
+/** Stand-in for a real choice — a policy would pick here. */
+function pickForcedCopyTarget(
 	read: ReadContext,
 ): CharacteristicsSnapshot | null {
 	for (const id of read.state.battlefield) {
@@ -683,11 +700,18 @@ export function gatherSpecimens(you: PlayerId): {
 /* ------------------------------------------------------------------ *
  * A replacement that produces *two* events — the case that forces the
  * pipeline to recurse and to carry the applied-set forward.
+ *
+ * Not the real Kalitas, Traitor of Ghet
+ * (cards/cardsfolder/k/kalitas_traitor_of_ghet.txt): this only implements the
+ * graveyard-replacement half, which matches the oracle text exactly. The
+ * activated ability ("{2}{B}, Sacrifice another Vampire or Zombie: put two
+ * +1/+1 counters on Kalitas") is not implemented, since nothing here
+ * exercises it.
  * ------------------------------------------------------------------ */
 
-export const KALITAS = registerCard({
-	id: "kalitas",
-	name: "Kalitas, Traitor of Ghet",
+export const TEST_KALITAS_REPLACEMENT = registerCard({
+	id: "test-kalitas-replacement",
+	name: "TEST ONLY — Kalitas-Style Graveyard Replacement",
 	types: ["creature"],
 	subtypes: ["Vampire", "Warrior"],
 	colors: ["b"],
@@ -700,7 +724,7 @@ export const KALITAS = registerCard({
 	keywords: ["lifelink"],
 	replacements: [
 		{
-			label: "kalitas",
+			label: "kalitas-style-replacement",
 			layer: "other",
 			text: "If a nontoken creature an opponent controls would die, instead exile it and create a 2/2 black Zombie token.",
 			applies(ev, ctx) {

@@ -81,8 +81,9 @@ registerCard({
 });
 
 /**
- * A test forced-copy fixture whose copy ability carries the *same human label* as Entry Guard's
- * entry replacement, and which also prints its own "enters tapped".
+ * A copy-effect creature whose copy ability carries the *same human label* as
+ * Entry Guard's entry replacement, and which also prints its own "enters
+ * tapped".
  *
  * Both halves are load-bearing. The shared label proves that effect identity
  * comes from the `cardId:index` reference and not from the label — under label
@@ -149,10 +150,16 @@ registerCard({
 	toughness: 2,
 });
 
-/** `entersTapped` shorthand, to prove the compiled form copies too. */
+/**
+ * `entersTapped` shorthand, to prove the compiled form copies too.
+ *
+ * Not the real Rusted Sentinel (cards/cardsfolder/r/rusted_sentinel.txt),
+ * which is an Artifact Creature Golem at 3/4: this fixture only borrows the
+ * "enters tapped" mechanic and uses different types and stats.
+ */
 registerCard({
-	id: "test-rusted-sentinel",
-	name: "Rusted Sentinel",
+	id: "test-entertapped-body",
+	name: "TEST ONLY — Entertapped Body",
 	types: ["artifact", "creature"],
 	subtypes: ["Construct"],
 	colors: [],
@@ -221,7 +228,7 @@ describe("copied enter-the-battlefield replacements", () => {
 		expect(
 			readObject(createReadContext(state), entered).currentCharacteristics.name,
 		).toBe("Entry Guard");
-		// The replacement reached the event during the test forced-copy fixture's own entry, not
+		// The replacement reached the event during the fixture's own entry, not
 		// afterwards: both fields are written by `moveObject`, not by any later
 		// mutation.
 		expect(copy.tapped, "copied ETB replacement tapped it").toBe(true);
@@ -258,7 +265,7 @@ describe("copied enter-the-battlefield replacements", () => {
 
 	test("copied entersTapped and entersWith work with no copied card identity", () => {
 		const tapped = newGame();
-		spawnPermanent(tapped, "test-rusted-sentinel", P1);
+		spawnPermanent(tapped, "test-entertapped-body", P1);
 		const sentinelCopy = permanent(
 			tapped,
 			enter(tapped, spawnCard(tapped, "test-forced-copy", P1, "hand").id),
@@ -266,27 +273,27 @@ describe("copied enter-the-battlefield replacements", () => {
 		expect(
 			readObject(createReadContext(tapped), sentinelCopy.id)
 				.currentCharacteristics.name,
-		).toBe("Rusted Sentinel");
+		).toBe("TEST ONLY — Entertapped Body");
 		expect(sentinelCopy.tapped, "copied entersTapped applied").toBe(true);
 		expect(
 			sentinelCopy.representation,
-			"still physically a test forced-copy fixture",
+			"still physically the fixture card",
 		).toEqual({
 			kind: "card",
 			cardId: "test-forced-copy",
 		});
 
 		const counters = newGame();
-		spawnPermanent(counters, "walking-ballista", P1);
-		const ballistaCopy = permanent(
+		spawnPermanent(counters, "test-enters-with-counters", P1);
+		const countersCopy = permanent(
 			counters,
 			enter(counters, spawnCard(counters, "test-forced-copy", P1, "hand").id),
 		);
 		expect(
-			readObject(createReadContext(counters), ballistaCopy.id)
+			readObject(createReadContext(counters), countersCopy.id)
 				.currentCharacteristics.name,
-		).toBe("Walking Ballista");
-		expect(ballistaCopy.counters["+1/+1"], "copied entersWith applied").toBe(2);
+		).toBe("TEST ONLY — Enters With Counters");
+		expect(countersCopy.counters["+1/+1"], "copied entersWith applied").toBe(2);
 	});
 
 	test("the copy replaces entry abilities rather than adding to them", () => {
@@ -387,7 +394,7 @@ describe("copied entry replacements across tokens and copy chains", () => {
 		);
 		expect(permanent(state, first).counters["+1/+1"]).toBe(1);
 
-		// Remove the original so the second test forced-copy fixture can only see the copy.
+		// Remove the original so the second fixture card can only see the copy.
 		leave(state, guard.id);
 		const second = enter(
 			state,
@@ -409,7 +416,7 @@ describe("copied entry replacements across tokens and copy chains", () => {
 });
 
 describe("physical identity and serialization of copied entry replacements", () => {
-	test("a copied test forced-copy fixture is still a test forced-copy fixture card in the graveyard", () => {
+	test("a copied fixture is still the same fixture card in the graveyard", () => {
 		const state = newGame();
 		spawnPermanent(state, GUARD, P1);
 		const entered = enter(

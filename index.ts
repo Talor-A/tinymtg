@@ -2282,11 +2282,11 @@ function printedRefsFor(
  *
  * Making them real registered abilities — rather than defs synthesized at
  * collection time from whatever card the object "is" — is what makes them
- * copiable. Walking Ballista's copiable values carry
- * `walking-ballista:<n>` in `abilities.replacement`; a Clone that enters as a
- * copy carries that same reference on the event's copy snapshot, and the
- * reference *is* the provenance. Nothing at execution time has to ask which
- * card an object was copied from.
+ * copiable. The TEST_ENTERS_WITH_COUNTERS fixture's copiable values carry
+ * `test-enters-with-counters:<n>` in `abilities.replacement`; a copy effect
+ * that enters as a copy carries that same reference on the event's copy
+ * snapshot, and the reference *is* the provenance. Nothing at execution time
+ * has to ask which card an object was copied from.
  *
  * They function from anywhere, because the object is still in the zone it is
  * leaving when they apply, and they are self-scoped to the object entering.

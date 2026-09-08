@@ -13,12 +13,12 @@ const DECK = [
 	"forest",
 	"grizzly-bears",
 	"eager-cadet",
-	"walking-ballista",
+	"test-enters-with-counters",
 	"darksteel-relic",
 	"revitalize",
 	"baby-rest-in-peace",
 	"root-maze",
-	"necropotence",
+	"test-skip-draw-step",
 	"test-forced-copy",
 ] as const;
 

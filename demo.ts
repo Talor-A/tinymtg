@@ -4,10 +4,10 @@
  *
  * Runs real scripted games through the real scheduler. Every replacement that
  * fires below (Furnace of Rath doubling combat damage, Palisade Giant
- * redirecting it, Kalitas exiling a creature and replacing it with a Zombie)
- * is the actual replacement-effect pipeline making its own choices about
- * ordering and layers, and Rhox War Monk's lifelink rides the same damage
- * events.
+ * redirecting it, the Kalitas-style TEST_KALITAS_REPLACEMENT fixture exiling
+ * a creature and replacing it with a Zombie) is the actual replacement-effect
+ * pipeline making its own choices about ordering and layers, and Rhox War
+ * Monk's lifelink rides the same damage events.
  *
  * Two caveats, so the tour doesn't oversell itself: each act builds a fresh
  * board with `spawnPermanent`, which places permanents directly rather than
@@ -232,9 +232,9 @@ function fillLibrary(state: GameState, player: PlayerId, n: number): void {
 // writes the object straight onto the battlefield — no "change zone" event, so
 // no ETB replacements and no ETB triggers run during setup. Fine for staging a
 // scene, but it means the demo never exercises the enters-the-battlefield path;
-// Kalitas in Act V is the only zone-change replacement shown at all. Cards like
-// Root Maze and Clone (cards.ts) are implemented and would need a real ETB to
-// demonstrate.
+// Kalitas in Act V is the only zone-change replacement shown at all. Cards
+// like Root Maze and the TEST_FORCED_COPY fixture (cards.ts) are implemented
+// and would need a real ETB to demonstrate.
 
 function passing(): Agents {
 	return [new ScriptedAgent(), new ScriptedAgent()];
@@ -424,25 +424,27 @@ async function main(): Promise<void> {
 	}
 
 	/* ---------------------------- Act V ----------------------------- */
-	// TODO: "Zombie army" oversells a single 2/2 token — Kalitas makes exactly
-	// one Zombie per creature that dies, and only one creature dies here. Either
-	// retitle this ("...into a Zombie"), or give Bob several doomed creatures so
-	// the plural is actually earned.
+	// TODO: "Zombie army" oversells a single 2/2 token — the fixture makes
+	// exactly one Zombie per creature that dies, and only one creature dies
+	// here. Either retitle this ("...into a Zombie"), or give Bob several
+	// doomed creatures so the plural is actually earned.
 	//
 	// The before/after count below is also loose: it counts all of Alice's
-	// permanents (Kalitas included), so it reads 1 → 2 rather than counting the
-	// tokens created. It happens to be right only because exactly one token was
-	// made and nothing of Alice's left the battlefield.
-	await banner("Act V — Kalitas turns a would-be kill into a Zombie army");
+	// permanents (the fixture included), so it reads 1 → 2 rather than
+	// counting the tokens created. It happens to be right only because exactly
+	// one token was made and nothing of Alice's left the battlefield.
+	await banner(
+		"Act V — a Kalitas-style replacement turns a would-be kill into a Zombie army",
+	);
 	await beat(
-		"Alice controls Kalitas, Traitor of Ghet. When Bob's nontoken creature would die, it's exiled and Alice gets a 2/2 Zombie instead.",
+		"Alice controls a TEST ONLY Kalitas-style graveyard replacement (not the real Kalitas, Traitor of Ghet — see cards.ts). When Bob's nontoken creature would die, it's exiled and Alice gets a 2/2 Zombie instead.",
 	);
 
 	{
 		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
-		spawnPermanent(state, "kalitas", ALICE);
+		spawnPermanent(state, "test-kalitas-replacement", ALICE);
 		const doomed = spawnPermanent(state, "eager-cadet", BOB);
 		permanent(state, doomed.id).damage = 1; // 1/1 with 1 damage marked = lethal at SBA
 

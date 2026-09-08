@@ -283,7 +283,7 @@ describe("derived game views", () => {
 		});
 	});
 
-	test("test forced-copy fixture retains a layer-1 snapshot after the source effect leaves", () => {
+	test("the forced-copy fixture retains a layer-1 snapshot after the source effect leaves", () => {
 		const state = newGame();
 		const target = spawnPermanent(state, "grizzly-bears", P1);
 		const source = spawnPermanent(state, LAYER_ONE_SOURCE.id, P1);
@@ -311,8 +311,7 @@ describe("derived game views", () => {
 			},
 			agents,
 		).created[0];
-		if (entered === undefined)
-			throw new Error("test forced-copy fixture did not enter");
+		if (entered === undefined) throw new Error("fixture did not enter");
 		expect(permanent(state, entered).copiableOverride).toEqual(captured);
 		expect(physicalCardId(permanent(state, entered))).toBe("test-forced-copy");
 
@@ -369,7 +368,7 @@ describe("derived game views", () => {
 		expect(() => readObject(read, bears.id)).toThrow(/stale ReadContext/);
 	});
 
-	test("test forced-copy fixture copies a creature token's actual copiable values", () => {
+	test("the forced-copy fixture copies a creature token's actual copiable values", () => {
 		const state = newGame();
 		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		const bearsSnapshot = readObject(createReadContext(state), bears.id);
@@ -484,9 +483,9 @@ describe("derived game views", () => {
 		expect(physicalCardId(token)).toBe(null);
 	});
 
-	test("copy-of-copy keeps effective values and a copied test forced-copy fixture leaves as test forced-copy fixture", () => {
+	test("copy-of-copy keeps effective values and a copied fixture leaves as the fixture", () => {
 		const state = newGame();
-		const ballista = spawnPermanent(state, "walking-ballista", P1);
+		const ballista = spawnPermanent(state, "test-enters-with-counters", P1);
 		const firstCard = spawnCard(state, "test-forced-copy", P1, "hand");
 		const firstResult = perform(
 			state,
@@ -766,7 +765,7 @@ describe("layer 6 ability grants", () => {
 		);
 	});
 
-	test("test forced-copy fixture copies the creature, not the grant hanging on it", () => {
+	test("the forced-copy fixture copies the creature, not the grant hanging on it", () => {
 		const { state, instruction } = withInstruction();
 		spawnPermanent(state, "grizzly-bears", P1);
 		const cloneCard = spawnCard(state, "test-forced-copy", P1, "hand");
@@ -789,7 +788,7 @@ describe("layer 6 ability grants", () => {
 		const copied = readObject(createReadContext(state), copiedId);
 		if (copied.kind !== "permanent") throw new Error("expected permanent");
 		expect(copied.copiableValues.name).toBe("Grizzly Bears");
-		// test forced-copy fixture copies copiable values, and the grant was never part of them.
+		// The fixture copies copiable values, and the grant was never part of them.
 		expect(copied.copiableValues.abilities.activated).toEqual([]);
 		// It is still a creature its controller controls, so the grant applies to
 		// it directly — from the instruction, not from the copy.
@@ -817,8 +816,8 @@ describe("layer 6 ability grants", () => {
 		expect(afterwards.copiableValues.name).toBe("Grizzly Bears");
 		expect(() => structuredClone(state)).not.toThrow();
 
-		// Physical identity is untouched by any of it: the copy is still a test forced-copy fixture
-		// card once it leaves the battlefield.
+		// Physical identity is untouched by any of it: the copy is still the
+		// fixture card once it leaves the battlefield.
 		const left = perform(
 			state,
 			{

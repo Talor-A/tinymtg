@@ -16,7 +16,7 @@ const LIBRARY_CARDS = [
 	"forest",
 	"grizzly-bears",
 	"eager-cadet",
-	"walking-ballista",
+	"test-enters-with-counters",
 ] as const;
 
 const PERMANENTS = [
@@ -31,7 +31,7 @@ const PERMANENTS = [
 	"grizzly-bears",
 	"hardened-scales",
 	"baby-leyline-of-the-void",
-	"necropotence",
+	"test-skip-draw-step",
 	"baby-rest-in-peace",
 	"root-maze",
 ] as const;

@@ -183,9 +183,9 @@ describe("draw steps and game endings", () => {
 		return { state, agents: passingAgents() };
 	}
 
-	test("Necropotence skips only its controller's normal draw", () => {
+	test("the skip-draw-step fixture skips only its controller's normal draw", () => {
 		const { state, agents } = setupDrawStep();
-		spawnPermanent(state, "necropotence", ALICE);
+		spawnPermanent(state, "test-skip-draw-step", ALICE);
 		for (let i = 0; i < 2; i++) {
 			spawnCard(state, "forest", ALICE, "library");
 			spawnCard(state, "forest", BOB, "library");
