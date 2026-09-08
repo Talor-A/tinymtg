@@ -932,6 +932,7 @@ Imperial Outrider
 Imperious Inkmage
 Implode
 Imposing Sovereign
+Impulse
 Incurable Ogre
 Independent Troops
 Indomitable Ancients
@@ -2233,4 +2234,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2230`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2231`;

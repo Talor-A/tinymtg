@@ -95,7 +95,9 @@ optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional
 single-permanent sacrifice, including `Creature.Other` to exclude the source,
 semicolon-separated alternatives, and `CARDNAME` for the source itself (e.g.
 Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with
-life/draw/discard-one-chosen-card, damage, destroy, counter, targeted or
+life/draw/discard-one-chosen-card, scry, surveil, and Impulse's exact hidden
+four-card `Dig` form, which chooses one card for hand and orders the rest on
+the bottom; damage, destroy, counter, targeted or
 self-directed fixed counter placement (including Forge's omitted `Defined$`
 default for a nontargeted permanent ability), and return-to-hand effects; spells,
 activated abilities, and triggered abilities with at most one required target
@@ -111,8 +113,9 @@ changes; temporary `KW$ Indestructible` grants; and fixed controlled-creature
 P/T statics. See the acceptance matrix in `forge/import.test.ts` for the exact
 fixtures this is checked against, and
 the "Deferred / explicitly unsupported" list at the top of `forge-import.ts`
-for what is intentionally out of scope (random/multi-card discard, dynamic/X
-amounts, alternate costs, hexproof/shroud/protection, and more).
+for what is intentionally out of scope (other `Dig` forms, random/multi-card
+discard, dynamic/X amounts, alternate costs, hexproof/shroud/protection, and
+more).
 
 The engine's own selector vocabulary is wider than the spellings the bridge
 accepts: `TargetSelectorDef` covers the source itself, card type, supertype,
@@ -120,7 +123,7 @@ subtype, color, and controller, combined with all/any/not to any depth. A
 hand-written card definition can use all of it.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 1,322 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 2,231 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.

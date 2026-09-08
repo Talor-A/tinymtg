@@ -683,6 +683,36 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				);
 			return { kind: "surveil", player: who, amount };
 		}
+		case "dig": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"dignum",
+					"changenum",
+					"noreveal",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const who = parseEffectPlayer(params, parsePlayer);
+			const amount = positiveInteger(getForgeParam(params, "DigNum"));
+			if (
+				who !== "you" ||
+				getForgeParam(params, "ChangeNum") !== "1" ||
+				getForgeParam(params, "NoReveal") !== "True" ||
+				amount !== 4
+			) {
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"only Impulse's fixed four-card hidden Dig form is supported",
+					where,
+				);
+			}
+			return { kind: "choose-from-top", player: who, amount };
+		}
 		case "draw": {
 			const badParams = checkParams(
 				params,

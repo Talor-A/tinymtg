@@ -52,6 +52,10 @@ export class ScriptedAgent implements SyncAgent {
 		public scryChoices: { top: ObjectId[]; bottom: ObjectId[] }[] = [],
 		public sacrificeChoices: ObjectId[] = [],
 		public surveilChoices: { top: ObjectId[]; bottom: ObjectId[] }[] = [],
+		public chooseFromTopChoices: {
+			chosen: ObjectId;
+			bottom: ObjectId[];
+		}[] = [],
 	) {}
 
 	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
@@ -141,6 +145,19 @@ export class ScriptedAgent implements SyncAgent {
 				};
 			}
 
+			case "chooseFromTop": {
+				const chosen = request.context.cards[0];
+				assertDefined(chosen);
+				const arrangement = this.chooseFromTopChoices.shift() ?? {
+					chosen,
+					bottom: request.context.cards.slice(1),
+				};
+				return {
+					chosen: String(arrangement.chosen),
+					bottom: arrangement.bottom.map(String),
+				};
+			}
+
 			default:
 				return assertNever(request);
 		}
@@ -175,6 +192,15 @@ export class RandomAgent implements SyncAgent {
 					top: shuffled.slice(0, topCount),
 					bottom: shuffled.slice(topCount),
 				};
+			}
+			case "chooseFromTop": {
+				const shuffled = request.options
+					.map((option) => ({ option, order: Math.random() }))
+					.sort((left, right) => left.order - right.order)
+					.map(({ option }) => option.id);
+				const chosen = shuffled[0];
+				assertDefined(chosen);
+				return { chosen, bottom: shuffled.slice(1) };
 			}
 			case "replacement":
 			case "copyAs":
@@ -235,6 +261,8 @@ export class KeyboardAgent implements SyncAgent {
 			case "scry":
 			case "surveil":
 				return this.chooseScry(request);
+			case "chooseFromTop":
+				return this.chooseFromTop(request);
 			default:
 				return assertNever(request);
 		}
@@ -283,6 +311,43 @@ export class KeyboardAgent implements SyncAgent {
 				optionIds.push(option.id);
 			}
 			return { optionIds };
+		}
+	}
+
+	private chooseFromTop(
+		request: Extract<ChoiceRequest, { kind: "chooseFromTop" }>,
+	): ChoiceAnswer {
+		console.log(
+			`\n[Player ${request.player}: choose one card for hand and order the rest on the bottom]`,
+		);
+		for (let i = 0; i < request.options.length; i++) {
+			console.log(`  ${i + 1}. ${request.options[i]?.label}`);
+		}
+		while (true) {
+			const input = prompt(
+				"Hand card first, then bottom cards in order (comma-separated numbers): ",
+			);
+			const parts = input.split(",").map((part) => part.trim());
+			const indices = parts.map((part) => Number.parseInt(part, 10) - 1);
+			if (
+				parts.some((part) => !/^\d+$/.test(part)) ||
+				indices.length !== request.options.length ||
+				new Set(indices).size !== indices.length ||
+				indices.some((index) => !request.options[index])
+			) {
+				console.log("Enter every card exactly once.");
+				continue;
+			}
+			const chosen = request.options[indices[0] ?? -1];
+			assertDefined(chosen);
+			return {
+				chosen: chosen.id,
+				bottom: indices.slice(1).map((index) => {
+					const option = request.options[index];
+					assertDefined(option);
+					return option.id;
+				}),
+			};
 		}
 	}
 

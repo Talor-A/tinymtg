@@ -70,6 +70,7 @@ registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("n/network_disruptor", "rt-network-disruptor");
 registerRuntimeFixture("p/preordain", "rt-preordain");
+registerRuntimeFixture("i/impulse", "rt-impulse");
 registerRuntimeFixture("c/consider", "rt-consider");
 registerRuntimeFixture("v/village_rites", "rt-village-rites");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
@@ -697,6 +698,45 @@ describe("forge-import runtime: spell effects", () => {
 		expect(state.players[ALICE].library[0]).toBe(first);
 		expect(state.players[ALICE].library.at(-1)).toBe(bottom);
 		expect(agents[ALICE].scryChoices).toHaveLength(0);
+	});
+
+	test("Impulse puts the chosen top-four card into hand and the rest on the bottom in the chosen order", () => {
+		const state = setupMain();
+		const existingLibrary = [...state.players[ALICE].library];
+		const first = spawnCard(state, "forest", ALICE, "library").id;
+		const second = spawnCard(state, "rt-grizzly-bears", ALICE, "library").id;
+		const chosen = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+		const fourth = spawnCard(state, "rt-aesthir-glider", ALICE, "library").id;
+		const spell = spawnCard(state, "rt-impulse", ALICE, "hand");
+		perform(
+			state,
+			{
+				kind: "add mana",
+				source: spell.id,
+				player: ALICE,
+				mana: { u: 1, c: 1 },
+			},
+			passingAgents(),
+		);
+		const agents = passingAgents();
+		agents[ALICE].chooseFromTopChoices.push({
+			chosen,
+			bottom: [second, fourth, first],
+		});
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		settlePriority(state, agents);
+
+		expect(state.players[ALICE].hand.map((id) => name(state, id))).toContain(
+			"Darksteel Relic",
+		);
+		expect(state.players[ALICE].library).toEqual([
+			first,
+			fourth,
+			second,
+			...existingLibrary,
+		]);
+		expect(agents[ALICE].chooseFromTopChoices).toHaveLength(0);
 	});
 
 	test("Village Rites' imported additional cost sacrifices before it draws", () => {

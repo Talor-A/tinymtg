@@ -19,6 +19,8 @@ export {
 	type ChoiceRequest,
 	type ChoiceSource,
 	type ChoiceTranscript,
+	type ChooseFromTopChoiceAnswer,
+	type ChooseFromTopResult,
 	InvalidChoiceAnswerError,
 	type RecordedChoice,
 	type ScryChoiceAnswer,
@@ -451,6 +453,16 @@ interface SurveilEvent extends EventCommon {
 	amount: number;
 }
 
+/**
+ * Look at the top cards, put one into the player's hand, and put the rest on
+ * the bottom in the order that player chooses. This is not a draw.
+ */
+interface ChooseFromTopEvent extends EventCommon {
+	kind: "choose from top";
+	player: PlayerId;
+	amount: number;
+}
+
 interface DiscardEvent extends EventCommon {
 	kind: "discard";
 	player: PlayerId;
@@ -776,6 +788,7 @@ export type GameEvent =
 	| MillEvent
 	| ScryEvent
 	| SurveilEvent
+	| ChooseFromTopEvent
 	| DiscardEvent
 	| DamageEvent
 	| DestroyEvent
@@ -2060,6 +2073,11 @@ export type EffectDef<
 			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
 			/** A relative player, or the player bound to a target slot. */
 			player: Player | TargetSlotRef;
+			amount: number;
+	  }
+	| {
+			kind: "choose-from-top";
+			player: Player;
 			amount: number;
 	  }
 	| {
@@ -4164,6 +4182,7 @@ export function affectedPlayer(
 		case "mill":
 		case "scry":
 		case "surveil":
+		case "choose from top":
 		case "discard":
 		case "begin turn":
 		case "begin step":
@@ -4602,6 +4621,8 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 			return `scry(P${ev.player}, ${ev.amount})`;
 		case "surveil":
 			return `surveil(P${ev.player}, ${ev.amount})`;
+		case "choose from top":
+			return `choose from top(P${ev.player}, ${ev.amount})`;
 		case "discard":
 			if (ev.cards.kind === "hand-size")
 				return `discard(P${ev.player}, to hand size)`;
@@ -5554,6 +5575,68 @@ function executeIn(
 			}
 			library.push(...[...arrangement.top].reverse());
 			log(state, `${"  ".repeat(depth)}P${ev.player} surveils ${ev.amount}`);
+			break;
+		}
+
+		case "choose from top": {
+			assert(
+				Number.isSafeInteger(ev.amount) && ev.amount >= 1,
+				`choose-from-top amount must be a positive integer, got ${ev.amount}`,
+			);
+			const library = state.players[ev.player].library;
+			const count = Math.min(ev.amount, library.length);
+			const seen = library.slice(library.length - count).reverse();
+			const choice = choices.chooseFromTop(state, ev.player, seen);
+			if (seen.length === 0) {
+				assert(choice.chosen === null && choice.bottom.length === 0);
+				log(
+					state,
+					`${"  ".repeat(depth)}P${ev.player} looks at an empty library`,
+				);
+				break;
+			}
+
+			assert(choice.chosen !== null, "choose-from-top selected no card");
+			const arranged = [choice.chosen, ...choice.bottom];
+			assert(
+				arranged.length === seen.length,
+				"choose-from-top changed the card count",
+			);
+			assert(
+				new Set(arranged).size === arranged.length,
+				"choose-from-top arrangement contains duplicate cards",
+			);
+			assert(
+				arranged.every((id) => seen.includes(id)),
+				"choose-from-top arrangement contains a card that was not looked at",
+			);
+
+			childResults.push(
+				performIn(
+					state,
+					{
+						kind: "change zone",
+						object: choice.chosen,
+						from: "library",
+						destination: { zone: "hand" },
+						cause: "put",
+					},
+					choices,
+					scope,
+					depth + 1,
+				),
+			);
+
+			for (const id of choice.bottom) {
+				const index = library.indexOf(id);
+				assert(index !== -1, `choose-from-top card ${id} left the library`);
+				library.splice(index, 1);
+			}
+			library.unshift(...[...choice.bottom].reverse());
+			log(
+				state,
+				`${"  ".repeat(depth)}P${ev.player} chooses from the top ${ev.amount} cards`,
+			);
 			break;
 		}
 
@@ -6772,6 +6855,12 @@ function effectToEvent(
 				player: effectPlayer(effect.player),
 				amount: effect.amount,
 			};
+		case "choose-from-top":
+			return {
+				kind: "choose from top",
+				player: relativeEffectPlayer(item, effect.player),
+				amount: effect.amount,
+			};
 		case "mill":
 			return {
 				kind: "mill",
@@ -7052,6 +7141,7 @@ function requiredTargetDefinition(
 			);
 			return;
 		}
+		if (effect.kind === "choose-from-top") return;
 		if (
 			(effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||
@@ -7722,6 +7812,7 @@ function activateAbilityIn(
 				effect.kind === "draw" ||
 				effect.kind === "scry" ||
 				effect.kind === "surveil" ||
+				effect.kind === "choose-from-top" ||
 				effect.kind === "mill" ||
 				effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||

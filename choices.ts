@@ -170,6 +170,15 @@ export interface SurveilChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
+export interface ChooseFromTopChoiceRequest extends ChoiceRequestBase {
+	kind: "chooseFromTop";
+	player: PlayerId;
+	context: {
+		/** The looked-at cards in current top-to-bottom order. */
+		cards: ObjectId[];
+	};
+}
+
 export type ChoiceRequest =
 	| TargetChoiceRequest
 	| ReplacementChoiceRequest
@@ -183,7 +192,8 @@ export type ChoiceRequest =
 	| DeclareAttackersChoiceRequest
 	| DeclareBlockersChoiceRequest
 	| ScryChoiceRequest
-	| SurveilChoiceRequest;
+	| SurveilChoiceRequest
+	| ChooseFromTopChoiceRequest;
 
 export interface ScryChoiceAnswer {
 	/**
@@ -211,10 +221,23 @@ export interface SurveilResult {
 	bottom: ObjectId[];
 }
 
+export interface ChooseFromTopChoiceAnswer {
+	chosen: string;
+	/** Ordered from nearest the top toward the bottom of the bottom group. */
+	bottom: string[];
+}
+
+export interface ChooseFromTopResult {
+	chosen: ObjectId | null;
+	/** Ordered from nearest the top toward the bottom of the bottom group. */
+	bottom: ObjectId[];
+}
+
 export type ChoiceAnswer =
 	| { optionId: string }
 	| { optionIds: string[] }
-	| ScryChoiceAnswer;
+	| ScryChoiceAnswer
+	| ChooseFromTopChoiceAnswer;
 
 export interface SyncAgent {
 	choose(view: PlayerView, request: ChoiceRequest): ChoiceAnswer;
@@ -298,7 +321,11 @@ type RequestInput =
 			"version" | "id" | "ordinal" | "fingerprint"
 	  >
 	| Omit<ScryChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
-	| Omit<SurveilChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">;
+	| Omit<SurveilChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
+	| Omit<
+			ChooseFromTopChoiceRequest,
+			"version" | "id" | "ordinal" | "fingerprint"
+	  >;
 
 function canonicalize(value: unknown, seen = new Set<object>()): string {
 	if (typeof value === "string" || typeof value === "boolean") {
@@ -372,7 +399,45 @@ function normalizeAnswer(
 	if (request.kind === "scry" || request.kind === "surveil") {
 		return normalizeScryAnswer(request, answer);
 	}
+	if (request.kind === "chooseFromTop") {
+		return normalizeChooseFromTopAnswer(request, answer);
+	}
 	return normalizeSingleAnswer(request, answer);
+}
+
+function normalizeChooseFromTopAnswer(
+	request: ChooseFromTopChoiceRequest,
+	answer: ChoiceAnswer,
+): ChooseFromTopChoiceAnswer {
+	const chosen = (answer as { chosen?: unknown })?.chosen;
+	const bottom = (answer as { bottom?: unknown })?.bottom;
+	if (typeof chosen !== "string" || !Array.isArray(bottom)) {
+		throw new InvalidChoiceAnswerError(
+			`agent returned an invalid answer for choice ${request.id}`,
+		);
+	}
+
+	const legalIds = new Set(request.options.map((option) => option.id));
+	if (!legalIds.has(chosen)) {
+		throw new InvalidChoiceAnswerError(
+			`agent selected ${chosen} for choice ${request.id}; legal options: ${[...legalIds].join(", ")}`,
+		);
+	}
+	const seen = new Set([chosen]);
+	for (const id of bottom) {
+		if (typeof id !== "string" || !legalIds.has(id) || seen.has(id)) {
+			throw new InvalidChoiceAnswerError(
+				`agent returned an invalid bottom order for choice ${request.id}`,
+			);
+		}
+		seen.add(id);
+	}
+	if (seen.size !== legalIds.size) {
+		throw new InvalidChoiceAnswerError(
+			`agent must place all ${legalIds.size - 1} unchosen cards for choice ${request.id}`,
+		);
+	}
+	return { chosen, bottom: [...bottom] as string[] };
 }
 
 function normalizeScryAnswer(
@@ -1150,6 +1215,97 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		this.cursor++;
 		return {
 			top: normalized.top.map(objectFor),
+			bottom: normalized.bottom.map(objectFor),
+		};
+	}
+
+	/**
+	 * Choose exactly one looked-at card and order every other card for the bottom
+	 * of the library. Cards are presented top-to-bottom, and `bottom` is returned
+	 * nearest-to-top first within that bottom group.
+	 */
+	chooseFromTop(
+		state: GameState,
+		player: PlayerId,
+		cards: ObjectId[],
+	): ChooseFromTopResult {
+		if (cards.length === 0) return { chosen: null, bottom: [] };
+		assert(
+			new Set(cards).size === cards.length,
+			"choose-from-top candidates contain duplicate object ids",
+		);
+		if (cards.length === 1) {
+			const chosen = cards[0];
+			assertDefined(chosen);
+			return { chosen, bottom: [] };
+		}
+
+		const candidates = cards.map((id) => ({ id: String(id), value: id }));
+		const request = this.request({
+			kind: "chooseFromTop",
+			player,
+			context: { cards: [...cards] },
+			options: cards.map((id) => ({
+				id: String(id),
+				label: `${objectLabel(state, id)}#${id}`,
+			})),
+		});
+
+		let normalized: ChoiceAnswer;
+		const recorded = this.decisions[this.cursor];
+		if (recorded) {
+			if (
+				recorded.request.id !== request.id ||
+				recorded.request.fingerprint !== request.fingerprint
+			) {
+				throw new ChoiceReplayMismatchError(
+					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
+				);
+			}
+			normalized = normalizeAnswer(request, recorded.answer);
+		} else {
+			const agent = this.agents?.[request.player];
+			if (!agent) {
+				throw new ChoiceReplayMismatchError(
+					`transcript ended before choice ${request.id}`,
+				);
+			}
+			const answer = agent.choose(
+				buildPlayerView(state, request.player),
+				request,
+			);
+			if (isPromiseLike(answer)) {
+				if (!this.allowSuspension) {
+					throw new Error(
+						"an async agent was used outside advanceWithReplay()",
+					);
+				}
+				this.pendingRequest = clone(request);
+				throw new ChoicePendingError(clone(request), answer);
+			}
+			normalized = normalizeAnswer(request, answer);
+			this.decisions.push({
+				request: clone(request),
+				answer: clone(normalized),
+			});
+		}
+
+		if (!("chosen" in normalized)) {
+			throw new InvalidChoiceAnswerError(
+				`choice ${request.id} requires a choose-from-top answer`,
+			);
+		}
+		const objectFor = (id: string): ObjectId => {
+			const candidate = candidates.find((entry) => entry.id === id);
+			assertDefined(
+				candidate,
+				`choose-from-top choice has no live candidate for ${id}`,
+			);
+			return candidate.value;
+		};
+		this.cursor++;
+		return {
+			chosen: objectFor(normalized.chosen),
 			bottom: normalized.bottom.map(objectFor),
 		};
 	}

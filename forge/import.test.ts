@@ -82,6 +82,7 @@ const POSITIVE_FIXTURES = [
 	"k/kessig_flamebreather",
 	"t/third_path_iconoclast",
 	"t/temple_of_epiphany",
+	"i/impulse",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -518,6 +519,33 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			{ kind: "scry", player: "you", amount: 2 },
 			{ kind: "draw", player: "you", amount: 1 },
 		]);
+	});
+
+	test("Impulse lowers its hidden choose-one Dig form", () => {
+		const result = importFixture("i/impulse");
+		if (!result.ok) throw new Error("expected Impulse to import");
+		expect(result.card).toMatchObject({
+			name: "Impulse",
+			manaCost: { n: 1, u: 1 },
+			types: ["instant"],
+		});
+		expect(result.card.spell?.effects).toEqual([
+			{ kind: "choose-from-top", player: "you", amount: 4 },
+		]);
+	});
+
+	test("Dig rejects forms that do not have Impulse's complete behavior", () => {
+		for (const changed of [
+			"DigNum$ 3 | ChangeNum$ 1 | NoReveal$ True",
+			"DigNum$ 4 | ChangeNum$ 2 | NoReveal$ True",
+			"DigNum$ 4 | ChangeNum$ 1 | Reveal$ True",
+			"DigNum$ 4 | ChangeNum$ 1 | NoReveal$ True | RestRandomOrder$ True",
+		]) {
+			const result = importText(
+				`Name:Unsupported Dig\nManaCost:1 U\nTypes:Instant\nA:SP$ Dig | ${changed} | SpellDescription$ x\nOracle:\n`,
+			);
+			expect(result.ok).toBe(false);
+		}
 	});
 
 	test("Scry defaults to one and rejects dynamic amounts", () => {
