@@ -8,6 +8,7 @@ import {
 	advanceWithReplay,
 	buildPlayerView,
 	ChoiceController,
+	ChoicePendingError,
 	ChoiceReplayMismatchError,
 	createReadContext,
 	type EntityRef,
@@ -22,6 +23,7 @@ import {
 	perform,
 	readObject,
 	registerCard,
+	type SyncAgent,
 	selectorMatches,
 	settlePriority,
 	spawnCard,
@@ -47,6 +49,33 @@ for (const file of [
 	"m/manic_vandal",
 ]) {
 	registerCardFixture(file);
+}
+
+registerCard({
+	id: "target-test-replace-cast",
+	name: "Target Test Replace Cast",
+	types: ["artifact"],
+	colors: [],
+	manaCost: "zero",
+	replacements: [
+		{
+			label: "target-test-replace-cast",
+			text: "If a card would move from a hand to the stack to be cast, it doesn't.",
+			layer: "other",
+			applies: (event) =>
+				event.kind === "change zone" &&
+				event.from === "hand" &&
+				event.destination.zone === "stack" &&
+				event.cause === "cast",
+			replace: () => [],
+		},
+	],
+});
+
+function canonicalStateBytes(state: GameState): string {
+	return JSON.stringify(state, (_key, value) =>
+		value instanceof Map ? [...value.entries()] : value,
+	);
 }
 
 function announcement(source: ObjectId) {
@@ -326,6 +355,50 @@ function castAt(state: GameState, card: ObjectId, target: EntityRef) {
 }
 
 describe("single-target spell casting", () => {
+	test("target choice observes and binds the newly announced spell", () => {
+		const { state, spell: cardInHand } = setupCast();
+		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		let announcedSpell: ObjectId | null = null;
+		const observer: SyncAgent = {
+			choose(view, request) {
+				if (request.kind !== "target")
+					throw new Error("expected only a target choice");
+				expect(view.stack).toHaveLength(1);
+				const stackSpell = view.stack[0];
+				expect(stackSpell?.kind).toBe("spell");
+				if (stackSpell?.kind !== "spell")
+					throw new Error("expected an announced spell");
+				expect(stackSpell.objectId).not.toBe(cardInHand.id);
+				expect(request.context.source).toBe(stackSpell.objectId);
+				announcedSpell = stackSpell.objectId;
+				return { optionId: `permanent:${creature.id}` };
+			},
+		};
+
+		executeCastAction(state, 0, { kind: "cast", card: cardInHand.id }, [
+			observer,
+			new ScriptedAgent(),
+		]);
+
+		expect(announcedSpell).not.toBeNull();
+		if (announcedSpell === null) throw new Error("spell was not announced");
+		const spellId: ObjectId = announcedSpell;
+		expect(state.stack).toEqual([
+			{
+				kind: "spell",
+				objectId: spellId,
+				targets: [
+					{ slot: "target-1", target: { type: "permanent", id: creature.id } },
+				],
+			},
+		]);
+		expect(state.objects.get(spellId)).toMatchObject({
+			kind: "spell",
+			id: spellId,
+			zone: "stack",
+		});
+	});
+
 	test("Murder is unavailable with no creature; direct execution changes nothing", () => {
 		const { state, spell } = setupCast();
 		spawnPermanent(state, "forest", 1);
@@ -352,15 +425,60 @@ describe("single-target spell casting", () => {
 		]) {
 			const { state, spell } = setupCast();
 			spawnPermanent(state, "grizzly-bears", 1);
-			const before = structuredClone(state);
+			const before = canonicalStateBytes(state);
 			expect(() =>
 				executeCastAction(state, 0, { kind: "cast", card: spell.id }, [
 					{ choose: () => answer },
 					new ScriptedAgent(),
 				]),
 			).toThrow(InvalidChoiceAnswerError);
-			expect(state).toEqual(before);
+			expect(canonicalStateBytes(state)).toBe(before);
 		}
+	});
+
+	test("suspended target selection restores canonical state byte-for-byte", () => {
+		const { state, spell } = setupCast();
+		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const before = canonicalStateBytes(state);
+		const choices = ChoiceController.suspending([
+			{
+				choose(view, request) {
+					expect(request.kind).toBe("target");
+					expect(view.stack).toHaveLength(1);
+					return Promise.resolve({
+						optionId: `permanent:${creature.id}`,
+					});
+				},
+			},
+			new ScriptedAgent(),
+		]);
+
+		expect(() =>
+			executeCastAction(
+				state,
+				0,
+				{ kind: "cast", card: spell.id },
+				choices as unknown as ChoiceController<false>,
+			),
+		).toThrow(ChoicePendingError);
+		expect(canonicalStateBytes(state)).toBe(before);
+	});
+
+	test("a replacement-interfered announcement restores canonical state byte-for-byte", () => {
+		const { state, spell } = setupCast();
+		spawnPermanent(state, "grizzly-bears", 1);
+		spawnPermanent(state, "target-test-replace-cast", 1);
+		const before = canonicalStateBytes(state);
+
+		expect(() =>
+			executeCastAction(
+				state,
+				0,
+				{ kind: "cast", card: spell.id },
+				passingAgents(),
+			),
+		).toThrow(IllegalCastError);
+		expect(canonicalStateBytes(state)).toBe(before);
 	});
 
 	test("Doom Blade's colour restriction decides its candidates", () => {

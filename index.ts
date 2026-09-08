@@ -7085,9 +7085,9 @@ function legalSacrifices(
 }
 
 /**
- * Whether `player` could begin casting `object` from hand right now, under the
- * engine's deliberate simplification that a spell never goes on the stack and
- * then fails payment (so affordability is decided here, before anything moves).
+ * Whether `player` could begin casting `object` from hand right now. This is an
+ * action-offering preflight only: the actual announcement puts the spell on the
+ * stack before choosing targets and paying, and rewinds a failed attempt.
  */
 function canCast(
 	object: DeepReadOnly<CardObject>,
@@ -7698,12 +7698,8 @@ function activateAbilityIn(
 /**
  * Casts a spell for the priority holder supplied by the scheduler, putting it
  * onto the stack (CR 601.2). Timing, actor, card, zone and affordability are
- * all rechecked before anything mutates.
- *
- * The engine deliberately simplifies CR 601.2: costs are locked in and paid
- * from the mana pool *before* the card moves, so a spell can never sit on the
- * stack with its payment unresolved. Mana abilities are therefore activated
- * beforehand at priority rather than during casting.
+ * all rechecked before announcement mutates canonical state. Mana abilities
+ * are still activated beforehand at priority rather than during casting.
  */
 export function executeCastAction(
 	state: GameState,
@@ -7768,27 +7764,91 @@ function castSpellIn(
 	}
 
 	const definition = card(object.cardId).spell;
-	let targets: TargetBindings = [];
+	let target: TargetDef | null = null;
 	if (characteristics.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
 		assertDefined(
 			definition,
 			`${characteristics.name} has no spell definition`,
 		);
-		const target = requiredTargetDefinition(
-			definition.targets,
-			definition.effects,
+		target = requiredTargetDefinition(definition.targets, definition.effects);
+	} else {
+		assert(
+			!definition?.targets.length,
+			"targeted permanent spells are not implemented",
 		);
+	}
+
+	// CR 601.2a moves the card to the stack before CR 601.2c chooses targets and
+	// CR 601.2h pays costs. Since that exposes an incomplete announcement to
+	// replacements and choices, CR 733.1 rewinds the entire attempt if any later
+	// step cannot be completed.
+	const checkpoint = structuredClone(state);
+	let castSpell: ObjectId;
+	try {
+		const movement = performIn(
+			state,
+			{
+				kind: "change zone",
+				object: action.card,
+				from: "hand",
+				destination: {
+					zone: "stack",
+					controller: priorityPlayer,
+					targets: [],
+				},
+				cause: "cast",
+			},
+			choices,
+			newScope(),
+			0,
+		);
+		const executedMove = movement.executed.filter(
+			(event): event is ZoneChangeEvent =>
+				event.kind === "change zone" &&
+				event.object === action.card &&
+				event.from === "hand" &&
+				event.destination.zone === "stack" &&
+				event.cause === "cast" &&
+				event.destination.controller === priorityPlayer,
+		);
+		if (
+			movement.executed.length !== 1 ||
+			executedMove.length !== 1 ||
+			movement.created.length !== 1
+		) {
+			throw new IllegalCastError(
+				`${characteristics.name}'s move to the stack was replaced`,
+			);
+		}
+
+		const spellId = movement.created[0];
+		assertDefined(spellId, "casting created no spell object");
+		const spell = maybeObject(state, spellId);
+		assert(
+			spell?.kind === "spell" &&
+				spell.zone === "stack" &&
+				spell.controller === priorityPlayer,
+			"casting did not create the expected spell object",
+		);
+		const entry = state.stack[state.stack.length - 1];
+		assert(
+			entry?.kind === "spell" && entry.objectId === spellId,
+			"the announced spell is not the top stack entry",
+		);
+		assert(entry.targets.length === 0, "new spell already has target bindings");
+
 		if (target) {
-			const ctx = { controller: priorityPlayer, source: action.card };
-			const candidates = legalTargets(read, target, ctx);
-			if (candidates.length === 0)
+			const ctx = { controller: priorityPlayer, source: spellId };
+			const candidates = legalTargets(createReadContext(state), target, ctx);
+			if (candidates.length === 0) {
 				throw new IllegalCastError(
 					`${characteristics.name} has no legal target`,
 				);
+			}
 			const chosen = choices.chooseTarget(
 				state,
 				priorityPlayer,
-				{ announcing: "spell", source: action.card },
+				{ announcing: "spell", source: spellId },
 				target,
 				candidates,
 			);
@@ -7797,65 +7857,43 @@ function castSpellIn(
 					`${characteristics.name}'s chosen target is no longer legal`,
 				);
 			}
-			targets = [{ slot: target.id, target: chosen }];
+			entry.targets = [{ slot: target.id, target: structuredClone(chosen) }];
 		}
-	} else {
-		assert(
-			!definition?.targets.length,
-			"targeted permanent spells are not implemented",
+
+		// Spending mana is a cost, not an event, so nothing may replace or trigger
+		// off it. It is still inside the announcement transaction.
+		const pool = state.players[priorityPlayer].manaPool;
+		for (const type of MANA_TYPES) {
+			const spent = payment[type] ?? 0;
+			assert(
+				pool[type] >= spent,
+				`payment plan spends ${spent} ${type} from a pool holding ${pool[type]}`,
+			);
+			pool[type] -= spent;
+		}
+		state.revision++;
+		log(
+			state,
+			`  [cast] P${priorityPlayer} pays ${
+				MANA_TYPES.map((type) =>
+					payment[type] ? `${payment[type]}${type.toUpperCase()}` : "",
+				)
+					.filter(Boolean)
+					.join(" ") || "nothing"
+			} for ${characteristics.name}`,
 		);
+
+		castSpell = spellId;
+	} catch (error) {
+		restoreCheckpoint(state, checkpoint);
+		throw error;
 	}
 
-	// Payment is deducted directly rather than as an event: spending mana is a
-	// cost, not something that happens to a player, so nothing may replace or
-	// trigger off it. The move to the stack below is the replaceable part.
-	const pool = state.players[priorityPlayer].manaPool;
-	for (const type of MANA_TYPES) {
-		const spent = payment[type] ?? 0;
-		assert(
-			pool[type] >= spent,
-			`payment plan spends ${spent} ${type} from a pool holding ${pool[type]}`,
-		);
-		pool[type] -= spent;
-	}
-	state.revision++;
-	log(
-		state,
-		`  [cast] P${priorityPlayer} pays ${
-			MANA_TYPES.map((type) =>
-				payment[type] ? `${payment[type]}${type.toUpperCase()}` : "",
-			)
-				.filter(Boolean)
-				.join(" ") || "nothing"
-		} for ${characteristics.name}`,
-	);
-
-	const movement = performIn(
-		state,
-		{
-			kind: "change zone",
-			object: action.card,
-			from: "hand",
-			destination: {
-				zone: "stack",
-				controller: priorityPlayer,
-				targets: targets,
-			},
-			cause: "cast",
-		},
-		choices,
-		newScope(),
-		0,
-	);
-	assert(
-		movement.created.length === 1,
-		"casting did not create exactly one object",
-	);
-	const spell = movement.created[0];
-	assertDefined(spell);
+	// CR 601.2i: the spell has been cast. Cast triggers fire only now, once the
+	// announcement transaction has committed and can no longer be rewound.
 	performIn(
 		state,
-		{ kind: "cast", player: priorityPlayer, spell },
+		{ kind: "cast", player: priorityPlayer, spell: castSpell },
 		choices,
 		newScope(),
 		0,
