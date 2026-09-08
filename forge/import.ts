@@ -265,6 +265,16 @@ function triggerEffectPlayer(
 	return player(value);
 }
 
+function selfDeathEffectPlayer(
+	value: string | undefined,
+): TriggerEffectPlayer | null {
+	// A Card.Self dies trigger's controller is captured from the departing
+	// permanent before it leaves. In that exact trigger shape,
+	// TriggeredCardController is therefore the ability controller ("you").
+	if (value === "TriggeredCardController") return "you";
+	return triggerEffectPlayer(value);
+}
+
 function spellCastEffectPlayer(
 	value: string | undefined,
 ): TriggerEffectPlayer | null {
@@ -1727,13 +1737,22 @@ function lowerTrigger(
 			where,
 		);
 
+	const isSelfDeath =
+		mode === "ChangesZone" &&
+		getForgeParam(params, "Origin") === "Battlefield" &&
+		getForgeParam(params, "Destination") === "Graveyard" &&
+		getForgeParam(params, "ValidCard") === "Card.Self";
 	const chain = lowerEffectChain(
 		face,
 		executeSVar.parsed.params,
 		{ nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
 		true,
 		["DB"],
-		mode === "SpellCast" ? spellCastEffectPlayer : triggerEffectPlayer,
+		mode === "SpellCast"
+			? spellCastEffectPlayer
+			: isSelfDeath
+				? selfDeathEffectPlayer
+				: triggerEffectPlayer,
 		true,
 	);
 	if ("code" in chain) return chain;

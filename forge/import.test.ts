@@ -88,6 +88,7 @@ const POSITIVE_FIXTURES = [
 	"m/mire_triton",
 	"b/baleful_strix",
 	"p/pierce_strider",
+	"e/etched_familiar",
 	"t/thrashing_brontodon",
 	"c/cathar_commando",
 	"r/resolute_reinforcements",
@@ -729,6 +730,37 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 						player: { targetSlot: "target-1" },
 						amount: 3,
 					},
+				],
+			},
+		]);
+	});
+
+	test("Etched Familiar keeps its characteristics and complete dies trigger", () => {
+		const result = importFixture("e/etched_familiar");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card).toMatchObject({
+			name: "Etched Familiar",
+			types: ["artifact", "creature"],
+			subtypes: ["Phyrexian", "Fox"],
+			colors: ["b"],
+			manaCost: { n: 2, b: 1 },
+			power: 3,
+			toughness: 2,
+		});
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigLoseLife",
+				text: "When CARDNAME dies, each opponent loses 2 life and you gain 2 life.",
+				condition: {
+					kind: "change zone",
+					from: "battlefield",
+					to: "graveyard",
+					selector: { kind: "self" },
+				},
+				targets: [],
+				effects: [
+					{ kind: "lose-life", player: "opponent", amount: 2 },
+					{ kind: "gain-life", player: "you", amount: 2 },
 				],
 			},
 		]);
@@ -2700,6 +2732,26 @@ describe("lowerForgeCard: ChangesZone dies triggers", () => {
 			from: "battlefield",
 			to: "graveyard",
 			selector: { kind: "self" },
+		});
+	});
+
+	test("TriggeredCardController is not approximated for a different entering permanent", () => {
+		const result = importText(
+			[
+				"Name:Watcher",
+				"ManaCost:1 B",
+				"Types:Enchantment",
+				"T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Creature.Other | TriggerZones$ Battlefield | Execute$ TrigGain | TriggerDescription$ d",
+				"SVar:TrigGain:DB$ GainLife | Defined$ TriggeredCardController | LifeAmount$ 1",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_PARAMETER",
+			message: "unsupported or missing LifeAmount$/player for gainlife",
 		});
 	});
 

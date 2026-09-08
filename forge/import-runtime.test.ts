@@ -109,6 +109,7 @@ registerRuntimeFixture("f/flayed_one", "rt-flayed-one");
 registerRuntimeFixture("m/mire_triton", "rt-mire-triton");
 registerRuntimeFixture("b/baleful_strix", "rt-baleful-strix");
 registerRuntimeFixture("p/pierce_strider", "rt-pierce-strider");
+registerRuntimeFixture("e/etched_familiar", "rt-etched-familiar");
 registerRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter");
 registerRuntimeFixture("t/timberland_guide", "rt-timberland-guide");
 registerCardFixture("d/darksteel_relic");
@@ -367,6 +368,34 @@ describe("forge-import runtime: triggers", () => {
 		expect(targetOptions).toEqual(["Player 1"]);
 		expect(state.players[ALICE].life).toBe(20);
 		expect(state.players[BOB].life).toBe(17);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Etched Familiar's imported dies trigger drains its controller's opponent", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+		expect(state.players).toHaveLength(2);
+		const familiar = spawnPermanent(state, "rt-etched-familiar", BOB);
+
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: familiar.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "effect",
+			},
+			agents,
+		);
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(state.players[ALICE].life).toBe(20);
+		expect(state.players[BOB].life).toBe(20);
+
+		settlePriority(state, agents);
+		expect(state.players[ALICE].life).toBe(18);
+		expect(state.players[BOB].life).toBe(22);
 		expect(state.stack).toHaveLength(0);
 	});
 
