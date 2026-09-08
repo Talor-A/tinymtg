@@ -2248,6 +2248,7 @@ export type Keyword =
 	| "defender"
 	| "haste"
 	| "vigilance"
+	| "trample"
 	| "flash"
 	/** A triggered ability keyword; see {@link printedKeywordTriggers}. */
 	| "prowess";
@@ -8654,10 +8655,11 @@ function performTurnBasedActions(
 					continue;
 				}
 
-				// With no trample, a blocked attacker can assign damage only to the
-				// creatures still blocking it. Assign lethal in declaration order,
-				// putting any remainder on the final blocker.
+				// Assign lethal in declaration order. A nontrampling attacker puts
+				// every remainder on the final blocker; trample may assign only lethal
+				// there and assigns the rest to the defending player.
 				let remaining = Math.max(0, characteristics.power);
+				const hasTrample = characteristics.keywords.includes("trample");
 				const blockers = (blockersByAttacker.get(id) ?? []).filter(
 					(blockerId) => maybePermanent(state, blockerId)?.blocking,
 				);
@@ -8674,7 +8676,7 @@ function performTurnBasedActions(
 						? 1
 						: Math.max(0, blockerCharacteristics.toughness - blocker.damage);
 					const amount =
-						index === blockers.length - 1
+						index === blockers.length - 1 && !hasTrample
 							? remaining
 							: Math.min(remaining, lethalAmount);
 					if (amount > 0) {
@@ -8691,6 +8693,16 @@ function performTurnBasedActions(
 						);
 						remaining -= amount;
 					}
+				}
+				if (hasTrample && remaining > 0) {
+					events.push(
+						damageEvent(
+							o,
+							characteristics,
+							{ type: "player", player: defender },
+							remaining,
+						),
+					);
 				}
 			}
 

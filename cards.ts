@@ -64,6 +64,7 @@ registerCardFixture("c/cathar_commando");
 registerCardFixture("r/resolute_reinforcements");
 registerCardFixture("m/monastery_swiftspear");
 registerCardFixture("t/thor_odinson");
+registerCardFixture("j/jewel_thief");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family

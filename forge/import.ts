@@ -66,6 +66,7 @@ import type {
 	ValidPlayer,
 } from "../index.ts";
 import {
+	abilityId,
 	characteristicsFromCardDef,
 	cloneCharacteristics,
 	defineCard,
@@ -145,8 +146,8 @@ const COLOR_WORDS = new Map<string, Color>([
  * never in {@link COLOR_WORDS}: `Produced$ C` makes colorless mana, while a
  * card producing it is not thereby any color. A space-separated list of these
  * symbols produces every listed symbol. `Combo` followed by two or more
- * distinct fixed symbols is a modal choice of exactly one of them; `Any`,
- * variables, dynamic amounts, and other Forge forms still reject.
+ * distinct fixed symbols is a modal choice of exactly one of them; `Any` is
+ * the five colored choices. Variables, dynamic amounts, and other forms reject.
  */
 const PRODUCED_MANA_SYMBOLS = new Map<string, ManaType>([
 	["W", "w"],
@@ -165,6 +166,7 @@ const BARE_KEYWORDS = new Map<string, Keyword>([
 	["Indestructible", "indestructible"],
 	["Haste", "haste"],
 	["Vigilance", "vigilance"],
+	["Trample", "trample"],
 	["Flash", "flash"],
 	["Prowess", "prowess"],
 ]);
@@ -560,9 +562,16 @@ const COMMON_EFFECT_PARAMS = [
 	"cost",
 ];
 
+interface TokenAbilityHost {
+	cardId: string;
+	activated: AnyActivatedAbilityDefinition[];
+	hostedActivatedIndices: Set<number>;
+}
+
 function fixedTokenCharacteristics(
 	scriptId: string,
 	where: { nodeId?: string; line?: number },
+	host: TokenAbilityHost,
 ): CharacteristicsSnapshot | ImportIssue {
 	if (!/^[A-Za-z0-9_]+$/.test(scriptId))
 		return issue(
@@ -586,16 +595,44 @@ function fixedTokenCharacteristics(
 		);
 	if (
 		imported.card.spell ||
-		Object.values(imported.card.printedAbilities).some(
-			(abilities) => abilities.length > 0,
+		imported.card.printedAbilities.static.length > 0 ||
+		imported.card.printedAbilities.triggered.length > 0 ||
+		imported.card.printedAbilities.replacement.length > 0 ||
+		imported.card.printedAbilities.prohibition.length > 0 ||
+		imported.card.abilityDefinitions.activated.some(
+			(ability) => ability.kind !== "mana",
 		)
 	)
 		return issue(
 			"UNSUPPORTED_EFFECT",
-			`Forge token script ${scriptId} has abilities`,
+			`Forge token script ${scriptId} has unsupported abilities`,
 			where,
 		);
-	return characteristicsFromCardDef(imported.card);
+
+	const tokenDefinitions = imported.card.abilityDefinitions.activated;
+	const tokenReferences = imported.card.printedAbilities.activated;
+	if (tokenDefinitions.length !== tokenReferences.length)
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			`Forge token script ${scriptId} has unprinted activated abilities`,
+			where,
+		);
+
+	const characteristics = characteristicsFromCardDef(imported.card);
+	characteristics.abilities.activated = tokenDefinitions.map(
+		(definition, tokenIndex) => {
+			assert.equal(
+				String(tokenReferences[tokenIndex]),
+				`${imported.card.id}:${tokenIndex}`,
+				"imported token ability references must match definition order",
+			);
+			const hostIndex = host.activated.length;
+			host.activated.push(definition);
+			host.hostedActivatedIndices.add(hostIndex);
+			return abilityId("activated", host.cardId, hostIndex);
+		},
+	);
+	return characteristics;
 }
 
 /**
@@ -621,6 +658,7 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 	where: { nodeId?: string; line?: number },
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
+	tokenAbilityHost: TokenAbilityHost,
 ): Exclude<EffectDef<Player>, { kind: "may" }> | ImportIssue {
 	switch (api) {
 		case "gainlife":
@@ -1063,7 +1101,11 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					"TokenAmount$ must be a positive integer",
 					where,
 				);
-			const characteristics = fixedTokenCharacteristics(scriptId, where);
+			const characteristics = fixedTokenCharacteristics(
+				scriptId,
+				where,
+				tokenAbilityHost,
+			);
 			if ("code" in characteristics) return characteristics;
 			return {
 				kind: "create-token",
@@ -1219,6 +1261,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 	rootTokens: readonly (typeof ABILITY_DISCRIMINATOR_TOKENS)[number][],
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
+	tokenAbilityHost: TokenAbilityHost,
 ): { effects: EffectDef<Player>[]; usedSVarNames: string[] } | ImportIssue {
 	const effects: EffectDef<Player>[] = [];
 	const usedSVarNames: string[] = [];
@@ -1262,6 +1305,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			where,
 			parsePlayer,
 			allowSourceObject,
+			tokenAbilityHost,
 		);
 		if ("code" in effect) return effect;
 		effects.push(effect);
@@ -1713,6 +1757,7 @@ function lowerTrigger(
 	face: ForgeFaceAst,
 	record: { params: ForgeParamList; source: { nodeId: string; line: number } },
 	used: Set<string>,
+	tokenAbilityHost: TokenAbilityHost,
 ): TriggeredAbilityDefinition | ImportIssue {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
@@ -1773,6 +1818,7 @@ function lowerTrigger(
 				? selfDeathEffectPlayer
 				: triggerEffectPlayer,
 		true,
+		tokenAbilityHost,
 	);
 	if ("code" in chain) return chain;
 	for (const n of chain.usedSVarNames) used.add(n);
@@ -2642,15 +2688,20 @@ export function lowerForgeCard(
 		if (replaceWith) usedSVarNames.add(replaceWith.toLowerCase());
 	}
 
+	const activatedAbilities: AnyActivatedAbilityDefinition[] = [];
+	const tokenAbilityHost: TokenAbilityHost = {
+		cardId: id,
+		activated: activatedAbilities,
+		hostedActivatedIndices: new Set(),
+	};
 	const triggers: TriggeredAbilityDefinition[] = [];
 	for (const record of face.triggers) {
-		const lowered = lowerTrigger(face, record, usedSVarNames);
+		const lowered = lowerTrigger(face, record, usedSVarNames, tokenAbilityHost);
 		if ("code" in lowered) return reject(lowered);
 		triggers.push(lowered);
 	}
 
 	let spell: SpellAbilityDef | undefined;
-	const activatedAbilities: AnyActivatedAbilityDefinition[] = [];
 	let spellCount = 0;
 	let activatedCount = 0;
 	for (const record of face.abilities) {
@@ -2685,14 +2736,18 @@ export function lowerForgeCard(
 			if (badParams) return reject(badParams);
 			assert(activationCost !== undefined && !("code" in activationCost));
 			const produced = getForgeParam(params, "Produced");
-			const modal = produced?.startsWith("Combo ") ?? false;
+			const anyColor = produced === "Any";
+			const modal = anyColor || (produced?.startsWith("Combo ") ?? false);
 			// Forge's fixed multi-mana form is exactly a space-separated list of
 			// printed symbols. `Combo` uses the same symbol list for mutually
-			// exclusive choices. Keep both forms strict so `Any`, variables,
-			// compact (`WU`), and malformed separators cannot change meaning.
-			const producedSymbols = modal
-				? (produced?.slice("Combo ".length).split(" ") ?? [])
-				: (produced?.split(" ") ?? []);
+			// exclusive choices, and `Any` is exactly W/U/B/R/G. Keep all forms
+			// strict so variables, compact (`WU`), and malformed separators cannot
+			// change meaning.
+			const producedSymbols = anyColor
+				? ["W", "U", "B", "R", "G"]
+				: modal
+					? (produced?.slice("Combo ".length).split(" ") ?? [])
+					: (produced?.split(" ") ?? []);
 			const producedTypes: ManaType[] = [];
 			for (const symbol of producedSymbols) {
 				const type = PRODUCED_MANA_SYMBOLS.get(symbol);
@@ -2847,6 +2902,7 @@ export function lowerForgeCard(
 			disc.token === "SP" ? ["SP"] : ["AB"],
 			player,
 			disc.token === "AB",
+			tokenAbilityHost,
 		);
 		if ("code" in chain) return reject(chain);
 		const targets = parseTarget(
@@ -3037,6 +3093,17 @@ export function lowerForgeCard(
 		...(spell ? { spell } : {}),
 		...(statics.length > 0 ? { statics } : {}),
 		...(activatedAbilities.length > 0 ? { activatedAbilities } : {}),
+		...(tokenAbilityHost.hostedActivatedIndices.size > 0
+			? {
+					printed: {
+						activated: activatedAbilities
+							.map((_, index) => index)
+							.filter(
+								(index) => !tokenAbilityHost.hostedActivatedIndices.has(index),
+							),
+					},
+				}
+			: {}),
 		...(triggers.length > 0 ? { triggers } : {}),
 		...(replacements.length > 0 ? { replacements } : {}),
 	};

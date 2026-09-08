@@ -79,7 +79,7 @@ accepted. A recognized keyword is never silently dropped: every root `A`, `T`,
 
 The current subset covers: literal characteristics (name, mana cost, types,
 colors, P/T); the keywords Deathtouch, Flying, Reach, Defender, Lifelink,
-Indestructible, and Vigilance;
+Indestructible, Vigilance, and Trample;
 literal entry-counter shorthand and both canonical enters-tapped `R:` forms —
 the self form (`ValidCard$ Card.Self`, e.g. Charcoal Diamond) lowers directly
 to `CardDefInput.entersTapped`, and the global form (a supported selector
@@ -89,8 +89,11 @@ form (`K:ETBReplacement:Copy:DBCopy:Optional` with `DB$ Clone | Choices$
 Creature.Other`) lowers to a replay-safe, non-targeting choice; basic-land mana abilities
 are synthesized from subtype (Forge omits explicit `A:` lines for those); mana
 abilities producing fixed mana, including colorless (`Produced$ C`, e.g.
-Wastes), and modal one-mana choices between two or more distinct fixed symbols
-(`Produced$ Combo U R`, e.g. Temple of Epiphany); activated abilities whose
+Wastes), modal one-mana choices between two or more distinct fixed symbols
+(`Produced$ Combo U R`, e.g. Temple of Epiphany), and the five colored choices
+encoded by `Produced$ Any`; token scripts with supported mana abilities are
+rehosted on the importing card so created tokens retain executable abilities
+without mutating the registry during import; activated abilities whose
 costs contain fixed generic/WUBRG mana,
 optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional
 single-permanent sacrifice, including `Creature.Other` to exclude the source,
@@ -127,7 +130,7 @@ subtype, color, and controller, combined with all/any/not to any depth. A
 hand-written card definition can use all of it.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 2,284 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 2,654 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
@@ -149,7 +152,7 @@ Normal progression through `advance()` currently supports:
 - activated abilities with fixed generic/WUBRG mana, optional tap-self, and optional single-permanent sacrifice costs, with or without a target;
 - relative-player and targeted-player sacrifice effects in which that player chooses one matching permanent;
 - the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith), and targeted triggers (e.g. Flametongue Kavu, Manic Vandal);
-- declaring attackers, and unblocked two-player combat damage; and
+- declaring attackers, blockers, and two-player combat damage, including trample; and
 - replacement, prohibition, and state-based effects encountered by those events.
 
 ### Declaring attackers
@@ -180,8 +183,9 @@ and evasion abilities are not implemented.
 
 At the combat damage turn-based action, each unblocked attacker deals its
 current derived power to the opposing player. A blocked attacker assigns lethal
-damage to its remaining blockers in declaration order and any remainder to the
-final blocker; without trample, none reaches the defending player. Each blocker
+damage to its remaining blockers in declaration order. Without trample, it
+assigns any remainder to the final blocker; with trample, it assigns that
+remainder to the defending player. Each blocker
 deals its power to the attacker it blocks. Damage is snapshotted before any of
 it is dealt (approximating CR 510.2's simultaneous assignment), and then each
 instance flows through the normal per-source event pipeline, so
@@ -192,8 +196,8 @@ turn-based action (destroyed, regenerated, etc.) deals no damage; tapped
 status at damage time does not prevent it. Zero or negative power deals no
 damage.
 
-Interactive damage-assignment choices, first/double strike, trample, infect,
-attacking a specific target (planeswalkers, battles, or any non-player
+Interactive damage-assignment choices, first/double strike, infect, attacking a
+specific target (planeswalkers, battles, or any non-player
 defender), and multiple combat damage steps are not implemented.
 
 ### Playing a land

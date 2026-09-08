@@ -1434,6 +1434,70 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		expect(result.card.entersWith).toEqual({ "+1/+1": 3 });
 	});
 
+	test("Jewel Thief lowers trample and its ability-bearing Treasure token", () => {
+		const result = importFixture("j/jewel_thief");
+		if (!result.ok) throw new Error("expected Jewel Thief to import");
+
+		expect(result.card).toMatchObject({
+			name: "Jewel Thief",
+			manaCost: { n: 2, g: 1 },
+			types: ["creature"],
+			subtypes: ["Cat", "Rogue"],
+			colors: ["g"],
+			power: 3,
+			toughness: 3,
+			keywords: ["vigilance", "trample"],
+			printedAbilities: {
+				activated: [],
+				triggered: ["jewel-thief:0"],
+			},
+		});
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "mana",
+				id: "activated-1",
+				text: "Add one mana of any color.",
+				cost: {
+					mana: "zero",
+					tapSelf: true,
+					sacrifice: { selector: { kind: "self" }, amount: 1 },
+				},
+				manaOptions: [
+					{ w: 1, u: 0, b: 0, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 1, b: 0, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 1, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 0, r: 1, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 0, r: 0, g: 1, c: 0 },
+				],
+			},
+		]);
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			expect.objectContaining({
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: { kind: "self" },
+				},
+				effects: [
+					expect.objectContaining({
+						kind: "create-token",
+						controller: "you",
+						amount: 1,
+						characteristics: expect.objectContaining({
+							name: "Treasure Token",
+							types: ["artifact"],
+							subtypes: ["Treasure"],
+							abilities: expect.objectContaining({
+								activated: ["jewel-thief:0"],
+							}),
+						}),
+					}),
+				],
+			}),
+		]);
+	});
+
 	test("Soulmender lowers to a targetless tap-for-life-gain activated ability", () => {
 		const result = importFixture("s/soulmender");
 		if (!result.ok) throw new Error("expected ok");
@@ -2505,9 +2569,35 @@ describe("lowerForgeCard: hardening regressions", () => {
 			expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 	});
 
+	test("Produced$ Any lowers to one option for each color", () => {
+		const result = importText(
+			"Name:Test Treasure\nManaCost:no cost\nTypes:Artifact Treasure\nA:AB$ Mana | Cost$ T Sac<1/CARDNAME/this token> | Produced$ Any | Amount$ 1 | SpellDescription$ Add one mana of any color.\nOracle:\n",
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "mana",
+				id: "activated-1",
+				text: "Add one mana of any color.",
+				cost: {
+					mana: "zero",
+					tapSelf: true,
+					sacrifice: { selector: { kind: "self" }, amount: 1 },
+				},
+				manaOptions: [
+					{ w: 1, u: 0, b: 0, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 1, b: 0, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 1, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 0, r: 1, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 0, r: 0, g: 1, c: 0 },
+				],
+			},
+		]);
+	});
+
 	test("rejects open-ended, variable, malformed, and unsupported Produced$ forms with diagnostics", () => {
 		for (const produced of [
-			"Any", // open-ended choice
 			"Combo Any", // open-ended modal choice
 			"Combo W", // a modal choice needs at least two outcomes
 			"Combo W W", // outcomes must be distinct
