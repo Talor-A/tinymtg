@@ -22,8 +22,9 @@
  * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
  * and dynamic amounts;
  * more than one target slot,
- * or an optional one; selector modifiers outside `YouCtrl`/`OppCtrl` and
- * `non`-prefixable color, card type, and supertype words (so hexproof, shroud,
+ * or an optional one; selector modifiers outside `YouCtrl`/`OppCtrl`, the exact
+ * target form `Creature.Other+YouCtrl`, and `non`-prefixable color, card type,
+ * and supertype words (so hexproof, shroud,
  * protection, and combat- or zone-dependent restrictions all reject, while a
  * subtype is only readable as a selector's base); more than one spell ability, or a
  * spell ability on a permanent card; conditions, alternate "unless" costs, or
@@ -396,6 +397,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt" &&
+			effect.kind !== "grant-keyword" &&
 			effect.kind !== "add counters"
 		)
 			continue;
@@ -404,6 +406,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				effect.kind === "tap" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
+				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
@@ -412,6 +415,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 		if (
 			(effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
+				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
 			effect.object === "source"
 		)
@@ -473,6 +477,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				where,
 			);
 		}
+		if (effect.kind === "grant-keyword" && target.legal.kind !== "permanent") {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"keyword grants require a permanent target",
+				where,
+			);
+		}
 		if (effect.kind === "add counters" && target.legal.kind !== "permanent") {
 			return issue(
 				"UNSUPPORTED_TARGET",
@@ -499,7 +510,19 @@ function parseTarget(
 	else if (targetType !== undefined) return null;
 	else if (value === "Any") legal = { kind: "any-target" };
 	else if (value === "Player") legal = { kind: "player" };
-	else {
+	else if (value === "Creature.Other+YouCtrl") {
+		legal = {
+			kind: "permanent",
+			selector: {
+				kind: "all",
+				selectors: [
+					{ kind: "type", type: "creature" },
+					{ kind: "not", selector: { kind: "self" } },
+					{ kind: "controller", player: "you" },
+				],
+			},
+		};
+	} else {
 		const selector = parseSelector(value);
 		if (!selector) return null;
 		legal = { kind: "permanent", selector };
@@ -980,17 +1003,36 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					"tgtprompt",
 					"numatt",
 					"numdef",
+					"kw",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
 			);
 			if (badParams) return badParams;
-			const power = signedInteger(getForgeParam(params, "NumAtt"));
-			const toughness = signedInteger(getForgeParam(params, "NumDef"));
-			if (power === null || toughness === null)
+			const powerText = getForgeParam(params, "NumAtt");
+			const toughnessText = getForgeParam(params, "NumDef");
+			const keywordText = getForgeParam(params, "KW");
+			if (
+				keywordText !== undefined &&
+				(powerText !== undefined || toughnessText !== undefined)
+			)
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"Pump requires fixed NumAtt and NumDef values",
+					"Pump cannot combine KW$ with NumAtt$ or NumDef$",
+					where,
+				);
+			if (keywordText !== undefined && keywordText !== "Indestructible")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					`unsupported temporary keyword ${keywordText}`,
+					where,
+				);
+			const power = signedInteger(powerText);
+			const toughness = signedInteger(toughnessText);
+			if (keywordText === undefined && (power === null || toughness === null))
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"Pump requires fixed NumAtt and NumDef values, or KW$ Indestructible",
 					where,
 				);
 			// `Defined$ Self` pumps the ability's own source ("it gets +1/+1");
@@ -999,6 +1041,15 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			const defined = getForgeParam(params, "Defined");
 			const validTargets = getForgeParam(params, "ValidTgts");
 			if (defined === "Self" && validTargets === undefined) {
+				if (keywordText === "Indestructible") {
+					return {
+						kind: "grant-keyword",
+						object: "source",
+						keyword: "indestructible",
+						duration: "until-end-of-turn",
+					};
+				}
+				assert(power !== null && toughness !== null);
 				return {
 					kind: "modify-pt",
 					object: "source",
@@ -1008,6 +1059,15 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				};
 			}
 			if (defined === undefined && validTargets !== undefined) {
+				if (keywordText === "Indestructible") {
+					return {
+						kind: "grant-keyword",
+						object: { targetSlot: TARGET_SLOT },
+						keyword: "indestructible",
+						duration: "until-end-of-turn",
+					};
+				}
+				assert(power !== null && toughness !== null);
 				return {
 					kind: "modify-pt",
 					object: { targetSlot: TARGET_SLOT },

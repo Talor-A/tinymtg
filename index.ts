@@ -1306,6 +1306,27 @@ function buildFilteredGameView(
 			}
 		}
 
+		if (layer === "6-ability-changing") {
+			for (const effect of state.temporaryEffects) {
+				const definition = temporaryEffectDefinition(effect);
+				if (definition?.kind !== "grant-keyword") continue;
+				const slot =
+					definition.object === "source"
+						? SELF_SLOT
+						: definition.object.targetSlot;
+				const bound = effect.bindings[slot];
+				assertDefined(
+					bound,
+					`temporary keyword effect has no binding for ${slot}`,
+				);
+				if (bound.type !== "permanent") continue;
+				const current = characteristics.get(bound.id);
+				if (!current) continue;
+				if (!current.keywords.includes(definition.keyword))
+					current.keywords.push(definition.keyword);
+			}
+		}
+
 		if (layer === "7c-modify-power-toughness") {
 			for (const effect of state.temporaryEffects) {
 				const definition = temporaryEffectDefinition(effect);
@@ -2083,6 +2104,13 @@ export type EffectDef<
 			duration: "until-end-of-turn";
 	  }
 	| {
+			kind: "grant-keyword";
+			/** The first supported temporary keyword grant is indestructible. */
+			keyword: "indestructible";
+			object: "source" | TargetSlotRef;
+			duration: "until-end-of-turn";
+	  }
+	| {
 			kind: "add-mana";
 			player: "you";
 			mana: ManaAmount;
@@ -2561,8 +2589,8 @@ function printedEntryReplacements(
  * re-synthesize a definition from a keyword list.
  *
  * A creature that *gains* prowess would need the reference granted alongside
- * the keyword. No continuous effect in the engine grants keywords yet, so
- * there is nowhere for that to happen today.
+ * the keyword. The temporary keyword effect can grant only indestructible, so
+ * that unsupported case cannot silently lose its trigger.
  */
 function printedKeywordTriggers(
 	def: CardDefBase,
@@ -4223,11 +4251,16 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 		read.state,
 		(effect) => effect.layer === "6-ability-changing",
 	);
+	const temporaryEffectCanGrantIndestructible =
+		read.state.temporaryEffects.some(
+			(effect) => temporaryEffectDefinition(effect)?.kind === "grant-keyword",
+		);
 	for (const object of read.state.objects.values()) {
 		const mightBeIndestructible =
 			object.kind === "permanent" &&
 			(baseCharacteristics(object).keywords.includes("indestructible") ||
-				abilityCanChangeKeywords);
+				abilityCanChangeKeywords ||
+				temporaryEffectCanGrantIndestructible);
 		const snapshot = mightBeIndestructible
 			? read.view.objects.get(object.id)
 			: undefined;
@@ -6532,6 +6565,7 @@ function resolveEffects(
 				effect.kind === "tap" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
+				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
@@ -6627,13 +6661,12 @@ function resolveEffects(
 			);
 			continue;
 		}
-		if (effect.kind === "modify-pt") {
+		if (effect.kind === "modify-pt" || effect.kind === "grant-keyword") {
 			let slot: string;
 			let subject: EntityRef;
 			if (effect.object === "source") {
-				// "It gets +1/+1": the bonus applies to the object the ability is
-				// on. An instruction affecting its source does nothing if that
-				// object has already left the battlefield.
+				// An instruction affecting its source does nothing if that object
+				// has already left the battlefield.
 				const self = maybePermanent(state, item.source);
 				if (!self) continue;
 				slot = SELF_SLOT;
@@ -6641,13 +6674,13 @@ function resolveEffects(
 			} else {
 				assert(
 					bound?.type === "permanent",
-					"temporary P/T effect requires a bound permanent target",
+					"temporary characteristic effect requires a bound permanent target",
 				);
 				slot = effect.object.targetSlot;
 				subject = bound;
 			}
 			// The effect keeps a reference to the definition that created it, so
-			// its power/toughness are never denormalized into game state.
+			// its characteristic change is never denormalized into game state.
 			addTemporaryEffect(state, item.controller, {
 				source: resolvingEffectSource(state, item, effectIndex),
 				bindings: { [slot]: subject },
@@ -6861,6 +6894,10 @@ function effectToEvent(
 			throw new Error(
 				"temporary P/T effects resolve without creating an event",
 			);
+		case "grant-keyword":
+			throw new Error(
+				"temporary keyword effects resolve without creating an event",
+			);
 		case "add-mana":
 			return {
 				kind: "add mana",
@@ -7025,6 +7062,7 @@ function requiredTargetDefinition(
 		// check it against.
 		if (
 			(effect.kind === "modify-pt" ||
+				effect.kind === "grant-keyword" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "add counters") &&
 			effect.object === "source"
@@ -7041,6 +7079,7 @@ function requiredTargetDefinition(
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt" &&
+			effect.kind !== "grant-keyword" &&
 			effect.kind !== "add counters" &&
 			effect.kind !== "sacrifice" &&
 			effect.kind !== "gain-life" &&
@@ -7070,6 +7109,7 @@ function requiredTargetDefinition(
 				effect.kind === "tap" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
+				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
@@ -7111,6 +7151,12 @@ function requiredTargetDefinition(
 			assert(
 				target.legal.kind === "permanent",
 				"temporary P/T change requires a permanent target",
+			);
+		}
+		if (effect.kind === "grant-keyword") {
+			assert(
+				target.legal.kind === "permanent",
+				"temporary keyword grant requires a permanent target",
 			);
 		}
 		if (effect.kind === "add counters") {
@@ -7678,6 +7724,7 @@ function activateAbilityIn(
 				effect.kind === "counter" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
+				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters" ||
 				effect.kind === "sacrifice" ||
 				effect.kind === "create-token"

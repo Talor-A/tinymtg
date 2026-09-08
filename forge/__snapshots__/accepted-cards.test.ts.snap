@@ -66,6 +66,7 @@ Ancient Spring
 Angel of Light
 Angel of Mercy
 Angel's Mercy
+Angelheart Protector
 Animal Sanctuary
 Anointed Chorister
 Ant Queen
@@ -390,6 +391,7 @@ Daysquad Marshal
 Deadeye Duelist
 Deadly Visit
 Death Cultist
+Deathless Angel
 Deathmark
 Dedicated Martyr
 Deeproot Champion
@@ -920,6 +922,7 @@ Kasimir the Lone Wolf
 Kavu Climber
 Kazandu Nectarpot
 Keen-Eyed Archers
+Keen-Eyed Raven
 Keening Apparition
 Keepers of the Faith
 Keldon Necropolis
@@ -1464,6 +1467,7 @@ Seer's Lantern
 Segovian Angel
 Seizan, Perverter of Truth
 Selesnya Signet
+Selfless Savior
 Seller of Songbirds
 Senate Guildmage
 Sentinel Spider
@@ -1489,6 +1493,7 @@ Shambling Ghoul
 Shatter
 Shatterskull Giant
 Shauku's Minion
+Sheltering Light
 Shining Aerosaur
 Shinra Reinforcements
 Shivan Gorge
@@ -1559,6 +1564,7 @@ Slith Ascendant
 Slith Firewalker
 Sliver Construct
 Sliver Queen
+Slobad, Goblin Tinkerer
 Smash
 Smelt
 Snake Pit
@@ -1641,6 +1647,7 @@ Steadfast Paladin
 Steadfast Sentry
 Stealer of Secrets
 Sterling Hound
+Sterling Supplier
 Stern Dismissal
 Stern Proctor
 Steward of Valeron
@@ -1961,6 +1968,7 @@ Wild Jhovall
 Willow Elf
 Willow Faerie
 Willow-Wind
+Wily Bandar
 Wind Drake
 Windgrace Acolyte
 Windrider Patrol
@@ -1974,6 +1982,7 @@ Wishcoin Crab
 Witch's Familiar
 Witching Well
 Withering Torment
+Withstand Death
 Witness of Tomorrows
 Wolf Cove Villager
 Wooded Ridgeline
@@ -2017,4 +2026,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2014`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2023`;

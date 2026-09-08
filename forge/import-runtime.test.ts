@@ -74,6 +74,7 @@ registerRuntimeFixture("v/village_rites", "rt-village-rites");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
+registerRuntimeFixture("s/selfless_savior", "rt-selfless-savior");
 registerRuntimeFixture("b/blazing_hellhound", "rt-blazing-hellhound");
 registerRuntimeFixture("a/acolyte_of_aclazotz", "rt-acolyte-of-aclazotz");
 registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
@@ -962,6 +963,62 @@ describe("forge-import runtime: activated abilities", () => {
 		settlePriority(state, [alice, new ScriptedAgent()]);
 		expect(state.players[ALICE].library[0]).toBe(top.id);
 		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Selfless Savior sacrifices itself to grant another creature indestructible", () => {
+		const state = setupMain();
+		const savior = spawnPermanent(state, "rt-selfless-savior", ALICE);
+		const target = spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const ability = abilityId("activated", "rt-selfless-savior", 0);
+
+		const invalid = new ScriptedAgent();
+		invalid.targetChoices.push({ type: "permanent", id: savior.id });
+		expect(() =>
+			executeAbilityAction(
+				state,
+				ALICE,
+				{ kind: "activate ability", source: savior.id, ability },
+				[invalid, new ScriptedAgent()],
+			),
+		).toThrow();
+		expect(state.battlefield).toContain(savior.id);
+
+		const alice = new ScriptedAgent();
+		alice.targetChoices.push({ type: "permanent", id: target.id });
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: savior.id, ability },
+			[alice, new ScriptedAgent()],
+		);
+
+		expect(state.battlefield).not.toContain(savior.id);
+		expect(
+			readObject(createReadContext(state), target.id).currentCharacteristics
+				.keywords,
+		).not.toContain("indestructible");
+		settlePriority(state, passingAgents());
+		expect(
+			readObject(createReadContext(state), target.id).currentCharacteristics
+				.keywords,
+		).toContain("indestructible");
+		expect(state.temporaryEffects[0]).toMatchObject({
+			source: {
+				origin: "ability-effect",
+				category: "activated",
+				abilityId: ability,
+				effectIndex: 0,
+			},
+			bindings: { "target-1": { type: "permanent", id: target.id } },
+			duration: "until-end-of-turn",
+		});
+
+		perform(
+			state,
+			{ kind: "destroy", object: target.id, noRegen: false },
+			passingAgents(),
+		);
+		expect(state.battlefield).toContain(target.id);
 	});
 
 	test("Blazing Hellhound sacrifices another creature but not itself", () => {

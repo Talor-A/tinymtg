@@ -99,12 +99,14 @@ activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
 `ValidTgts$` selector whose base is a card type, a subtype, `Card`, or
 `Permanent`, followed by `YouCtrl`, `OppCtrl`, or a color, card type, or
-supertype word that may carry Forge's `non` prefix — so
-`Creature.nonBlack` lowers, while `Creature.attacking` does not); simple self-entry,
+supertype word that may carry Forge's `non` prefix; the exact target form
+`Creature.Other+YouCtrl` is also supported — so it and `Creature.nonBlack` lower, while
+`Creature.attacking` does not); simple self-entry,
 upkeep, and self-attack triggers, including one optional (`may`) wrapper around
 a trigger's whole (possibly multi-step) effect sequence; fixed temporary P/T
-spells; and fixed controlled-creature P/T statics. See the acceptance matrix in
-`test/forge-import.test.ts` for the exact fixtures this is checked against, and
+changes; temporary `KW$ Indestructible` grants; and fixed controlled-creature
+P/T statics. See the acceptance matrix in `forge/import.test.ts` for the exact
+fixtures this is checked against, and
 the "Deferred / explicitly unsupported" list at the top of `forge-import.ts`
 for what is intentionally out of scope (random/multi-card discard, dynamic/X
 amounts, alternate costs, hexproof/shroud/protection, and more).

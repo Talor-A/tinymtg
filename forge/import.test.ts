@@ -54,6 +54,7 @@ const POSITIVE_FIXTURES = [
 	"r/raging_goblin",
 	"f/faithful_watchdog",
 	"s/soulmender",
+	"s/selfless_savior",
 	"k/kambal_consul_of_allocation",
 	"m/merfolk_looter",
 	"d/doom_blade",
@@ -1244,6 +1245,65 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				},
 			],
 		});
+	});
+
+	test("Selfless Savior lowers its self-sacrifice and temporary indestructible grant", () => {
+		const result = importFixture("s/selfless_savior");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: "Another target creature you control gains indestructible until end of turn.",
+				cost: {
+					mana: "zero",
+					tapSelf: false,
+					sacrifice: { selector: { kind: "self" }, amount: 1 },
+				},
+				targets: [
+					{
+						id: "target-1",
+						min: 1,
+						max: 1,
+						legal: {
+							kind: "permanent",
+							selector: {
+								kind: "all",
+								selectors: [
+									{ kind: "type", type: "creature" },
+									{ kind: "not", selector: { kind: "self" } },
+									{ kind: "controller", player: "you" },
+								],
+							},
+						},
+					},
+				],
+				effects: [
+					{
+						kind: "grant-keyword",
+						keyword: "indestructible",
+						object: { targetSlot: "target-1" },
+						duration: "until-end-of-turn",
+					},
+				],
+			},
+		]);
+	});
+
+	test("temporary Pump keywords remain limited to indestructible without a simultaneous P/T change", () => {
+		const selflessSavior = cardText("s/selfless_savior");
+		for (const text of [
+			selflessSavior.replace("KW$ Indestructible", "KW$ Flying"),
+			selflessSavior.replace(
+				"KW$ Indestructible",
+				"KW$ Indestructible | NumAtt$ 1 | NumDef$ 1",
+			),
+		]) {
+			const result = importForgeCard(text, { id: "unsupported-pump-keyword" });
+			expect(result.ok).toBe(false);
+			if (result.ok) continue;
+			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+		}
 	});
 });
 
