@@ -4563,8 +4563,13 @@ function triggerMatches(
 			if (condition.from !== "any" && ev.from !== condition.from) return false;
 			if (condition.to !== "any" && ev.to !== condition.to) return false;
 
-			if (condition.from === "battlefield")
+			if (condition.from === "battlefield") {
+				// The exact self-death form is detected from the pre-event context. A
+				// surviving permanent with the same ability is not the departed self.
+				if (condition.to === "graveyard" && condition.selector === "self")
+					return false;
 				throw new Error("leaves the battlefield triggers are not supported");
+			}
 			// CR 400.7: ev.object names the old object, which no longer exists after
 			// execution. Match against the new object(s) returned by moveObject instead.
 			// Leaves-the-battlefield triggers will need last-known information here.
@@ -4621,6 +4626,87 @@ function detectTriggers(
 				enqueueTrigger(state, abilitySource, triggerId, trigger, ev);
 			}
 		}
+	}
+}
+
+interface SelfDeathTriggerCandidate {
+	pending: Omit<PendingTrigger, "triggeringEvent">;
+	sourceName: string;
+}
+
+/**
+ * Read the one supported leaves-the-battlefield trigger shape while its source
+ * and derived abilities still exist. Other matching battlefield-origin forms
+ * remain explicit unsupported cases.
+ */
+function selfDeathTriggerCandidates(
+	before: ReadContext,
+	ev: ZoneChangeEvent,
+): SelfDeathTriggerCandidate[] {
+	if (ev.from !== "battlefield") return [];
+
+	const source = maybeObject(before.state, ev.object);
+	assert(
+		source?.kind === "permanent" && source.zone === "battlefield",
+		"a battlefield departure source must be a battlefield permanent",
+	);
+	const snapshot = readObject(before, source.id);
+	assert(
+		snapshot.kind === "permanent" && snapshot.zone === "battlefield",
+		"a battlefield departure source must have a permanent snapshot",
+	);
+	const controller = snapshot.controller;
+	assertDefined(controller, "a departing permanent must have a controller");
+
+	const candidates: SelfDeathTriggerCandidate[] = [];
+	for (const triggerId of snapshot.currentCharacteristics.abilities.triggered) {
+		const trigger = getAbilityDefinition("triggered", triggerId);
+		if (!functionsHere(trigger.functionsFrom, "battlefield")) continue;
+		const condition = trigger.condition;
+		if (condition.kind !== "change zone" || condition.from !== "battlefield")
+			continue;
+		if (condition.to !== "any" && condition.to !== ev.to) continue;
+
+		if (
+			ev.to !== "graveyard" ||
+			condition.to !== "graveyard" ||
+			condition.selector !== "self"
+		) {
+			throw new Error("leaves the battlefield triggers are not supported");
+		}
+
+		candidates.push({
+			pending: {
+				source: source.id,
+				triggerId,
+				controller,
+				text: trigger.text,
+				targetDefinitions: structuredClone(trigger.targets),
+				effects: structuredClone(trigger.effects),
+				sourceLastKnown: {
+					controller,
+					colors: [...snapshot.currentCharacteristics.colors],
+					lifelink:
+						snapshot.currentCharacteristics.keywords.includes("lifelink"),
+				},
+			},
+			sourceName: snapshot.currentCharacteristics.name,
+		});
+	}
+	return candidates;
+}
+
+function enqueueSelfDeathTriggers(
+	state: GameState,
+	candidates: SelfDeathTriggerCandidate[],
+	triggeringEvent: DeepReadOnly<ZoneChangeEvent>,
+): void {
+	for (const { pending, sourceName } of candidates) {
+		state.pendingTriggers.push({ ...pending, triggeringEvent });
+		log(
+			state,
+			`  [trigger] ${sourceName}#${pending.source} — ${pending.text}`,
+		);
 	}
 }
 
@@ -4690,6 +4776,7 @@ function executeIn(
 	const created: ObjectId[] = [];
 	const changed: ObjectId[] = [];
 	const childResults: PerformResult[] = [];
+	let selfDeathTriggers: SelfDeathTriggerCandidate[] = [];
 
 	switch (ev.kind) {
 		case "draw cards": {
@@ -5022,6 +5109,7 @@ function executeIn(
 		}
 
 		case "change zone": {
+			selfDeathTriggers = selfDeathTriggerCandidates(before, ev);
 			recordSourceDeparture(state, before, ev.object, ev.from);
 			const newId = moveObject(state, ev.object, ev.from, ev.to, {
 				toController: ev.toController,
@@ -5337,6 +5425,8 @@ function executeIn(
 	if (happened) {
 		executed.push(ev);
 		state.revision++;
+		if (ev.kind === "change zone")
+			enqueueSelfDeathTriggers(state, selfDeathTriggers, ev);
 		detectTriggers(state, createReadContext(state), ev, created, changed);
 		if (ev.fact) scope.facts.add(ev.fact);
 	}
