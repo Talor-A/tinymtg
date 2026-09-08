@@ -2273,7 +2273,7 @@ export interface TargetDef {
 	min: number;
 	max: number;
 	legal:
-		| { kind: "player" }
+		| { kind: "player"; player: ValidPlayer }
 		| { kind: "spell" }
 		| {
 				kind: "permanent";
@@ -7340,9 +7340,20 @@ function isLegalTarget(
 	ctx: TargetContext,
 ): boolean {
 	if (target.type === "player") {
+		if (
+			definition.legal.kind !== "player" &&
+			definition.legal.kind !== "any-target"
+		)
+			return false;
+		const validPlayer =
+			definition.legal.kind === "player"
+				? definition.legal.player
+				: "either";
+		const matchesController = target.player === ctx.controller;
 		return (
-			(definition.legal.kind === "player" ||
-				definition.legal.kind === "any-target") &&
+			(validPlayer === "either" ||
+				(validPlayer === "you" && matchesController) ||
+				(validPlayer === "opponent" && !matchesController)) &&
 			!read.state.players[target.player].lost &&
 			!read.state.players[target.player].won
 		);

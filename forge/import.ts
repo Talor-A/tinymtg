@@ -442,7 +442,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 		if (playerTarget !== null && target.legal.kind !== "player") {
 			return issue(
 				"UNSUPPORTED_TARGET",
-				"a targeted player effect requires ValidTgts$ Player",
+				"a targeted player effect requires a player target",
 				where,
 			);
 		}
@@ -501,8 +501,8 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 
 /**
  * `ValidTgts$`-shaped values. Anything `parseSelector` accepts is a permanent
- * restriction the engine can check; `Any` and `Player` are the two forms that
- * are not object restrictions at all.
+ * restriction the engine can check; `Any`, `Player`, and `Opponent` are the
+ * forms that are not object restrictions at all.
  */
 function parseTarget(
 	value: string | undefined,
@@ -513,7 +513,10 @@ function parseTarget(
 	if (value === "Card" && targetType === "Spell") legal = { kind: "spell" };
 	else if (targetType !== undefined) return null;
 	else if (value === "Any") legal = { kind: "any-target" };
-	else if (value === "Player") legal = { kind: "player" };
+	else if (value === "Player")
+		legal = { kind: "player", player: "either" };
+	else if (value === "Opponent")
+		legal = { kind: "player", player: "opponent" };
 	else if (value === "Permanent") legal = { kind: "permanent" };
 	else if (value === "Creature.Other+YouCtrl") {
 		legal = {

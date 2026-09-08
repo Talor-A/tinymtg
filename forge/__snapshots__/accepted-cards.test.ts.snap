@@ -204,6 +204,7 @@ Blade of the Sixth Pride
 Blanchwood Treefolk
 Blazing Hellhound
 Blessed Spirits
+Blight Keeper
 Blighted Cataract
 Blighted Gorge
 Blighted Shaman
@@ -434,6 +435,7 @@ Daggerback Basilisk
 Daggerclaw Imp
 Daggerdrome Imp
 Dakmor Bat
+Dakmor Ghoul
 Dakmor Lancer
 Dakmor Scorpion
 Dancing Scimitar
@@ -539,6 +541,7 @@ Dread Reaper
 Dread Shade
 Dread of Night
 Dreadbore
+Dream Beavers
 Dreamstone Hedron
 Dreg Reaver
 Dreg Recycler
@@ -941,12 +944,14 @@ Hero's Demise
 Hero's Downfall
 Heroes' Reunion
 Hexplate Golem
+Hierophant's Chalice
 High Market
 Highborn Vampire
 Highland Forest
 Highland Giant
 Highland Lake
 Highland Weald
+Highway Robber
 Hill Giant
 Hill Giant Herdgorger
 Hired Blade
@@ -1262,6 +1267,7 @@ Midnight Assassin
 Midnight Haunting
 Might of Oaks
 Millennial Gargoyle
+Mind Sculpt
 Mind Stone
 Mindeye Drake
 Minotaur Abomination
@@ -1353,6 +1359,7 @@ Night's Whisper
 Nightscape Master
 Nightshade Stinger
 Nikko-Onna
+Nimana Skydancer
 Nimble Birdsticker
 Nimble Innovator
 Nimble Pilferer
@@ -1460,6 +1467,7 @@ Phyrexian Tower
 Phyrexian Walker
 Phytoburst
 Pia and Kiran Nalaar
+Pierce Strider
 Pilfered Plans
 Pillarfield Ox
 Pious Wayfarer
@@ -1814,6 +1822,7 @@ Skycloud Expanse
 Skyhunter Prowler
 Skyknight Legionnaire
 Skyline Predator
+Skymarch Bloodletter
 Skyraker Giant
 Skyscanner
 Skyshroud Elf
@@ -1870,10 +1879,12 @@ Spark Reaper
 Sparkmage Apprentice
 Sparring Construct
 Spectacle Summit
+Specter of the Fens
 Spectral Reserves
 Spectral Shepherd
 Spellgorger Weird
 Sphinx Mindbreaker
+Sphinx of Enlightenment
 Sphinx of Magosi
 Spike Jester
 Spin Out
@@ -2205,6 +2216,7 @@ Vampire Nighthawk
 Vampire Noble
 Vampire Opportunist
 Vampire Revenant
+Vampire Sovereign
 Vampire Spawn
 Vampire of the Dire Moon
 Vampiric Feast
@@ -2394,4 +2406,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2391`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2403`;

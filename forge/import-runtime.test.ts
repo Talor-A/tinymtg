@@ -108,6 +108,7 @@ registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
 registerRuntimeFixture("f/flayed_one", "rt-flayed-one");
 registerRuntimeFixture("m/mire_triton", "rt-mire-triton");
 registerRuntimeFixture("b/baleful_strix", "rt-baleful-strix");
+registerRuntimeFixture("p/pierce_strider", "rt-pierce-strider");
 registerRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter");
 registerRuntimeFixture("t/timberland_guide", "rt-timberland-guide");
 registerCardFixture("d/darksteel_relic");
@@ -339,6 +340,33 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].hand.map((id) => name(state, id))).toEqual([
 			"Forest",
 		]);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Pierce Strider's imported ETB targets only its controller's opponent", () => {
+		const state = newGame();
+		const fallback = new ScriptedAgent();
+		let targetOptions: string[] = [];
+		const alice: SyncAgent = {
+			choose(view, request) {
+				if (request.kind === "target") {
+					targetOptions = request.options.map((option) => option.label);
+				}
+				return fallback.choose(view, request);
+			},
+		};
+		const agents: SyncAgents = [alice, new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+
+		enterFromHand(state, "rt-pierce-strider", ALICE, agents);
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(state.players[ALICE].life).toBe(20);
+		expect(state.players[BOB].life).toBe(20);
+
+		settlePriority(state, agents);
+		expect(targetOptions).toEqual(["Player 1"]);
+		expect(state.players[ALICE].life).toBe(20);
+		expect(state.players[BOB].life).toBe(17);
 		expect(state.stack).toHaveLength(0);
 	});
 

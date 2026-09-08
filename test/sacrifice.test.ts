@@ -105,7 +105,7 @@ registerCard({
 					id: "player",
 					min: 1,
 					max: 1,
-					legal: { kind: "player" },
+					legal: { kind: "player", player: "either" },
 				},
 			],
 			effects: [

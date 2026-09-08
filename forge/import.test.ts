@@ -87,6 +87,7 @@ const POSITIVE_FIXTURES = [
 	"s/stock_up",
 	"m/mire_triton",
 	"b/baleful_strix",
+	"p/pierce_strider",
 	"t/thrashing_brontodon",
 	"c/cathar_commando",
 	"r/resolute_reinforcements",
@@ -688,6 +689,47 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				},
 				targets: [],
 				effects: [{ kind: "draw", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
+	test("Pierce Strider keeps its characteristics and targeted ETB life loss", () => {
+		const result = importFixture("p/pierce_strider");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card).toMatchObject({
+			name: "Pierce Strider",
+			types: ["artifact", "creature"],
+			subtypes: ["Phyrexian", "Construct"],
+			colors: [],
+			manaCost: { n: 4 },
+			power: 3,
+			toughness: 3,
+		});
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigLoseLife",
+				text: "When CARDNAME enters, target opponent loses 3 life.",
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: { kind: "self" },
+				},
+				targets: [
+					{
+						id: "target-1",
+						min: 1,
+						max: 1,
+						legal: { kind: "player", player: "opponent" },
+					},
+				],
+				effects: [
+					{
+						kind: "lose-life",
+						player: { targetSlot: "target-1" },
+						amount: 3,
+					},
+				],
 			},
 		]);
 	});
@@ -2011,7 +2053,12 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.card.spell?.targets).toEqual([
-			{ id: "target-1", min: 1, max: 1, legal: { kind: "player" } },
+			{
+				id: "target-1",
+				min: 1,
+				max: 1,
+				legal: { kind: "player", player: "either" },
+			},
 		]);
 		// The head reads its operand from the ability's own ValidTgts$ and the
 		// continuation from Defined$ Targeted; both name the same slot.

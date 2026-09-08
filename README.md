@@ -102,7 +102,7 @@ order the rest on the bottom; damage, destroy, counter, targeted or
 self-directed fixed counter placement (including Forge's omitted `Defined$`
 default for a nontargeted permanent ability), and return-to-hand effects; spells,
 activated abilities, and triggered abilities with at most one required target
-(`Any`, `Player`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
+(`Any`, `Player`, `Opponent`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
 `ValidTgts$` selector whose base is a card type, a subtype, `Card`, or
 `Permanent`, followed by `YouCtrl`, `OppCtrl`, or a color, card type, or
 supertype word that may carry Forge's `non` prefix; the exact target form
