@@ -530,12 +530,11 @@ interface RegenerateEvent extends EventCommon {
 	object: ObjectId;
 }
 
-interface ZoneChangeEvent extends EventCommon {
+interface ZoneChangeEventBase extends EventCommon {
 	/** Choices installed atomically when this movement creates a spell. */
 	spellTargets?: TargetBindings;
 	kind: "change zone";
 	object: ObjectId;
-	from: Zone;
 	to: Zone;
 	cause: MoveCause;
 	/** Who it will be controlled by if `to === 'battlefield'`. Drives CR 616.1's chooser. */
@@ -552,6 +551,31 @@ interface ZoneChangeEvent extends EventCommon {
 	copiableOverride?: CharacteristicsSnapshot;
 	toBottom?: boolean;
 }
+
+/** An existing object moving from one zone to another. */
+interface ObjectZoneChangeEvent extends ZoneChangeEventBase {
+	from: Zone;
+	createdToken?: never;
+}
+
+/**
+ * A token entering as part of its creation (CR 111.2).
+ *
+ * A created token is not in a zone before it enters the battlefield. Its
+ * identity and copiable values therefore travel on the event until execution,
+ * instead of staging a fake object in a hand, graveyard, or other zone.
+ */
+interface TokenZoneChangeEvent extends ZoneChangeEventBase {
+	from: null;
+	to: "battlefield";
+	createdToken: {
+		values: CharacteristicsSnapshot;
+		/** Scratch for the token's own replacement abilities during this event. */
+		effectData: Record<string, Record<string, number>>;
+	};
+}
+
+type ZoneChangeEvent = ObjectZoneChangeEvent | TokenZoneChangeEvent;
 
 type MoveCause =
 	| "cast"
@@ -3118,8 +3142,6 @@ export function etbPreview(
 	state: ReadonlyGameState,
 	ev: ZoneChangeEvent,
 ): PermanentSnapshot {
-	const source = maybeObject(state, ev.object);
-	assertDefined(source);
 	// Clone only mutable state containers; card definitions contain callbacks and
 	// therefore cannot pass through structuredClone.
 	const preview: GameState = {
@@ -3147,14 +3169,46 @@ export function etbPreview(
 		floating: [...state.floating] as FloatingEffect[],
 		log: [],
 	};
-	moveObject(preview, ev.object, ev.from, "battlefield", {
-		toController: ev.toController,
-		tapped: ev.entersTapped,
-		counters: ev.entersWithCounters,
-		copiableOverride: ev.copiableOverride,
-	});
-	const id = preview.battlefield[preview.battlefield.length - 1];
-	assertDefined(id);
+	let id: ObjectId;
+	if (ev.from === null) {
+		assert(
+			!preview.objects.has(ev.object),
+			`created token id ${ev.object} is already in use`,
+		);
+		id = ev.object;
+		preview.objects.set(id, {
+			kind: "permanent",
+			id,
+			owner: ev.toController,
+			controller: ev.toController,
+			zone: "battlefield",
+			representation: {
+				kind: "token",
+				createdValues: cloneCharacteristics(ev.createdToken.values),
+			},
+			...(ev.copiableOverride
+				? { copiableOverride: cloneCharacteristics(ev.copiableOverride) }
+				: {}),
+			tapped: ev.entersTapped ?? false,
+			summoningSick: true,
+			counters: { ...ev.entersWithCounters },
+			effectData: {},
+			damage: 0,
+			attacking: false,
+			blocking: false,
+			token: true,
+			attributes: {},
+		});
+		preview.battlefield.push(id);
+	} else {
+		assertDefined(maybeObject(state, ev.object));
+		id = moveObject(preview, ev.object, ev.from, "battlefield", {
+			toController: ev.toController,
+			tapped: ev.entersTapped,
+			counters: ev.entersWithCounters,
+			copiableOverride: ev.copiableOverride,
+		});
+	}
 	const snapshot = readObject(createReadContext(preview), id);
 	assert(snapshot.kind === "permanent");
 	return snapshot;
@@ -3528,12 +3582,13 @@ function enteringObject(ev: GameEvent | undefined): ObjectId | null {
  */
 function incomingReplacementRefs(
 	view: GameView,
-	object: DeepReadOnly<GameObject>,
+	object: DeepReadOnly<GameObject> | null,
 	ev: ZoneChangeEvent,
 ): readonly ReplacementAbilityId[] {
-	return ev.copiableOverride
-		? ev.copiableOverride.abilities.replacement
-		: abilityReferencesOf(view, object).replacement;
+	if (ev.copiableOverride) return ev.copiableOverride.abilities.replacement;
+	if (ev.from === null) return ev.createdToken.values.abilities.replacement;
+	assertDefined(object);
+	return abilityReferencesOf(view, object).replacement;
 }
 
 /**
@@ -3583,12 +3638,44 @@ export function collectReplacements(
 	}
 
 	if (entering !== null && ev?.kind === "change zone") {
-		const o = maybeObject(state, entering);
+		const canonical = maybeObject(state, entering);
+		if (ev.from === null) {
+			assert(
+				canonical === null,
+				`created token id ${ev.object} is already in use`,
+			);
+		}
+		const o: DeepReadOnly<GameObject> | null =
+			canonical ??
+			(ev.from === null
+				? {
+						kind: "permanent",
+						id: ev.object,
+						owner: ev.toController,
+						controller: ev.toController,
+						zone: "battlefield",
+						representation: {
+							kind: "token",
+							createdValues: ev.createdToken.values,
+						},
+						tapped: ev.entersTapped ?? false,
+						summoningSick: true,
+						counters: { ...ev.entersWithCounters },
+						effectData: ev.createdToken.effectData,
+						damage: 0,
+						attacking: false,
+						blocking: false,
+						token: true,
+						attributes: {},
+					}
+				: null);
 		// The would-be permanent is evaluated in the zone it is entering, so an
 		// ETB replacement written with the ordinary battlefield default works
 		// whether the object gets there on its own or as a copy.
 		if (o) {
-			const displayName = ev.copiableOverride?.name ?? viewName(view, o.id);
+			const displayName =
+				ev.copiableOverride?.name ??
+				(ev.from === null ? ev.createdToken.values.name : viewName(view, o.id));
 			for (const id of incomingReplacementRefs(view, o, ev)) {
 				const def = getAbilityDefinition("replacement", id);
 				if (!functionsHere(def.functionsFrom, "battlefield")) continue;
@@ -3703,6 +3790,7 @@ export function affectedPlayer(
 			return ev.player;
 
 		case "change zone": {
+			if (ev.from === null) return ev.toController;
 			const o = maybeObject(state, ev.object);
 			assertDefined(o);
 			if (ev.from === "battlefield") return controllerOf(o) ?? o.owner;
@@ -4108,7 +4196,10 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 			]
 				.filter(Boolean)
 				.join(" ");
-			return `move(${name(state, ev.object)}: ${ev.from}->${ev.to}${extras ? ` ${extras}` : ""})`;
+			const objectName =
+				ev.from === null ? ev.createdToken.values.name : name(state, ev.object);
+			const from = ev.from ?? "creation";
+			return `move(${objectName}#${ev.object}: ${from}->${ev.to}${extras ? ` ${extras}` : ""})`;
 		}
 		case "add counters":
 			return `counters(${ev.amount}x ${ev.counter} on ${name(state, ev.target.id)})`;
@@ -5245,15 +5336,52 @@ function executeIn(
 
 		case "change zone": {
 			selfDeathTriggers = selfDeathTriggerCandidates(before, ev);
-			recordSourceDeparture(state, before, ev.object, ev.from);
-			const newId = moveObject(state, ev.object, ev.from, ev.to, {
-				toController: ev.toController,
-				tapped: ev.entersTapped,
-				counters: ev.entersWithCounters,
-				copiableOverride: ev.copiableOverride,
-				toBottom: ev.toBottom,
-				spellTargets: ev.spellTargets,
-			});
+			let newId: ObjectId;
+			if (ev.from === null) {
+				assert(
+					!state.objects.has(ev.object),
+					`created token id ${ev.object} is already in use`,
+				);
+				newId = ev.object;
+				state.objects.set(newId, {
+					kind: "permanent",
+					id: newId,
+					owner: ev.toController,
+					controller: ev.toController,
+					zone: "battlefield",
+					representation: {
+						kind: "token",
+						createdValues: cloneCharacteristics(ev.createdToken.values),
+					},
+					...(ev.copiableOverride
+						? { copiableOverride: cloneCharacteristics(ev.copiableOverride) }
+						: {}),
+					tapped: ev.entersTapped ?? false,
+					summoningSick: true,
+					counters: { ...ev.entersWithCounters },
+					effectData: {},
+					damage: 0,
+					attacking: false,
+					blocking: false,
+					token: true,
+					attributes: {},
+				});
+				state.battlefield.push(newId);
+				log(
+					state,
+					`  ${initialCharacteristics(permanent(state, newId)).name}#${newId} is now in battlefield`,
+				);
+			} else {
+				recordSourceDeparture(state, before, ev.object, ev.from);
+				newId = moveObject(state, ev.object, ev.from, ev.to, {
+					toController: ev.toController,
+					tapped: ev.entersTapped,
+					counters: ev.entersWithCounters,
+					copiableOverride: ev.copiableOverride,
+					toBottom: ev.toBottom,
+					spellTargets: ev.spellTargets,
+				});
+			}
 			created.push(newId);
 			break;
 		}
@@ -5389,13 +5517,27 @@ function executeIn(
 
 		case "create token": {
 			for (let i = 0; i < ev.amount; i++) {
-				const t = spawnToken(
-					state,
-					ev.controller,
-					characteristicsFromCardDef(card(ev.tokenDefinitionId)),
+				const tokenId = state.nextObjectId++ as ObjectId;
+				childResults.push(
+					performIn(
+						state,
+						{
+							kind: "change zone",
+							object: tokenId,
+							from: null,
+							to: "battlefield",
+							cause: "effect",
+							toController: ev.controller,
+							createdToken: {
+								values: characteristicsFromCardDef(card(ev.tokenDefinitionId)),
+								effectData: {},
+							},
+						},
+						choices,
+						scope,
+						depth + 1,
+					),
 				);
-				created.push(t.id);
-				log(state, `${"  ".repeat(depth)}created ${name(state, t.id)}`);
 			}
 			break;
 		}

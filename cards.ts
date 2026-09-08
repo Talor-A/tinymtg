@@ -320,7 +320,9 @@ export const BABY_REST_IN_PEACE = registerCard({
 			text: "If a card or token would be put into a graveyard from anywhere, exile it instead.",
 			applies: (ev, ctx) => onBattlefield(ctx) && goingToGraveyard(ev),
 			replace: (ev) =>
-				ev.kind === "change zone" ? [{ ...ev, to: "exile" }] : [ev],
+				ev.kind === "change zone" && ev.from !== null
+					? [{ ...ev, to: "exile" }]
+					: [ev],
 		},
 	],
 });
@@ -353,7 +355,9 @@ export const BABY_LEYLINE_OF_THE_VOID = registerCard({
 				return !!o && o.owner !== ctx.controller;
 			},
 			replace: (ev) =>
-				ev.kind === "change zone" ? [{ ...ev, to: "exile" }] : [ev],
+				ev.kind === "change zone" && ev.from !== null
+					? [{ ...ev, to: "exile" }]
+					: [ev],
 		},
 	],
 });
@@ -731,7 +735,7 @@ export const KALITAS = registerCard({
 				);
 			},
 			replace(ev, ctx) {
-				if (ev.kind !== "change zone") return [ev];
+				if (ev.kind !== "change zone" || ev.from === null) return [ev];
 				return [
 					{ ...ev, to: "exile" },
 					{
