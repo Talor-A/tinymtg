@@ -62,6 +62,8 @@ const POSITIVE_FIXTURES = [
 	"t/timeless_lotus",
 	"w/wastes",
 	"v/viscera_seer",
+	"b/blazing_hellhound",
+	"a/acolyte_of_aclazotz",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -647,6 +649,59 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				effects: [{ kind: "scry", player: "you", amount: 1 }],
 			},
 		]);
+	});
+
+	test("Blazing Hellhound excludes itself from its creature sacrifice cost", () => {
+		const result = importFixture("b/blazing_hellhound");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated[0]?.cost).toEqual({
+			mana: { n: 1 },
+			tapSelf: false,
+			sacrifice: {
+				selector: {
+					kind: "all",
+					selectors: [
+						{ kind: "type", type: "creature" },
+						{ kind: "not", selector: { kind: "self" } },
+					],
+				},
+				amount: 1,
+			},
+		});
+	});
+
+	test("Acolyte of Aclazotz lowers its other-creature-or-artifact cost", () => {
+		const result = importFixture("a/acolyte_of_aclazotz");
+		if (!result.ok) throw new Error("expected ok");
+		expect(
+			result.card.abilityDefinitions.activated[0]?.cost.sacrifice?.selector,
+		).toEqual({
+			kind: "any",
+			selectors: [
+				{
+					kind: "all",
+					selectors: [
+						{ kind: "type", type: "creature" },
+						{ kind: "not", selector: { kind: "self" } },
+					],
+				},
+				{
+					kind: "all",
+					selectors: [
+						{ kind: "type", type: "artifact" },
+						{ kind: "not", selector: { kind: "self" } },
+					],
+				},
+			],
+		});
+	});
+
+	test("a CARDNAME sacrifice selector lowers to the source, not a subtype", () => {
+		const result = importFixture("upcoming/disruptor_pistol");
+		if (!result.ok) throw new Error("expected ok");
+		expect(
+			result.card.abilityDefinitions.activated[0]?.cost.sacrifice?.selector,
+		).toEqual({ kind: "self" });
 	});
 
 	test("Merfolk Looter lowers to draw-then-discard-one, targetless", () => {

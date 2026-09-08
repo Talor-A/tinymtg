@@ -44,6 +44,8 @@ registerCardFixture("r/rhox_war_monk");
 registerCardFixture("r/root_maze");
 registerCardFixture("r/revitalize");
 registerCardFixture("v/viscera_seer");
+registerCardFixture("b/blazing_hellhound");
+registerCardFixture("a/acolyte_of_aclazotz");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family

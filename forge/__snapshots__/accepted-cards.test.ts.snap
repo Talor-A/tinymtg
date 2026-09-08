@@ -5,6 +5,7 @@ exports[`the accepted-card list matches its snapshot: accepted card names 1`] = 
 A.I.M. Bot
 Aardvark Sloth
 Abbey Griffin
+Acolyte of Aclazotz
 Adult Gold Dragon
 Adventurer's Inn
 Aegis Turtle
@@ -37,6 +38,7 @@ Ambition's Cost
 Amphin Cutthroat
 Anaba Shaman
 Ancestral Reminiscence
+Anchovy & Banana Pizza
 Ancient Brontodon
 Ancient Carp
 Ancient Crab
@@ -114,6 +116,7 @@ Bishop's Soldier
 Black Widow, Natasha Romanoff
 Blade of the Sixth Pride
 Blanchwood Treefolk
+Blazing Hellhound
 Blighted Cataract
 Blighted Gorge
 Blind Phantasm
@@ -283,9 +286,11 @@ Direct Hit
 Diregraf Ghoul
 Disenchant
 Dispeller's Capsule
+Disruptor Pistol
 Divination
 Diving Griffin
 Djinn of the Lamp
+Dockside Chef
 Doom Blade
 Dosan's Oldest Chant
 Douse in Gloom
@@ -297,6 +302,7 @@ Dread of Night
 Dreadbore
 Dreamstone Hedron
 Dreg Reaver
+Dreg Recycler
 Dromar's Attendant
 Dromoka Warrior
 Dross Crocodile
@@ -602,6 +608,7 @@ Kemba's Skyguard
 Kindercatch
 Kindly Customer
 King Suleiman
+Kingpin's Enforcers
 Kinjalli's Sunwing
 Kismet
 Kiss of Death
@@ -661,6 +668,7 @@ Lucent Liminid
 Lumengrid Gargoyle
 Lumengrid Warden
 Magma Jet
+Magmaw
 Mahamoti Djinn
 Makindi Aeronaut
 Makindi Griffin
@@ -931,6 +939,7 @@ Scion of Ugin
 Scorching Shot
 Scorching Spear
 Scoria Elemental
+Scrap Compactor
 Screeching Drake
 Scrounger of Souls
 Scrubland
@@ -1016,6 +1025,7 @@ Skyscanner
 Skyshroud Falcon
 Skyshroud Troopers
 Skyswirl Harrier
+Slagdrill Scrapper
 Slice in Twain
 Slingshot Goblin
 Slinking Skirge
@@ -1044,6 +1054,7 @@ Southern Elephant
 Southern Paladin
 Spare Supplies
 Spark Jolt
+Spark Reaper
 Sparkmage Apprentice
 Spike Jester
 Spin Out
@@ -1152,6 +1163,7 @@ Thought Courier
 Thraben Purebloods
 Thraben Valiant
 Thran Dynamo
+Thraxodemon
 Thundering Giant
 Thundering Rebuke
 Tidepool Turtle
@@ -1312,4 +1324,4 @@ Zuko's Offense
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1309`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1321`;

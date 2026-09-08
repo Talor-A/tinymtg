@@ -1207,12 +1207,27 @@ function parseActivationCost(
 		);
 	}
 
+	const terms: string[] = [];
+	let term = "";
+	let insideAngleBrackets = false;
+	for (const character of text) {
+		if (character === " " && !insideAngleBrackets) {
+			terms.push(term);
+			term = "";
+			continue;
+		}
+		term += character;
+		if (character === "<") insideAngleBrackets = true;
+		if (character === ">") insideAngleBrackets = false;
+	}
+	terms.push(term);
+
 	const mana: Exclude<ActivationCost["mana"], "zero"> = {};
 	let tapSelf = false;
 	let sacrifice: ActivationCost["sacrifice"];
 	let sawZero = false;
 	let sawMana = false;
-	for (const term of text.split(" ")) {
+	for (const term of terms) {
 		if (term === "") {
 			return issue(
 				"UNSUPPORTED_COST",
@@ -1250,7 +1265,7 @@ function parseActivationCost(
 			sawMana = true;
 			continue;
 		}
-		const sacrificeMatch = term.match(/^Sac<1\/(.+)>$/);
+		const sacrificeMatch = term.match(/^Sac<1\/([^/]+)(?:\/[^>]*)?>$/);
 		if (sacrificeMatch) {
 			if (sacrifice) {
 				return issue(
@@ -1261,15 +1276,36 @@ function parseActivationCost(
 			}
 			const selectorText = sacrificeMatch[1];
 			assert(selectorText !== undefined);
-			const selector = parseSelector(selectorText);
-			if (!selector) {
-				return issue(
-					"UNSUPPORTED_COST",
-					`unsupported sacrifice selector ${selectorText}`,
-					where,
+			const selectorChoices: TargetSelectorDef[] = [];
+			for (const choice of selectorText.split(";")) {
+				if (choice === "CARDNAME") {
+					selectorChoices.push({ kind: "self" });
+					continue;
+				}
+				const excludesSelf = choice.endsWith(".Other");
+				const parsed = parseSelectorPart(
+					excludesSelf ? choice.slice(0, -".Other".length) : choice,
+				);
+				if (!parsed) {
+					return issue(
+						"UNSUPPORTED_COST",
+						`unsupported sacrifice selector ${selectorText}`,
+						where,
+					);
+				}
+				selectorChoices.push(
+					excludesSelf
+						? combineSelectors("all", [
+								parsed,
+								{ kind: "not", selector: { kind: "self" } },
+							])
+						: parsed,
 				);
 			}
-			sacrifice = { selector, amount: 1 };
+			sacrifice = {
+				selector: combineSelectors("any", selectorChoices),
+				amount: 1,
+			};
 			continue;
 		}
 		if (/^\d+$/.test(term)) {

@@ -71,6 +71,8 @@ registerRuntimeFixture("p/preordain", "rt-preordain");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
+registerRuntimeFixture("b/blazing_hellhound", "rt-blazing-hellhound");
+registerRuntimeFixture("a/acolyte_of_aclazotz", "rt-acolyte-of-aclazotz");
 registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
@@ -552,6 +554,62 @@ describe("forge-import runtime: activated abilities", () => {
 		settlePriority(state, [alice, new ScriptedAgent()]);
 		expect(state.players[ALICE].library[0]).toBe(top.id);
 		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Blazing Hellhound sacrifices another creature but not itself", () => {
+		const state = setupMain();
+		const hellhound = spawnPermanent(state, "rt-blazing-hellhound", ALICE);
+		const ability = abilityId("activated", "rt-blazing-hellhound", 0);
+		state.players[ALICE].manaPool.c = 1;
+		expect(
+			getObservableActions(state, ALICE).some(
+				(action) =>
+					action.kind === "activate ability" && action.ability === ability,
+			),
+		).toBe(false);
+
+		const fodder = spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const alice = new ScriptedAgent([], [], [], [], [], [], [], [fodder.id]);
+		alice.targetChoices.push({ type: "player", player: BOB });
+		expect(
+			getObservableActions(state, ALICE).some(
+				(action) =>
+					action.kind === "activate ability" && action.ability === ability,
+			),
+		).toBe(true);
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: hellhound.id, ability },
+			[alice, new ScriptedAgent()],
+		);
+		expect(state.battlefield).toContain(hellhound.id);
+		expect(state.battlefield).not.toContain(fodder.id);
+		settlePriority(state, [alice, new ScriptedAgent()]);
+		expect(state.players[BOB].life).toBe(19);
+	});
+
+	test("Acolyte of Aclazotz sacrifices another artifact and drains its opponent", () => {
+		const state = setupMain();
+		const acolyte = spawnPermanent(state, "rt-acolyte-of-aclazotz", ALICE, {
+			summoningSick: false,
+		});
+		const relic = spawnPermanent(state, "darksteel-relic", ALICE);
+		const ability = abilityId("activated", "rt-acolyte-of-aclazotz", 0);
+		const alice = new ScriptedAgent([], [], [], [], [], [], [], [relic.id]);
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: acolyte.id, ability },
+			[alice, new ScriptedAgent()],
+		);
+		expect(state.battlefield).toContain(acolyte.id);
+		expect(state.battlefield).not.toContain(relic.id);
+		settlePriority(state, [alice, new ScriptedAgent()]);
+		expect(state.players[ALICE].life).toBe(21);
+		expect(state.players[BOB].life).toBe(19);
 	});
 
 	test("Soulmender's imported targetless activated ability resolves through the stack", () => {

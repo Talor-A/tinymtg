@@ -86,15 +86,17 @@ scoped by `ActiveZones$ Battlefield`, e.g. Root Maze) lowers to a registered
 replacement, honoring CR 614.12's own-entry guard; basic-land mana abilities
 are synthesized from subtype (Forge omits explicit `A:` lines for those); mana
 abilities producing fixed mana, including colorless (`Produced$ C`, e.g.
-Wastes); activated abilities whose costs contain fixed generic/WUBRG mana, optional
-tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional single-permanent
-sacrifice (`Cost$ Sac<1/Creature>`, e.g. Viscera Seer), with
+Wastes); activated abilities whose costs contain fixed generic/WUBRG mana,
+optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional
+single-permanent sacrifice, including `Creature.Other` to exclude the source,
+semicolon-separated alternatives, and `CARDNAME` for the source itself (e.g.
+Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with
 life/draw/discard-one-chosen-card, damage, and destroy effects; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, or a `ValidTgts$` selector whose base is a card type, a
 subtype, `Card`, or `Permanent`, followed by `YouCtrl`, `OppCtrl`, or a color,
 card type, or supertype word that may carry Forge's `non` prefix — so
-`Creature.nonBlack` lowers, `Creature.attacking` does not); simple self-entry,
+`Creature.nonBlack` lowers, while `Creature.attacking` does not); simple self-entry,
 upkeep, and self-attack triggers, including one optional (`may`) wrapper around
 a trigger's whole (possibly multi-step) effect sequence; and fixed
 controlled-creature P/T statics. See the acceptance matrix in
@@ -110,7 +112,7 @@ subtype, color, and controller, combined with all/any/not to any depth. A
 hand-written card definition can use all of it.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 1,309 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 1,321 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
