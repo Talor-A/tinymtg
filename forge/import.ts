@@ -55,7 +55,7 @@ import type {
 	StaticAbilityDefinition,
 	Supertype,
 	TargetDef,
-	TargetSelectorDef,
+	ObjectSelectorDef,
 	TriggerEffectPlayer,
 	TriggeredAbilityDefinition,
 	ValidPlayer,
@@ -259,8 +259,8 @@ function triggerEffectPlayer(
 
 function combineSelectors(
 	kind: "all" | "any",
-	selectors: TargetSelectorDef[],
-): TargetSelectorDef {
+	selectors: ObjectSelectorDef[],
+): ObjectSelectorDef {
 	const only = selectors[0];
 	return selectors.length === 1 && only ? only : { kind, selectors };
 }
@@ -297,7 +297,7 @@ function parseValidPlayer(value: string): ValidPlayer | null {
 	return null;
 }
 
-function parseSelectorModifier(modifier: string): TargetSelectorDef | null {
+function parseSelectorModifier(modifier: string): ObjectSelectorDef | null {
 	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
 	const negated = modifier.startsWith("non");
@@ -305,7 +305,7 @@ function parseSelectorModifier(modifier: string): TargetSelectorDef | null {
 	const color = COLOR_WORDS.get(word);
 	const type = [...CARD_TYPES].find((candidate) => candidate === word);
 	const supertype = [...SUPERTYPES].find((candidate) => candidate === word);
-	let selector: TargetSelectorDef | null = null;
+	let selector: ObjectSelectorDef | null = null;
 	if (color) selector = { kind: "color", color };
 	else if (type) selector = { kind: "type", type };
 	else if (supertype) selector = { kind: "supertype", supertype };
@@ -313,11 +313,11 @@ function parseSelectorModifier(modifier: string): TargetSelectorDef | null {
 	return negated ? { kind: "not", selector } : selector;
 }
 
-function parseSelectorPart(value: string): TargetSelectorDef | null {
+function parseSelectorPart(value: string): ObjectSelectorDef | null {
 	if (value === "Card.Self" || value === "Self") return { kind: "self" };
 	const pieces = value.split(".");
 	const base = pieces.shift();
-	const parts: TargetSelectorDef[] = [];
+	const parts: ObjectSelectorDef[] = [];
 	const type = base
 		? ([...CARD_TYPES].find((t) => t === base.toLowerCase()) ?? null)
 		: null;
@@ -333,11 +333,11 @@ function parseSelectorPart(value: string): TargetSelectorDef | null {
 	return parts.length > 0 ? combineSelectors("all", parts) : null;
 }
 
-function parseSelector(value: string): TargetSelectorDef | null {
+function parseSelector(value: string): ObjectSelectorDef | null {
 	const choices = value
 		.split(",")
 		.map((part) => parseSelectorPart(part.trim()));
-	return choices.every((choice): choice is TargetSelectorDef => choice !== null)
+	return choices.every((choice): choice is ObjectSelectorDef => choice !== null)
 		? combineSelectors("any", choices)
 		: null;
 }
@@ -938,7 +938,7 @@ function lowerStatic(
 	};
 }
 
-function selectorContainsSelf(selector: TargetSelectorDef): boolean {
+function selectorContainsSelf(selector: ObjectSelectorDef): boolean {
 	switch (selector.kind) {
 		case "self":
 			return true;
@@ -1334,35 +1334,19 @@ function lowerTrigger(
 					where,
 				);
 
-			const rawTypes = getForgeParam(params, "ValidCard");
-			const types = rawTypes?.split(",").map((part) => {
-				const word = part
-					.trim()
-					.replace(/^Card\./, "")
-					.toLowerCase();
-				return [...CARD_TYPES].find((type) => type === word) ?? null;
-			});
-			if (
-				!types ||
-				types.length === 0 ||
-				!types.every((type): type is CardType => type !== null)
-			)
+			const rawSelector = getForgeParam(params, "ValidCard");
+			const selector = rawSelector ? parseSelector(rawSelector) : null;
+			if (selector === null)
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"SpellCast ValidCard$ must contain only card types",
+					"SpellCast requires a supported ValidCard$ selector",
 					where,
 				);
-			const firstType = types[0];
-			assert(firstType, "validated SpellCast types must be nonempty");
-			const castTypes: [CardType, ...CardType[]] = [
-				firstType,
-				...types.slice(1),
-			];
 
 			return {
 				id: execute,
 				text,
-				condition: { kind: "cast", player: castPlayer, types: castTypes },
+				condition: { kind: "cast", player: castPlayer, selector },
 				targets,
 				effects,
 			};
@@ -1375,20 +1359,33 @@ function lowerTrigger(
 					"origin",
 					"destination",
 					"validcard",
+					"triggerzones",
+					"secondary",
 					"execute",
 					"triggerdescription",
 				]),
 				where,
 			);
 			if (badParams) return badParams;
+			const triggerZones = getForgeParam(params, "TriggerZones");
+			const secondary = getForgeParam(params, "Secondary");
 			if (
 				getForgeParam(params, "Origin") !== "Any" ||
 				getForgeParam(params, "Destination") !== "Battlefield" ||
-				getForgeParam(params, "ValidCard") !== "Card.Self"
+				(triggerZones !== undefined && triggerZones !== "Battlefield") ||
+				(secondary !== undefined && secondary !== "True")
 			)
 				return issue(
 					"UNSUPPORTED_EFFECT",
 					"unsupported ChangesZone trigger shape",
+					where,
+				);
+			const rawSelector = getForgeParam(params, "ValidCard");
+			const selector = rawSelector ? parseSelector(rawSelector) : null;
+			if (selector === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"ChangesZone requires a supported ValidCard$ selector",
 					where,
 				);
 			return {
@@ -1398,7 +1395,7 @@ function lowerTrigger(
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: "self",
+					selector,
 				},
 				targets,
 				effects,
@@ -1466,7 +1463,7 @@ function lowerTrigger(
 			return {
 				id: execute,
 				text,
-				condition: { kind: "declare attackers", selector: "self" },
+				condition: { kind: "declare attackers", selector: { kind: "self" } },
 				targets,
 				effects,
 			};
@@ -1603,7 +1600,7 @@ function parseActivationCost(
 			}
 			const selectorText = sacrificeMatch[1];
 			assert(selectorText !== undefined);
-			const selectorChoices: TargetSelectorDef[] = [];
+			const selectorChoices: ObjectSelectorDef[] = [];
 			for (const choice of selectorText.split(";")) {
 				if (choice === "CARDNAME") {
 					selectorChoices.push({ kind: "self" });

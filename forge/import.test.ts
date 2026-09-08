@@ -337,7 +337,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		const kavu = importFixture("f/flametongue_kavu");
 		if (!kavu.ok) throw new Error("expected ok");
 		expect(kavu.card.abilityDefinitions.triggered[0]).toMatchObject({
-			condition: { kind: "change zone", to: "battlefield", selector: "self" },
+			condition: { kind: "change zone", to: "battlefield", selector: { kind: "self" } },
 			targets: [
 				{
 					id: "target-1",
@@ -426,7 +426,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: "self",
+					selector: { kind: "self" },
 				},
 				targets: [],
 				effects: [{ kind: "gain-life", player: "you", amount: 3 }],
@@ -559,7 +559,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			{
 				id: "TrigGainLife",
 				text: expect.any(String),
-				condition: { kind: "declare attackers", selector: "self" },
+				condition: { kind: "declare attackers", selector: { kind: "self" } },
 				targets: [],
 				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
 			},
@@ -582,7 +582,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				condition: {
 					kind: "cast",
 					player: "you",
-					types: ["creature"],
+					selector: { kind: "type", type: "creature" },
 				},
 				targets: [],
 				effects: [{ kind: "draw", player: "you", amount: 1 }],
@@ -590,24 +590,135 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
-	test("SpellCast rejects broad and decorated Forge selectors", () => {
-		const card = (triggerParams: string) =>
+	test("Student of Ojutai lowers its noncreature cast trigger", () => {
+		const result = importFixture("s/student_of_ojutai");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigGainLife",
+				text: expect.any(String),
+				condition: {
+					kind: "cast",
+					player: "you",
+					selector: {
+						kind: "not",
+						selector: { kind: "type", type: "creature" },
+					},
+				},
+				targets: [],
+				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
+			},
+		]);
+	});
+
+	test("Staff of the Death Magus lowers both object-selected triggers", () => {
+		const result = importFixture("s/staff_of_the_death_magus");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigGainLife",
+				text: expect.any(String),
+				condition: {
+					kind: "cast",
+					player: "you",
+					selector: { kind: "color", color: "b" },
+				},
+				targets: [],
+				effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+			},
+			{
+				id: "TrigGainLife",
+				text: expect.any(String),
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: {
+						kind: "all",
+						selectors: [
+							{ kind: "subtype", subtype: "Swamp" },
+							{ kind: "controller", player: "you" },
+						],
+					},
+				},
+				targets: [],
+				effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
+	test("SpellCast lowers supported object selectors", () => {
+		const card = (selector: string) =>
 			[
 				"Name:Cast Watcher",
 				"ManaCost:1 U",
 				"Types:Enchantment",
-				`T:Mode$ SpellCast | ${triggerParams} | ValidActivatingPlayer$ You | TriggerZones$ Battlefield | Execute$ Trig | TriggerDescription$ x`,
+				`T:Mode$ SpellCast | ValidCard$ ${selector} | ValidActivatingPlayer$ You | TriggerZones$ Battlefield | Execute$ Trig | TriggerDescription$ x`,
 				"SVar:Trig:DB$ Draw | Defined$ You | NumCards$ 1",
 				"Oracle:",
 				"",
 			].join("\n");
 
-		for (const selector of ["Card", "Card.nonCreature", "Creature.cmcGE5"]) {
-			const result = importText(card(`ValidCard$ ${selector}`));
+		for (const [forgeSelector, selector] of [
+			[
+				"Instant,Sorcery",
+				{
+					kind: "any",
+					selectors: [
+						{ kind: "type", type: "instant" },
+						{ kind: "type", type: "sorcery" },
+					],
+				},
+			],
+			[
+				"Artifact.Creature",
+				{
+					kind: "all",
+					selectors: [
+						{ kind: "type", type: "artifact" },
+						{ kind: "type", type: "creature" },
+					],
+				},
+			],
+			[
+				"Card.nonCreature",
+				{
+					kind: "not",
+					selector: { kind: "type", type: "creature" },
+				},
+			],
+			["Card.Black", { kind: "color", color: "b" }],
+		] as const) {
+			const result = importText(card(forgeSelector));
+			if (!result.ok) throw new Error(`expected ${forgeSelector} to import`);
+			expect<unknown>(
+				result.card.abilityDefinitions.triggered[0]?.condition,
+			).toEqual({
+				kind: "cast",
+				player: "you",
+				selector,
+			});
+		}
+	});
+
+	test("SpellCast rejects broad and decorated Forge selectors", () => {
+		const card = (selector: string) =>
+			[
+				"Name:Cast Watcher",
+				"ManaCost:1 U",
+				"Types:Enchantment",
+				`T:Mode$ SpellCast | ValidCard$ ${selector} | ValidActivatingPlayer$ You | TriggerZones$ Battlefield | Execute$ Trig | TriggerDescription$ x`,
+				"SVar:Trig:DB$ Draw | Defined$ You | NumCards$ 1",
+				"Oracle:",
+				"",
+			].join("\n");
+
+		for (const selector of ["Card", "Creature.cmcGE5"]) {
+			const result = importText(card(selector));
 			expect(result.ok).toBe(false);
 			if (result.ok) return;
 			expect(result.diagnostics[0]?.message).toBe(
-				"SpellCast ValidCard$ must contain only card types",
+				"SpellCast requires a supported ValidCard$ selector",
 			);
 		}
 	});
@@ -1544,7 +1655,7 @@ describe("lowerForgeCard: chain traversal", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: "self",
+					selector: { kind: "self" },
 				},
 				targets: [],
 				effects: [

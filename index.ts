@@ -1990,7 +1990,7 @@ export type EffectDef<
 			kind: "sacrifice";
 			/** A relative player, or the player bound to a target slot. */
 			player: Player | { targetSlot: string };
-			selector: TargetSelectorDef;
+			selector: ObjectSelectorDef;
 			amount: 1;
 	  }
 	| {
@@ -2025,15 +2025,6 @@ export type EffectDef<
 
 export type ValidPlayer = "you" | "opponent" | "either";
 
-type TriggerSelector =
-	| "self"
-	| { non?: true; type: CardType }
-	| { non?: true; subtype: string }
-	| { non?: true; supertype: string }
-	| { controller: "you" | "opponent" }
-	| { owner: "you" | "opponent" }
-	| { non?: true; color: Color };
-
 interface GainLifeTriggerCondition {
 	kind: "gain life" | "lose life";
 	/** Which player gained or lost life. */
@@ -2045,18 +2036,18 @@ interface DrawTriggerCondition {
 	player: ValidPlayer;
 }
 
-/** Matches a cast by player and any one of the spell's current card types. */
+/** Matches a cast by player and the spell's current characteristics. */
 interface CastTriggerCondition {
 	kind: "cast";
 	player: ValidPlayer;
-	types: [CardType, ...CardType[]];
+	selector: ObjectSelectorDef;
 }
 
 /** Matches the player declaring attackers and/or each matching attacker. */
 interface DeclareAttackersTriggerCondition {
 	kind: "declare attackers";
 	attacker?: ValidPlayer;
-	selector?: TriggerSelector | TriggerSelector[];
+	selector?: ObjectSelectorDef;
 }
 
 interface BeginStepTriggerCondition {
@@ -2070,14 +2061,13 @@ interface ZoneChangeTriggerCondition {
 	kind: "change zone";
 	from: Zone | "any";
 	to: Zone | "any";
-	/** If array, the object must match every selector. */
-	selector: TriggerSelector | TriggerSelector[];
+	selector: ObjectSelectorDef;
 }
 
 /** Matches a permanent becoming tapped or untapped. */
 interface TapTriggerCondition {
 	kind: "untap" | "tap";
-	selector: TriggerSelector | TriggerSelector[];
+	selector: ObjectSelectorDef;
 }
 
 type TriggerCondition =
@@ -2117,19 +2107,19 @@ export type Keyword =
 	| "vigilance";
 
 /**
- * Object restrictions shared by targeting and by imported continuous effects.
- * Every case is evaluated against an object's *current* characteristics, so a
- * restriction that stopped matching is what makes a target illegal later.
+ * Object restrictions shared by targeting, triggers, costs, and imported
+ * continuous effects. Every case is evaluated against an object's *current*
+ * characteristics.
  */
-export type TargetSelectorDef =
+export type ObjectSelectorDef =
 	| { kind: "self" }
 	| { kind: "type"; type: CardType }
 	| { kind: "supertype"; supertype: Supertype }
 	| { kind: "subtype"; subtype: string }
 	| { kind: "color"; color: Color }
 	| { kind: "controller"; player: "you" | "opponent" }
-	| { kind: "all" | "any"; selectors: TargetSelectorDef[] }
-	| { kind: "not"; selector: TargetSelectorDef };
+	| { kind: "all" | "any"; selectors: ObjectSelectorDef[] }
+	| { kind: "not"; selector: ObjectSelectorDef };
 
 /** Declarative targeting; the runtime supports one required target slot. */
 export interface TargetDef {
@@ -2139,7 +2129,7 @@ export interface TargetDef {
 	legal:
 		| { kind: "player" }
 		| { kind: "spell" }
-		| { kind: "permanent"; selector: TargetSelectorDef }
+		| { kind: "permanent"; selector: ObjectSelectorDef }
 		| { kind: "any-target" };
 }
 
@@ -2158,8 +2148,8 @@ export interface TargetContext {
  * case compares against, or null where there is no source object.
  */
 export function selectorMatches(
-	selector: TargetSelectorDef,
-	object: DeepReadOnly<PermanentSnapshot | ContinuousEffectEvaluation>,
+	selector: ObjectSelectorDef,
+	object: DeepReadOnly<GameObjectSnapshot | ContinuousEffectEvaluation>,
 	source: { controller: PlayerId; id: ObjectId | null },
 ): boolean {
 	const characteristics = object.currentCharacteristics;
@@ -2201,7 +2191,7 @@ export interface SpellAbilityDef {
 }
 
 export interface SacrificeActivationCost {
-	selector: TargetSelectorDef;
+	selector: ObjectSelectorDef;
 	amount: 1;
 }
 
@@ -4848,61 +4838,19 @@ function relativePlayerMatches(
 	return expected === "you" ? actual === controller : actual !== controller;
 }
 
-function triggerSubjectMatches(
-	read: ReadContext,
-	source: DeepReadOnly<GameObject>,
-	subject: DeepReadOnly<GameObject>,
-	selector: TriggerSelector,
-): boolean {
-	if (selector === "self") return subject.id === source.id;
-
-	let matches: boolean;
-	if ("controller" in selector) {
-		const controller = controllerOf(subject);
-		if (controller === null) return false;
-		matches = relativePlayerMatches(controller, selector.controller, source);
-	} else if ("owner" in selector) {
-		matches = relativePlayerMatches(subject.owner, selector.owner, source);
-	} else {
-		const printedId = physicalCardId(subject);
-		const subjectSnapshot =
-			subject.kind === "permanent" && subject.zone === "battlefield"
-				? readObject(read, subject.id)
-				: null;
-		if (subjectSnapshot !== null) assert(subjectSnapshot.kind === "permanent");
-		const characteristics =
-			subjectSnapshot?.kind === "permanent"
-				? subjectSnapshot.currentCharacteristics
-				: printedId
-					? card(printedId)
-					: initialCharacteristics(subject);
-		if ("type" in selector) {
-			matches = characteristics.types.includes(selector.type);
-		} else if ("subtype" in selector) {
-			matches = characteristics.subtypes?.includes(selector.subtype) ?? false;
-		} else if ("supertype" in selector) {
-			matches =
-				characteristics.supertypes?.includes(selector.supertype as Supertype) ??
-				false;
-		} else {
-			matches = characteristics.colors.includes(selector.color);
-		}
-	}
-
-	return "non" in selector && selector.non ? !matches : matches;
-}
-
 function triggerSubjectsMatch(
 	read: ReadContext,
 	source: DeepReadOnly<GameObject>,
 	subjects: DeepReadOnly<GameObject>[],
-	_selectors: TriggerSelector | TriggerSelector[],
+	selector: ObjectSelectorDef,
 ): boolean {
-	const selectors = Array.isArray(_selectors) ? _selectors : [_selectors];
+	const controller = controllerOf(source);
+	assertDefined(controller, "a functioning trigger source must have a controller");
 	return subjects.some((subject) =>
-		selectors.every((selector) =>
-			triggerSubjectMatches(read, source, subject, selector),
-		),
+		selectorMatches(selector, readObject(read, subject.id), {
+			controller,
+			id: source.id,
+		}),
 	);
 }
 
@@ -4921,11 +4869,9 @@ function triggerMatches(
 			assert(ev.kind === "cast");
 			if (!relativePlayerMatches(ev.player, condition.player, source))
 				return false;
-			const spell = readObject(read, ev.spell);
-			assert(spell.kind === "spell", "cast event subject is not a spell");
-			return condition.types.some((type) =>
-				spell.currentCharacteristics.types.includes(type),
-			);
+			const spell = maybeObject(read.state, ev.spell);
+			assert(spell?.kind === "spell", "cast event subject is not a spell");
+			return triggerSubjectsMatch(read, source, [spell], condition.selector);
 		}
 
 		case "gain life":
@@ -4969,7 +4915,10 @@ function triggerMatches(
 			if (condition.from === "battlefield") {
 				// The exact self-death form is detected from the pre-event context. A
 				// surviving permanent with the same ability is not the departed self.
-				if (condition.to === "graveyard" && condition.selector === "self")
+				if (
+					condition.to === "graveyard" &&
+					condition.selector.kind === "self"
+				)
 					return false;
 				throw new Error("leaves the battlefield triggers are not supported");
 			}
@@ -5073,7 +5022,7 @@ function selfDeathTriggerCandidates(
 		if (
 			ev.to !== "graveyard" ||
 			condition.to !== "graveyard" ||
-			condition.selector !== "self"
+			condition.selector.kind !== "self"
 		) {
 			throw new Error("leaves the battlefield triggers are not supported");
 		}
@@ -6842,7 +6791,7 @@ function legalTargets(
 function legalSacrifices(
 	read: ReadContext,
 	player: PlayerId,
-	selector: TargetSelectorDef,
+	selector: ObjectSelectorDef,
 	context: TargetContext,
 ): ObjectId[] {
 	return read.state.battlefield.filter((id) => {

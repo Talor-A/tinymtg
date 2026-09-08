@@ -27,7 +27,7 @@ import {
 	spawnPermanent,
 	type TargetBindings,
 	type TargetDef,
-	type TargetSelectorDef,
+	type ObjectSelectorDef,
 	turnLocation,
 } from "../index.ts";
 import {
@@ -67,7 +67,7 @@ describe("target selectors", () => {
 		const swamp = spawnPermanent(state, "swamp", 1);
 		const mine = { controller: 0 as const, id: bears.id };
 
-		const matches = (selector: TargetSelectorDef, id: ObjectId) => {
+		const matches = (selector: ObjectSelectorDef, id: ObjectId) => {
 			const snapshot = readObject(createReadContext(state), id);
 			if (snapshot.kind !== "permanent")
 				throw new Error("expected a permanent");

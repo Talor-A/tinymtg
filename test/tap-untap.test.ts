@@ -36,14 +36,14 @@ registerCard({
 		{
 			id: "tap-self",
 			text: "Whenever Tap Observer becomes tapped, you gain 1 life.",
-			condition: { kind: "tap", selector: "self" },
+			condition: { kind: "tap", selector: { kind: "self" } },
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
 		},
 		{
 			id: "untap-self",
 			text: "Whenever Tap Observer becomes untapped, you gain 2 life.",
-			condition: { kind: "untap", selector: "self" },
+			condition: { kind: "untap", selector: { kind: "self" } },
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 2 }],
 		},
@@ -61,14 +61,20 @@ registerCard({
 		{
 			id: "red-tapped",
 			text: "Whenever a red permanent becomes tapped, you gain 1 life.",
-			condition: { kind: "tap", selector: { color: "r" } },
+			condition: {
+				kind: "tap",
+				selector: { kind: "color", color: "r" },
+			},
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
 		},
 		{
 			id: "green-tapped",
 			text: "Whenever a green permanent becomes tapped, you gain 1 life.",
-			condition: { kind: "tap", selector: { color: "g" } },
+			condition: {
+				kind: "tap",
+				selector: { kind: "color", color: "g" },
+			},
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
 		},

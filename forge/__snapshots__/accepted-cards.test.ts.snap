@@ -80,6 +80,7 @@ Augmenting Automaton
 Augury Owl
 Aura Blast
 Auratog
+Authority of the Consuls
 Automatic Librarian
 Avacyn's Pilgrim
 Aven Battle Priest
@@ -241,6 +242,7 @@ Concentrate
 Concentrated Fire
 Concordia Pegasus
 Contaminated Aquifer
+Contraband Kingpin
 Contradict
 Copper Myr
 Coral Commando
@@ -409,6 +411,7 @@ Ertai, the Corrupted
 Esper Cormorants
 Essence Drain
 Essence Extraction
+Eumidian Terrabotanist
 Eviscerate
 Exclusion Mage
 Exocomp
@@ -551,6 +554,7 @@ Goblin Roughrider
 Goblin Settler
 Goblin Sky Raider
 Goblin Sledder
+God-Pharaoh's Faithful
 Gold Myr
 Gold-Forged Sentinel
 Golden Bear
@@ -662,6 +666,7 @@ Infernal Idol
 Infuriate
 Inkrise Infiltrator
 Insatiable Harpy
+Insight
 Inspired Insurgent
 Inspiring Cleric
 Introduction to Prophecy
@@ -678,6 +683,7 @@ Jace's Ingenuity
 Jadecraft Artisan
 Jagwasp Swarm
 Jalum Tome
+Jarvis, Earth's Mightiest Butler
 Jasmine Boreal
 Jaya's Firenado
 Jaya's Greeting
@@ -703,6 +709,7 @@ Kami of Old Stone
 Karakas
 Kasimir the Lone Wolf
 Kavu Climber
+Kazandu Nectarpot
 Keen-Eyed Archers
 Keening Apparition
 Keepers of the Faith
@@ -862,6 +869,7 @@ Nether Horror
 Nettle Swine
 Neurok Replica
 New Benalia
+Nexus Wardens
 Nezumi Informant
 Nezumi Shadow-Watcher
 Night of Souls' Betrayal
@@ -904,6 +912,7 @@ Orcish Bloodpainter
 Orcish Mechanics
 Order of the Sacred Bell
 Ordinary Bear
+Ore Gorger
 Oreskos Swiftclaw
 Ornithopter
 Orochi Sustainer
@@ -931,6 +940,7 @@ Phyrexian Tower
 Phyrexian Walker
 Phytoburst
 Pillarfield Ox
+Pious Wayfarer
 Piranha Fly
 Plains
 Plateau
@@ -1004,6 +1014,7 @@ Redwood Treefolk
 Refute
 Regal Unicorn
 Regathan Firecat
+Reki, the History of Kamigawa
 Renegade Demon
 Renegade Troops
 Repulse
@@ -1108,6 +1119,7 @@ Selesnya Signet
 Senate Guildmage
 Sentinel Spider
 Sephiroth's Intervention
+Seraph Sanctuary
 Seraph of Dawn
 Seraph of the Suns
 Serpent Warrior
@@ -1151,6 +1163,7 @@ Silvercoat Lion
 Simic Signet
 Sinkhole
 Sir Shandlar of Eberyn
+Sire of the Storm
 Sisay's Ring
 Sisters of the Flame
 Sivitri Scarzam
@@ -1222,7 +1235,13 @@ Spring of Eternal Peace
 Springmane Cervin
 Springsage Ritual
 Squire
+Sram, Senior Edificer
 Staff of Nin
+Staff of the Death Magus
+Staff of the Flame Magus
+Staff of the Mind Magus
+Staff of the Sun Magus
+Staff of the Wild Magus
 Stand Firm
 Standing Troops
 Starfleet Crew
@@ -1257,6 +1276,7 @@ Strip Mine
 Striped Bears
 Strix Lookout
 Stronghold Assassin
+Student of Ojutai
 Succumb to Temptation
 Sudden Strength
 Sulfur Vent
@@ -1296,8 +1316,10 @@ Talruum Minotaur
 Tamiyo's Epiphany
 Tanglebloom
 Tangled Islet
+Tanglespan Lookout
 Tasseled Dromedary
 Tattered Apparition
+Tatyova, Benthic Druid
 Teferi's Protege
 Tel-Jilad Justice
 Tempest Drake
@@ -1411,6 +1433,7 @@ Viashino Fangtail
 Viashino Warrior
 Vicious Hunger
 Vigilant Baloth
+Vigilante Justice
 Viridescent Bog
 Viridian Shaman
 Viridian Zealot
@@ -1437,6 +1460,7 @@ Wandering Ones
 Wandering Tombshell
 Warden of Geometries
 Warleader's Helix
+Warmth
 Warpath Ghoul
 Warship Flight Crew
 Warship Scout
@@ -1507,4 +1531,4 @@ Zuko's Offense
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1504`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1528`;

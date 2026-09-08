@@ -151,7 +151,7 @@ registerCard({
 				kind: "change zone",
 				from: "battlefield",
 				to: "graveyard",
-				selector: { type: "creature" },
+				selector: { kind: "type", type: "creature" },
 			},
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],

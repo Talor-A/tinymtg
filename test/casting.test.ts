@@ -13,6 +13,7 @@ import {
 	advance,
 	executeAbilityAction,
 	executeCastAction,
+	executeLandAction,
 	getObservableActions,
 	IllegalCastError,
 	newGame,
@@ -84,12 +85,42 @@ registerCard({
 			condition: {
 				kind: "cast",
 				player: "you",
-				types: ["instant", "sorcery"],
+				selector: {
+					kind: "any",
+					selectors: [
+						{ kind: "type", type: "instant" },
+						{ kind: "type", type: "sorcery" },
+					],
+				},
 			},
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
 		},
 	],
+});
+
+registerCard({
+	id: "test-free-black-instant",
+	name: "Test Free Black Instant",
+	types: ["instant"],
+	colors: ["b"],
+	manaCost: "zero",
+	spell: {
+		id: "test-free-black-instant-spell",
+		text: "Do nothing.",
+		targets: [],
+		effects: [],
+	},
+});
+
+registerCard({
+	id: "test-swamp",
+	name: "Test Swamp",
+	supertypes: ["basic"],
+	types: ["land"],
+	subtypes: ["Swamp"],
+	colors: [],
+	manaCost: "none",
 });
 
 registerCard({
@@ -100,6 +131,57 @@ registerCard({
 	manaCost: "zero",
 	power: 1,
 	toughness: 1,
+});
+
+registerCard({
+	id: "test-free-artifact-creature",
+	name: "Test Free Artifact Creature",
+	types: ["artifact", "creature"],
+	colors: [],
+	manaCost: "zero",
+	power: 1,
+	toughness: 1,
+});
+
+registerCard({
+	id: "test-cast-type-watcher",
+	name: "Test Cast Type Watcher",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	triggers: [
+		{
+			id: "artifact-creature",
+			text: "Whenever you cast an artifact creature spell, gain 1 life.",
+			condition: {
+				kind: "cast",
+				player: "you",
+				selector: {
+					kind: "all",
+					selectors: [
+						{ kind: "type", type: "artifact" },
+						{ kind: "type", type: "creature" },
+					],
+				},
+			},
+			targets: [],
+			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+		},
+		{
+			id: "noncreature",
+			text: "Whenever you cast a noncreature spell, gain 1 life.",
+			condition: {
+				kind: "cast",
+				player: "you",
+				selector: {
+					kind: "not",
+					selector: { kind: "type", type: "creature" },
+				},
+			},
+			targets: [],
+			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+		},
+	],
 });
 
 const forestMana = abilityId("activated", "forest", 0);
@@ -326,6 +408,65 @@ describe("casting onto the stack", () => {
 				spell: spellEntry.objectId,
 			},
 		});
+	});
+
+	test("distinguishes all-type and excluded-type cast triggers", () => {
+		for (const [cardId, triggerIndex] of [
+			["darksteel-relic", 1],
+			["test-free-artifact-creature", 0],
+		] as const) {
+			const state = setupMain();
+			spawnPermanent(state, "test-cast-type-watcher", ALICE);
+			const spell = spawnCard(state, cardId, ALICE, "hand");
+
+			executeCastAction(state, ALICE, castAction(spell.id), passingAgents());
+
+			expect(state.pendingTriggers).toHaveLength(1);
+			expect(state.pendingTriggers[0]?.triggerId).toBe(
+				abilityId("triggered", "test-cast-type-watcher", triggerIndex),
+			);
+		}
+
+		const state = setupMain();
+		spawnPermanent(state, "test-cast-type-watcher", ALICE);
+		const creature = spawnCard(state, "test-free-creature", ALICE, "hand");
+		executeCastAction(state, ALICE, castAction(creature.id), passingAgents());
+		expect(state.pendingTriggers).toHaveLength(0);
+	});
+
+	test("Staff of the Death Magus matches a black spell and a controlled Swamp", () => {
+		const castState = setupMain();
+		spawnPermanent(castState, "staff-of-the-death-magus", ALICE);
+		const blackSpell = spawnCard(
+			castState,
+			"test-free-black-instant",
+			ALICE,
+			"hand",
+		);
+		executeCastAction(
+			castState,
+			ALICE,
+			castAction(blackSpell.id),
+			passingAgents(),
+		);
+		expect(castState.pendingTriggers).toHaveLength(1);
+		expect(castState.pendingTriggers[0]?.triggerId).toBe(
+			abilityId("triggered", "staff-of-the-death-magus", 0),
+		);
+
+		const landState = setupMain();
+		spawnPermanent(landState, "staff-of-the-death-magus", ALICE);
+		const swamp = spawnCard(landState, "test-swamp", ALICE, "hand");
+		executeLandAction(
+			landState,
+			ALICE,
+			{ kind: "play land", card: swamp.id },
+			passingAgents(),
+		);
+		expect(landState.pendingTriggers).toHaveLength(1);
+		expect(landState.pendingTriggers[0]?.triggerId).toBe(
+			abilityId("triggered", "staff-of-the-death-magus", 1),
+		);
 	});
 
 	test("a Forge-imported Beast Whisperer trigger resolves before its creature spell", () => {

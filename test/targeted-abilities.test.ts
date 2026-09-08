@@ -146,7 +146,7 @@ registerCard({
 				kind: "change zone",
 				from: "any",
 				to: "battlefield",
-				selector: "self",
+				selector: { kind: "self" },
 			},
 			targets: [
 				{
