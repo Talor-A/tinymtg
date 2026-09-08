@@ -64,6 +64,9 @@ export class ScriptedAgent implements SyncAgent {
 				}
 				return firstOption(request);
 
+			case "copyAs":
+				return firstOption(request);
+
 			case "target": {
 				const target = this.targetChoices.shift();
 				return target
@@ -161,6 +164,7 @@ export class RandomAgent implements SyncAgent {
 				};
 			}
 			case "replacement":
+			case "copyAs":
 			case "target":
 			case "sacrifice":
 			case "ownHand":
@@ -179,6 +183,11 @@ export class KeyboardAgent implements SyncAgent {
 		switch (request.kind) {
 			case "replacement":
 				console.log(`\n[Replacement choice for ${request.context.event.kind}]`);
+				break;
+			case "copyAs":
+				console.log(
+					`\n[Player ${request.player}: choose what #${request.context.source} enters as]`,
+				);
 				break;
 			case "target":
 				console.log(

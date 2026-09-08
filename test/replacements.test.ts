@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
 import "../cards.ts"; // side effect: registers the card database
-import type { GameState, ObjectId } from "../index.ts";
+import type { Agent, GameState, ObjectId, SyncAgent } from "../index.ts";
 import {
 	addFloating,
 	affectedPlayer,
+	ChoiceController,
+	ChoicePendingError,
 	createReadContext,
 	newGame,
 	perform,
@@ -19,6 +21,18 @@ import {
 	BOB,
 	created,
 } from "./utils/engine-helpers.ts";
+
+function chooseCopyAs(choice: ObjectId | null): SyncAgent {
+	const fallback = new ScriptedAgent();
+	return {
+		choose(view, request) {
+			if (request.kind === "copyAs") {
+				return { optionId: choice === null ? "no-copy" : String(choice) };
+			}
+			return fallback.choose(view, request);
+		},
+	};
+}
 
 describe("destroy event success", () => {
 	const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
@@ -479,6 +493,176 @@ describe("interacting effects as permanents enter", () => {
 			permanent(state, entered).counters["+1/+1"] ?? 0,
 			"copy inherits the copied card's printed ETB modifier",
 		).toBe(2);
+	});
+});
+
+describe("Clone's optional copy replacement", () => {
+	function cloneEvent(object: ObjectId) {
+		return {
+			kind: "change zone" as const,
+			object,
+			from: "hand" as const,
+			to: "battlefield" as const,
+			cause: "resolve" as const,
+			toController: ALICE,
+		};
+	}
+
+	test("chooses any battlefield creature without targeting", () => {
+		const state = newGame();
+		const first = spawnPermanent(state, "grizzly-bears", BOB);
+		const selected = spawnPermanent(state, "eager-cadet", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
+		const recorder = ChoiceController.record([
+			chooseCopyAs(selected.id),
+			new ScriptedAgent(),
+		]);
+
+		const result = perform(state, cloneEvent(clone.id), recorder);
+		const entered = created(result);
+		expect(
+			readObject(createReadContext(state), entered).currentCharacteristics.name,
+		).toBe("Eager Cadet");
+		expect(permanent(state, entered).representation).toEqual({
+			kind: "card",
+			cardId: "clone",
+		});
+
+		const request = recorder.transcript().choices[0]?.request;
+		expect(request?.kind).toBe("copyAs");
+		expect(request?.options.map((option) => option.id)).toEqual([
+			String(first.id),
+			String(selected.id),
+			"no-copy",
+		]);
+	});
+
+	test("the entering permanent's would-be controller makes the choice", () => {
+		const state = newGame();
+		const selected = spawnPermanent(state, "grizzly-bears", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
+		const aliceFallback = new ScriptedAgent();
+		const alice: SyncAgent = {
+			choose(view, request) {
+				if (request.kind === "copyAs") {
+					throw new Error("Clone's owner was incorrectly asked");
+				}
+				return aliceFallback.choose(view, request);
+			},
+		};
+		const recorder = ChoiceController.record([
+			alice,
+			chooseCopyAs(selected.id),
+		]);
+		const result = perform(
+			state,
+			{ ...cloneEvent(clone.id), toController: BOB },
+			recorder,
+		);
+
+		const entered = created(result);
+		expect(permanent(state, entered).controller).toBe(BOB);
+		expect(
+			readObject(createReadContext(state), entered).currentCharacteristics.name,
+		).toBe("Grizzly Bears");
+		expect(recorder.transcript().choices[0]?.request.player).toBe(BOB);
+	});
+
+	test("may decline and enter as Clone", () => {
+		const state = newGame();
+		spawnPermanent(state, "grizzly-bears", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
+
+		const entered = created(
+			perform(state, cloneEvent(clone.id), [
+				chooseCopyAs(null),
+				new ScriptedAgent(),
+			]),
+		);
+		const snapshot = readObject(createReadContext(state), entered);
+		expect(snapshot.currentCharacteristics.name).toBe("Clone");
+		expect(snapshot.currentCharacteristics).toMatchObject({
+			kind: "creature",
+			power: 0,
+			toughness: 0,
+		});
+	});
+
+	test("with no legal creature, enters as Clone without asking", () => {
+		const state = newGame();
+		const clone = spawnCard(state, "clone", ALICE, "hand");
+		const recorder = ChoiceController.record([
+			new ScriptedAgent(),
+			new ScriptedAgent(),
+		]);
+
+		const entered = created(perform(state, cloneEvent(clone.id), recorder));
+		expect(
+			readObject(createReadContext(state), entered).currentCharacteristics.name,
+		).toBe("Clone");
+		expect(recorder.transcript().choices).toHaveLength(0);
+	});
+
+	test("records, serializes, and exactly replays the selection", () => {
+		const checkpoint = newGame();
+		spawnPermanent(checkpoint, "grizzly-bears", BOB);
+		const selected = spawnPermanent(checkpoint, "eager-cadet", BOB);
+		const clone = spawnCard(checkpoint, "clone", ALICE, "hand");
+
+		const recordedState = structuredClone(checkpoint);
+		const recorder = ChoiceController.record([
+			chooseCopyAs(selected.id),
+			new ScriptedAgent(),
+		]);
+		perform(recordedState, cloneEvent(clone.id), recorder);
+		const transcript = JSON.parse(JSON.stringify(recorder.transcript()));
+
+		const replayedState = structuredClone(checkpoint);
+		const replay = ChoiceController.replay(transcript);
+		perform(replayedState, cloneEvent(clone.id), replay);
+		replay.assertComplete();
+		expect(replayedState).toEqual(recordedState);
+	});
+
+	test("an asynchronous selection unwinds and replays from the checkpoint", async () => {
+		const checkpoint = newGame();
+		const selected = spawnPermanent(checkpoint, "grizzly-bears", BOB);
+		const clone = spawnCard(checkpoint, "clone", ALICE, "hand");
+		const checkpointSnapshot = structuredClone(checkpoint);
+		const fallback = new ScriptedAgent();
+		const asyncAgent: Agent = {
+			choose(view, request) {
+				if (request.kind === "copyAs") {
+					return Promise.resolve({ optionId: String(selected.id) });
+				}
+				return fallback.choose(view, request);
+			},
+		};
+		const choices = ChoiceController.suspending([
+			asyncAgent,
+			new ScriptedAgent(),
+		]);
+		let pending: ChoicePendingError | undefined;
+		try {
+			choices.chooseCopyAs(checkpoint, ALICE, cloneEvent(clone.id), clone.id, [
+				selected.id,
+			]);
+		} catch (error) {
+			if (!(error instanceof ChoicePendingError)) throw error;
+			pending = error;
+		}
+		if (!pending) throw new Error("expected copy-as choice to suspend");
+		expect(pending.request.kind).toBe("copyAs");
+		choices.recordAnswer(pending.request, await pending.answer);
+
+		choices.rewind();
+		expect(
+			choices.chooseCopyAs(checkpoint, ALICE, cloneEvent(clone.id), clone.id, [
+				selected.id,
+			]),
+		).toBe(selected.id);
+		choices.assertComplete();
+		expect(checkpoint).toEqual(checkpointSnapshot);
 	});
 });
 

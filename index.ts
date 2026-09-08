@@ -1704,6 +1704,11 @@ export interface EffectCtx {
 	rc: ReplacementRun;
 }
 
+export interface ReplacementApplyCtx extends EffectCtx {
+	/** Replay-safe decisions made while applying this replacement. */
+	choices: AnyChoiceController;
+}
+
 /** A set of zones. 'any' == every zone (CR 113.6). */
 type ZoneScope = Zone[] | "any";
 function functionsHere(
@@ -1728,13 +1733,13 @@ export interface ReplacementEffectDefinition {
 	functionsFrom?: ZoneScope;
 	/** further scope the rule, after applying functionsFrom above. */
 	applies(ev: GameEvent, ctx: EffectCtx): boolean;
-	replace(ev: GameEvent, ctx: EffectCtx): GameEvent[];
+	replace(ev: GameEvent, ctx: ReplacementApplyCtx): GameEvent[];
 	/**
 	 * Consume shields / decrement counters here.
 	 *
 	 * TODO: is this an antipattern/smell?
 	 */
-	onApplied?(ev: GameEvent, ctx: EffectCtx): void;
+	onApplied?(ev: GameEvent, ctx: ReplacementApplyCtx): void;
 }
 
 /** A ReplacementDef bound to a concrete source. This is what the loop sees. */
@@ -3822,6 +3827,15 @@ function ctxFor(
 	};
 }
 
+function applyCtxFor(
+	read: ReadContext,
+	r: BoundReplacement,
+	run: ReplacementRun,
+	choices: AnyChoiceController,
+): ReplacementApplyCtx {
+	return { ...ctxFor(read, r, run), choices };
+}
+
 function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 	const out: BoundProhibition[] = [];
 	const abilityCanChangeKeywords = anyPossessedCharacteristicStatic(
@@ -3980,7 +3994,7 @@ function resolveReplacements(
 
 		assertDefined(chosen);
 		run.applied.add(chosen.id);
-		const ctx = ctxFor(read, chosen, run);
+		const ctx = applyCtxFor(read, chosen, run, choices);
 		const produced = chosen.def.replace(current, ctx);
 		chosen.def.onApplied?.(current, ctx);
 

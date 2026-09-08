@@ -13,6 +13,7 @@ import type {
 	PlayerId,
 	PlayerView,
 	PriorityAction,
+	ReadonlyGameState,
 	TargetDef,
 	TriggeredAbilityStackItem,
 	TurnLocation,
@@ -26,7 +27,7 @@ import {
 } from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
 
-function objectLabel(state: GameState, id: ObjectId): string {
+function objectLabel(state: ReadonlyGameState, id: ObjectId): string {
 	const object = state.objects.get(id);
 	return object ? name(state, id) : "unknown";
 }
@@ -48,6 +49,20 @@ interface ChoiceRequestBase {
 export interface ReplacementChoiceRequest extends ChoiceRequestBase {
 	kind: "replacement";
 	context: { event: GameEvent };
+}
+
+/**
+ * Choosing an object for an "enter as a copy" replacement is not targeting.
+ * The no-copy option is part of the same decision because the replacement may
+ * be optional.
+ */
+export interface CopyAsChoiceRequest extends ChoiceRequestBase {
+	kind: "copyAs";
+	context: {
+		event: GameEvent;
+		source: ObjectId;
+		creatures: ObjectId[];
+	};
 }
 
 export interface OwnHandChoiceRequest extends ChoiceRequestBase {
@@ -149,6 +164,7 @@ export interface ScryChoiceRequest extends ChoiceRequestBase {
 export type ChoiceRequest =
 	| TargetChoiceRequest
 	| ReplacementChoiceRequest
+	| CopyAsChoiceRequest
 	| OwnHandChoiceRequest
 	| SacrificeChoiceRequest
 	| OptionalChoiceRequest
@@ -239,6 +255,7 @@ export class ChoicePendingError extends Error {
 type RequestInput =
 	| Omit<TargetChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<ReplacementChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
+	| Omit<CopyAsChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OwnHandChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<SacrificeChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OptionalChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
@@ -591,7 +608,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 	}
 
 	private choose<T>(
-		state: GameState,
+		state: ReadonlyGameState,
 		request: ChoiceRequest,
 		candidates: readonly { id: string; value: T }[],
 	): T {
@@ -785,6 +802,37 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				id: String(option.id),
 				label: option.label,
 			})),
+		});
+		return this.choose(state, request, candidates);
+	}
+
+	chooseCopyAs(
+		state: ReadonlyGameState,
+		player: PlayerId,
+		event: GameEvent,
+		source: ObjectId,
+		creatures: ObjectId[],
+	): ObjectId | null {
+		assert(creatures.length > 0, "copy-as choice requires a legal creature");
+		assert(
+			new Set(creatures).size === creatures.length,
+			"copy-as choice received duplicate creatures",
+		);
+		const candidates: { id: string; value: ObjectId | null }[] = [
+			...creatures.map((id) => ({ id: String(id), value: id })),
+			{ id: "no-copy", value: null },
+		];
+		const request = this.request({
+			kind: "copyAs",
+			player,
+			context: { event, source, creatures: [...creatures] },
+			options: [
+				...creatures.map((id) => ({
+					id: String(id),
+					label: `${objectLabel(state, id)}#${id}`,
+				})),
+				{ id: "no-copy", label: "Don't copy" },
+			],
 		});
 		return this.choose(state, request, candidates);
 	}
