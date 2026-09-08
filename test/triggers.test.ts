@@ -443,28 +443,28 @@ describe("triggered abilities", () => {
 		expect(state.pendingTriggers).toHaveLength(0);
 	});
 
-	test.each([
-		"test-broad-self-death",
-		"test-nonself-death",
-	])("keeps %s as an explicit unsupported leaves trigger", (cardId) => {
-		const state = newGame();
-		const source = spawnPermanent(state, cardId, ALICE);
+	test.each(["test-broad-self-death", "test-nonself-death"])(
+		"keeps %s as an explicit unsupported leaves trigger",
+		(cardId) => {
+			const state = newGame();
+			const source = spawnPermanent(state, cardId, ALICE);
 
-		expect(() =>
-			perform(
-				state,
-				{
-					kind: "change zone",
-					object: source.id,
-					from: "battlefield",
-					to: "graveyard",
-					cause: "destroy",
-					toController: ALICE,
-				},
-				passingAgents(),
-			),
-		).toThrow("leaves the battlefield triggers are not supported");
-	});
+			expect(() =>
+				perform(
+					state,
+					{
+						kind: "change zone",
+						object: source.id,
+						from: "battlefield",
+						to: "graveyard",
+						cause: "destroy",
+						toController: ALICE,
+					},
+					passingAgents(),
+				),
+			).toThrow("leaves the battlefield triggers are not supported");
+		},
+	);
 
 	test("a trigger resolves after its source leaves", () => {
 		const state = newGame();

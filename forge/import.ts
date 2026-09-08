@@ -17,8 +17,9 @@
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
  * temporary P/T effects; random or multi-card discard; alternate/additional
- * costs on spells or activations other than a bare tap-self;
- * X/hybrid/Phyrexian/snow mana and dynamic amounts; more than one target slot,
+ * costs on spells, and activation costs other than fixed generic/coloured mana
+ * and tap-self; X/colorless/hybrid/Phyrexian/snow mana and dynamic amounts;
+ * more than one target slot,
  * or an optional one; selector modifiers outside `YouCtrl`/`OppCtrl` and
  * `non`-prefixable color, card type, and supertype words (so hexproof, shroud,
  * protection, and combat- or zone-dependent restrictions all reject, while a
@@ -30,7 +31,9 @@
  * (see `lowerReplacement`).
  */
 
+import assert from "node:assert/strict";
 import type {
+	ActivationCost,
 	AnyActivatedAbilityDefinition,
 	CardDef,
 	CardDefInput,
@@ -1192,6 +1195,119 @@ function parseManaCost(text: string): CardDefInput["manaCost"] | null {
 	return out;
 }
 
+function parseActivationCost(
+	text: string | undefined,
+	where: { nodeId?: string; line?: number },
+): ActivationCost | ImportIssue {
+	if (text === undefined || text === "") {
+		return issue(
+			"UNSUPPORTED_COST",
+			"malformed activation cost: expected mana and/or T",
+			where,
+		);
+	}
+
+	const mana: Exclude<ActivationCost["mana"], "zero"> = {};
+	let tapSelf = false;
+	let sawZero = false;
+	let sawMana = false;
+	for (const term of text.split(" ")) {
+		if (term === "") {
+			return issue(
+				"UNSUPPORTED_COST",
+				"malformed activation cost: empty term",
+				where,
+			);
+		}
+		if (term === "T") {
+			if (tapSelf) {
+				return issue(
+					"UNSUPPORTED_COST",
+					"malformed activation cost: duplicate T term",
+					where,
+				);
+			}
+			tapSelf = true;
+			continue;
+		}
+		if (
+			term === "W" ||
+			term === "U" ||
+			term === "B" ||
+			term === "R" ||
+			term === "G"
+		) {
+			if (sawZero) {
+				return issue(
+					"UNSUPPORTED_COST",
+					"malformed activation cost: 0 cannot be combined with other mana terms",
+					where,
+				);
+			}
+			const type = term.toLowerCase() as "w" | "u" | "b" | "r" | "g";
+			mana[type] = (mana[type] ?? 0) + 1;
+			sawMana = true;
+			continue;
+		}
+		if (/^\d+$/.test(term)) {
+			if (term !== "0" && term.startsWith("0")) {
+				return issue(
+					"UNSUPPORTED_COST",
+					`malformed generic activation cost term ${term}`,
+					where,
+				);
+			}
+			const amount = Number(term);
+			if (!Number.isSafeInteger(amount)) {
+				return issue(
+					"UNSUPPORTED_COST",
+					`unsupported generic activation cost term ${term}: quantity is not a safe integer`,
+					where,
+				);
+			}
+			if (amount === 0) {
+				if (sawZero || sawMana) {
+					return issue(
+						"UNSUPPORTED_COST",
+						"malformed activation cost: 0 cannot be combined with other mana terms",
+						where,
+					);
+				}
+				sawZero = true;
+				continue;
+			}
+			if (sawZero) {
+				return issue(
+					"UNSUPPORTED_COST",
+					"malformed activation cost: 0 cannot be combined with other mana terms",
+					where,
+				);
+			}
+			const generic = (mana.n ?? 0) + amount;
+			if (!Number.isSafeInteger(generic)) {
+				return issue(
+					"UNSUPPORTED_COST",
+					`unsupported generic activation cost term ${term}: total is not a safe integer`,
+					where,
+				);
+			}
+			mana.n = generic;
+			sawMana = true;
+			continue;
+		}
+		return issue(
+			"UNSUPPORTED_COST",
+			`unsupported activation cost term ${term}`,
+			where,
+		);
+	}
+
+	return {
+		mana: sawMana ? mana : "zero",
+		tapSelf,
+	};
+}
+
 function manaCostColors(mana: CardDefInput["manaCost"]): Color[] {
 	if (mana === "none" || mana === "zero") return [];
 	return (["w", "u", "b", "r", "g"] as const).filter(
@@ -1579,6 +1695,14 @@ export function lowerForgeCard(
 			);
 		}
 
+		const activationCost =
+			disc.token === "AB"
+				? parseActivationCost(getForgeParam(params, "Cost"), where)
+				: undefined;
+		if (activationCost && "code" in activationCost) {
+			return reject(activationCost);
+		}
+
 		if (disc.token === "AB" && disc.api === "mana") {
 			const badParams = checkParams(
 				params,
@@ -1586,15 +1710,7 @@ export function lowerForgeCard(
 				where,
 			);
 			if (badParams) return reject(badParams);
-			if (getForgeParam(params, "Cost") !== "T") {
-				return reject(
-					issue(
-						"UNSUPPORTED_COST",
-						"only a tap-self cost is supported for mana abilities",
-						where,
-					),
-				);
-			}
+			assert(activationCost !== undefined && !("code" in activationCost));
 			const produced = getForgeParam(params, "Produced");
 			// Forge's fixed multi-mana form is exactly a space-separated list of
 			// printed symbols. Keep this strict so choice (`Any`, `Combo ...`),
@@ -1655,21 +1771,12 @@ export function lowerForgeCard(
 				text:
 					getForgeParam(params, "SpellDescription") ??
 					`Add ${producedSymbols.map((symbol) => `{${symbol}}`).join("")}.`,
-				cost: { mana: "zero", tapSelf: true },
+				cost: activationCost,
 				effects: [{ kind: "add-mana", player: "you", mana }],
 			});
 			continue;
 		}
 
-		if (disc.token === "AB" && getForgeParam(params, "Cost") !== "T") {
-			return reject(
-				issue(
-					"UNSUPPORTED_COST",
-					"only a tap-self activation cost is supported",
-					where,
-				),
-			);
-		}
 		if (disc.token === "SP" && getForgeParam(params, "Cost") !== undefined) {
 			return reject(
 				issue(
@@ -1734,12 +1841,13 @@ export function lowerForgeCard(
 				effects: chain.effects,
 			};
 		} else {
+			assert(activationCost !== undefined && !("code" in activationCost));
 			activatedCount += 1;
 			activatedAbilities.push({
 				kind: "activated",
 				id: `activated-${activatedCount}`,
 				text: description,
-				cost: { mana: "zero", tapSelf: true },
+				cost: activationCost,
 				targets,
 				effects: chain.effects,
 			});

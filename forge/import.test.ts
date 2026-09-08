@@ -55,6 +55,7 @@ const POSITIVE_FIXTURES = [
 	"m/merfolk_looter",
 	"d/doom_blade",
 	"p/prodigal_sorcerer",
+	"r/rod_of_ruin",
 	"f/flametongue_kavu",
 	"m/manic_vandal",
 	"t/timeless_lotus",
@@ -268,10 +269,20 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
-	test("Prodigal Sorcerer lowers a targeted activated ability", () => {
-		const result = importFixture("p/prodigal_sorcerer");
-		if (!result.ok) throw new Error("expected ok");
-		expect(result.card.abilityDefinitions.activated).toEqual([
+	test("activation costs preserve mana-only, tap-only, and mana-plus-tap components", () => {
+		const manaOnly = importForgeCard(
+			"Name:Mana Cost Probe\nManaCost:2\nTypes:Artifact\nA:AB$ GainLife | Cost$ 2 U U 3 | Defined$ You | LifeAmount$ 1 | SpellDescription$ You gain 1 life.\nOracle:\n",
+			{ id: "mana-cost-probe" },
+		);
+		if (!manaOnly.ok) throw new Error("expected ok");
+		expect(manaOnly.card.abilityDefinitions.activated[0]?.cost).toEqual({
+			mana: { n: 5, u: 2 },
+			tapSelf: false,
+		});
+
+		const tapOnly = importFixture("p/prodigal_sorcerer");
+		if (!tapOnly.ok) throw new Error("expected ok");
+		expect(tapOnly.card.abilityDefinitions.activated).toEqual([
 			{
 				kind: "activated",
 				id: "activated-1",
@@ -283,6 +294,13 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				effects: [{ kind: "damage", targetSlot: "target-1", amount: 1 }],
 			},
 		]);
+
+		const combined = importFixture("r/rod_of_ruin");
+		if (!combined.ok) throw new Error("expected ok");
+		expect(combined.card.abilityDefinitions.activated[0]?.cost).toEqual({
+			mana: { n: 3 },
+			tapSelf: true,
+		});
 	});
 
 	test("targeted triggers carry their target declaration, not the T: line", () => {
@@ -772,6 +790,71 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_COST");
+	});
+
+	test("rejects unsupported activation cost terms without dropping them", () => {
+		for (const term of [
+			"C",
+			"X",
+			"W/U",
+			"W/P",
+			"PayLife<2>",
+			"Discard<1>",
+			"Sac<1/Creature>",
+		]) {
+			const result = importText(
+				`${BEARS}A:AB$ GainLife | Cost$ ${term} | Defined$ You | LifeAmount$ 1 | SpellDescription$ You gain 1 life.\n`,
+			);
+			expect(result.ok, term).toBe(false);
+			if (!result.ok) {
+				expect(result.diagnostics).toEqual([
+					expect.objectContaining({
+						code: "UNSUPPORTED_COST",
+						message: `unsupported activation cost term ${term}`,
+					}),
+				]);
+			}
+		}
+	});
+
+	test("rejects an unsafe activation mana quantity precisely", () => {
+		const term = "9007199254740992";
+		const result = importText(
+			`${BEARS}A:AB$ GainLife | Cost$ ${term} | Defined$ You | LifeAmount$ 1 | SpellDescription$ You gain 1 life.\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.diagnostics[0]).toMatchObject({
+				code: "UNSUPPORTED_COST",
+				message: `unsupported generic activation cost term ${term}: quantity is not a safe integer`,
+			});
+		}
+	});
+
+	test("rejects malformed activation cost strings precisely", () => {
+		for (const [costParameter, message] of [
+			["", "malformed activation cost: expected mana and/or T"],
+			["Cost$", "malformed activation cost: expected mana and/or T"],
+			["Cost$ T T", "malformed activation cost: duplicate T term"],
+			["Cost$ 2  T", "malformed activation cost: empty term"],
+			["Cost$ 02", "malformed generic activation cost term 02"],
+			[
+				"Cost$ 0 U",
+				"malformed activation cost: 0 cannot be combined with other mana terms",
+			],
+		] as const) {
+			const cost = costParameter === "" ? "" : `${costParameter} | `;
+			const result = importText(
+				`${BEARS}A:AB$ GainLife | ${cost}Defined$ You | LifeAmount$ 1 | SpellDescription$ You gain 1 life.\n`,
+			);
+			expect(result.ok, costParameter || "missing Cost$").toBe(false);
+			if (!result.ok) {
+				expect(result.diagnostics[0]).toMatchObject({
+					code: "UNSUPPORTED_COST",
+					message,
+				});
+			}
+		}
 	});
 
 	test("rejects an extra face", () => {

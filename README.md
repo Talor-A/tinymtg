@@ -84,9 +84,10 @@ the self form (`ValidCard$ Card.Self`, e.g. Charcoal Diamond) lowers directly
 to `CardDefInput.entersTapped`, and the global form (a supported selector
 scoped by `ActiveZones$ Battlefield`, e.g. Root Maze) lowers to a registered
 replacement, honoring CR 614.12's own-entry guard; basic-land mana abilities
-are synthesized from subtype (Forge omits explicit `A:` lines for those);
-tap-for-mana abilities producing a fixed amount of one mana symbol, colorless
-(`Produced$ C`, e.g. Wastes) included; tap-self activated abilities with
+are synthesized from subtype (Forge omits explicit `A:` lines for those); mana
+abilities producing fixed mana, including colorless (`Produced$ C`, e.g.
+Wastes); activated abilities whose costs contain only fixed generic/WUBRG mana
+and optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), with
 life/draw/discard-one-chosen-card, damage, and destroy effects; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, or a `ValidTgts$` selector whose base is a card type, a
@@ -121,7 +122,7 @@ Normal progression through `advance()` currently supports:
 - priority passing and one ordinary land play from the active player's hand during either main phase while the stack is empty;
 - fixed tap-for-mana abilities and mana pools;
 - casting from hand with mana already in the pool, including supported single-target instants and sorceries;
-- activated abilities with tap-self or single-permanent sacrifice costs, with or without a target;
+- activated abilities with fixed generic/WUBRG mana, optional tap-self, and optional single-permanent sacrifice costs, with or without a target;
 - relative-player and targeted-player sacrifice effects in which that player chooses one matching permanent;
 - the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith), and targeted triggers (e.g. Flametongue Kavu, Manic Vandal);
 - declaring attackers, and unblocked two-player combat damage; and

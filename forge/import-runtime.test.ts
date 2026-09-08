@@ -70,6 +70,7 @@ registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("p/preordain", "rt-preordain");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
+registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
 registerCardFixture("d/darksteel_relic");
@@ -490,6 +491,29 @@ describe("forge-import runtime: activated abilities", () => {
 
 		expect(permanent(state, elves.id).tapped).toBe(true);
 		expect(state.players[ALICE].manaPool.g).toBe(1);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Rod of Ruin's imported paid ability executes through normal priority", () => {
+		const state = setupMain();
+		const rod = spawnPermanent(state, "rt-rod-of-ruin", ALICE);
+		const ability = abilityId("activated", "rt-rod-of-ruin", 0);
+		state.players[ALICE].manaPool.c = 3;
+		const alice = new ScriptedAgent();
+		alice.priorityActions.push({
+			kind: "activate ability",
+			source: rod.id,
+			ability,
+		});
+		alice.targetChoices.push({ type: "player", player: BOB });
+
+		settlePriority(state, [alice, new ScriptedAgent()]);
+
+		expect(alice.priorityActions).toHaveLength(0);
+		expect(alice.targetChoices).toHaveLength(0);
+		expect(permanent(state, rod.id).tapped).toBe(true);
+		expect(state.players[ALICE].manaPool.c).toBe(0);
+		expect(state.players[BOB].life).toBe(19);
 		expect(state.stack).toHaveLength(0);
 	});
 
