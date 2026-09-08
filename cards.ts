@@ -48,6 +48,7 @@ registerCardFixture("b/blazing_hellhound");
 registerCardFixture("a/acolyte_of_aclazotz");
 registerCardFixture("c/counterspell");
 registerCardFixture("b/beast_whisperer");
+registerCardFixture("c/clone");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family
@@ -570,67 +571,6 @@ function pickFirstCreatureToCopy(
 		return snapshot.copiableValues;
 	}
 	return null;
-}
-
-export const CLONE = registerCard({
-	id: "clone",
-	name: "Clone",
-	types: ["creature"],
-	subtypes: ["Shapeshifter"],
-	colors: ["u"],
-	manaCost: { u: 1, n: 3 },
-	power: 0,
-	toughness: 0,
-	replacements: [
-		{
-			label: "clone",
-			layer: "copy",
-			functionsFrom: "any",
-			text: "You may have Clone enter as a copy of any creature on the battlefield.",
-			applies: (ev, ctx) =>
-				ev.kind === "change zone" &&
-				ev.to === "battlefield" &&
-				ev.object === ctx.self?.id &&
-				ev.copiableOverride === undefined &&
-				cloneCandidates(ctx.read).length > 0,
-			replace(ev, ctx) {
-				assert(ev.kind === "change zone");
-				assert(ctx.self, "Clone's replacement must have a source");
-				const targetId = ctx.choices.chooseCopyAs(
-					ctx.state,
-					ctx.controller,
-					ev,
-					ctx.self.id,
-					cloneCandidates(ctx.read),
-				);
-				if (targetId === null) return [ev];
-				const target = readObject(ctx.read, targetId);
-				assert(
-					target.kind === "permanent",
-					"copy-as candidate must be a permanent",
-				);
-				return [
-					{
-						...ev,
-						copiableOverride: cloneCharacteristics(target.copiableValues),
-					},
-				];
-			},
-		},
-	],
-});
-
-function cloneCandidates(read: ReadContext): ObjectId[] {
-	const candidates: ObjectId[] = [];
-	for (const id of read.state.battlefield) {
-		const snapshot = readObject(read, id);
-		if (
-			snapshot.kind === "permanent" &&
-			snapshot.currentCharacteristics.types.includes("creature")
-		)
-			candidates.push(id);
-	}
-	return candidates;
 }
 
 /* ------------------------------------------------------------------ *

@@ -83,7 +83,9 @@ literal entry-counter shorthand and both canonical enters-tapped `R:` forms —
 the self form (`ValidCard$ Card.Self`, e.g. Charcoal Diamond) lowers directly
 to `CardDefInput.entersTapped`, and the global form (a supported selector
 scoped by `ActiveZones$ Battlefield`, e.g. Root Maze) lowers to a registered
-replacement, honoring CR 614.12's own-entry guard; basic-land mana abilities
+replacement, honoring CR 614.12's own-entry guard; the exact optional Clone
+form (`K:ETBReplacement:Copy:DBCopy:Optional` with `DB$ Clone | Choices$
+Creature.Other`) lowers to a replay-safe, non-targeting choice; basic-land mana abilities
 are synthesized from subtype (Forge omits explicit `A:` lines for those); mana
 abilities producing fixed mana, including colorless (`Produced$ C`, e.g.
 Wastes); activated abilities whose costs contain fixed generic/WUBRG mana,
@@ -113,7 +115,7 @@ subtype, color, and controller, combined with all/any/not to any depth. A
 hand-written card definition can use all of it.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 1,321 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 1,322 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.

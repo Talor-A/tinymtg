@@ -12,6 +12,7 @@ import {
 	perform,
 	permanent,
 	readObject,
+	registerCard,
 	spawnCard,
 	spawnPermanent,
 } from "../index.ts";
@@ -33,6 +34,26 @@ function chooseCopyAs(choice: ObjectId | null): SyncAgent {
 		},
 	};
 }
+
+registerCard({
+	id: "test-animate-artifacts-for-copy",
+	name: "Test: Animate Artifacts for Copy",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	statics: [
+		{
+			layer: "4-type-changing",
+			text: "Test: Artifacts are creatures in addition to their other types.",
+			applies: (view) =>
+				view.currentCharacteristics.types.includes("artifact") &&
+				!view.currentCharacteristics.types.includes("creature"),
+			modify: (view) => {
+				view.types.push("creature");
+			},
+		},
+	],
+});
 
 describe("destroy event success", () => {
 	const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
@@ -586,6 +607,43 @@ describe("Clone's optional copy replacement", () => {
 			power: 0,
 			toughness: 0,
 		});
+	});
+
+	test("can choose a permanent that is currently a creature but copies only its copiable values", () => {
+		const state = newGame();
+		spawnPermanent(state, "test-animate-artifacts-for-copy", ALICE);
+		const relic = spawnPermanent(state, "darksteel-relic", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
+
+		const entered = created(
+			perform(state, cloneEvent(clone.id), [
+				chooseCopyAs(relic.id),
+				new ScriptedAgent(),
+			]),
+		);
+		const snapshot = readObject(createReadContext(state), entered);
+		expect(snapshot.copiableValues.name).toBe("Darksteel Relic");
+		expect(snapshot.copiableValues.types).toEqual(["artifact"]);
+		expect(snapshot.currentCharacteristics.types).toEqual([
+			"artifact",
+			"creature",
+		]);
+	});
+
+	test("acquires and applies the chosen creature's own entry replacement in the same event", () => {
+		const state = newGame();
+		const watchdog = spawnPermanent(state, "faithful-watchdog", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
+
+		const entered = created(
+			perform(state, cloneEvent(clone.id), [
+				chooseCopyAs(watchdog.id),
+				new ScriptedAgent(),
+			]),
+		);
+		const snapshot = readObject(createReadContext(state), entered);
+		expect(snapshot.currentCharacteristics.name).toBe("Faithful Watchdog");
+		expect(permanent(state, entered).counters).toEqual({ "+1/+1": 3 });
 	});
 
 	test("with no legal creature, enters as Clone without asking", () => {

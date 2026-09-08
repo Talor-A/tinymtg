@@ -200,6 +200,7 @@ Chrome Cat
 Cinder Storm
 Cleansing Screech
 Cliffhaven Sell-Sword
+Clone
 Cloud Manta
 Cloudblazer
 Cloudchaser Eagle
@@ -1383,4 +1384,4 @@ Zuko's Offense
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1369`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1381`;

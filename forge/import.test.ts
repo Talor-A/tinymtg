@@ -66,6 +66,7 @@ const POSITIVE_FIXTURES = [
 	"a/acolyte_of_aclazotz",
 	"c/counterspell",
 	"b/beast_whisperer",
+	"c/clone",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -661,6 +662,17 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		expect(result.card.abilityDefinitions.replacement[0]?.layer).toBe("other");
 	});
 
+	test("Clone lowers its exact optional creature-copy entry replacement", () => {
+		const result = importFixture("c/clone");
+		if (!result.ok) throw new Error("expected Clone to lower");
+		expect(result.card.abilityDefinitions.replacement).toHaveLength(1);
+		expect(result.card.abilityDefinitions.replacement[0]).toMatchObject({
+			layer: "copy",
+			functionsFrom: "any",
+			text: "You may have CARDNAME enter as a copy of any creature on the battlefield.",
+		});
+	});
+
 	test("Charcoal Diamond and Diregraf Ghoul lower the canonical self-entry form to entersTapped", () => {
 		for (const fixture of ["c/charcoal_diamond", "d/diregraf_ghoul"]) {
 			const result = importFixture(fixture);
@@ -801,7 +813,6 @@ const NEGATIVE_FIXTURES = [
 	"b/blind_obedience",
 	"w/walking_ballista",
 	"r/rest_in_peace",
-	"c/clone",
 	"i/into_the_maw_of_hell",
 	"e/eye_of_vecna",
 	"r/reckless_abandon",
@@ -816,6 +827,59 @@ describe("lowerForgeCard: required negative fixtures", () => {
 			expect(result.diagnostics.length).toBeGreaterThan(0);
 		});
 	}
+});
+
+describe("lowerForgeCard: strict Clone shape", () => {
+	const clone = cardText("c/clone");
+	const mutations = [
+		["mandatory replacement", ":Optional", ":Mandatory"],
+		["non-copy ETB tier", ":Copy:DBCopy", ":Other:DBCopy"],
+		["extra keyword segment", ":DBCopy:Optional", ":DBCopy:Optional:Extra"],
+		["different effect API", "DB$ Clone", "DB$ CopyPermanent"],
+		[
+			"different choice selector",
+			"Choices$ Creature.Other",
+			"Choices$ Creature.YouCtrl",
+		],
+		[
+			"extra copy-body parameter",
+			" | SpellDescription$",
+			" | Defined$ Self | SpellDescription$",
+		],
+	] as const;
+
+	for (const [name, from, to] of mutations) {
+		test(`rejects ${name}`, () => {
+			expect(clone).toContain(from);
+			const result = importForgeCard(clone.replace(from, to), {
+				id: "mutated-clone",
+			});
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.code).toMatch(
+				/^UNSUPPORTED_(KEYWORD|EFFECT|PARAMETER)$/,
+			);
+		});
+	}
+
+	test("rejects a missing copy body", () => {
+		const result = importForgeCard(clone.replace("DBCopy", "DBMissing"), {
+			id: "mutated-clone",
+		});
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_REFERENCE");
+	});
+
+	test("rejects a copy body without its choice description", () => {
+		const result = importForgeCard(
+			clone.replace(/ \| SpellDescription\$[^\n]*/, ""),
+			{ id: "mutated-clone" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
 });
 
 /* ------------------------------------------------------------------------- */

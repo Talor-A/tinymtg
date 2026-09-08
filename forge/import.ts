@@ -46,6 +46,8 @@ import type {
 	ManaCostType,
 	ManaPool,
 	ManaType,
+	ObjectId,
+	ReadContext,
 	RelativeEffectPlayer,
 	ReplacementEffectDefinition,
 	SpellAbilityDef,
@@ -58,15 +60,18 @@ import type {
 	ValidPlayer,
 } from "../index.ts";
 import {
+	cloneCharacteristics,
 	defineCard,
 	etbPreview,
 	MANA_COST_TYPES,
+	readObject,
 	selectorMatches,
 } from "../index.ts";
 import type {
 	ForgeAbilityRecord,
 	ForgeCardAst,
 	ForgeFaceAst,
+	ForgeKeywordRecord,
 	ForgeParamList,
 	ForgeSVarRecord,
 } from "./ast.ts";
@@ -840,6 +845,121 @@ function selectorContainsSelf(selector: TargetSelectorDef): boolean {
 type ReplacementLowering =
 	| { kind: "self-entry" }
 	| { kind: "global"; def: ReplacementEffectDefinition };
+
+function lowerCopyEtbKeyword(
+	face: ForgeFaceAst,
+	record: ForgeKeywordRecord,
+): { def: ReplacementEffectDefinition; usedSVar: string } | ImportIssue {
+	const where = { nodeId: record.source.nodeId, line: record.source.line };
+	if (
+		record.segments.length !== 4 ||
+		record.segments[1] !== "Copy" ||
+		record.segments[3] !== "Optional"
+	) {
+		return issue(
+			"UNSUPPORTED_KEYWORD",
+			`unsupported keyword: ${record.raw}`,
+			where,
+		);
+	}
+	const svarName = record.segments[2];
+	assert(svarName !== undefined);
+	const bucket = face.svarIndex[svarName.toLowerCase()];
+	if (!bucket || bucket.length === 0) {
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`unresolved ETBReplacement ${svarName}`,
+			where,
+		);
+	}
+	if (bucket.length > 1) {
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`ambiguous duplicate SVar ${svarName}`,
+			where,
+		);
+	}
+	const body = bucket[0] as ForgeSVarRecord;
+	if (body.parsed.kind !== "params") {
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`${svarName} is not an ability body`,
+			where,
+		);
+	}
+	const bodyWhere = { nodeId: body.source.nodeId, line: body.source.line };
+	const badParams = checkParams(
+		body.parsed.params,
+		new Set(["db", "choices", "spelldescription"]),
+		bodyWhere,
+	);
+	if (badParams) return badParams;
+	const text = getForgeParam(body.parsed.params, "SpellDescription");
+	if (
+		getForgeParam(body.parsed.params, "DB") !== "Clone" ||
+		getForgeParam(body.parsed.params, "Choices") !== "Creature.Other" ||
+		text === undefined
+	) {
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"unsupported ETBReplacement copy body",
+			bodyWhere,
+		);
+	}
+
+	const def: ReplacementEffectDefinition = {
+		label: `import:${where.nodeId}`,
+		text,
+		layer: "copy",
+		functionsFrom: "any",
+		applies(ev, ctx) {
+			return (
+				ev.kind === "change zone" &&
+				ev.to === "battlefield" &&
+				ev.object === ctx.self?.id &&
+				ev.copiableOverride === undefined &&
+				copyableCreatureCandidates(ctx.read).length > 0
+			);
+		},
+		replace(ev, ctx) {
+			assert(ev.kind === "change zone");
+			assert(ctx.self, "copy ETB replacement must have a source");
+			const targetId = ctx.choices.chooseCopyAs(
+				ctx.state,
+				ctx.controller,
+				ev,
+				ctx.self.id,
+				copyableCreatureCandidates(ctx.read),
+			);
+			if (targetId === null) return [ev];
+			const target = readObject(ctx.read, targetId);
+			assert(
+				target.kind === "permanent",
+				"copy-as candidate must be a permanent",
+			);
+			return [
+				{
+					...ev,
+					copiableOverride: cloneCharacteristics(target.copiableValues),
+				},
+			];
+		},
+	};
+	return { def, usedSVar: svarName.toLowerCase() };
+}
+
+function copyableCreatureCandidates(read: ReadContext): ObjectId[] {
+	const candidates: ObjectId[] = [];
+	for (const id of read.state.battlefield) {
+		const snapshot = readObject(read, id);
+		if (
+			snapshot.kind === "permanent" &&
+			snapshot.currentCharacteristics.types.includes("creature")
+		)
+			candidates.push(id);
+	}
+	return candidates;
+}
 
 /**
  * Two canonical enters-tapped shapes share `Event$ Moved | ... | ReplaceWith$`:
@@ -1739,9 +1859,18 @@ export function lowerForgeCard(
 	}
 
 	const keywords: Keyword[] = [];
+	const keywordReplacements: ReplacementEffectDefinition[] = [];
+	const usedSVarNames = new Set<string>();
 	const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
 	for (const record of face.keywordRecords) {
 		const where = { nodeId: record.source.nodeId, line: record.source.line };
+		if (record.keyword === "ETBReplacement") {
+			const lowered = lowerCopyEtbKeyword(face, record);
+			if ("code" in lowered) return reject(lowered);
+			keywordReplacements.push(lowered.def);
+			usedSVarNames.add(lowered.usedSVar);
+			continue;
+		}
 		if (record.keyword === "etbCounter") {
 			const [, counterKind, amountText] = record.segments;
 			const counterName = counterKind
@@ -1783,7 +1912,6 @@ export function lowerForgeCard(
 		keywords.push(bare);
 	}
 
-	const usedSVarNames = new Set<string>();
 	for (const bucket of Object.values(face.svarIndex)) {
 		if (bucket.length > 1) {
 			const first = bucket[0] as ForgeSVarRecord;
@@ -1803,7 +1931,7 @@ export function lowerForgeCard(
 		statics.push(lowered);
 	}
 
-	const replacements: ReplacementEffectDefinition[] = [];
+	const replacements: ReplacementEffectDefinition[] = [...keywordReplacements];
 	let entersTappedFromReplacement = false;
 	for (const record of face.replacements) {
 		const lowered = lowerReplacement(face, record);

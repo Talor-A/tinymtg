@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ScriptedAgent } from "../agents.ts";
 import "../cards.ts"; // side effect: registers the baseline lands (forest) libraries rely on
-import type { GameState, ObjectId, PlayerId } from "../index.ts";
+import type { GameState, ObjectId, PlayerId, SyncAgent } from "../index.ts";
 import {
 	abilityId,
 	activePlayer,
@@ -76,7 +76,20 @@ registerRuntimeFixture("a/acolyte_of_aclazotz", "rt-acolyte-of-aclazotz");
 registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
+registerRuntimeFixture("c/clone", "rt-clone");
 registerCardFixture("d/darksteel_relic");
+
+function chooseCopyAs(choice: ObjectId | null): SyncAgent {
+	const fallback = new ScriptedAgent();
+	return {
+		choose(view, request) {
+			if (request.kind === "copyAs") {
+				return { optionId: choice === null ? "no-copy" : String(choice) };
+			}
+			return fallback.choose(view, request);
+		},
+	};
+}
 
 /**
  * Synthetic: a static that makes every permanent an artifact, purely to
@@ -302,6 +315,32 @@ describe("forge-import runtime: triggers", () => {
 });
 
 describe("forge-import runtime: statics and replacements", () => {
+	test("Clone's imported replacement may copy any chosen creature or decline", () => {
+		const copying = newGame();
+		spawnPermanent(copying, "darksteel-relic", BOB);
+		spawnPermanent(copying, "rt-grizzly-bears", BOB);
+		const selected = spawnPermanent(copying, "eager-cadet", BOB);
+		const copied = enterFromHand(copying, "rt-clone", ALICE, [
+			chooseCopyAs(selected.id),
+			new ScriptedAgent(),
+		]);
+		expect(
+			readObject(createReadContext(copying), copied).currentCharacteristics
+				.name,
+		).toBe("Eager Cadet");
+
+		const declining = newGame();
+		spawnPermanent(declining, "rt-grizzly-bears", BOB);
+		const unchanged = enterFromHand(declining, "rt-clone", ALICE, [
+			chooseCopyAs(null),
+			new ScriptedAgent(),
+		]);
+		expect(
+			readObject(createReadContext(declining), unchanged).currentCharacteristics
+				.name,
+		).toBe("Clone");
+	});
+
 	test("Aesthir Glider's imported static removes only itself from blocker candidates", () => {
 		const state = newGame();
 		const glider = spawnPermanent(state, "rt-aesthir-glider", BOB);
