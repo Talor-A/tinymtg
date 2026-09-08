@@ -23,6 +23,8 @@ export {
 	type RecordedChoice,
 	type ScryChoiceAnswer,
 	type ScryResult,
+	type SurveilChoiceAnswer,
+	type SurveilResult,
 	type SyncAgent,
 	type SyncAgentPair,
 } from "./choices.ts";
@@ -443,6 +445,11 @@ interface ScryEvent extends EventCommon {
 	player: PlayerId;
 	amount: number;
 }
+interface SurveilEvent extends EventCommon {
+	kind: "surveil";
+	player: PlayerId;
+	amount: number;
+}
 
 interface DiscardEvent extends EventCommon {
 	kind: "discard";
@@ -582,6 +589,7 @@ type MoveCause =
 	| "play land"
 	| "discard"
 	| "mill"
+	| "surveil"
 	| "destroy"
 	| "counter"
 	| "sacrifice"
@@ -716,6 +724,7 @@ export type GameEvent =
 	| DrawEvent
 	| MillEvent
 	| ScryEvent
+	| SurveilEvent
 	| DiscardEvent
 	| DamageEvent
 	| DestroyEvent
@@ -1972,7 +1981,7 @@ export type EffectDef<
 	Player extends TriggerEffectPlayer = RelativeEffectPlayer,
 > =
 	| {
-			kind: "gain-life" | "lose-life" | "draw" | "scry";
+			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil";
 			player: Player;
 			amount: number;
 	  }
@@ -3944,6 +3953,7 @@ export function affectedPlayer(
 		case "draw cards":
 		case "mill":
 		case "scry":
+		case "surveil":
 		case "discard":
 		case "begin turn":
 		case "begin step":
@@ -4371,6 +4381,8 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 			return `mill(P${ev.player}, ${ev.amount})`;
 		case "scry":
 			return `scry(P${ev.player}, ${ev.amount})`;
+		case "surveil":
+			return `surveil(P${ev.player}, ${ev.amount})`;
 		case "discard":
 			if (ev.cards.kind === "hand-size")
 				return `discard(P${ev.player}, to hand size)`;
@@ -5257,6 +5269,61 @@ function executeIn(
 			library.unshift(...[...arrangement.bottom].reverse());
 			library.push(...[...arrangement.top].reverse());
 			log(state, `${"  ".repeat(depth)}P${ev.player} scries ${ev.amount}`);
+			break;
+		}
+
+		case "surveil": {
+			assert(
+				Number.isSafeInteger(ev.amount) && ev.amount >= 0,
+				`surveil amount must be a nonnegative integer, got ${ev.amount}`,
+			);
+			if (ev.amount === 0) {
+				happened = false;
+				break;
+			}
+			const library = state.players[ev.player].library;
+			const count = Math.min(ev.amount, library.length);
+			const seen = library.slice(library.length - count).reverse();
+			const arrangement = choices.chooseSurveil(state, ev.player, seen);
+			const arranged = [...arrangement.top, ...arrangement.bottom];
+			assert(arranged.length === seen.length, "surveil changed the card count");
+			assert(
+				new Set(arranged).size === arranged.length,
+				"surveil arrangement contains duplicate cards",
+			);
+			assert(
+				arranged.every((id) => seen.includes(id)),
+				"surveil arrangement contains a card that was not looked at",
+			);
+
+			// Use normal zone-change events so replacements and triggers apply.
+			// Reverse the chosen order so its first card is on top of the graveyard.
+			for (const id of [...arrangement.bottom].reverse()) {
+				childResults.push(
+					performIn(
+						state,
+						{
+							kind: "change zone",
+							object: id,
+							from: "library",
+							to: "graveyard",
+							cause: "surveil",
+							toController: ev.player,
+						},
+						choices,
+						scope,
+						depth + 1,
+					),
+				);
+			}
+
+			for (const id of arrangement.top) {
+				const index = library.indexOf(id);
+				assert(index !== -1, `surveil top card ${id} left the library`);
+				library.splice(index, 1);
+			}
+			library.push(...[...arrangement.top].reverse());
+			log(state, `${"  ".repeat(depth)}P${ev.player} surveils ${ev.amount}`);
 			break;
 		}
 
@@ -6419,6 +6486,12 @@ function effectToEvent(
 				player: relativeEffectPlayer(item, effect.player),
 				amount: effect.amount,
 			};
+		case "surveil":
+			return {
+				kind: "surveil",
+				player: relativeEffectPlayer(item, effect.player),
+				amount: effect.amount,
+			};
 		case "discard": {
 			assert(
 				effect.amount === 1,
@@ -7233,6 +7306,7 @@ function activateAbilityIn(
 			if (
 				effect.kind === "draw" ||
 				effect.kind === "scry" ||
+				effect.kind === "surveil" ||
 				effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||
 				effect.kind === "damage" ||

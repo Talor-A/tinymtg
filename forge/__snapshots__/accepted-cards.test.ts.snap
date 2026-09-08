@@ -3,6 +3,7 @@
 exports[`the accepted-card list matches its snapshot: accepted card names 1`] = `
 "A-Dragonborn Looter
 A.I.M. Bot
+A.I.M. Synthoids
 Aardvark Sloth
 Abbey Griffin
 Absorb
@@ -104,6 +105,7 @@ Balduvian Bears
 Balshan Collaborator
 Bane Alley Blackguard
 Banehound
+Banishing Betrayal
 Barbarian Horde
 Barbarian Lunatic
 Barbarian Riftcutter
@@ -237,11 +239,14 @@ Colorful Feiyi Sparrow
 Colossapede
 Colossodon Yearling
 Command the Storm
+Commercial District
 Composite Golem
 Concentrate
 Concentrated Fire
 Concordia Pegasus
+Consider
 Contaminated Aquifer
+Contingency Plan
 Contraband Kingpin
 Contradict
 Copper Myr
@@ -267,6 +272,7 @@ Crimson Kobolds
 Crooked Custodian
 Crookshank Kobolds
 Crosis's Attendant
+Cruel Truths
 Crush
 Crypt Ripper
 Cryptic Annelid
@@ -274,6 +280,7 @@ Crystal Ball
 Crystal Quarry
 Crystal Vein
 Cunning Sparkmage
+Curate
 Curio Vendor
 Curious Killbot
 Cursebreak
@@ -305,6 +312,7 @@ Dawning Angel
 Dawnstrike Paladin
 Daybreak Chaplain
 Deadeye Duelist
+Deadly Visit
 Deathmark
 Dedicated Martyr
 Defense Force Aggressor
@@ -324,9 +332,11 @@ Devkarin Dissident
 Devoted Hero
 Devotee of Strength
 Devout Monk
+Dimir Informant
 Dimir Signet
 Direct Hit
 Diregraf Ghoul
+Diresight
 Disenchant
 Dismiss
 Dispeller's Capsule
@@ -383,6 +393,7 @@ Ebony Treefolk
 Eidolon of Philosophy
 Elderfang Disciple
 Electrify
+Elegant Parlor
 Elf Replica
 Elite Guardmage
 Elite Instructor
@@ -580,6 +591,7 @@ Greenweaver Druid
 Greenwood Sentinel
 Griffin Sentinel
 Grim Backwoods
+Grim Bauble
 Grizzled Leotau
 Grizzled Outrider
 Grizzly Bears
@@ -604,6 +616,7 @@ Harrier Naga
 Haunted Mire
 Havenwood Battleground
 Hawkeye, Clint Barton
+He's Dead, Jim
 Headless Horseman
 Headwater Sentries
 Healer of the Glade
@@ -612,6 +625,7 @@ Healer's Hawk
 Heart Warden
 Heart of Ramos
 Hecteyes
+Hedge Maze
 Hedron Archive
 Hedron Crawler
 Helpful Hunter
@@ -638,6 +652,7 @@ Horn of Ramos
 Horned Turtle
 Hornet Sting
 Hostile Minotaur
+Hour of Defeat
 Hovermyr
 Huatli's Snubhorn
 Hulking Bugbear
@@ -655,6 +670,7 @@ Icewind Elemental
 Idyllic Beachfront
 Impale
 Imperial Outrider
+Imperious Inkmage
 Implode
 Imposing Sovereign
 Incurable Ogre
@@ -782,6 +798,8 @@ Loxodon Wayfarer
 Lucent Liminid
 Lumengrid Gargoyle
 Lumengrid Warden
+Lunatic Pandora
+Lush Portico
 Magma Jet
 Magmaw
 Magnigoth Sentry
@@ -816,6 +834,7 @@ Mesa Enchantress
 Mesa Unicorn
 Metallic Sliver
 Metalspinner's Puzzleknot
+Meticulous Archive
 Might of Oaks
 Millennial Gargoyle
 Mind Stone
@@ -851,6 +870,7 @@ Murasa Brute
 Murder
 Muse Drake
 Naga Eternal
+Naga Oracle
 Nantuko Disciple
 Nantuko Elder
 Nantuko Shade
@@ -994,6 +1014,7 @@ Rambunctious Mutt
 Raptor Companion
 Rath's Edge
 Rats of Rath
+Raucous Theater
 Ravaging Horde
 Ravenous Baboons
 Ravenous Baloth
@@ -1075,6 +1096,7 @@ Sage's Row Savant
 Saltblast
 Sanctify
 Sanctuary Cat
+Sanitation Automaton
 Sarpadian Simulacrum
 Satyr Enchanter
 Savage Gorilla
@@ -1130,6 +1152,7 @@ Serum Visionary
 Serum Visions
 Shadow Glider
 Shadowblood Ridge
+Shadowy Backstreet
 Shaman of Spring
 Shambling Ghoul
 Shatter
@@ -1140,6 +1163,7 @@ Shivan Hellkite
 Shock
 Shock Troops
 Shore Keeper
+Shore Lurker
 Shorecomber Crab
 Show of Valor
 Shrine Keeper
@@ -1161,6 +1185,8 @@ Silverback Ape
 Silverbeak Griffin
 Silvercoat Lion
 Simic Signet
+Sinister Sabotage
+Sinister Starfish
 Sinkhole
 Sir Shandlar of Eberyn
 Sire of the Storm
@@ -1252,6 +1278,7 @@ Staunch Defenders
 Staunch Shieldmate
 Steadfast Guard
 Steadfast Paladin
+Sterling Hound
 Stern Dismissal
 Stern Proctor
 Steward of Valeron
@@ -1281,6 +1308,7 @@ Succumb to Temptation
 Sudden Strength
 Sulfur Vent
 Sulfurous Mire
+Sultai Ascendancy
 Summit Prowler
 Sun Sentinel
 Sunastian Falconer
@@ -1306,6 +1334,7 @@ Sylvok Replica
 Symbol of Unsummoning
 Sythis, Harvest's Hand
 Taiga
+Taigam's Scheming
 Tajuru Snarecaster
 Talarian Hook Spider
 Talas Air Ship
@@ -1339,6 +1368,7 @@ The Fair Basilica
 The Hunter Maze
 The Lady of the Mountain
 The Surgical Bay
+Think Tank
 Third Path Savant
 Thornhide Wolves
 Thornwind Faeries
@@ -1349,6 +1379,7 @@ Thraben Valiant
 Thran Dynamo
 Thraxodemon
 Thriss, Nantuko Primus
+Thundering Falls
 Thundering Giant
 Thundering Rebuke
 Tidepool Turtle
@@ -1361,6 +1392,7 @@ Titanic Growth
 Titanic Pelagosaur
 Tithebearer Giant
 Tobias Andrion
+Tocasia's Dig Site
 Tolarian Scholar
 Tome Raider
 Tooth of Ramos
@@ -1399,10 +1431,16 @@ Tusked Colossodon
 Tyrox, Saurid Tyrant
 Uktabi Faerie
 Uktabi Orangutan
+Umbral Collar Zealot
+Unauthorized Exit
 Undead Minotaur
+Undercity Sewers
+Underground Mortuary
 Underground Sea
+Unexplained Disappearance
 Unfriendly Fire
 Unhallowed Phalanx
+Unsubtle Mockery
 Unsummon
 Unyaro Bee Sting
 Updraft Elemental
@@ -1467,6 +1505,7 @@ Warship Scout
 Wary Okapi
 Wasteland
 Wastes
+Watcher in the Mist
 Watchful Automaton
 Watchwolf
 Water Elemental
@@ -1508,7 +1547,9 @@ Woodland Patrol
 Woolly Thoctar
 Worf, Chief Tactical Officer
 Worn Powerstone
+Wreckage Wickerfolk
 Wrecking Ball
+Wretched Doll
 Wu Infantry
 Wyluli Wolf
 Yargle and Multani
@@ -1531,4 +1572,4 @@ Zuko's Offense
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1528`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1569`;

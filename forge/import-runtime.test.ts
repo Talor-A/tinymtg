@@ -68,6 +68,7 @@ registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
 registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("p/preordain", "rt-preordain");
+registerRuntimeFixture("c/consider", "rt-consider");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
@@ -491,6 +492,41 @@ describe("forge-import runtime: spell effects", () => {
 		expect(state.players[ALICE].library[0]).toBe(first);
 		expect(state.players[ALICE].library.at(-1)).toBe(bottom);
 		expect(agents[ALICE].scryChoices).toHaveLength(0);
+	});
+
+	test("Consider's imported surveil moves the chosen card before drawing", () => {
+		const state = setupMain();
+		spawnCard(state, "forest", ALICE, "library");
+		const surveilled = spawnCard(
+			state,
+			"rt-grizzly-bears",
+			ALICE,
+			"library",
+		).id;
+		const spell = spawnCard(state, "rt-consider", ALICE, "hand");
+		perform(
+			state,
+			{
+				kind: "add mana",
+				source: spell.id,
+				player: ALICE,
+				mana: { u: 1 },
+			},
+			passingAgents(),
+		);
+		const agents = passingAgents();
+		agents[ALICE].surveilChoices.push({ top: [], bottom: [surveilled] });
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		settlePriority(state, agents);
+
+		expect(state.players[ALICE].hand.map((id) => name(state, id))).toContain(
+			"Forest",
+		);
+		expect(state.players[ALICE].graveyard.map((id) => name(state, id))).toContain(
+			"Grizzly Bears",
+		);
+		expect(agents[ALICE].surveilChoices).toHaveLength(0);
 	});
 });
 

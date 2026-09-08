@@ -405,6 +405,26 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		});
 	});
 
+	test("Surveil mirrors scry and reads Forge's Amount parameter", () => {
+		const result = importText(
+			"Name:Imported Surveil\nManaCost:U\nTypes:Instant\nA:SP$ Surveil | Amount$ 2 | SpellDescription$ Surveil 2.\nOracle:Surveil 2.\n",
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.spell?.effects).toEqual([
+			{ kind: "surveil", player: "you", amount: 2 },
+		]);
+
+		const defaulted = importText(
+			"Name:Default Surveil\nManaCost:U\nTypes:Instant\nA:SP$ Surveil | SpellDescription$ Surveil 1.\nOracle:Surveil 1.\n",
+		);
+		expect(defaulted.ok).toBe(true);
+		if (!defaulted.ok) return;
+		expect(defaulted.card.spell?.effects).toEqual([
+			{ kind: "surveil", player: "you", amount: 1 },
+		]);
+	});
+
 	test("Sorin's Thirst sequences damage then life gain in one target slot", () => {
 		const result = importFixture("s/sorins_thirst");
 		if (!result.ok) throw new Error("expected ok");

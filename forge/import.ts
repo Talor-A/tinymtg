@@ -500,6 +500,28 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				);
 			return { kind: "scry", player: who, amount };
 		}
+		case "surveil": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"amount",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const who = parsePlayer(getForgeParam(params, "Defined"));
+			const amount = positiveInteger(getForgeParam(params, "Amount"), 1);
+			if (!who || !amount)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"unsupported surveil amount/player",
+					where,
+				);
+			return { kind: "surveil", player: who, amount };
+		}
 		case "draw": {
 			const badParams = checkParams(
 				params,

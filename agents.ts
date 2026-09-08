@@ -51,6 +51,7 @@ export class ScriptedAgent implements SyncAgent {
 		public targetChoices: EntityRef[] = [],
 		public scryChoices: { top: ObjectId[]; bottom: ObjectId[] }[] = [],
 		public sacrificeChoices: ObjectId[] = [],
+		public surveilChoices: { top: ObjectId[]; bottom: ObjectId[] }[] = [],
 	) {}
 
 	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
@@ -129,6 +130,17 @@ export class ScriptedAgent implements SyncAgent {
 				};
 			}
 
+			case "surveil": {
+				const arrangement = this.surveilChoices.shift() ?? {
+					top: request.context.cards,
+					bottom: [],
+				};
+				return {
+					top: arrangement.top.map(String),
+					bottom: arrangement.bottom.map(String),
+				};
+			}
+
 			default:
 				return assertNever(request);
 		}
@@ -152,7 +164,8 @@ export class RandomAgent implements SyncAgent {
 						.sort((left, right) => left.order - right.order)
 						.map(({ option }) => option.id),
 				};
-			case "scry": {
+			case "scry":
+			case "surveil": {
 				const shuffled = request.options
 					.map((option) => ({ option, order: Math.random() }))
 					.sort((left, right) => left.order - right.order)
@@ -220,6 +233,7 @@ export class KeyboardAgent implements SyncAgent {
 			case "declareBlockers":
 				return this.chooseBlockers(request);
 			case "scry":
+			case "surveil":
 				return this.chooseScry(request);
 			default:
 				return assertNever(request);
@@ -273,9 +287,11 @@ export class KeyboardAgent implements SyncAgent {
 	}
 
 	private chooseScry(
-		request: Extract<ChoiceRequest, { kind: "scry" }>,
+		request: Extract<ChoiceRequest, { kind: "scry" | "surveil" }>,
 	): ChoiceAnswer {
-		console.log(`\n[Player ${request.player}: arrange cards while scrying]`);
+		console.log(
+			`\n[Player ${request.player}: arrange cards while ${request.kind === "scry" ? "scrying" : "surveilling"}]`,
+		);
 		for (let i = 0; i < request.options.length; i++) {
 			console.log(`  ${i + 1}. ${request.options[i]?.label}`);
 		}

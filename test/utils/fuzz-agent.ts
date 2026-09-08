@@ -57,7 +57,7 @@ export class FuzzAgent implements SyncAgent {
 					.map((option) => option.id),
 			};
 		}
-		if (request.kind === "scry") {
+		if (request.kind === "scry" || request.kind === "surveil") {
 			const shuffled = request.options
 				.map((option) => ({ option, order: this.rng() }))
 				.sort((left, right) => left.order - right.order)

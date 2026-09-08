@@ -161,6 +161,15 @@ export interface ScryChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
+export interface SurveilChoiceRequest extends ChoiceRequestBase {
+	kind: "surveil";
+	player: PlayerId;
+	context: {
+		/** The looked-at cards in current top-to-bottom order. */
+		cards: ObjectId[];
+	};
+}
+
 export type ChoiceRequest =
 	| TargetChoiceRequest
 	| ReplacementChoiceRequest
@@ -173,7 +182,8 @@ export type ChoiceRequest =
 	| TriggerOrderChoiceRequest
 	| DeclareAttackersChoiceRequest
 	| DeclareBlockersChoiceRequest
-	| ScryChoiceRequest;
+	| ScryChoiceRequest
+	| SurveilChoiceRequest;
 
 export interface ScryChoiceAnswer {
 	/**
@@ -186,6 +196,17 @@ export interface ScryChoiceAnswer {
 
 export interface ScryResult {
 	/** Both arrays are ordered in future draw order. */
+	top: ObjectId[];
+	bottom: ObjectId[];
+}
+
+/** Surveil uses the same ordered partition answer shape as scry. */
+export interface SurveilChoiceAnswer {
+	top: string[];
+	bottom: string[];
+}
+
+export interface SurveilResult {
 	top: ObjectId[];
 	bottom: ObjectId[];
 }
@@ -276,7 +297,8 @@ type RequestInput =
 			DeclareBlockersChoiceRequest,
 			"version" | "id" | "ordinal" | "fingerprint"
 	  >
-	| Omit<ScryChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">;
+	| Omit<ScryChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
+	| Omit<SurveilChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">;
 
 function canonicalize(value: unknown, seen = new Set<object>()): string {
 	if (typeof value === "string" || typeof value === "boolean") {
@@ -347,16 +369,16 @@ function normalizeAnswer(
 	if (request.kind === "triggerOrder") {
 		return normalizeOrderedAnswer(request, answer);
 	}
-	if (request.kind === "scry") {
+	if (request.kind === "scry" || request.kind === "surveil") {
 		return normalizeScryAnswer(request, answer);
 	}
 	return normalizeSingleAnswer(request, answer);
 }
 
 function normalizeScryAnswer(
-	request: ScryChoiceRequest,
+	request: ScryChoiceRequest | SurveilChoiceRequest,
 	answer: ChoiceAnswer,
-): ScryChoiceAnswer {
+): ScryChoiceAnswer | SurveilChoiceAnswer {
 	const top = (answer as { top?: unknown })?.top;
 	const bottom = (answer as { bottom?: unknown })?.bottom;
 	if (!Array.isArray(top) || !Array.isArray(bottom)) {
@@ -1123,6 +1145,87 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		const objectFor = (id: string): ObjectId => {
 			const candidate = candidates.find((entry) => entry.id === id);
 			assertDefined(candidate, `scry choice has no live candidate for ${id}`);
+			return candidate.value;
+		};
+		this.cursor++;
+		return {
+			top: normalized.top.map(objectFor),
+			bottom: normalized.bottom.map(objectFor),
+		};
+	}
+
+	/** Surveil has exactly the same replayable ordered partition as scry. */
+	chooseSurveil(
+		state: GameState,
+		player: PlayerId,
+		cards: ObjectId[],
+	): SurveilResult {
+		if (cards.length === 0) return { top: [], bottom: [] };
+		assert(
+			new Set(cards).size === cards.length,
+			"surveil candidates contain duplicate object ids",
+		);
+		const candidates = cards.map((id) => ({ id: String(id), value: id }));
+		const request = this.request({
+			kind: "surveil",
+			player,
+			context: { cards: [...cards] },
+			options: cards.map((id) => ({
+				id: String(id),
+				label: `${objectLabel(state, id)}#${id}`,
+			})),
+		});
+
+		let normalized: ChoiceAnswer;
+		const recorded = this.decisions[this.cursor];
+		if (recorded) {
+			if (
+				recorded.request.id !== request.id ||
+				recorded.request.fingerprint !== request.fingerprint
+			) {
+				throw new ChoiceReplayMismatchError(
+					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
+				);
+			}
+			normalized = normalizeAnswer(request, recorded.answer);
+		} else {
+			const agent = this.agents?.[request.player];
+			if (!agent) {
+				throw new ChoiceReplayMismatchError(
+					`transcript ended before choice ${request.id}`,
+				);
+			}
+			const answer = agent.choose(
+				buildPlayerView(state, request.player),
+				request,
+			);
+			if (isPromiseLike(answer)) {
+				if (!this.allowSuspension) {
+					throw new Error(
+						"an async agent was used outside advanceWithReplay()",
+					);
+				}
+				this.pendingRequest = clone(request);
+				throw new ChoicePendingError(clone(request), answer);
+			}
+			normalized = normalizeAnswer(request, answer);
+			this.decisions.push({
+				request: clone(request),
+				answer: clone(normalized),
+			});
+		}
+
+		if (!("top" in normalized)) {
+			throw new InvalidChoiceAnswerError(
+				`choice ${request.id} requires a surveil answer`,
+			);
+		}
+		const objectFor = (id: string): ObjectId => {
+			const candidate = candidates.find((entry) => entry.id === id);
+			assertDefined(
+				candidate,
+				`surveil choice has no live candidate for ${id}`,
+			);
 			return candidate.value;
 		};
 		this.cursor++;
