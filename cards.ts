@@ -56,6 +56,8 @@ registerCardFixture("c/clone");
 registerCardFixture("b/benalish_veteran");
 registerCardFixture("z/zof_shade");
 registerCardFixture("u/unsummon");
+registerCardFixture("m/monastery_swiftspear");
+registerCardFixture("t/thor_odinson");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family

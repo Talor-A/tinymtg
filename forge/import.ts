@@ -160,6 +160,7 @@ const BARE_KEYWORDS = new Map<string, Keyword>([
 	["Indestructible", "indestructible"],
 	["Haste", "haste"],
 	["Vigilance", "vigilance"],
+	["Prowess", "prowess"],
 ]);
 const COUNTER_NAMES = new Map<string, "+1/+1" | "-1/-1">([
 	["P1P1", "+1/+1"],

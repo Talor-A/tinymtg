@@ -2195,7 +2195,9 @@ export type Keyword =
 	| "flying"
 	| "reach"
 	| "haste"
-	| "vigilance";
+	| "vigilance"
+	/** A triggered ability keyword; see {@link printedKeywordTriggers}. */
+	| "prowess";
 
 /**
  * Object restrictions shared by targeting, triggers, costs, and imported
@@ -2546,6 +2548,52 @@ function printedEntryReplacements(
 }
 
 /**
+ * CR 702.108a: prowess is a triggered ability keyword, so `keywords:
+ * ["prowess"]` is authoring shorthand for one ordinary cast trigger, and that
+ * is what it compiles to here.
+ *
+ * The keyword itself stays on the characteristics — "has prowess" is what an
+ * ability-changing effect or a text reference would read — and the trigger it
+ * stands for becomes a real registered ability for the same reason the entry
+ * shorthands do (see {@link printedEntryReplacements}): the possession
+ * reference is copiable, so nothing at trigger-detection time has to
+ * re-synthesize a definition from a keyword list.
+ *
+ * A creature that *gains* prowess would need the reference granted alongside
+ * the keyword. No continuous effect in the engine grants keywords yet, so
+ * there is nowhere for that to happen today.
+ */
+function printedKeywordTriggers(
+	def: CardDefBase,
+): TriggeredAbilityDefinition[] {
+	// One ability per instance, not one per distinct keyword: CR 702.108b lets a
+	// creature have prowess more than once, and each instance triggers
+	// separately. Thor Odinson prints `K:Prowess` twice and gets +2/+2.
+	const keywords = def.keywords ?? [];
+	return keywords
+		.filter((keyword) => keyword === "prowess")
+		.map(() => ({
+			id: "prowess",
+			text: "Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.",
+			condition: {
+				kind: "cast",
+				player: "you",
+				selector: { kind: "not", selector: { kind: "type", type: "creature" } },
+			},
+			targets: [],
+			effects: [
+				{
+					kind: "modify-pt",
+					object: "source",
+					power: 1,
+					toughness: 1,
+					duration: "until-end-of-turn",
+				},
+			],
+		}));
+}
+
+/**
  * Normalizes the authoring shape into the engine shape. Idempotent, so an
  * already-normalized def (from the compiler, or a round trip) passes through
  * with its definition object identities intact.
@@ -2564,18 +2612,24 @@ export function defineCard(input: CardDefInput | CardDef): CardDef {
 	const abilityDefinitions: AbilityDefinitions = {
 		static: statics ?? [],
 		activated: activatedAbilities ?? [],
-		triggered: triggers ?? [],
+		triggered: [...(triggers ?? [])],
 		replacement: [...(replacements ?? [])],
 		prohibition: prohibitions ?? [],
 	};
 	// Author-declared indices are resolved first so that an explicit `printed`
-	// list keeps meaning what it said; the entry shorthands are appended after,
-	// and are always printed.
+	// list keeps meaning what it said; the keyword and entry shorthands are
+	// appended after, and are always printed.
 	const printedAbilities = printedRefsFor(
 		input.id,
 		abilityDefinitions,
 		printed,
 	);
+	for (const trigger of printedKeywordTriggers(input)) {
+		printedAbilities.triggered.push(
+			abilityId("triggered", input.id, abilityDefinitions.triggered.length),
+		);
+		abilityDefinitions.triggered.push(trigger);
+	}
 	for (const entry of printedEntryReplacements(input)) {
 		printedAbilities.replacement.push(
 			abilityId("replacement", input.id, abilityDefinitions.replacement.length),

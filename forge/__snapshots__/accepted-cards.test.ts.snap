@@ -23,6 +23,7 @@ Aether Sting
 Affa Protector
 Aftershock
 Ageless Guardian
+Agent of Atlas
 Agent of Stromgald
 Aggressive Urge
 Agonizing Syphon
@@ -172,6 +173,7 @@ Blood Glutton
 Blood Pact
 Blood Pet
 Blood Vassal
+Bloodfire Expert
 Bloodfire Mentor
 Bloodgift Demon
 Bloodhunter Bat
@@ -419,6 +421,7 @@ Dosan's Oldest Chant
 Douse in Gloom
 Douser of Lights
 Drag Under
+Dragon Bell Monk
 Dragon Fodder
 Dragon Moose
 Dragon Trainer
@@ -806,6 +809,7 @@ Ice Tunnel
 Iceridge Serpent
 Icewind Elemental
 Idyllic Beachfront
+Iguana Parrot
 Imaginary Friends
 Impact Tremors
 Impale
@@ -824,6 +828,7 @@ Infernal Grasp
 Infernal Idol
 Infestation Sage
 Infuriate
+Ingenious Skaab
 Inkrise Infiltrator
 Insatiable Harpy
 Insight
@@ -855,7 +860,10 @@ Jedit Ojanen
 Jedit's Dragoons
 Jerrard of the Closed Fist
 Jeskai Shrinekeeper
+Jeskai Student
+Jeskai Windscout
 Jhessian Lookout
+Jhessian Thief
 Jhovall Queen
 Jibbirik Omnivore
 Joraga Visionary
@@ -910,6 +918,7 @@ Kraken Hatchling
 Krark-Clan Ironworks
 Krark-Clan Stoker
 Kraul Warrior
+Kree Commandos
 Krenko's Command
 Krovikan Scoundrel
 Kyoshi Warrior Guard
@@ -944,7 +953,9 @@ Lightning Helix
 Lightning Javelin
 Lightning Stormkin
 Lightning Strike
+Lightning Visionary
 Lightning-Core Excavator
+Lightshell Duo
 Liliana's Specter
 Limestone Golem
 Lizard Warrior
@@ -955,6 +966,7 @@ Llanowar Visionary
 Lone Missionary
 Looming Altisaur
 Lost Legion
+Lotus Path Djinn
 Lowland Giant
 Loxodon Convert
 Loxodon Gatekeeper
@@ -1026,12 +1038,14 @@ Minotaur Warrior
 Misshapen Fiend
 Mist Raven
 Mistral Charger
+Mistral Singer
 Moaning Spirit
 Mogg Fanatic
 Mogg Raider
 Mold Adder
 Molten Tributary
 Moment of Triumph
+Monastery Swiftspear
 Monk Realist
 Mons's Goblin Raiders
 Monstrous Growth
@@ -1085,6 +1099,7 @@ New Benalia
 Nexus Wardens
 Nezumi Informant
 Nezumi Shadow-Watcher
+Niblis of Dusk
 Night of Souls' Betrayal
 Night's Whisper
 Nightscape Master
@@ -1093,6 +1108,7 @@ Nikko-Onna
 Nimble Birdsticker
 Nimble Innovator
 Nimble Thopterist
+Nimble-Blade Khenra
 Nimbus of the Isles
 Nine-Tail White Fox
 Nocturnal Feeder
@@ -1292,6 +1308,7 @@ Rhox Oracle
 Rhox War Monk
 Rib Cage Spider
 Rimewood Falls
+Ringwarden Owl
 Riot Devils
 Rip-Clan Crasher
 Ripchain Razorkin
@@ -1304,6 +1321,7 @@ Riven Turnbull
 Riven Turnbull and Princess Lucrezia
 River Hoopoe
 River Kaijin
+Riverwheel Aerialists
 Roc Hunter
 Roc of Kher Ridges
 Rockslide Sorcerer
@@ -1346,6 +1364,7 @@ Sage's Row Savant
 Saltblast
 Sanctify
 Sanctuary Cat
+Sanguinary Mage
 Sanguine Syphoner
 Sanitation Automaton
 Sarpadian Simulacrum
@@ -1581,6 +1600,7 @@ Storm Crow
 Storm God's Oracle
 Storm Spirit
 Stormcaller of Keranos
+Stormchaser Mage
 Stormcloud Spirit
 Stormfront Pegasus
 Stormwatch Eagle
@@ -1645,6 +1665,7 @@ Tamiyo's Epiphany
 Tanglebloom
 Tangled Islet
 Tanglespan Lookout
+Target Minotaur
 Tasseled Dromedary
 Tattered Apparition
 Tattered Mummy
@@ -1674,6 +1695,7 @@ The Surgical Bay
 Think Tank
 Third Path Iconoclast
 Third Path Savant
+Thor Odinson
 Thornhide Wolves
 Thornwind Faeries
 Those Who Serve
@@ -1749,6 +1771,7 @@ Twin-Silk Spider
 Tyrox, Saurid Tyrant
 Uktabi Faerie
 Uktabi Orangutan
+Umara Entangler
 Umbral Collar Zealot
 Unauthorized Exit
 Undead Minotaur
@@ -1785,6 +1808,7 @@ Vastwood Gorger
 Vault Plunderer
 Vault of Whispers
 Vedalken Archmage
+Vedalken Blademaster
 Vedalken Entrancer
 Vedalken Mastermind
 Venerable Lammasu
@@ -1877,6 +1901,7 @@ Wind Drake
 Windgrace Acolyte
 Windrider Patrol
 Windseeker Centaur
+Wing Commando
 Winter Soldier, Bucky Barnes
 Winter's Grasp
 Winter's Intervention
@@ -1928,4 +1953,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1925`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1950`;
