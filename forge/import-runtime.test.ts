@@ -82,6 +82,7 @@ registerRuntimeFixture("c/clone", "rt-clone");
 registerRuntimeFixture("f/firebrand_archer", "rt-firebrand-archer");
 registerRuntimeFixture("k/kessig_flamebreather", "rt-kessig-flamebreather");
 registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
+registerRuntimeFixture("f/flayed_one", "rt-flayed-one");
 registerCardFixture("d/darksteel_relic");
 
 {
@@ -220,6 +221,31 @@ describe("forge-import runtime: triggers", () => {
 		settlePriority(state, agents);
 		expect(state.players[ALICE].life).toBe(23);
 		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Flayed One's imported ETB trigger mills three cards on resolution", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+		for (let i = 0; i < 5; i++) spawnCard(state, "forest", ALICE, "library");
+		const library = [...state.players[ALICE].library];
+
+		enterFromHand(state, "rt-flayed-one", ALICE, agents);
+		expect(
+			state.players[ALICE].graveyard,
+			"trigger has not resolved yet",
+		).toHaveLength(0);
+		expect(state.pendingTriggers).toHaveLength(1);
+
+		settlePriority(state, agents);
+		// The library's last element is its top card, so milling three takes the
+		// last three and leaves the rest in order.
+		expect(state.players[ALICE].library).toEqual(library.slice(0, -3));
+		// A card gets a fresh object id when it changes zone, so the milled cards
+		// are identified by name rather than by the ids the library held.
+		expect(state.players[ALICE].graveyard.map((id) => name(state, id))).toEqual(
+			["Forest", "Forest", "Forest"],
+		);
 	});
 
 	test("Ajani's Mantra's imported upkeep trigger fires only for its controller, and its choice is genuinely optional", () => {

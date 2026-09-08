@@ -80,6 +80,7 @@ Ark of Blight
 Armored Cancrix
 Armored Griffin
 Armored Pegasus
+Armored Skaab
 Armored Warhorse
 Armored Whirl Turtle
 Armored Wolf-Rider
@@ -385,6 +386,7 @@ Diving Griffin
 Djinn of the Lamp
 Dockside Chef
 Doom Blade
+Doom's Servo-Guards
 Dosan's Oldest Chant
 Douse in Gloom
 Douser of Lights
@@ -536,6 +538,7 @@ Flameborn Viron
 Flamecast Wheel
 Flamekin Spitfire
 Flametongue Kavu
+Flayed One
 Fledgling Djinn
 Fleeting Image
 Flowstone Charger
@@ -575,6 +578,7 @@ Frostling
 Frozen Aether
 Frozen Shade
 Fugitive Wizard
+Funeral Rites
 Furtive Analyst
 Fusion Elemental
 Futurist Forge
@@ -855,6 +859,7 @@ Krovikan Scoundrel
 Kyoshi Warrior Guard
 Kyoshi Warriors
 Kyren Glider
+Laboratory Brute
 Lady Orca
 Lagac Lizard
 Lampad of Death's Vigil
@@ -932,6 +937,7 @@ Memorial to Glory
 Memorial to War
 Memory Drain
 Meng Huo's Horde
+Mental Note
 Merchant of Secrets
 Merciless Enforcers
 Merfolk Looter
@@ -964,6 +970,7 @@ Monstrous Growth
 Moon Heron
 Moon Sprite
 Moonglove Extract
+Morgue Thrull
 Morgue Toad
 Moriok Reaver
 Moriok Replica
@@ -991,6 +998,7 @@ Naturalize
 Nebula Dragon
 Necrogen Mists
 Necrogen Scudder
+Necromancer's Assistant
 Needlepeak Spider
 Needleshot Gourna
 Nema Siltlurker
@@ -1057,6 +1065,7 @@ Ornithopter
 Orochi Sustainer
 Orzhov Signet
 Overflowing Basin
+Overwhelmed Apprentice
 Owl Familiar
 Oxidda Scrapmelter
 Oyobi, Who Split the Heavens
@@ -1222,6 +1231,7 @@ Roving Harper
 Rowan Treefolk
 Royal Falcon
 Rubble Reading
+Ruin Crab
 Ruination Wurm
 Ruinous Gremlin
 Ruins of Trokair
@@ -1253,6 +1263,7 @@ Savannah Sage
 Scalding Cauldron
 Scaldkin
 Scaled Wurm
+Scarblade Scout
 Scarwood Goblins
 Scarwood Treefolk
 Scathe Zombies
@@ -1264,7 +1275,9 @@ Scorching Shot
 Scorching Spear
 Scoria Elemental
 Scrap Compactor
+Screaming Phantom
 Screeching Drake
+Screeching Skaab
 Scroll Thief
 Scrounger of Souls
 Scrubland
@@ -1309,6 +1322,7 @@ Shatter
 Shatterskull Giant
 Shauku's Minion
 Shining Aerosaur
+Shinra Reinforcements
 Shivan Gorge
 Shivan Hellkite
 Shock
@@ -1408,6 +1422,7 @@ Sparkmage Apprentice
 Spectral Reserves
 Spectral Shepherd
 Spellgorger Weird
+Sphinx Mindbreaker
 Sphinx of Magosi
 Spike Jester
 Spin Out
@@ -1481,6 +1496,7 @@ Sudden Strength
 Sulfur Vent
 Sulfurous Mire
 Sultai Ascendancy
+Sultai Skullkeeper
 Summit Prowler
 Sun Sentinel
 Sunastian Falconer
@@ -1575,6 +1591,7 @@ Tithebearer Giant
 Tobias Andrion
 Tocasia's Dig Site
 Tolarian Scholar
+Tolarian Serpent
 Tome Raider
 Tooth of Ramos
 Tor Giant
@@ -1693,6 +1710,7 @@ Vorstclaw
 Voyage's End
 Vulshok Berserker
 Vulshok Sorcerer
+Wailing Ghoul
 Wakandan Drone Flock
 Wakandan Shield Guard
 Walking Corpse
@@ -1736,6 +1754,7 @@ Willow Elf
 Willow Faerie
 Willow-Wind
 Wind Drake
+Windgrace Acolyte
 Windrider Patrol
 Windseeker Centaur
 Winter Soldier, Bucky Barnes
@@ -1756,6 +1775,7 @@ Woodland Patrol
 Woolly Thoctar
 Worf, Chief Tactical Officer
 Worn Powerstone
+Worry Beads
 Wreckage Wickerfolk
 Wrecking Ball
 Wretched Doll
@@ -1787,4 +1807,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1784`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1804`;

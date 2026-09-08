@@ -2036,7 +2036,7 @@ export type EffectDef<
 	Player extends TriggerEffectPlayer = RelativeEffectPlayer,
 > =
 	| {
-			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil";
+			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
 			player: Player;
 			amount: number;
 	  }
@@ -6646,6 +6646,12 @@ function effectToEvent(
 				player: relativeEffectPlayer(item, effect.player),
 				amount: effect.amount,
 			};
+		case "mill":
+			return {
+				kind: "mill",
+				player: relativeEffectPlayer(item, effect.player),
+				amount: effect.amount,
+			};
 		case "create-token":
 			assert(
 				Number.isSafeInteger(effect.amount) && effect.amount >= 1,
@@ -7505,6 +7511,7 @@ function activateAbilityIn(
 				effect.kind === "draw" ||
 				effect.kind === "scry" ||
 				effect.kind === "surveil" ||
+				effect.kind === "mill" ||
 				effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||
 				effect.kind === "damage" ||

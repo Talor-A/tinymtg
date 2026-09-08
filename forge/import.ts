@@ -621,6 +621,28 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				);
 			return { kind: "draw", player: who, amount };
 		}
+		case "mill": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"numcards",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const who = parsePlayer(getForgeParam(params, "Defined"));
+			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
+			if (!who || !amount)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"unsupported mill amount/player",
+					where,
+				);
+			return { kind: "mill", player: who, amount };
+		}
 		case "discard": {
 			const badParams = checkParams(
 				params,

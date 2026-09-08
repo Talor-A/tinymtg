@@ -468,6 +468,23 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
+	test("Flayed One's ETB mill reads Forge's NumCards parameter", () => {
+		const result = importFixture("f/flayed_one");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+			{ kind: "mill", player: "you", amount: 3 },
+		]);
+
+		const defaulted = importText(
+			"Name:Default Mill\nManaCost:B\nTypes:Instant\nA:SP$ Mill | Defined$ Opponent | SpellDescription$ Target opponent mills a card.\nOracle:x\n",
+		);
+		expect(defaulted.ok).toBe(true);
+		if (!defaulted.ok) return;
+		expect(defaulted.card.spell?.effects).toEqual([
+			{ kind: "mill", player: "opponent", amount: 1 },
+		]);
+	});
+
 	test("Sorin's Thirst sequences damage then life gain in one target slot", () => {
 		const result = importFixture("s/sorins_thirst");
 		if (!result.ok) throw new Error("expected ok");
