@@ -84,6 +84,7 @@ const POSITIVE_FIXTURES = [
 	"t/third_path_iconoclast",
 	"t/temple_of_epiphany",
 	"i/impulse",
+	"s/stock_up",
 	"t/thrashing_brontodon",
 	"c/cathar_commando",
 	"r/resolute_reinforcements",
@@ -525,23 +526,50 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
-	test("Impulse lowers its hidden choose-one Dig form", () => {
-		const result = importFixture("i/impulse");
-		if (!result.ok) throw new Error("expected Impulse to import");
-		expect(result.card).toMatchObject({
-			name: "Impulse",
-			manaCost: { n: 1, u: 1 },
-			types: ["instant"],
-		});
-		expect(result.card.spell?.effects).toEqual([
-			{ kind: "choose-from-top", player: "you", amount: 4 },
-		]);
+	test("Dig reads both the looked-at and kept card counts from the card", () => {
+		const cases = [
+			{
+				fixture: "i/impulse",
+				name: "Impulse",
+				manaCost: { n: 1, u: 1 },
+				types: ["instant"],
+				amount: 4,
+				keep: 1,
+			},
+			{
+				fixture: "s/stock_up",
+				name: "Stock Up",
+				manaCost: { n: 2, u: 1 },
+				types: ["sorcery"],
+				amount: 5,
+				keep: 2,
+			},
+		] as const;
+		for (const expected of cases) {
+			const result = importFixture(expected.fixture);
+			if (!result.ok) throw new Error(`expected ${expected.name} to import`);
+			expect(result.card).toMatchObject({
+				name: expected.name,
+				manaCost: expected.manaCost,
+				types: expected.types,
+			});
+			expect(result.card.spell?.effects).toEqual([
+				{
+					kind: "choose-from-top",
+					player: "you",
+					amount: expected.amount,
+					keep: expected.keep,
+				},
+			]);
+		}
 	});
 
-	test("Dig rejects forms that do not have Impulse's complete behavior", () => {
+	test("Dig rejects dynamic, public, random-order, and impossible forms", () => {
 		for (const changed of [
-			"DigNum$ 3 | ChangeNum$ 1 | NoReveal$ True",
-			"DigNum$ 4 | ChangeNum$ 2 | NoReveal$ True",
+			"DigNum$ X | ChangeNum$ 1 | NoReveal$ True",
+			"DigNum$ 4 | ChangeNum$ X | NoReveal$ True",
+			"DigNum$ 1 | ChangeNum$ 2 | NoReveal$ True",
+			"DigNum$ 4 | ChangeNum$ 1 | NoReveal$ False",
 			"DigNum$ 4 | ChangeNum$ 1 | Reveal$ True",
 			"DigNum$ 4 | ChangeNum$ 1 | NoReveal$ True | RestRandomOrder$ True",
 		]) {

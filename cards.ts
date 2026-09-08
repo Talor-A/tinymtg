@@ -58,6 +58,7 @@ registerCardFixture("b/benalish_veteran");
 registerCardFixture("z/zof_shade");
 registerCardFixture("u/unsummon");
 registerCardFixture("i/impulse");
+registerCardFixture("s/stock_up");
 registerCardFixture("t/thrashing_brontodon");
 registerCardFixture("c/cathar_commando");
 registerCardFixture("r/resolute_reinforcements");

@@ -176,6 +176,8 @@ export interface ChooseFromTopChoiceRequest extends ChoiceRequestBase {
 	context: {
 		/** The looked-at cards in current top-to-bottom order. */
 		cards: ObjectId[];
+		/** The exact number of cards to put into hand. */
+		keep: number;
 	};
 }
 
@@ -222,13 +224,13 @@ export interface SurveilResult {
 }
 
 export interface ChooseFromTopChoiceAnswer {
-	chosen: string;
+	kept: string[];
 	/** Ordered from nearest the top toward the bottom of the bottom group. */
 	bottom: string[];
 }
 
 export interface ChooseFromTopResult {
-	chosen: ObjectId | null;
+	kept: ObjectId[];
 	/** Ordered from nearest the top toward the bottom of the bottom group. */
 	bottom: ObjectId[];
 }
@@ -409,35 +411,38 @@ function normalizeChooseFromTopAnswer(
 	request: ChooseFromTopChoiceRequest,
 	answer: ChoiceAnswer,
 ): ChooseFromTopChoiceAnswer {
-	const chosen = (answer as { chosen?: unknown })?.chosen;
+	const kept = (answer as { kept?: unknown })?.kept;
 	const bottom = (answer as { bottom?: unknown })?.bottom;
-	if (typeof chosen !== "string" || !Array.isArray(bottom)) {
+	if (!Array.isArray(kept) || !Array.isArray(bottom)) {
 		throw new InvalidChoiceAnswerError(
 			`agent returned an invalid answer for choice ${request.id}`,
 		);
 	}
-
-	const legalIds = new Set(request.options.map((option) => option.id));
-	if (!legalIds.has(chosen)) {
+	if (kept.length !== request.context.keep) {
 		throw new InvalidChoiceAnswerError(
-			`agent selected ${chosen} for choice ${request.id}; legal options: ${[...legalIds].join(", ")}`,
+			`agent must keep exactly ${request.context.keep} cards for choice ${request.id}`,
 		);
 	}
-	const seen = new Set([chosen]);
-	for (const id of bottom) {
+
+	const legalIds = new Set(request.options.map((option) => option.id));
+	const seen = new Set<string>();
+	for (const id of [...kept, ...bottom]) {
 		if (typeof id !== "string" || !legalIds.has(id) || seen.has(id)) {
 			throw new InvalidChoiceAnswerError(
-				`agent returned an invalid bottom order for choice ${request.id}`,
+				`agent returned an invalid card arrangement for choice ${request.id}`,
 			);
 		}
 		seen.add(id);
 	}
 	if (seen.size !== legalIds.size) {
 		throw new InvalidChoiceAnswerError(
-			`agent must place all ${legalIds.size - 1} unchosen cards for choice ${request.id}`,
+			`agent must place all ${legalIds.size} cards for choice ${request.id}`,
 		);
 	}
-	return { chosen, bottom: [...bottom] as string[] };
+	return {
+		kept: [...kept] as string[],
+		bottom: [...bottom] as string[],
+	};
 }
 
 function normalizeScryAnswer(
@@ -1220,31 +1225,32 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 	}
 
 	/**
-	 * Choose exactly one looked-at card and order every other card for the bottom
-	 * of the library. Cards are presented top-to-bottom, and `bottom` is returned
-	 * nearest-to-top first within that bottom group.
+	 * Choose exactly `keep` looked-at cards and order every other card for the
+	 * bottom of the library. Cards are presented top-to-bottom, and `bottom` is
+	 * returned nearest-to-top first within that bottom group.
 	 */
 	chooseFromTop(
 		state: GameState,
 		player: PlayerId,
 		cards: ObjectId[],
+		keep: number,
 	): ChooseFromTopResult {
-		if (cards.length === 0) return { chosen: null, bottom: [] };
+		assert(
+			Number.isSafeInteger(keep) && keep >= 1,
+			`choose-from-top keep count must be a positive integer, got ${keep}`,
+		);
 		assert(
 			new Set(cards).size === cards.length,
 			"choose-from-top candidates contain duplicate object ids",
 		);
-		if (cards.length === 1) {
-			const chosen = cards[0];
-			assertDefined(chosen);
-			return { chosen, bottom: [] };
-		}
+		const actualKeep = Math.min(keep, cards.length);
+		if (cards.length <= keep) return { kept: [...cards], bottom: [] };
 
 		const candidates = cards.map((id) => ({ id: String(id), value: id }));
 		const request = this.request({
 			kind: "chooseFromTop",
 			player,
-			context: { cards: [...cards] },
+			context: { cards: [...cards], keep: actualKeep },
 			options: cards.map((id) => ({
 				id: String(id),
 				label: `${objectLabel(state, id)}#${id}`,
@@ -1290,7 +1296,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			});
 		}
 
-		if (!("chosen" in normalized)) {
+		if (!("kept" in normalized)) {
 			throw new InvalidChoiceAnswerError(
 				`choice ${request.id} requires a choose-from-top answer`,
 			);
@@ -1305,7 +1311,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		};
 		this.cursor++;
 		return {
-			chosen: objectFor(normalized.chosen),
+			kept: normalized.kept.map(objectFor),
 			bottom: normalized.bottom.map(objectFor),
 		};
 	}

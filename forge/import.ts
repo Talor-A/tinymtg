@@ -701,19 +701,22 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			if (badParams) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "DigNum"));
+			const keep = positiveInteger(getForgeParam(params, "ChangeNum"));
+			const noReveal = getForgeParam(params, "NoReveal");
 			if (
 				who !== "you" ||
-				getForgeParam(params, "ChangeNum") !== "1" ||
-				getForgeParam(params, "NoReveal") !== "True" ||
-				amount !== 4
+				!amount ||
+				!keep ||
+				keep > amount ||
+				(noReveal !== undefined && noReveal !== "True")
 			) {
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"only Impulse's fixed four-card hidden Dig form is supported",
+					"only fixed hidden Dig forms that put a fixed number of cards into hand and order the rest on the library bottom are supported",
 					where,
 				);
 			}
-			return { kind: "choose-from-top", player: who, amount };
+			return { kind: "choose-from-top", player: who, amount, keep };
 		}
 		case "draw": {
 			const badParams = checkParams(

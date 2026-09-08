@@ -72,6 +72,7 @@ registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("n/network_disruptor", "rt-network-disruptor");
 registerRuntimeFixture("p/preordain", "rt-preordain");
 registerRuntimeFixture("i/impulse", "rt-impulse");
+registerRuntimeFixture("s/stock_up", "rt-stock-up");
 registerRuntimeFixture("c/consider", "rt-consider");
 registerRuntimeFixture("v/village_rites", "rt-village-rites");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
@@ -792,7 +793,7 @@ describe("forge-import runtime: spell effects", () => {
 		);
 		const agents = passingAgents();
 		agents[ALICE].chooseFromTopChoices.push({
-			chosen,
+			kept: [chosen],
 			bottom: [second, fourth, first],
 		});
 
@@ -806,6 +807,51 @@ describe("forge-import runtime: spell effects", () => {
 			first,
 			fourth,
 			second,
+			...existingLibrary,
+		]);
+		expect(agents[ALICE].chooseFromTopChoices).toHaveLength(0);
+	});
+
+	test("Stock Up puts two chosen top-five cards into hand and orders the rest on the bottom", () => {
+		const state = setupMain();
+		const existingLibrary = [...state.players[ALICE].library];
+		const first = spawnCard(state, "forest", ALICE, "library").id;
+		const keptFirst = spawnCard(state, "rt-grizzly-bears", ALICE, "library").id;
+		const third = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+		const fourth = spawnCard(state, "rt-aesthir-glider", ALICE, "library").id;
+		const keptSecond = spawnCard(
+			state,
+			"monastery-swiftspear",
+			ALICE,
+			"library",
+		).id;
+		const spell = spawnCard(state, "rt-stock-up", ALICE, "hand");
+		perform(
+			state,
+			{
+				kind: "add mana",
+				source: spell.id,
+				player: ALICE,
+				mana: { u: 1, c: 2 },
+			},
+			passingAgents(),
+		);
+		const agents = passingAgents();
+		agents[ALICE].chooseFromTopChoices.push({
+			kept: [keptSecond, keptFirst],
+			bottom: [fourth, first, third],
+		});
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		settlePriority(state, agents);
+
+		const hand = state.players[ALICE].hand.map((id) => name(state, id));
+		expect(hand).toContain("Monastery Swiftspear");
+		expect(hand).toContain("Grizzly Bears");
+		expect(state.players[ALICE].library).toEqual([
+			third,
+			first,
+			fourth,
 			...existingLibrary,
 		]);
 		expect(agents[ALICE].chooseFromTopChoices).toHaveLength(0);

@@ -96,9 +96,9 @@ optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional
 single-permanent sacrifice, including `Creature.Other` to exclude the source,
 semicolon-separated alternatives, and `CARDNAME` for the source itself (e.g.
 Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with
-life/draw/discard-one-chosen-card, scry, surveil, and Impulse's exact hidden
-four-card `Dig` form, which chooses one card for hand and orders the rest on
-the bottom; damage, destroy, counter, targeted or
+life/draw/discard-one-chosen-card, scry, surveil, and fixed hidden `Dig` forms
+such as Impulse and Stock Up, which put a card-defined number into hand and
+order the rest on the bottom; damage, destroy, counter, targeted or
 self-directed fixed counter placement (including Forge's omitted `Defined$`
 default for a nontargeted permanent ability), and return-to-hand effects; spells,
 activated abilities, and triggered abilities with at most one required target
@@ -114,9 +114,9 @@ changes; temporary `KW$ Indestructible` grants; and fixed controlled-creature
 P/T statics. See the acceptance matrix in `forge/import.test.ts` for the exact
 fixtures this is checked against, and
 the "Deferred / explicitly unsupported" list at the top of `forge-import.ts`
-for what is intentionally out of scope (other `Dig` forms, random/multi-card
-discard, dynamic/X amounts, alternate costs, hexproof/shroud/protection, and
-more).
+for what is intentionally out of scope (other `Dig` forms, including dynamic
+amounts and non-bottom dispositions; random/multi-card discard, alternate
+costs, hexproof/shroud/protection, and more).
 
 The engine's own selector vocabulary is wider than the spellings the bridge
 accepts: `TargetSelectorDef` covers the source itself, card type, supertype,

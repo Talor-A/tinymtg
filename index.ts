@@ -454,13 +454,14 @@ interface SurveilEvent extends EventCommon {
 }
 
 /**
- * Look at the top cards, put one into the player's hand, and put the rest on
- * the bottom in the order that player chooses. This is not a draw.
+ * Look at the top cards, put a fixed number into the player's hand, and put the
+ * rest on the bottom in the order that player chooses. This is not a draw.
  */
 interface ChooseFromTopEvent extends EventCommon {
 	kind: "choose from top";
 	player: PlayerId;
 	amount: number;
+	keep: number;
 }
 
 interface DiscardEvent extends EventCommon {
@@ -2079,6 +2080,7 @@ export type EffectDef<
 			kind: "choose-from-top";
 			player: Player;
 			amount: number;
+			keep: number;
 	  }
 	| {
 			kind: "discard";
@@ -4625,7 +4627,7 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 		case "surveil":
 			return `surveil(P${ev.player}, ${ev.amount})`;
 		case "choose from top":
-			return `choose from top(P${ev.player}, ${ev.amount})`;
+			return `choose ${ev.keep} from top(P${ev.player}, ${ev.amount})`;
 		case "discard":
 			if (ev.cards.kind === "hand-size")
 				return `discard(P${ev.player}, to hand size)`;
@@ -5586,21 +5588,20 @@ function executeIn(
 				Number.isSafeInteger(ev.amount) && ev.amount >= 1,
 				`choose-from-top amount must be a positive integer, got ${ev.amount}`,
 			);
+			assert(
+				Number.isSafeInteger(ev.keep) && ev.keep >= 1 && ev.keep <= ev.amount,
+				`choose-from-top keep count must be between one and ${ev.amount}, got ${ev.keep}`,
+			);
 			const library = state.players[ev.player].library;
 			const count = Math.min(ev.amount, library.length);
 			const seen = library.slice(library.length - count).reverse();
-			const choice = choices.chooseFromTop(state, ev.player, seen);
-			if (seen.length === 0) {
-				assert(choice.chosen === null && choice.bottom.length === 0);
-				log(
-					state,
-					`${"  ".repeat(depth)}P${ev.player} looks at an empty library`,
-				);
-				break;
-			}
-
-			assert(choice.chosen !== null, "choose-from-top selected no card");
-			const arranged = [choice.chosen, ...choice.bottom];
+			const choice = choices.chooseFromTop(state, ev.player, seen, ev.keep);
+			const actualKeep = Math.min(ev.keep, seen.length);
+			assert(
+				choice.kept.length === actualKeep,
+				`choose-from-top must keep exactly ${actualKeep} cards`,
+			);
+			const arranged = [...choice.kept, ...choice.bottom];
 			assert(
 				arranged.length === seen.length,
 				"choose-from-top changed the card count",
@@ -5613,22 +5614,36 @@ function executeIn(
 				arranged.every((id) => seen.includes(id)),
 				"choose-from-top arrangement contains a card that was not looked at",
 			);
-
-			childResults.push(
-				performIn(
+			if (seen.length === 0) {
+				assert(choice.bottom.length === 0);
+				log(
 					state,
-					{
-						kind: "change zone",
-						object: choice.chosen,
-						from: "library",
-						destination: { zone: "hand" },
-						cause: "put",
-					},
-					choices,
-					scope,
-					depth + 1,
-				),
-			);
+					`${"  ".repeat(depth)}P${ev.player} looks at an empty library`,
+				);
+				break;
+			}
+
+			for (const id of choice.kept) {
+				assert(
+					library.includes(id),
+					`choose-from-top kept card ${id} left the library`,
+				);
+				childResults.push(
+					performIn(
+						state,
+						{
+							kind: "change zone",
+							object: id,
+							from: "library",
+							destination: { zone: "hand" },
+							cause: "put",
+						},
+						choices,
+						scope,
+						depth + 1,
+					),
+				);
+			}
 
 			for (const id of choice.bottom) {
 				const index = library.indexOf(id);
@@ -5638,7 +5653,7 @@ function executeIn(
 			library.unshift(...[...choice.bottom].reverse());
 			log(
 				state,
-				`${"  ".repeat(depth)}P${ev.player} chooses from the top ${ev.amount} cards`,
+				`${"  ".repeat(depth)}P${ev.player} keeps ${actualKeep} of the top ${count} cards`,
 			);
 			break;
 		}
@@ -6863,6 +6878,7 @@ function effectToEvent(
 				kind: "choose from top",
 				player: relativeEffectPlayer(item, effect.player),
 				amount: effect.amount,
+				keep: effect.keep,
 			};
 		case "mill":
 			return {
