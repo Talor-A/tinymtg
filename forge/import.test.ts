@@ -629,6 +629,25 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
+	test("Stealer of Secrets keeps its self combat-damage trigger", () => {
+		const result = importFixture("s/stealer_of_secrets");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigDraw",
+				text: expect.any(String),
+				condition: {
+					kind: "damage",
+					source: "self",
+					target: "player",
+					combat: true,
+				},
+				targets: [],
+				effects: [{ kind: "draw", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
 	test("Giant Spider keeps Reach", () => {
 		const result = importFixture("g/giant_spider");
 		if (!result.ok) throw new Error("expected ok");

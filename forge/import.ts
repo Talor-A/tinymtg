@@ -1692,6 +1692,47 @@ function lowerTrigger(
 				effects,
 			};
 		}
+		case "DamageDone": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					"mode",
+					"validsource",
+					"validtarget",
+					"combatdamage",
+					"triggerzones",
+					"execute",
+					"optionaldecider",
+					"triggerdescription",
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const triggerZones = getForgeParam(params, "TriggerZones");
+			if (
+				getForgeParam(params, "ValidSource") !== "Card.Self" ||
+				getForgeParam(params, "ValidTarget") !== "Player" ||
+				getForgeParam(params, "CombatDamage") !== "True" ||
+				(triggerZones !== undefined && triggerZones !== "Battlefield")
+			)
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"unsupported DamageDone trigger shape",
+					where,
+				);
+			return {
+				id: execute,
+				text,
+				condition: {
+					kind: "damage",
+					source: "self",
+					target: "player",
+					combat: true,
+				},
+				targets,
+				effects,
+			};
+		}
 		default:
 			return issue(
 				"UNSUPPORTED_KEYWORD",

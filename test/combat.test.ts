@@ -33,6 +33,7 @@ registerCardFixture("h/herald_of_faith");
 registerCardFixture("f/flying_men");
 registerCardFixture("g/giant_spider");
 registerCardFixture("r/raging_goblin");
+registerCardFixture("s/stealer_of_secrets");
 
 /** One attacker-eligible creature plus enough library to survive a full turn. */
 function setupAttackTurn(cardId: string): {
@@ -861,6 +862,61 @@ describe("dealing combat damage", () => {
 		playOneTurn(state, agents);
 
 		expect(state.players[BOB].life, "3/3 Bears dealt 3").toBe(17);
+	});
+
+	test("Stealer of Secrets draws after it deals combat damage to a player", () => {
+		const { state, attacker } = setupAttackTurn("stealer-of-secrets");
+		// One card is consumed by the turn's normal draw; this one remains for the
+		// combat-damage trigger.
+		spawnCard(state, "forest", ALICE, "library");
+		const agents = attackWith([attacker.id]);
+
+		playOneTurn(state, agents);
+
+		expect(state.players[BOB].life).toBe(18);
+		expect(state.players[ALICE].hand).toHaveLength(2);
+		expect(state.pendingTriggers).toHaveLength(0);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Stealer of Secrets triggers only from combat damage to a player", () => {
+		const state = newGame();
+		const source = spawnPermanent(state, "stealer-of-secrets", ALICE);
+		const creature = spawnPermanent(state, "grizzly-bears", BOB);
+		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
+		const damage = {
+			kind: "damage" as const,
+			source: source.id,
+			sourceController: ALICE,
+			sourceColors: ["u"] as ["u"],
+			amount: 2,
+			deathtouch: false,
+			lifelink: false,
+			unpreventable: false,
+		};
+
+		perform(
+			state,
+			{
+				...damage,
+				target: { type: "player", player: BOB },
+				combat: false,
+			},
+			agents,
+		);
+		perform(
+			state,
+			{
+				...damage,
+				target: { type: "permanent", id: creature.id },
+				combat: true,
+			},
+			agents,
+		);
+
+		expect(state.players[BOB].life).toBe(18);
+		expect(permanent(state, creature.id).damage).toBe(2);
+		expect(state.pendingTriggers).toHaveLength(0);
 	});
 
 	test("Rhox War Monk's lifelink makes its controller gain life while the opponent loses it", () => {

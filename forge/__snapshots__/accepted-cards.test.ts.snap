@@ -466,6 +466,7 @@ Enlightened Maniac
 Enormous Baloth
 Enraged Killbot
 Envoy of Okinec Ahau
+Erdwal Ripper
 Erebor Flamesmith
 Erratic Visionary
 Ertai, Wizard Adept
@@ -494,6 +495,7 @@ Faerie Seer
 Failed Inspection
 Faithbearer Paladin
 Faithful Watchdog
+Falkenrath Marauders
 Falkenrath Reaver
 Fall of the Gavel
 Fanatical Firebrand
@@ -794,6 +796,7 @@ Jayemdae Tome
 Jedit Ojanen
 Jedit's Dragoons
 Jerrard of the Closed Fist
+Jeskai Shrinekeeper
 Jhessian Lookout
 Jhovall Queen
 Jibbirik Omnivore
@@ -1010,6 +1013,7 @@ Nimble Birdsticker
 Nimble Innovator
 Nimble Thopterist
 Nimbus of the Isles
+Nine-Tail White Fox
 Northern Paladin
 Norwood Archers
 Norwood Ranger
@@ -1261,6 +1265,7 @@ Scorching Spear
 Scoria Elemental
 Scrap Compactor
 Screeching Drake
+Scroll Thief
 Scrounger of Souls
 Scrubland
 Scryb Sprites
@@ -1366,6 +1371,8 @@ Slice in Twain
 Slingshot Goblin
 Slinking Skirge
 Sliptide Serpent
+Slith Ascendant
+Slith Firewalker
 Sliver Construct
 Sliver Queen
 Smash
@@ -1390,6 +1397,7 @@ Sorcerer of the Fang
 Sorin's Thirst
 Soul Shred
 Soul of Magma
+Soulknife Spy
 Soulmender
 Southern Elephant
 Southern Paladin
@@ -1438,6 +1446,7 @@ Staunch Defenders
 Staunch Shieldmate
 Steadfast Guard
 Steadfast Paladin
+Stealer of Secrets
 Sterling Hound
 Stern Dismissal
 Stern Proctor
@@ -1464,6 +1473,7 @@ Streetbreaker Wurm
 Strip Mine
 Striped Bears
 Strix Lookout
+Stromkirk Patrol
 Stronghold Assassin
 Student of Ojutai
 Succumb to Temptation
@@ -1726,6 +1736,7 @@ Willow Elf
 Willow Faerie
 Willow-Wind
 Wind Drake
+Windrider Patrol
 Windseeker Centaur
 Winter Soldier, Bucky Barnes
 Winter's Grasp
@@ -1776,4 +1787,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1773`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1784`;

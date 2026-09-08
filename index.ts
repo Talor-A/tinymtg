@@ -2117,6 +2117,14 @@ interface DrawTriggerCondition {
 	player: ValidPlayer;
 }
 
+/** Matches this source dealing combat damage to a player. */
+interface DealsCombatDamageTriggerCondition {
+	kind: "damage";
+	source: "self";
+	target: "player";
+	combat: true;
+}
+
 /** Matches a cast by player and the spell's current characteristics. */
 interface CastTriggerCondition {
 	kind: "cast";
@@ -2154,6 +2162,7 @@ interface TapTriggerCondition {
 type TriggerCondition =
 	| GainLifeTriggerCondition
 	| DrawTriggerCondition
+	| DealsCombatDamageTriggerCondition
 	| CastTriggerCondition
 	| DeclareAttackersTriggerCondition
 	| BeginStepTriggerCondition
@@ -5013,6 +5022,12 @@ function triggerMatches(
 					ev.kind === "draw",
 			);
 			return relativePlayerMatches(ev.player, condition.player, source);
+
+		case "damage":
+			assert(ev.kind === "damage");
+			return (
+				ev.source === source.id && ev.combat && ev.target.type === "player"
+			);
 
 		case "begin step":
 			assert(ev.kind === "begin step");
