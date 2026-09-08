@@ -80,6 +80,8 @@ registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
 registerRuntimeFixture("c/clone", "rt-clone");
+registerRuntimeFixture("b/blood_pact", "rt-blood-pact");
+registerRuntimeFixture("t/tome_scour", "rt-tome-scour");
 registerRuntimeFixture("f/firebrand_archer", "rt-firebrand-archer");
 registerRuntimeFixture("k/kessig_flamebreather", "rt-kessig-flamebreather");
 registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
@@ -684,6 +686,68 @@ describe("forge-import runtime: spell effects", () => {
 			(action) => action.kind === "cast" && action.card === spell.id,
 		);
 		expect(castable).toBe(false);
+	});
+
+	test("Blood Pact's imported halves both act on the one targeted player", () => {
+		const state = setupMain();
+		// The end of a library array is its top, so these two are drawn first.
+		spawnCard(state, "forest", BOB, "library");
+		spawnCard(state, "darksteel-relic", BOB, "library");
+		const spell = spawnCard(state, "rt-blood-pact", ALICE, "hand");
+		perform(
+			state,
+			{
+				kind: "add mana",
+				source: spell.id,
+				player: ALICE,
+				mana: { b: 1, c: 2 },
+			},
+			passingAgents(),
+		);
+		const bobHandBefore = state.players[BOB].hand.length;
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "player", player: BOB });
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		settlePriority(state, agents);
+
+		// The draw and the life loss name the same target slot, so both land on
+		// Bob -- not on Alice, who controls the spell and is the default player
+		// an undefined operand would resolve to.
+		const bobHand = state.players[BOB].hand.map((id) => name(state, id));
+		expect(bobHand).toHaveLength(bobHandBefore + 2);
+		expect(bobHand).toContain("Forest");
+		expect(bobHand).toContain("Darksteel Relic");
+		expect(state.players[BOB].life).toBe(18);
+		expect(state.players[ALICE].life).toBe(20);
+		expect(agents[ALICE].targetChoices).toHaveLength(0);
+	});
+
+	test("Tome Scour's imported mill runs against the targeted player", () => {
+		const state = setupMain();
+		for (let i = 0; i < 5; i++) spawnCard(state, "forest", BOB, "library");
+		const bobLibrary = [...state.players[BOB].library];
+		const aliceLibrary = [...state.players[ALICE].library];
+		const spell = spawnCard(state, "rt-tome-scour", ALICE, "hand");
+		perform(
+			state,
+			{ kind: "add mana", source: spell.id, player: ALICE, mana: { u: 1 } },
+			passingAgents(),
+		);
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "player", player: BOB });
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		settlePriority(state, agents);
+
+		// The library's last element is its top card, so milling five takes the
+		// last five and leaves the rest in order.
+		expect(state.players[BOB].library).toEqual(bobLibrary.slice(0, -5));
+		expect(state.players[BOB].graveyard).toHaveLength(5);
+		// Alice cast it, so an operand that fell back to the controller would
+		// have emptied her library instead.
+		expect(state.players[ALICE].library).toEqual(aliceLibrary);
+		expect(agents[ALICE].targetChoices).toHaveLength(0);
 	});
 
 	test("Consider's imported surveil moves the chosen card before drawing", () => {

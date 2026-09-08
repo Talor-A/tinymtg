@@ -2037,7 +2037,8 @@ export type EffectDef<
 > =
 	| {
 			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
-			player: Player;
+			/** A relative player, or the player bound to a target slot. */
+			player: Player | TargetSlotRef;
 			amount: number;
 	  }
 	| {
@@ -6461,6 +6462,16 @@ function resolveEffects(
 			effect.kind === "sacrifice" && typeof effect.player !== "string"
 				? effect.player
 				: null;
+		const playerTarget =
+			(effect.kind === "gain-life" ||
+				effect.kind === "lose-life" ||
+				effect.kind === "draw" ||
+				effect.kind === "scry" ||
+				effect.kind === "surveil" ||
+				effect.kind === "mill") &&
+			typeof effect.player !== "string"
+				? effect.player
+				: null;
 		const objectTarget =
 			(effect.kind === "destroy" ||
 				effect.kind === "return to hand" ||
@@ -6474,13 +6485,15 @@ function resolveEffects(
 			damageTarget !== null ||
 			objectTarget !== null ||
 			counterTarget !== null ||
-			sacrificeTarget !== null
+			sacrificeTarget !== null ||
+			playerTarget !== null
 		) {
 			const targetSlot =
 				damageTarget?.targetSlot ??
 				objectTarget?.targetSlot ??
 				counterTarget?.targetSlot ??
-				sacrificeTarget?.targetSlot;
+				sacrificeTarget?.targetSlot ??
+				playerTarget?.targetSlot;
 			assertDefined(targetSlot);
 			const binding = item.targets[0];
 			assertDefined(binding, "effect has no target binding");
@@ -6623,41 +6636,53 @@ function effectToEvent(
 	effect: Exclude<EffectDef<TriggerEffectPlayer>, { kind: "may" }>,
 	subject: EntityRef | null,
 ): GameEvent {
+	/**
+	 * The player an instruction acts on: either relative to the source's
+	 * controller, or the one bound to the target slot the instruction names.
+	 */
+	const effectPlayer = (who: TriggerEffectPlayer | TargetSlotRef): PlayerId => {
+		if (typeof who === "string") return relativeEffectPlayer(item, who);
+		assert(
+			subject?.type === "player",
+			"a targeted player effect requires a bound player target",
+		);
+		return subject.player;
+	};
 	switch (effect.kind) {
 		case "gain-life":
 			return {
 				kind: "gain life",
-				player: relativeEffectPlayer(item, effect.player),
+				player: effectPlayer(effect.player),
 				amount: effect.amount,
 			};
 		case "lose-life":
 			return {
 				kind: "lose life",
-				player: relativeEffectPlayer(item, effect.player),
+				player: effectPlayer(effect.player),
 				amount: effect.amount,
 			};
 		case "draw":
 			return {
 				kind: "draw cards",
-				player: relativeEffectPlayer(item, effect.player),
+				player: effectPlayer(effect.player),
 				amount: effect.amount,
 			};
 		case "scry":
 			return {
 				kind: "scry",
-				player: relativeEffectPlayer(item, effect.player),
+				player: effectPlayer(effect.player),
 				amount: effect.amount,
 			};
 		case "surveil":
 			return {
 				kind: "surveil",
-				player: relativeEffectPlayer(item, effect.player),
+				player: effectPlayer(effect.player),
 				amount: effect.amount,
 			};
 		case "mill":
 			return {
 				kind: "mill",
-				player: relativeEffectPlayer(item, effect.player),
+				player: effectPlayer(effect.player),
 				amount: effect.amount,
 			};
 		case "create-token":
@@ -6921,6 +6946,16 @@ function requiredTargetDefinition(
 			);
 			return;
 		}
+		if (
+			(effect.kind === "gain-life" ||
+				effect.kind === "lose-life" ||
+				effect.kind === "draw" ||
+				effect.kind === "scry" ||
+				effect.kind === "surveil" ||
+				effect.kind === "mill") &&
+			typeof effect.player === "string"
+		)
+			return;
 		// An effect on its own source declares no target, so there is no slot to
 		// check it against.
 		if (
@@ -6941,11 +6976,27 @@ function requiredTargetDefinition(
 			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt" &&
 			effect.kind !== "add counters" &&
-			effect.kind !== "sacrifice"
+			effect.kind !== "sacrifice" &&
+			effect.kind !== "gain-life" &&
+			effect.kind !== "lose-life" &&
+			effect.kind !== "draw" &&
+			effect.kind !== "scry" &&
+			effect.kind !== "surveil" &&
+			effect.kind !== "mill"
 		)
 			return;
 		const sacrificeTarget =
 			effect.kind === "sacrifice" && typeof effect.player !== "string"
+				? effect.player
+				: null;
+		const playerTarget =
+			(effect.kind === "gain-life" ||
+				effect.kind === "lose-life" ||
+				effect.kind === "draw" ||
+				effect.kind === "scry" ||
+				effect.kind === "surveil" ||
+				effect.kind === "mill") &&
+			typeof effect.player !== "string"
 				? effect.player
 				: null;
 		const objectTarget =
@@ -6961,7 +7012,8 @@ function requiredTargetDefinition(
 			damageTarget?.targetSlot ??
 			objectTarget?.targetSlot ??
 			counterTarget?.targetSlot ??
-			sacrificeTarget?.targetSlot;
+			sacrificeTarget?.targetSlot ??
+			playerTarget?.targetSlot;
 		assertDefined(targetSlot);
 		assert(
 			target !== null && targetSlot === target.id,
@@ -6992,6 +7044,19 @@ function requiredTargetDefinition(
 			assert(
 				target.legal.kind === "permanent",
 				"adding counters requires a permanent target",
+			);
+		}
+		if (
+			effect.kind === "gain-life" ||
+			effect.kind === "lose-life" ||
+			effect.kind === "draw" ||
+			effect.kind === "scry" ||
+			effect.kind === "surveil" ||
+			effect.kind === "mill"
+		) {
+			assert(
+				target.legal.kind === "player",
+				"a targeted player effect requires a player target",
 			);
 		}
 		if (effect.kind === "sacrifice") {

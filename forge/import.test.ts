@@ -1326,6 +1326,14 @@ SVar:DBDraw:DB$ Draw | Defined$ You | SpellDescription$ Draw a card.
 Oracle:You gain 3 life. Draw a card.
 `;
 
+const BLOOD_PACT = `Name:Blood Pact
+ManaCost:2 B
+Types:Instant
+A:SP$ Draw | NumCards$ 2 | ValidTgts$ Player | SubAbility$ DBLoseLife | StackDescription$ {p:Targeted} draws two cards and loses 2 life. | SpellDescription$ Target player draws two cards and loses 2 life.
+SVar:DBLoseLife:DB$ LoseLife | LifeAmount$ 2 | Defined$ Targeted | StackDescription$ None
+Oracle:Target player draws two cards and loses 2 life.
+`;
+
 const BEARS = `Name:Grizzly Bears
 ManaCost:1 G
 Types:Creature Bear
@@ -1454,6 +1462,41 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("lowers a targeted player operand on both halves of a chain", () => {
+		const result = importText(BLOOD_PACT);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.spell?.targets).toEqual([
+			{ id: "target-1", min: 1, max: 1, legal: { kind: "player" } },
+		]);
+		// The head reads its operand from the ability's own ValidTgts$ and the
+		// continuation from Defined$ Targeted; both name the same slot.
+		expect(result.card.spell?.effects).toEqual([
+			{ kind: "draw", player: { targetSlot: "target-1" }, amount: 2 },
+			{ kind: "lose-life", player: { targetSlot: "target-1" }, amount: 2 },
+		]);
+	});
+
+	test("an omitted Defined$ without ValidTgts$ is still the controller", () => {
+		const result = importText(REVITALIZE.replace("Defined$ You | ", ""));
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.spell?.effects[0]).toEqual({
+			kind: "gain-life",
+			player: "you",
+			amount: 3,
+		});
+	});
+
+	test("rejects a targeted player operand whose ValidTgts$ is not a player", () => {
+		const result = importText(
+			BLOOD_PACT.replace("ValidTgts$ Player", "ValidTgts$ Creature"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_TARGET");
 	});
 
 	test("rejects an effect that targets a slot its ability never declared", () => {

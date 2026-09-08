@@ -59,6 +59,7 @@ import type {
 	StaticAbilityDefinition,
 	Supertype,
 	TargetDef,
+	TargetSlotRef,
 	TriggerEffectPlayer,
 	TriggeredAbilityDefinition,
 	ValidPlayer,
@@ -376,8 +377,19 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			effect.kind === "damage" && "targetSlot" in effect.recipient
 				? effect.recipient
 				: null;
+		const playerTarget =
+			(effect.kind === "gain-life" ||
+				effect.kind === "lose-life" ||
+				effect.kind === "draw" ||
+				effect.kind === "scry" ||
+				effect.kind === "surveil" ||
+				effect.kind === "mill") &&
+			typeof effect.player !== "string"
+				? effect.player
+				: null;
 		if (
 			damageTarget === null &&
+			playerTarget === null &&
 			effect.kind !== "destroy" &&
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
@@ -404,6 +416,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 		const counterTarget = effect.kind === "counter" ? effect.spell : null;
 		const effectSlot =
 			damageTarget?.targetSlot ??
+			playerTarget?.targetSlot ??
 			objectTarget?.targetSlot ??
 			counterTarget?.targetSlot;
 		assert(effectSlot !== undefined);
@@ -412,6 +425,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			return issue(
 				"UNSUPPORTED_TARGET",
 				"targeted effects must reference the declared target slot",
+				where,
+			);
+		}
+		if (playerTarget !== null && target.legal.kind !== "player") {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"a targeted player effect requires ValidTgts$ Player",
 				where,
 			);
 		}
@@ -481,7 +501,12 @@ function parseTarget(
 /* Effects                                                                    */
 /* ------------------------------------------------------------------------- */
 
-const COMMON_EFFECT_PARAMS = ["spelldescription", "subability", "cost"];
+const COMMON_EFFECT_PARAMS = [
+	"spelldescription",
+	"stackdescription",
+	"subability",
+	"cost",
+];
 
 function fixedTokenCharacteristics(
 	scriptId: string,
@@ -521,6 +546,22 @@ function fixedTokenCharacteristics(
 	return characteristicsFromCardDef(imported.card);
 }
 
+/**
+ * Forge's player operand. `Defined$ Targeted`, and an omitted `Defined$` on an
+ * ability that declares `ValidTgts$`, both name the player this ability
+ * targets; every other spelling is relative to the source's controller.
+ */
+function parseEffectPlayer<Player extends TriggerEffectPlayer>(
+	params: ForgeParamList,
+	parsePlayer: (value: string | undefined) => Player | null,
+): Player | TargetSlotRef | null {
+	const defined = getForgeParam(params, "Defined");
+	if (defined === "Targeted") return { targetSlot: TARGET_SLOT };
+	if (defined === undefined && getForgeParam(params, "ValidTgts") !== undefined)
+		return { targetSlot: TARGET_SLOT };
+	return parsePlayer(defined);
+}
+
 function parseSingleEffect<Player extends TriggerEffectPlayer>(
 	params: ForgeParamList,
 	discriminatorLower: string,
@@ -537,13 +578,15 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				new Set([
 					discriminatorLower,
 					"defined",
+					"validtgts",
+					"tgtprompt",
 					"lifeamount",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
 			);
 			if (badParams) return badParams;
-			const who = parsePlayer(getForgeParam(params, "Defined"));
+			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "LifeAmount"));
 			if (!who || !amount)
 				return issue(
@@ -563,13 +606,15 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				new Set([
 					discriminatorLower,
 					"defined",
+					"validtgts",
+					"tgtprompt",
 					"scrynum",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
 			);
 			if (badParams) return badParams;
-			const who = parsePlayer(getForgeParam(params, "Defined"));
+			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "ScryNum"), 1);
 			if (!who || !amount)
 				return issue(
@@ -585,13 +630,15 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				new Set([
 					discriminatorLower,
 					"defined",
+					"validtgts",
+					"tgtprompt",
 					"amount",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
 			);
 			if (badParams) return badParams;
-			const who = parsePlayer(getForgeParam(params, "Defined"));
+			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "Amount"), 1);
 			if (!who || !amount)
 				return issue(
@@ -607,13 +654,15 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				new Set([
 					discriminatorLower,
 					"defined",
+					"validtgts",
+					"tgtprompt",
 					"numcards",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
 			);
 			if (badParams) return badParams;
-			const who = parsePlayer(getForgeParam(params, "Defined"));
+			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!who || !amount)
 				return issue(
@@ -629,13 +678,15 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				new Set([
 					discriminatorLower,
 					"defined",
+					"validtgts",
+					"tgtprompt",
 					"numcards",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
 			);
 			if (badParams) return badParams;
-			const who = parsePlayer(getForgeParam(params, "Defined"));
+			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!who || !amount)
 				return issue(
