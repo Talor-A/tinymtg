@@ -77,7 +77,7 @@ const TEST_TRIGGER_TOKEN: CharacteristicsSnapshot = {
 
 const COPY_TOKEN: CharacteristicsSnapshot = {
 	kind: "creature",
-	name: "Clone Token",
+	name: "TEST ONLY — Forced Copy Token",
 	manaCost: "none",
 	colors: ["u"],
 	supertypes: [],
@@ -88,7 +88,7 @@ const COPY_TOKEN: CharacteristicsSnapshot = {
 		static: [],
 		activated: [],
 		triggered: [],
-		replacement: [abilityId("replacement", "clone", 0)],
+		replacement: [abilityId("replacement", "test-forced-copy", 0)],
 		prohibition: [],
 	},
 	power: 0,

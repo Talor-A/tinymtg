@@ -208,12 +208,12 @@ describe("triggered abilities", () => {
 		expect(replayedState).toEqual(recordedState);
 	});
 
-	test("Clone queues and resolves a copied ETB trigger from its characteristics", () => {
+	test("test forced-copy fixture queues and resolves a copied ETB trigger from its characteristics", () => {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(state, agents);
 		spawnPermanent(state, "arashin-cleric", ALICE);
-		const clone = spawnCard(state, "clone", ALICE, "hand");
+		const clone = spawnCard(state, "test-forced-copy", ALICE, "hand");
 
 		const result = perform(
 			state,

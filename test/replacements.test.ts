@@ -438,13 +438,13 @@ describe("interacting effects as permanents enter", () => {
 		expect(entered.owner, "ALICE still owns it").toBe(1);
 	});
 
-	test("Clone chooses what to copy before that card's own entry effect applies", () => {
+	test("test forced-copy fixture chooses what to copy before that card's own entry effect applies", () => {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		spawnPermanent(state, "walking-ballista", 1, {
 			counters: { "+1/+1": 2 },
 		});
-		const clone = spawnCard(state, "clone", 0, "hand");
+		const clone = spawnCard(state, "test-forced-copy", 0, "hand");
 		const r = perform(
 			state,
 			{
@@ -459,9 +459,12 @@ describe("interacting effects as permanents enter", () => {
 		);
 		const entered = created(r);
 		const copied = permanent(state, entered);
-		expect(copied.representation, "physical Clone card is retained").toEqual({
+		expect(
+			copied.representation,
+			"physical test forced-copy fixture card is retained",
+		).toEqual({
 			kind: "card",
-			cardId: "clone",
+			cardId: "test-forced-copy",
 		});
 		expect(
 			readObject(createReadContext(state), entered).currentCharacteristics.name,

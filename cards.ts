@@ -519,9 +519,9 @@ export const BABY_MYCOSYNTH = registerCard({
  * Copy tier (CR 616.1c)
  * ------------------------------------------------------------------ */
 
-export const CLONE = registerCard({
-	id: "clone",
-	name: "Clone",
+export const TEST_FORCED_COPY = registerCard({
+	id: "test-forced-copy",
+	name: "TEST ONLY — Forced First-Creature Copy",
 	types: ["creature"],
 	subtypes: ["Shapeshifter"],
 	colors: ["u"],
@@ -533,22 +533,21 @@ export const CLONE = registerCard({
 	toughness: 0,
 	replacements: [
 		{
-			label: "clone",
+			label: "test-forced-copy",
 			layer: "copy",
 			functionsFrom: "any",
-			text: "You may have Clone enter as a copy of any creature on the battlefield.",
+			text: "TEST ONLY — This enters as a copy of the first creature on the battlefield.",
 			applies: (ev, ctx) =>
 				ev.kind === "change zone" &&
 				ev.to === "battlefield" &&
 				ev.object === ctx.self?.id &&
 				ev.copiableOverride === undefined &&
-				pickCloneTarget(ctx.read) !== null,
+				pickFirstCreatureToCopy(ctx.read) !== null,
 			replace(ev, ctx) {
 				if (ev.kind !== "change zone") return [ev];
-				const target = pickCloneTarget(ctx.read);
-				// The copiable values carry the copied object's ability references,
-				// which is the whole of what Clone acquires. No card identity comes
-				// along: the Clone stays physically a Clone.
+				const target = pickFirstCreatureToCopy(ctx.read);
+				// The copiable values carry the copied object's ability references.
+				// No card identity comes along: this remains the test fixture card.
 				return target
 					? [{ ...ev, copiableOverride: cloneCharacteristics(target) }]
 					: [ev];
@@ -557,8 +556,10 @@ export const CLONE = registerCard({
 	],
 });
 
-/** Stand-in for a real choice — a policy would pick here. */
-function pickCloneTarget(read: ReadContext): CharacteristicsSnapshot | null {
+/** Deterministic test behavior; this is intentionally not a real card choice. */
+function pickFirstCreatureToCopy(
+	read: ReadContext,
+): CharacteristicsSnapshot | null {
 	for (const id of read.state.battlefield) {
 		const snapshot = readObject(read, id);
 		if (

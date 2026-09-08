@@ -19,7 +19,7 @@ const DECK = [
 	"baby-rest-in-peace",
 	"root-maze",
 	"necropotence",
-	"clone",
+	"test-forced-copy",
 ] as const;
 
 function seededGame(seed: number): GameState {

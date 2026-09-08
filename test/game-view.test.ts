@@ -220,7 +220,7 @@ describe("derived game views", () => {
 			tokenSnapshot.copiableValues.abilities.activated.map(String),
 		).toEqual(["snapshot-activation-test:0"]);
 
-		const clone = spawnCard(state, "clone", P1, "hand");
+		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
 		const result = perform(
 			state,
 			{
@@ -283,7 +283,7 @@ describe("derived game views", () => {
 		});
 	});
 
-	test("Clone retains a layer-1 snapshot after the source effect leaves", () => {
+	test("test forced-copy fixture retains a layer-1 snapshot after the source effect leaves", () => {
 		const state = newGame();
 		const target = spawnPermanent(state, "grizzly-bears", P1);
 		const source = spawnPermanent(state, LAYER_ONE_SOURCE.id, P1);
@@ -298,7 +298,7 @@ describe("derived game views", () => {
 		);
 		const captured = structuredClone(modifiedTarget.copiableValues);
 
-		const clone = spawnCard(state, "clone", P1, "hand");
+		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
 		const entered = perform(
 			state,
 			{
@@ -311,9 +311,10 @@ describe("derived game views", () => {
 			},
 			agents,
 		).created[0];
-		if (entered === undefined) throw new Error("Clone did not enter");
+		if (entered === undefined)
+			throw new Error("test forced-copy fixture did not enter");
 		expect(permanent(state, entered).copiableOverride).toEqual(captured);
-		expect(physicalCardId(permanent(state, entered))).toBe("clone");
+		expect(physicalCardId(permanent(state, entered))).toBe("test-forced-copy");
 
 		perform(
 			state,
@@ -368,7 +369,7 @@ describe("derived game views", () => {
 		expect(() => readObject(read, bears.id)).toThrow(/stale ReadContext/);
 	});
 
-	test("Clone copies a creature token's actual copiable values", () => {
+	test("test forced-copy fixture copies a creature token's actual copiable values", () => {
 		const state = newGame();
 		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		const bearsSnapshot = readObject(createReadContext(state), bears.id);
@@ -389,7 +390,7 @@ describe("derived game views", () => {
 		const tokenValues = structuredClone(bearsSnapshot.copiableValues);
 		tokenValues.name = "Test Bear Token";
 		spawnToken(state, P1, tokenValues);
-		const clone = spawnCard(state, "clone", P1, "hand");
+		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
 		const result = perform(
 			state,
 			{
@@ -413,7 +414,7 @@ describe("derived game views", () => {
 		const copiedObject = state.objects.get(copiedId);
 		expect(copiedObject).toBeDefined();
 		if (!copiedObject) return;
-		expect(physicalCardId(copiedObject)).toBe("clone");
+		expect(physicalCardId(copiedObject)).toBe("test-forced-copy");
 	});
 
 	test("an arbitrary token name never becomes registry identity", () => {
@@ -455,7 +456,7 @@ describe("derived game views", () => {
 		});
 		expect(physicalCardId(token)).toBe(null);
 
-		const clone = spawnCard(state, "clone", P1, "hand");
+		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
 		let result: ReturnType<typeof perform> | undefined;
 		expect(() => {
 			result = perform(
@@ -483,10 +484,10 @@ describe("derived game views", () => {
 		expect(physicalCardId(token)).toBe(null);
 	});
 
-	test("copy-of-copy keeps effective values and a copied Clone leaves as Clone", () => {
+	test("copy-of-copy keeps effective values and a copied test forced-copy fixture leaves as test forced-copy fixture", () => {
 		const state = newGame();
 		const ballista = spawnPermanent(state, "walking-ballista", P1);
-		const firstCard = spawnCard(state, "clone", P1, "hand");
+		const firstCard = spawnCard(state, "test-forced-copy", P1, "hand");
 		const firstResult = perform(
 			state,
 			{
@@ -512,7 +513,7 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const secondCard = spawnCard(state, "clone", P1, "hand");
+		const secondCard = spawnCard(state, "test-forced-copy", P1, "hand");
 		const secondResult = perform(
 			state,
 			{
@@ -550,7 +551,7 @@ describe("derived game views", () => {
 		const graveyardObject = state.objects.get(leave.created[0]!);
 		expect(graveyardObject).toMatchObject({
 			kind: "card",
-			cardId: "clone",
+			cardId: "test-forced-copy",
 			zone: "graveyard",
 		});
 	});
@@ -765,10 +766,10 @@ describe("layer 6 ability grants", () => {
 		);
 	});
 
-	test("Clone copies the creature, not the grant hanging on it", () => {
+	test("test forced-copy fixture copies the creature, not the grant hanging on it", () => {
 		const { state, instruction } = withInstruction();
 		spawnPermanent(state, "grizzly-bears", P1);
-		const cloneCard = spawnCard(state, "clone", P1, "hand");
+		const cloneCard = spawnCard(state, "test-forced-copy", P1, "hand");
 		const result = perform(
 			state,
 			{
@@ -788,7 +789,7 @@ describe("layer 6 ability grants", () => {
 		const copied = readObject(createReadContext(state), copiedId);
 		if (copied.kind !== "permanent") throw new Error("expected permanent");
 		expect(copied.copiableValues.name).toBe("Grizzly Bears");
-		// Clone copies copiable values, and the grant was never part of them.
+		// test forced-copy fixture copies copiable values, and the grant was never part of them.
 		expect(copied.copiableValues.abilities.activated).toEqual([]);
 		// It is still a creature its controller controls, so the grant applies to
 		// it directly — from the instruction, not from the copy.
@@ -816,7 +817,7 @@ describe("layer 6 ability grants", () => {
 		expect(afterwards.copiableValues.name).toBe("Grizzly Bears");
 		expect(() => structuredClone(state)).not.toThrow();
 
-		// Physical identity is untouched by any of it: the copy is still a Clone
+		// Physical identity is untouched by any of it: the copy is still a test forced-copy fixture
 		// card once it leaves the battlefield.
 		const left = perform(
 			state,
@@ -832,7 +833,7 @@ describe("layer 6 ability grants", () => {
 		);
 		expect(state.objects.get(left.created[0]!)).toMatchObject({
 			kind: "card",
-			cardId: "clone",
+			cardId: "test-forced-copy",
 			zone: "graveyard",
 		});
 	});

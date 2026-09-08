@@ -77,7 +77,7 @@ describe("player views", () => {
 	test("show each viewer only their hand and no library identities", () => {
 		const state = newGame();
 		const p0Hand = spawnCard(state, "forest", 0, "hand");
-		const p1Hand = spawnCard(state, "clone", 1, "hand");
+		const p1Hand = spawnCard(state, "test-forced-copy", 1, "hand");
 		const p0Library = spawnCard(state, "doubling-season", 0, "library");
 		const p1Library = spawnCard(state, "hardened-scales", 1, "library");
 
@@ -98,7 +98,7 @@ describe("player views", () => {
 		expect(p1VisibleIds.has(p0Library.id)).toBe(false);
 		expect(p1VisibleIds.has(p1Library.id)).toBe(false);
 
-		expect(JSON.stringify(p0)).not.toContain("clone");
+		expect(JSON.stringify(p0)).not.toContain("test-forced-copy");
 		expect(JSON.stringify(p0)).not.toContain("doubling-season");
 		expect(JSON.stringify(p0)).not.toContain("hardened-scales");
 		expect(JSON.stringify(p1)).not.toContain("forest");
@@ -113,7 +113,7 @@ describe("player views", () => {
 			counters: { "+1/+1": 1 },
 		});
 		const theirs = spawnPermanent(state, "eager-cadet", 1);
-		const graveyard = spawnCard(state, "clone", 0, "graveyard");
+		const graveyard = spawnCard(state, "test-forced-copy", 0, "graveyard");
 		const exile = spawnCard(state, "forest", 1, "exile");
 		const stackId = state.nextStackItemId++ as StackItemId;
 		state.stack.push({
@@ -190,7 +190,7 @@ describe("player views", () => {
 			mutable.players[0].manaPool.g = 1;
 		}).toThrow(TypeError);
 		expect(buildPlayerView(state, 0)).toBe(view);
-		spawnCard(state, "clone", 0, "hand");
+		spawnCard(state, "test-forced-copy", 0, "hand");
 
 		const fresh = buildPlayerView(state, 0);
 		expect(view.hand).toHaveLength(1);
