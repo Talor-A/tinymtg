@@ -68,6 +68,7 @@ const POSITIVE_FIXTURES = [
 	"b/beast_whisperer",
 	"c/clone",
 	"b/benalish_veteran",
+	"u/unsummon",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -852,6 +853,43 @@ describe("lowerForgeCard: required negative fixtures", () => {
 			expect(result.diagnostics.length).toBeGreaterThan(0);
 		});
 	}
+});
+
+describe("lowerForgeCard: ChangeZone is limited to bounce", () => {
+	const unsummon = cardText("u/unsummon");
+
+	const rejected = [
+		["a graveyard origin", "Origin$ Battlefield", "Origin$ Graveyard"],
+		[
+			"a battlefield destination",
+			"Destination$ Hand",
+			"Destination$ Battlefield",
+		],
+		["an exile destination", "Destination$ Hand", "Destination$ Exile"],
+		["a library destination", "Destination$ Hand", "Destination$ Library"],
+	] as const;
+
+	for (const [name, from, to] of rejected) {
+		test(`rejects ${name}`, () => {
+			expect(unsummon).toContain(from);
+			const result = importForgeCard(unsummon.replace(from, to), {
+				id: "mutated-unsummon",
+			});
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+		});
+	}
+
+	test("rejects a bounce with no declared target", () => {
+		const result = importForgeCard(
+			unsummon.replace(" | ValidTgts$ Creature", ""),
+			{ id: "mutated-unsummon" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_TARGET");
+	});
 });
 
 describe("lowerForgeCard: strict Clone shape", () => {

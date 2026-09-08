@@ -93,7 +93,8 @@ optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional
 single-permanent sacrifice, including `Creature.Other` to exclude the source,
 semicolon-separated alternatives, and `CARDNAME` for the source itself (e.g.
 Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with
-life/draw/discard-one-chosen-card, damage, destroy, and counter effects; spells,
+life/draw/discard-one-chosen-card, damage, destroy, counter, and
+return-to-hand effects; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
 `ValidTgts$` selector whose base is a card type, a subtype, `Card`, or

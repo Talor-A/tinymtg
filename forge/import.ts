@@ -16,7 +16,8 @@
  * the concrete subset documented in the acceptance matrix in README.md lowers.
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
- * random or multi-card discard; alternate/additional
+ * `ChangeZone` other than Battlefield to Hand (so no reanimation, tutoring,
+ * blinking, or exile); random or multi-card discard; alternate/additional
  * costs on spells, and activation costs other than fixed generic/coloured mana,
  * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
  * and dynamic amounts;
@@ -363,6 +364,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			effect.kind !== "damage" &&
 			effect.kind !== "destroy" &&
 			effect.kind !== "counter" &&
+			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt"
 		)
 			continue;
@@ -391,6 +393,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			return issue(
 				"UNSUPPORTED_TARGET",
 				"Counter requires a spell target",
+				where,
+			);
+		}
+		if (effect.kind === "return to hand" && target.legal.kind !== "permanent") {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"ChangeZone to hand requires a permanent target",
 				where,
 			);
 		}
@@ -588,6 +597,41 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			);
 			if (badParams) return badParams;
 			return { kind: "counter", targetSlot: TARGET_SLOT };
+		}
+		case "changezone": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"origin",
+					"destination",
+					"validtgts",
+					"tgtprompt",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			// Only the bounce case is lowered. Every other origin/destination pair
+			// -- reanimation, tutoring, blinking, exile -- needs zone handling this
+			// effect does not have, so they reject rather than approximate.
+			const origin = getForgeParam(params, "Origin");
+			const destination = getForgeParam(params, "Destination");
+			if (origin !== "Battlefield" || destination !== "Hand") {
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"only ChangeZone from Battlefield to Hand is supported",
+					where,
+				);
+			}
+			if (getForgeParam(params, "ValidTgts") === undefined) {
+				return issue(
+					"UNSUPPORTED_TARGET",
+					"ChangeZone to hand must declare targets",
+					where,
+				);
+			}
+			return { kind: "return to hand", targetSlot: TARGET_SLOT };
 		}
 		case "pump": {
 			const badParams = checkParams(

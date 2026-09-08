@@ -585,6 +585,7 @@ type MoveCause =
 	| "destroy"
 	| "counter"
 	| "sacrifice"
+	| "bounce"
 	| "sba"
 	| "cast"
 	| "illegal target"
@@ -1984,6 +1985,7 @@ export type EffectDef<
 	| { kind: "damage"; targetSlot: string; amount: number }
 	| { kind: "destroy"; targetSlot: string }
 	| { kind: "counter"; targetSlot: string }
+	| { kind: "return to hand"; targetSlot: string }
 	| {
 			kind: "sacrifice";
 			/** A relative player, or the player bound to a target slot. */
@@ -6320,6 +6322,7 @@ function resolveEffects(
 			effect.kind === "damage" ||
 			effect.kind === "destroy" ||
 			effect.kind === "counter" ||
+			effect.kind === "return to hand" ||
 			modifyPtSlot !== null ||
 			sacrificeTarget !== null
 		) {
@@ -6330,7 +6333,8 @@ function resolveEffects(
 				assert(
 					effect.kind === "damage" ||
 						effect.kind === "destroy" ||
-						effect.kind === "counter",
+						effect.kind === "counter" ||
+						effect.kind === "return to hand",
 				);
 
 				targetSlot = effect.targetSlot;
@@ -6525,6 +6529,26 @@ function effectToEvent(
 				spell: bound.id,
 				source: item.source,
 			};
+		case "return to hand": {
+			assert(
+				bound !== null && bound.type === "permanent",
+				"return to hand requires a bound permanent target",
+			);
+			const object = state.objects.get(bound.id);
+			assertDefined(object);
+			return {
+				kind: "change zone",
+				from: "battlefield",
+				to: "hand",
+				cause: "resolve",
+				// `toController` only decides who controls the object when it
+				// enters the battlefield or the stack; a card in a hand has an
+				// owner and no controller. The owner is the honest value here,
+				// since that is whose hand it returns to (CR 400.3).
+				toController: object.owner,
+				object: bound.id,
+			};
+		}
 		case "sacrifice":
 			throw new Error("sacrifice effects are resolved with a player choice");
 		case "modify-pt":
@@ -6688,6 +6712,7 @@ function requiredTargetDefinition(
 			effect.kind !== "damage" &&
 			effect.kind !== "destroy" &&
 			effect.kind !== "counter" &&
+			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt" &&
 			effect.kind !== "sacrifice"
 		)
@@ -6705,7 +6730,8 @@ function requiredTargetDefinition(
 			assert(
 				effect.kind === "damage" ||
 					effect.kind === "destroy" ||
-					effect.kind === "counter",
+					effect.kind === "counter" ||
+					effect.kind === "return to hand",
 			);
 			targetSlot = effect.targetSlot;
 		}
@@ -6721,6 +6747,12 @@ function requiredTargetDefinition(
 		}
 		if (effect.kind === "counter") {
 			assert(target.legal.kind === "spell", "counter requires a spell target");
+		}
+		if (effect.kind === "return to hand") {
+			assert(
+				target.legal.kind === "permanent",
+				"return to hand requires a permanent target",
+			);
 		}
 		if (effect.kind === "modify-pt") {
 			assert(

@@ -403,6 +403,32 @@ describe("single-target spell casting", () => {
 		);
 	});
 
+	test("Unsummon returns the targeted creature to its owner's hand", () => {
+		const { state, spell } = setupCast("unsummon");
+		perform(
+			state,
+			{ kind: "add mana", source: spell.id, player: 0, mana: { u: 1 } },
+			passingAgents(),
+		);
+		// Owned by P1, so it must return to P1's hand rather than the caster's.
+		const bears = spawnPermanent(state, "grizzly-bears", 1);
+		const handBefore = state.players[1].hand.length;
+
+		castAt(state, spell.id, { type: "permanent", id: bears.id });
+		settlePriority(state, passingAgents());
+
+		expect(state.battlefield).not.toContain(bears.id);
+		expect(state.players[1].hand).toHaveLength(handBefore + 1);
+		const returned = state.players[1].hand.at(-1);
+		if (returned === undefined) throw new Error("nothing returned to hand");
+		expect(state.objects.get(returned)).toMatchObject({
+			kind: "card",
+			cardId: "grizzly-bears",
+			zone: "hand",
+			owner: 1,
+		});
+	});
+
 	test("a temporary P/T effect resolves into the layer system", () => {
 		const { state, spell } = setupCast("target-test-deferred-pt");
 		const bears = spawnPermanent(state, "grizzly-bears", 1);

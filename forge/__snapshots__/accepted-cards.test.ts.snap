@@ -14,6 +14,7 @@ Aegis of the Heavens
 Aeolipile
 Aerial Responder
 Aesthir Glider
+Aether Adept
 Affa Protector
 Ageless Guardian
 Agent of Stromgald
@@ -84,6 +85,7 @@ Avacyn's Pilgrim
 Aven Battle Priest
 Aven Cloudchaser
 Aven Envoy
+Aven Fogbringer
 Aven Sentry
 Aven Skirmisher
 Aven Wind Mage
@@ -124,6 +126,7 @@ Bee Sting
 Bellowing Crier
 Benalish Heralds
 Benalish Veteran
+Bigfin Bouncer
 Bilbo's Deadly Slice
 Bird Maiden
 Bishop's Soldier
@@ -156,6 +159,7 @@ Borderland Minotaur
 Boreal Druid
 Boros Signet
 Bottle Gnomes
+Bounce Off
 Bounty Agent
 Braidwood Cup
 Bramblecrush
@@ -225,6 +229,7 @@ Cloudcrown Oak
 Cloudkin Seer
 Cloudreader Sphinx
 Coal Golem
+Coastal Drake
 Cobblebrute
 Collective Blessing
 Colorful Feiyi Sparrow
@@ -323,6 +328,7 @@ Diregraf Ghoul
 Disenchant
 Dismiss
 Dispeller's Capsule
+Disperse
 Disruptor Pistol
 Divination
 Diving Griffin
@@ -332,8 +338,10 @@ Doom Blade
 Dosan's Oldest Chant
 Douse in Gloom
 Douser of Lights
+Drag Under
 Dragon Moose
 Dragonborn Looter
+Dramatic Rescue
 Dread Reaper
 Dread Shade
 Dread of Night
@@ -346,6 +354,7 @@ Dromar's Attendant
 Dromoka Warrior
 Dross Crocodile
 Dross Ripper
+Drown in Shapelessness
 Drowned Rusalka
 Druid Lyrist
 Druid of the Cowl
@@ -401,6 +410,7 @@ Esper Cormorants
 Essence Drain
 Essence Extraction
 Eviscerate
+Exclusion Mage
 Exocomp
 Exorcist
 Expedition Envoy
@@ -617,6 +627,7 @@ Hitchclaw Recluse
 Hoar Shade
 Hollowhenge Beast
 Honey Mammoth
+Hoodwink
 Hoof Skulkin
 Horizon Scholar
 Horn of Ramos
@@ -635,6 +646,7 @@ Hyena Pack
 Icatian Priest
 Ice Storm
 Ice Tunnel
+Iceridge Serpent
 Icewind Elemental
 Idyllic Beachfront
 Impale
@@ -688,6 +700,7 @@ Kalonian Tusker
 Kamahl, Pit Fighter
 Kami of Ancient Law
 Kami of Old Stone
+Karakas
 Kasimir the Lone Wolf
 Kavu Climber
 Keen-Eyed Archers
@@ -731,6 +744,7 @@ Lazotep Behemoth
 Leaden Myr
 Leaf Gilder
 Leatherback Baloth
+Leave in the Dust
 Leonin Skyhunter
 Leopard-Spotted Jiao
 Library Larcenist
@@ -768,6 +782,7 @@ Mahamoti Djinn
 Makindi Aeronaut
 Makindi Griffin
 Mammoth Spider
+Man-o'-War
 Manakin
 Mandroid Squadron
 Maned Serval
@@ -800,6 +815,7 @@ Mind Stone
 Minotaur Abomination
 Minotaur Warrior
 Misshapen Fiend
+Mist Raven
 Mistral Charger
 Moaning Spirit
 Mogg Fanatic
@@ -831,6 +847,7 @@ Naga Eternal
 Nantuko Disciple
 Nantuko Elder
 Nantuko Shade
+Narrow Escape
 Natural End
 Naturalize
 Nebula Dragon
@@ -843,11 +860,13 @@ Nessian Courser
 Nest Robber
 Nether Horror
 Nettle Swine
+Neurok Replica
 New Benalia
 Nezumi Informant
 Nezumi Shadow-Watcher
 Night of Souls' Betrayal
 Night's Whisper
+Nightscape Master
 Nightshade Stinger
 Nimble Birdsticker
 Nimble Innovator
@@ -987,7 +1006,9 @@ Regal Unicorn
 Regathan Firecat
 Renegade Demon
 Renegade Troops
+Repulse
 Repulsor Rays
+Rescue
 Research Assistant
 Resupply
 Retrieval Agent
@@ -1184,6 +1205,7 @@ Spare Supplies
 Spark Jolt
 Spark Reaper
 Sparkmage Apprentice
+Spectral Shepherd
 Spike Jester
 Spin Out
 Spinal Villain
@@ -1211,6 +1233,8 @@ Staunch Defenders
 Staunch Shieldmate
 Steadfast Guard
 Steadfast Paladin
+Stern Dismissal
+Stern Proctor
 Steward of Valeron
 Stolen Grain
 Stone Golem
@@ -1259,6 +1283,7 @@ Swordwise Centaur
 Sworn Guardian
 Sylvan Brushstrider
 Sylvok Replica
+Symbol of Unsummoning
 Sythis, Harvest's Hand
 Taiga
 Tajuru Snarecaster
@@ -1356,6 +1381,7 @@ Undead Minotaur
 Underground Sea
 Unfriendly Fire
 Unhallowed Phalanx
+Unsummon
 Unyaro Bee Sting
 Updraft Elemental
 Ur-Golem's Eye
@@ -1373,6 +1399,7 @@ Vampiric Touch
 Vastwood Gorger
 Vault of Whispers
 Vedalken Archmage
+Vedalken Mastermind
 Venerable Lammasu
 Venerable Monk
 Verdigris
@@ -1393,6 +1420,7 @@ Vizzerdrix
 Vodalian Merchant
 Vodalian Soldiers
 Void Helix
+Void Snare
 Volatile Fjord
 Volcanic Dragon
 Volcanic Hammer
@@ -1400,6 +1428,7 @@ Volcanic Island
 Volcanic Upheaval
 Volunteer Militia
 Vorstclaw
+Voyage's End
 Vulshok Berserker
 Vulshok Sorcerer
 Wakandan Drone Flock
@@ -1478,4 +1507,4 @@ Zuko's Offense
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1475`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1504`;
