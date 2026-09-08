@@ -28,6 +28,8 @@ import {
 } from "./utils/engine-helpers.ts";
 
 registerCardFixture("h/herald_of_faith");
+registerCardFixture("f/flying_men");
+registerCardFixture("g/giant_spider");
 registerCardFixture("r/raging_goblin");
 
 /** One attacker-eligible creature plus enough library to survive a full turn. */
@@ -266,7 +268,7 @@ describe("declaring attackers", () => {
 });
 
 describe("declaring blockers", () => {
-	function declareBlockersSetup(): {
+	function declareBlockersSetup(attackerCard = "grizzly-bears"): {
 		state: GameState;
 		agents: Agents;
 		attacker: ReturnType<typeof spawnPermanent>;
@@ -276,7 +278,7 @@ describe("declaring blockers", () => {
 		const agents: Agents = [attackerAgent, new ScriptedAgent()];
 		spawnCard(state, "forest", ALICE, "library");
 		spawnCard(state, "forest", BOB, "library");
-		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
+		const attacker = spawnPermanent(state, attackerCard, ALICE);
 		attackerAgent.attackerChoices.push([attacker.id]);
 		while (!isTurnStep(state, "declare blockers")) {
 			advance(state, agents);
@@ -321,6 +323,78 @@ describe("declaring blockers", () => {
 		// perform() logs the attempted event before validation; gameplay state is
 		// otherwise unchanged by the rejected declaration.
 		expect({ ...state, log: before.log }).toEqual(before);
+	});
+
+	test("a creature without flying or reach cannot block a flying attacker", () => {
+		const { state, agents, attacker } = declareBlockersSetup("herald-of-faith");
+		const bear = spawnPermanent(state, "grizzly-bears", BOB);
+
+		expect(eligibleBlockers(state, BOB)).toEqual([bear.id]);
+		expect(eligibleBlockers(state, BOB, attacker.id)).toEqual([]);
+		const before = structuredClone(state);
+		expect(() =>
+			perform(
+				state,
+				{
+					kind: "declare blockers",
+					player: BOB,
+					blockers: [{ blocker: bear.id, attacker: attacker.id }],
+				},
+				agents,
+			),
+		).toThrow(IllegalBlockDeclarationError);
+		expect({ ...state, log: before.log }).toEqual(before);
+	});
+
+	test("a creature with flying can block a flying attacker", () => {
+		const { state, agents, attacker } = declareBlockersSetup("herald-of-faith");
+		const blocker = spawnPermanent(state, "flying-men", BOB);
+
+		expect(eligibleBlockers(state, BOB, attacker.id)).toEqual([blocker.id]);
+		perform(
+			state,
+			{
+				kind: "declare blockers",
+				player: BOB,
+				blockers: [{ blocker: blocker.id, attacker: attacker.id }],
+			},
+			agents,
+		);
+		expect(permanent(state, blocker.id).blocking).toBe(true);
+	});
+
+	test("a creature with reach can block a flying attacker", () => {
+		const { state, agents, attacker } = declareBlockersSetup("herald-of-faith");
+		const blocker = spawnPermanent(state, "giant-spider", BOB);
+
+		expect(eligibleBlockers(state, BOB, attacker.id)).toEqual([blocker.id]);
+		perform(
+			state,
+			{
+				kind: "declare blockers",
+				player: BOB,
+				blockers: [{ blocker: blocker.id, attacker: attacker.id }],
+			},
+			agents,
+		);
+		expect(permanent(state, blocker.id).blocking).toBe(true);
+	});
+
+	test("a creature with flying can block a creature without flying", () => {
+		const { state, agents, attacker } = declareBlockersSetup();
+		const blocker = spawnPermanent(state, "flying-men", BOB);
+
+		expect(eligibleBlockers(state, BOB, attacker.id)).toEqual([blocker.id]);
+		perform(
+			state,
+			{
+				kind: "declare blockers",
+				player: BOB,
+				blockers: [{ blocker: blocker.id, attacker: attacker.id }],
+			},
+			agents,
+		);
+		expect(permanent(state, blocker.id).blocking).toBe(true);
 	});
 
 	test("a blocker assignment marks the blocker but does not tap it", () => {

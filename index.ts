@@ -1945,6 +1945,7 @@ export type Keyword =
 	| "indestructible"
 	| "lifelink"
 	| "flying"
+	| "reach"
 	| "haste"
 	| "vigilance";
 
@@ -2848,16 +2849,24 @@ export class IllegalAttackDeclarationError extends Error {
 }
 
 /**
- * The single source of truth for who may be declared as a blocker (CR 509.1a,
- * deliberately simplified): a creature controlled by the defending player,
- * untapped, currently on the battlefield. Blocking does not tap the blocker.
- * Battlefield order is preserved.
+ * The single source of truth for who may be declared as a blocker (CR 509.1a):
+ * a creature controlled by the defending player, untapped, currently on the
+ * battlefield, and able to block the given attacker. A creature with flying
+ * can be blocked only by a creature with flying or reach (CR 702.9b). Blocking
+ * does not tap the blocker. Battlefield order is preserved.
  */
 export function eligibleBlockers(
 	state: ReadonlyGameState,
 	player: PlayerId,
+	attacker?: ObjectId,
 ): ObjectId[] {
 	const read = createReadContext(state);
+	const attackerSnapshot =
+		attacker === undefined ? undefined : readObject(read, attacker);
+	if (attackerSnapshot !== undefined) {
+		assert(attackerSnapshot.kind === "permanent");
+		assert(attackerSnapshot.currentCharacteristics.kind === "creature");
+	}
 	return state.battlefield.filter((id) => {
 		const object = state.objects.get(id);
 		const snapshot = read.view.objects.get(id);
@@ -2867,6 +2876,12 @@ export function eligibleBlockers(
 			object.tapped ||
 			snapshot?.kind !== "permanent" ||
 			!snapshot.currentCharacteristics.types.includes("creature")
+		)
+			return false;
+		if (
+			attackerSnapshot?.currentCharacteristics.keywords.includes("flying") &&
+			!snapshot.currentCharacteristics.keywords.includes("flying") &&
+			!snapshot.currentCharacteristics.keywords.includes("reach")
 		)
 			return false;
 		return !snapshot.currentCharacteristics.abilities.static.some(
@@ -5398,6 +5413,11 @@ function executeIn(
 				if (!attackingIds.has(attacker)) {
 					throw new IllegalBlockDeclarationError(
 						`${name(state, attacker)} is not a legal attacker to be blocked`,
+					);
+				}
+				if (!eligibleBlockers(state, ev.player, attacker).includes(blocker)) {
+					throw new IllegalBlockDeclarationError(
+						`${name(state, blocker)} cannot block ${name(state, attacker)}`,
 					);
 				}
 			}

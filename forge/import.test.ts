@@ -540,6 +540,12 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
+	test("Giant Spider keeps Reach", () => {
+		const result = importFixture("g/giant_spider");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.keywords).toEqual(["reach"]);
+	});
+
 	test("Raging Goblin keeps Haste", () => {
 		const result = importFixture("r/raging_goblin");
 		if (!result.ok) throw new Error("expected ok");

@@ -30,6 +30,9 @@ import {
 	startGame,
 	type TurnId,
 } from "../index.ts";
+import { registerCardFixture } from "./utils/engine-helpers.ts";
+
+registerCardFixture("f/flying_men");
 
 function agents(first = new ScriptedAgent()): [SyncAgent, SyncAgent] {
 	return [first, new ScriptedAgent()];
@@ -678,6 +681,43 @@ describe("chooseBlockers", () => {
 		const recorder = ChoiceController.record(agents());
 		const result = recorder.chooseBlockers(state, 1, [attacker], []);
 		expect(result).toEqual([]);
+		expect(recorder.transcript().choices).toHaveLength(0);
+	});
+
+	test("does not offer a ground creature as a blocker for a flying attacker", () => {
+		const state = newGame();
+		const attacker = spawnPermanent(state, "flying-men", 0).id;
+		const ground = spawnPermanent(state, "grizzly-bears", 1).id;
+		const flying = spawnPermanent(state, "flying-men", 1).id;
+		const agent: Agent = {
+			choose(_state, request) {
+				expect(request.options.map((option) => option.id)).toEqual([
+					blockAssignmentOptionId(flying, attacker),
+				]);
+				return { optionIds: [] };
+			},
+		};
+		const recorder = ChoiceController.record([
+			agent as SyncAgent,
+			agent as SyncAgent,
+		]);
+
+		expect(
+			recorder.chooseBlockers(state, 1, [attacker], [ground, flying]),
+		).toEqual([]);
+		const request = recorder.transcript().choices[0]?.request;
+		expect(request?.kind).toBe("declareBlockers");
+		if (request?.kind !== "declareBlockers") return;
+		expect(request.context.eligibleBlockers).toEqual([flying]);
+	});
+
+	test("does not request a choice when no creature can block a flying attacker", () => {
+		const state = newGame();
+		const attacker = spawnPermanent(state, "flying-men", 0).id;
+		const ground = spawnPermanent(state, "grizzly-bears", 1).id;
+		const recorder = ChoiceController.record(agents());
+
+		expect(recorder.chooseBlockers(state, 1, [attacker], [ground])).toEqual([]);
 		expect(recorder.transcript().choices).toHaveLength(0);
 	});
 

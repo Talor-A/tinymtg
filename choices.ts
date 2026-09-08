@@ -17,7 +17,13 @@ import type {
 	TriggeredAbilityStackItem,
 	TurnLocation,
 } from "./index.ts";
-import { activePlayer, buildPlayerView, name, turnLocation } from "./index.ts";
+import {
+	activePlayer,
+	buildPlayerView,
+	eligibleBlockers as eligibleBlockersFor,
+	name,
+	turnLocation,
+} from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
 
 function objectLabel(state: GameState, id: ObjectId): string {
@@ -970,18 +976,24 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		const candidates: { id: string; value: BlockAssignment }[] = [];
 		for (const blocker of eligibleBlockers) {
 			for (const attacker of attackers) {
+				if (!eligibleBlockersFor(state, player, attacker).includes(blocker))
+					continue;
 				candidates.push({
 					id: blockAssignmentOptionId(blocker, attacker),
 					value: { blocker, attacker },
 				});
 			}
 		}
+		if (candidates.length === 0) return [];
+		const offeredBlockers = eligibleBlockers.filter((blocker) =>
+			candidates.some((candidate) => candidate.value.blocker === blocker),
+		);
 		const request = this.request({
 			kind: "declareBlockers",
 			player,
 			context: {
 				attackers: [...attackers],
-				eligibleBlockers: [...eligibleBlockers],
+				eligibleBlockers: offeredBlockers,
 			},
 			options: candidates.map((candidate) => ({
 				id: candidate.id,

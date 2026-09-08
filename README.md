@@ -78,7 +78,7 @@ accepted. A recognized keyword is never silently dropped: every root `A`, `T`,
 `R`, `S`, and `K` rule on a card either lowers or the whole card is rejected.
 
 The current subset covers: literal characteristics (name, mana cost, types,
-colors, P/T); the keywords Flying, Lifelink, Indestructible, and Vigilance;
+colors, P/T); the keywords Flying, Reach, Lifelink, Indestructible, and Vigilance;
 literal entry-counter shorthand and both canonical enters-tapped `R:` forms —
 the self form (`ValidCard$ Card.Self`, e.g. Charcoal Diamond) lowers directly
 to `CardDefInput.entersTapped`, and the global form (a supported selector
@@ -158,8 +158,9 @@ Attack restrictions, requirements, and costs, and non-player defenders (e.g.
 planeswalkers and battles) are not implemented. The defending player may assign
 each untapped creature they control to at most one attacker, with multiple
 blockers allowed on one attacker. Aesthir Glider's unconditional self
-restriction is the only supported effect that changes blocker eligibility;
-blocking requirements, costs, and evasion abilities are not implemented.
+restriction changes blocker eligibility. A creature with flying can be blocked
+only by a creature with flying or reach. Other blocking requirements, costs,
+and evasion abilities are not implemented.
 
 ### Combat damage
 
