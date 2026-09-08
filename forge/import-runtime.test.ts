@@ -71,6 +71,7 @@ registerRuntimeFixture("p/preordain", "rt-preordain");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
+registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
 registerCardFixture("d/darksteel_relic");
 
 /**
@@ -451,6 +452,30 @@ describe("forge-import runtime: spell effects", () => {
 });
 
 describe("forge-import runtime: activated abilities", () => {
+	test("Timeless Lotus's imported fixed list adds W/U and the other symbols in one activation", () => {
+		const state = setupMain();
+		const lotus = spawnPermanent(state, "rt-timeless-lotus", ALICE);
+		const ability = abilityId("activated", "rt-timeless-lotus", 0);
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: lotus.id, ability },
+			passingAgents(),
+		);
+
+		expect(permanent(state, lotus.id).tapped).toBe(true);
+		expect(state.players[ALICE].manaPool).toEqual({
+			w: 1,
+			u: 1,
+			b: 1,
+			r: 1,
+			g: 1,
+			c: 0,
+		});
+		expect(state.stack).toHaveLength(0);
+	});
+
 	test("Llanowar Elves' imported mana ability taps and adds green mana immediately", () => {
 		const state = setupMain();
 		const elves = spawnPermanent(state, "rt-llanowar-elves", ALICE);

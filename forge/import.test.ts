@@ -57,6 +57,7 @@ const POSITIVE_FIXTURES = [
 	"p/prodigal_sorcerer",
 	"f/flametongue_kavu",
 	"m/manic_vandal",
+	"t/timeless_lotus",
 	"w/wastes",
 ];
 
@@ -105,6 +106,49 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			{ id: "test-hybrid" },
 		);
 		expect(result.ok).toBe(false);
+	});
+
+	test("Produced$ W U is one ability with one fixed W/U effect", () => {
+		const result = importText(
+			"Name:Fixed WU Probe\nManaCost:2\nTypes:Artifact\nA:AB$ Mana | Cost$ T | Produced$ W U | SpellDescription$ Add {W}{U}.\nOracle:\n",
+		);
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "mana",
+				id: "activated-1",
+				text: "Add {W}{U}.",
+				costs: [{ kind: "tap-self" }],
+				effects: [
+					{
+						kind: "add-mana",
+						player: "you",
+						mana: { w: 1, u: 1, b: 0, r: 0, g: 0, c: 0 },
+					},
+				],
+			},
+		]);
+	});
+
+	test("imports the checked-in Timeless Lotus fixed list without modal choices", () => {
+		// Timeless Lotus's checked-in definition says `Produced$ W U B R G`.
+		const result = importFixture("t/timeless_lotus");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "mana",
+				id: "activated-1",
+				text: "Add {W}{U}{B}{R}{G}.",
+				costs: [{ kind: "tap-self" }],
+				effects: [
+					{
+						kind: "add-mana",
+						player: "you",
+						mana: { w: 1, u: 1, b: 1, r: 1, g: 1, c: 0 },
+					},
+				],
+			},
+		]);
 	});
 
 	test("Produced$ C lowers to colorless mana", () => {
@@ -964,15 +1008,38 @@ describe("lowerForgeCard: hardening regressions", () => {
 			expect(random.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 	});
 
-	test("rejects the produced-mana forms that name a choice, not a symbol", () => {
-		for (const produced of ["Any", "Combo W U", "Chosen", "W U", "CW"]) {
+	test("rejects choice, variable, malformed, and unsupported Produced$ forms with diagnostics", () => {
+		for (const produced of [
+			"Any", // choice
+			"Combo W U", // modal choice
+			"Chosen", // variable
+			"W  U", // malformed fixed-list separator
+			"WU", // unsupported compact form
+		]) {
 			const result = importText(
 				`Name:Bad Land\nManaCost:no cost\nTypes:Land\nA:AB$ Mana | Cost$ T | Produced$ ${produced} | SpellDescription$ x.\nOracle:\n`,
 			);
 			expect(result.ok, `Produced$ ${produced}`).toBe(false);
 			if (result.ok) return;
-			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+			expect(result.diagnostics[0]).toMatchObject({
+				code: "UNSUPPORTED_EFFECT",
+				message: `unsupported produced mana ${produced}`,
+			});
+			expect(result.diagnostics[0]?.nodeId).toBeDefined();
+			expect(result.diagnostics[0]?.line).toBeDefined();
 		}
+	});
+
+	test("rejects an Amount$ on a fixed Produced$ list as an unsupported quantity", () => {
+		const result = importText(
+			"Name:Bad Land\nManaCost:no cost\nTypes:Land\nA:AB$ Mana | Cost$ T | Produced$ W U | Amount$ 2 | SpellDescription$ x.\nOracle:\n",
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message: "unsupported mana amount 2",
+		});
 	});
 
 	test("a dynamic mana amount rejects on the amount, not the symbol", () => {
