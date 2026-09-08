@@ -50,6 +50,7 @@ const POSITIVE_FIXTURES = [
 	"r/root_maze",
 	"c/charcoal_diamond",
 	"d/diregraf_ghoul",
+	"r/raging_goblin",
 	"f/faithful_watchdog",
 	"s/soulmender",
 	"m/merfolk_looter",
@@ -534,6 +535,12 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
 			},
 		]);
+	});
+
+	test("Raging Goblin keeps Haste", () => {
+		const result = importFixture("r/raging_goblin");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.keywords).toEqual(["haste"]);
 	});
 
 	test("Glorious Anthem is a controlled-creature +1/+1 static", () => {

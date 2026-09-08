@@ -5,6 +5,7 @@ exports[`the accepted-card list matches its snapshot: accepted card names 1`] = 
 A.I.M. Bot
 Aardvark Sloth
 Abbey Griffin
+Adult Gold Dragon
 Adventurer's Inn
 Aegis Turtle
 Aerial Responder
@@ -79,6 +80,7 @@ Badlands
 Balduvian Barbarians
 Balduvian Bears
 Bane Alley Blackguard
+Banehound
 Barbarian Horde
 Barbary Apes
 Barbtooth Wurm
@@ -119,12 +121,16 @@ Boreal Druid
 Boros Signet
 Braidwood Cup
 Bramblecrush
+Brazen Scourge
+Breakneck Berserker
 Breath of Fire
 Brilliant Plan
+Brimstone Dragon
 Broadside Barrage
 Bronze Sable
 Broodhunter Wurm
 Brushstrider
+Bull Cerodon
 Bulwark Giant
 Burglar Rat
 Burning Fields
@@ -146,6 +152,7 @@ Catalog
 Cathedral Sanctifier
 Centaur Courser
 Centaur Healer
+Cerodon Yearling
 Champion of Arashin
 Chandler
 Chapel Geist
@@ -188,6 +195,7 @@ Craterize
 Craven Giant
 Craven Knight
 Craw Wurm
+Crazed Skirge
 Creeping Mold
 Crimson Kobolds
 Crooked Custodian
@@ -196,6 +204,7 @@ Crush
 Cryptic Annelid
 Crystal Ball
 Crystal Quarry
+Cunning Sparkmage
 Curio Vendor
 Curious Killbot
 Cursebreak
@@ -248,6 +257,7 @@ Doom Blade
 Dosan's Oldest Chant
 Douse in Gloom
 Douser of Lights
+Dragon Moose
 Dragonborn Looter
 Dread Reaper
 Dread of Night
@@ -322,6 +332,7 @@ Fire Ambush
 Fire Diamond
 Fire Elemental
 Fire Imp
+Fire Nation Soldier
 Fire Sprites
 Flame Lash
 Flame Slash
@@ -380,6 +391,7 @@ Goblin Assailant
 Goblin Bruiser
 Goblin Bully
 Goblin Cavaliers
+Goblin Chariot
 Goblin Commando
 Goblin Glider
 Goblin Hero
@@ -446,8 +458,10 @@ Honey Mammoth
 Horizon Scholar
 Horned Turtle
 Hornet Sting
+Hostile Minotaur
 Hovermyr
 Huatli's Snubhorn
+Hulking Bugbear
 Hulking Cyclops
 Hulking Devil
 Hulking Goblin
@@ -472,6 +486,7 @@ Inspiring Cleric
 Introduction to Prophecy
 Invoke the Divine
 Iron Myr
+Iron-Barb Hellion
 Ironclad Krovod
 Ironroot Treefolk
 Isamaru, Hound of Konda
@@ -497,6 +512,7 @@ Jwari Scuttler
 Kabira Crossroads
 Kalakscion, Hunger Tyrant
 Kalonian Tusker
+Kamahl, Pit Fighter
 Kami of Old Stone
 Kasimir the Lone Wolf
 Kavu Climber
@@ -536,10 +552,13 @@ Leonin Skyhunter
 Leopard-Spotted Jiao
 Library Larcenist
 Lich's Caress
+Lightning Angel
 Lightning Blast
 Lightning Bolt
+Lightning Elemental
 Lightning Helix
 Lightning Javelin
+Lightning Stormkin
 Lightning Strike
 Liliana's Specter
 Lizard Warrior
@@ -566,6 +585,7 @@ Manakin
 Mandroid Squadron
 Maned Serval
 Manic Vandal
+Mantis Rider
 Marble Chalice
 Marble Diamond
 Maritime Guard
@@ -601,6 +621,7 @@ Moss Monster
 Mosscoat Goriak
 Mossfire Valley
 Mountain
+Mountain Bandit
 Muck Rats
 Murasa Brute
 Murder
@@ -614,6 +635,7 @@ Necrogen Mists
 Necrogen Scudder
 Nema Siltlurker
 Nessian Courser
+Nest Robber
 Nether Horror
 Nettle Swine
 New Benalia
@@ -636,7 +658,9 @@ Nyxborn Seaguard
 Obsianus Golem
 Obsidian Giant
 Octoprophet
+Oggyar Battle-Seer
 Ogre Arsonist
+Ogre Berserker
 Ogre Resister
 Ogre Taskmaster
 Ogre Warrior
@@ -690,21 +714,27 @@ Prodigal Sorcerer
 Prophet of the Peak
 Prowling Caracal
 Pyroclastic Elemental
+Pyromantic Pilgrim
 Python
 Quakestrider Ceratops
 Queen's Bay Soldier
 Quick Study
 Quicksilver Fisher
+Quicksilver, Pietro Maximoff
 Quiet Purity
 Quilled Slagwurm
 Radiant Fountain
 Radiant Grove
 Ragefire
 Raging Bull
+Raging Cougar
+Raging Goblin
+Raging Minotaur
 Raging Poltergeist
 Raging Regisaur
 Rain of Revelation
 Rain of Tears
+Rakdos Ragemutt
 Rakdos Signet
 Rambunctious Mutt
 Raptor Companion
@@ -724,6 +754,7 @@ Redwood Treefolk
 Regal Unicorn
 Regathan Firecat
 Renegade Demon
+Renegade Troops
 Repulsor Rays
 Research Assistant
 Resupply
@@ -734,6 +765,7 @@ Rhox Oracle
 Rhox War Monk
 Rimewood Falls
 Riot Devils
+Rip-Clan Crasher
 Risen Sanctuary
 Ritual of Rejuvenation
 Riven Turnbull
@@ -745,6 +777,7 @@ Rod of Ruin
 Romantic Rendezvous
 Root Maze
 Rootwater Hunter
+Rorix Bladewing
 Rotted Hulk
 Rotted Hystrix
 Rotting Fensnake
@@ -853,6 +886,7 @@ Sky-Eel School
 Skyblade of the Legion
 Skycloud Expanse
 Skyhunter Prowler
+Skyknight Legionnaire
 Skyscanner
 Skyshroud Falcon
 Skyshroud Troopers
@@ -863,6 +897,7 @@ Sliver Construct
 Smash
 Smelt
 Snapping Drake
+Snare Thopter
 Snow-Covered Forest
 Snow-Covered Island
 Snow-Covered Mountain
@@ -883,6 +918,7 @@ Southern Elephant
 Southern Paladin
 Spark Jolt
 Sparkmage Apprentice
+Spike Jester
 Spin Out
 Spinal Villain
 Spined Karok
@@ -915,6 +951,7 @@ Stonework Puma
 Stony-Voiced Goblins
 Storm Crow
 Storm Spirit
+Stormcaller of Keranos
 Stormcloud Spirit
 Stormfront Pegasus
 Story Seeker
@@ -950,6 +987,7 @@ Talas Air Ship
 Talas Merchant
 Talas Scout
 Talon Trooper
+Talruum Minotaur
 Tamiyo's Epiphany
 Tanglebloom
 Tangled Islet
@@ -958,6 +996,7 @@ Teferi's Protege
 Tel-Jilad Justice
 Tempest Drake
 Temple Acolyte
+Tenement Crasher
 Teroh's Faithful
 Terrain Elemental
 Terrian, World Tyrant
@@ -973,6 +1012,7 @@ Thought Courier
 Thraben Purebloods
 Thraben Valiant
 Thran Dynamo
+Thundering Giant
 Thundering Rebuke
 Tidepool Turtle
 Tidings
@@ -1044,11 +1084,14 @@ Vodalian Merchant
 Vodalian Soldiers
 Void Helix
 Volatile Fjord
+Volcanic Dragon
 Volcanic Hammer
 Volcanic Island
 Volcanic Upheaval
 Volunteer Militia
 Vorstclaw
+Vulshok Berserker
+Vulshok Sorcerer
 Wakandan Drone Flock
 Walking Corpse
 Wandering Ones
@@ -1072,6 +1115,7 @@ Whiptail Wurm
 Whitesun's Passage
 Wicker Witch
 Wild Ceratok
+Wild Colos
 Wild Griffin
 Wild Jhovall
 Willow Elf
@@ -1116,4 +1160,4 @@ Zuko's Offense
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1113`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1157`;

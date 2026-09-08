@@ -41,6 +41,7 @@ import type {
 	Color,
 	EffectDef,
 	GameEvent,
+	Keyword,
 	ManaCostType,
 	ManaPool,
 	ManaType,
@@ -139,10 +140,7 @@ const PRODUCED_MANA_SYMBOLS = new Map<string, ManaType>([
 	["G", "g"],
 	["C", "c"],
 ]);
-const BARE_KEYWORDS = new Map<
-	string,
-	"indestructible" | "lifelink" | "flying" | "haste" | "vigilance"
->([
+const BARE_KEYWORDS = new Map<string, Keyword>([
 	["Flying", "flying"],
 	["Lifelink", "lifelink"],
 	["Indestructible", "indestructible"],
@@ -1582,14 +1580,7 @@ export function lowerForgeCard(
 		return reject(issue("UNSUPPORTED_PARAMETER", "creatures require PT$"));
 	}
 
-	const keywords: (
-		| "indestructible"
-		| "lifelink"
-		| "flying"
-		| "haste"
-		| "vigilance"
-	)[] =
-		[];
+	const keywords: Keyword[] = [];
 	const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
 	for (const record of face.keywordRecords) {
 		const where = { nodeId: record.source.nodeId, line: record.source.line };
