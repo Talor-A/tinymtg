@@ -65,6 +65,7 @@ registerRuntimeFixture("a/aesthir_glider", "rt-aesthir-glider");
 registerRuntimeFixture("r/root_maze", "rt-root-maze");
 registerRuntimeFixture("f/faithful_watchdog", "rt-faithful-watchdog");
 registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
+registerRuntimeFixture("w/wall_of_omens", "rt-wall-of-omens");
 registerRuntimeFixture("a/arcanis_the_omnipotent", "rt-arcanis");
 registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
@@ -243,6 +244,26 @@ describe("forge-import runtime: triggers", () => {
 
 		settlePriority(state, agents);
 		expect(state.players[ALICE].life).toBe(23);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Wall of Omens' imported ETB trigger draws a card on resolution", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		stockLibraries(state);
+		beginFirstTurn(state, agents);
+		const librarySize = state.players[ALICE].library.length;
+
+		enterFromHand(state, "rt-wall-of-omens", ALICE, agents);
+
+		expect(
+			state.players[ALICE].library,
+			"trigger has not resolved yet",
+		).toHaveLength(librarySize);
+		expect(state.pendingTriggers).toHaveLength(1);
+
+		settlePriority(state, agents);
+		expect(state.players[ALICE].library).toHaveLength(librarySize - 1);
 		expect(state.stack).toHaveLength(0);
 	});
 

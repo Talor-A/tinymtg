@@ -39,6 +39,7 @@ const POSITIVE_FIXTURES = [
 	"p/preordain",
 	"s/sorins_thirst",
 	"a/arashin_cleric",
+	"w/wall_of_omens",
 	"a/arcanis_the_omnipotent",
 	"a/ajanis_mantra",
 	"n/necrogen_mists",
@@ -1099,6 +1100,26 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		expect(() => importForgeCard(text, { id: "missing-token-maker" })).toThrow(
 			"missing Forge token script token_script_that_is_not_vendored",
 		);
+	});
+
+	test("Wall of Omens keeps Defender and its entry trigger", () => {
+		const result = importFixture("w/wall_of_omens");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.keywords).toEqual(["defender"]);
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigDraw",
+				text: "When CARDNAME enters, draw a card.",
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: { kind: "self" },
+				},
+				targets: [],
+				effects: [{ kind: "draw", player: "you", amount: 1 }],
+			},
+		]);
 	});
 
 	test("Raging Goblin keeps Haste", () => {

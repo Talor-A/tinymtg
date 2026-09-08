@@ -158,6 +158,7 @@ const PRODUCED_MANA_SYMBOLS = new Map<string, ManaType>([
 const BARE_KEYWORDS = new Map<string, Keyword>([
 	["Flying", "flying"],
 	["Reach", "reach"],
+	["Defender", "defender"],
 	["Lifelink", "lifelink"],
 	["Indestructible", "indestructible"],
 	["Haste", "haste"],
