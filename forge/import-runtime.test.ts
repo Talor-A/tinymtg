@@ -70,6 +70,7 @@ registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("p/preordain", "rt-preordain");
 registerRuntimeFixture("c/consider", "rt-consider");
+registerRuntimeFixture("v/village_rites", "rt-village-rites");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
@@ -639,6 +640,50 @@ describe("forge-import runtime: spell effects", () => {
 		expect(state.players[ALICE].library[0]).toBe(first);
 		expect(state.players[ALICE].library.at(-1)).toBe(bottom);
 		expect(agents[ALICE].scryChoices).toHaveLength(0);
+	});
+
+	test("Village Rites' imported additional cost sacrifices before it draws", () => {
+		const state = setupMain();
+		// The end of a library array is its top, so these two are drawn first.
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "darksteel-relic", ALICE, "library");
+		const fodder = spawnPermanent(state, "rt-grizzly-bears", ALICE).id;
+		const spell = spawnCard(state, "rt-village-rites", ALICE, "hand");
+		perform(
+			state,
+			{ kind: "add mana", source: spell.id, player: ALICE, mana: { b: 1 } },
+			passingAgents(),
+		);
+		const agents = passingAgents();
+		agents[ALICE].sacrificeChoices.push(fodder);
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		// The creature is gone as a cost, while the spell is still on the stack:
+		// CR 601.2h pays costs during casting, not on resolution.
+		expect(state.battlefield).not.toContain(fodder);
+		expect(state.players[ALICE].hand).not.toContain(spell.id);
+		settlePriority(state, agents);
+
+		// Names, not ids: a zone change creates a new object (CR 400.7), so the
+		// cards that arrive in hand are not the objects that were in the library.
+		const hand = state.players[ALICE].hand.map((id) => name(state, id));
+		expect(hand).toContain("Forest");
+		expect(hand).toContain("Darksteel Relic");
+		expect(agents[ALICE].sacrificeChoices).toHaveLength(0);
+	});
+
+	test("Village Rites is not castable with no creature to sacrifice", () => {
+		const state = setupMain();
+		const spell = spawnCard(state, "rt-village-rites", ALICE, "hand");
+		perform(
+			state,
+			{ kind: "add mana", source: spell.id, player: ALICE, mana: { b: 1 } },
+			passingAgents(),
+		);
+		const castable = getObservableActions(state, ALICE).some(
+			(action) => action.kind === "cast" && action.card === spell.id,
+		);
+		expect(castable).toBe(false);
 	});
 
 	test("Consider's imported surveil moves the chosen card before drawing", () => {

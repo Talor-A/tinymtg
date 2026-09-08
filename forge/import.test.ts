@@ -1112,6 +1112,35 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
+	test("Village Rites lowers its additional sacrifice cost", () => {
+		const result = importFixture("v/village_rites");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.spell).toEqual({
+			id: "spell-1",
+			text: "Draw two cards.",
+			additionalCost: {
+				kind: "sacrifice",
+				selector: { kind: "type", type: "creature" },
+				amount: 1,
+			},
+			targets: [],
+			effects: [{ kind: "draw", player: "you", amount: 2 }],
+		});
+	});
+
+	test("an additional cost does not double-charge the printed mana cost", () => {
+		// `Cost$ R Sac<1/Creature>` restates the {R} from `ManaCost:`. The {R} must
+		// land on the card once, and only the sacrifice may reach the spell.
+		const result = importFixture("r/reckless_abandon");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.manaCost).toEqual({ r: 1 });
+		expect(result.card.spell?.additionalCost).toEqual({
+			kind: "sacrifice",
+			selector: { kind: "type", type: "creature" },
+			amount: 1,
+		});
+	});
+
 	test("Giant Growth lowers to a temporary P/T instruction", () => {
 		const result = importFixture("g/giant_growth");
 		if (!result.ok) throw new Error("expected ok");
@@ -1148,7 +1177,10 @@ const NEGATIVE_FIXTURES = [
 	"r/rest_in_peace",
 	"i/into_the_maw_of_hell",
 	"e/eye_of_vecna",
-	"r/reckless_abandon",
+	// Additional costs the engine cannot express: a sacrifice whose selector is
+	// not "a creature you control", and a discard cost.
+	"r/raze",
+	"u/unexpected_windfall",
 ];
 
 describe("lowerForgeCard: required negative fixtures", () => {
@@ -1335,6 +1367,41 @@ describe("lowerForgeCard: required negative mutations", () => {
 			if (!result.ok)
 				expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 		}
+	});
+
+	test("rejects a spell Cost$ whose mana disagrees with ManaCost:", () => {
+		// Forge restates the mana cost inside Cost$. If the importer's two parses
+		// disagree, one of them is wrong, and accepting the card would price the
+		// spell at whichever line happened to win.
+		for (const cost of [
+			"Sac<1/Creature>",
+			"1 R Sac<1/Creature>",
+			"B Sac<1/Creature>",
+		]) {
+			const result = importText(
+				BOLT.replace("SP$ DealDamage |", `SP$ DealDamage | Cost$ ${cost} |`),
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok)
+				expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_COST");
+		}
+	});
+
+	test("accepts a spell Cost$ that restates ManaCost: and adds a sacrifice", () => {
+		const result = importText(
+			BOLT.replace(
+				"SP$ DealDamage |",
+				"SP$ DealDamage | Cost$ R Sac<1/Creature> |",
+			),
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.manaCost).toEqual({ r: 1 });
+		expect(result.card.spell?.additionalCost).toEqual({
+			kind: "sacrifice",
+			selector: { kind: "type", type: "creature" },
+			amount: 1,
+		});
 	});
 
 	test("rejects a supported spell plus an unknown keyword", () => {

@@ -50,10 +50,12 @@ import type {
 	ManaType,
 	ObjectId,
 	ObjectSelectorDef,
+	PayableActivationManaCost,
 	ReadContext,
 	RelativeEffectPlayer,
 	ReplacementEffectDefinition,
 	SpellAbilityDef,
+	SpellAdditionalCostDef,
 	StaticAbilityDefinition,
 	Supertype,
 	TargetDef,
@@ -2002,6 +2004,30 @@ function parseActivationCost(
 	};
 }
 
+/**
+ * Whether a spell's `Cost$` mana terms are the card's printed mana cost.
+ *
+ * Forge repeats the mana cost inside `Cost$` and appends the additional costs
+ * after it, so the two must agree. They are separate parses of separate lines,
+ * and a disagreement means the importer has misread one of them — charging the
+ * `Cost$` mana on top of `ManaCost:` would double the spell's price.
+ *
+ * `{C}` has no activation-cost spelling, so a colorless requirement can never
+ * be restated and is rejected here rather than silently dropped.
+ */
+function restatesManaCost(
+	restated: PayableActivationManaCost,
+	printed: CardDefInput["manaCost"],
+): boolean {
+	if (printed === "none") return false;
+	if (printed === "zero") return restated === "zero";
+	if (restated === "zero") return false;
+	if ((printed.c ?? 0) > 0) return false;
+	return (["w", "u", "b", "r", "g", "n"] as const).every(
+		(type) => (restated[type] ?? 0) === (printed[type] ?? 0),
+	);
+}
+
 function manaCostColors(mana: CardDefInput["manaCost"]): Color[] {
 	if (mana === "none" || mana === "zero") return [];
 	return (["w", "u", "b", "r", "g"] as const).filter(
@@ -2478,14 +2504,44 @@ export function lowerForgeCard(
 			continue;
 		}
 
-		if (disc.token === "SP" && getForgeParam(params, "Cost") !== undefined) {
-			return reject(
-				issue(
-					"UNSUPPORTED_COST",
-					"additional spell costs are unsupported",
-					where,
-				),
-			);
+		// A spell's `Cost$` restates the printed mana cost and then appends the
+		// additional costs. Only the appended part is new information, so the
+		// mana part is checked against `ManaCost:` rather than charged again.
+		let additionalCost: SpellAdditionalCostDef | undefined;
+		if (disc.token === "SP") {
+			const costText = getForgeParam(params, "Cost");
+			if (costText !== undefined) {
+				const parsed = parseActivationCost(costText, where);
+				if ("code" in parsed) return reject(parsed);
+				const restated = restatesManaCost(parsed.mana, manaCost);
+				if (parsed.tapSelf || !restated || !parsed.sacrifice) {
+					return reject(
+						issue(
+							"UNSUPPORTED_COST",
+							`unsupported additional spell cost ${costText}`,
+							where,
+						),
+					);
+				}
+				// The engine models exactly one additional cost: sacrifice one
+				// creature you control. A narrower or wider selector (Sac<1/Goblin>,
+				// Sac<1/Permanent>) would change which permanents pay it.
+				const selector = parsed.sacrifice.selector;
+				if (!(selector.kind === "type" && selector.type === "creature")) {
+					return reject(
+						issue(
+							"UNSUPPORTED_COST",
+							`unsupported additional sacrifice cost ${costText}`,
+							where,
+						),
+					);
+				}
+				additionalCost = {
+					kind: "sacrifice",
+					selector: { kind: "type", type: "creature" },
+					amount: 1,
+				};
+			}
 		}
 		if (
 			disc.token === "SP" &&
@@ -2542,6 +2598,7 @@ export function lowerForgeCard(
 			spell = {
 				id: `spell-${spellCount}`,
 				text: description,
+				...(additionalCost ? { additionalCost } : {}),
 				targets,
 				effects: chain.effects,
 			};

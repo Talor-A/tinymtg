@@ -298,6 +298,7 @@ Coral Eel
 Coral Merfolk
 Corroding Dragonstorm
 Corrupt Eunuchs
+Corrupted Conviction
 Council of Advisors
 Counsel of the Soratami
 Counterspell
@@ -538,6 +539,7 @@ Ferocious Zheng
 Ferrous Lake
 Fetid Horror
 Field Creeper
+Fiery Conclusion
 Fiery Finish
 Fighting Drake
 Filigree Crawler
@@ -1215,6 +1217,7 @@ Razortip Whip
 Reach Through Mists
 Read the Bones
 Rearing Embermare
+Reckless Abandon
 Reckless Barbarian
 Reckless Fireweaver
 Reckless Pangolin
@@ -1416,6 +1419,7 @@ Skirk Prospector
 Skirsdag Cultist
 Skirsdag Flayer
 Skull of Ramos
+Skulltap
 Sky Diamond
 Sky Ruin Drake
 Sky-Eel School
@@ -1743,12 +1747,14 @@ Vicious Conquistador
 Vicious Hunger
 Vigilant Baloth
 Vigilante Justice
+Village Rites
 Viridescent Bog
 Viridian Shaman
 Viridian Zealot
 Viscera Seer
 Vithian Renegades
 Vitu-Ghazi, the City-Tree
+Vivisection
 Vizzerdrix
 Vodalian Merchant
 Vodalian Soldiers
@@ -1865,4 +1871,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1862`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1868`;
