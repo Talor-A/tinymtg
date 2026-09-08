@@ -297,9 +297,11 @@ function goingToGraveyard(ev: GameEvent): boolean {
 	return ev.kind === "change zone" && ev.to === "graveyard";
 }
 
-export const REST_IN_PEACE = registerCard({
-	id: "rest-in-peace",
-	name: "Rest in Peace",
+// This is the graveyard-replacement half of Rest in Peace. The real card's
+// ETB ability that exiles all graveyards is not implemented yet.
+export const BABY_REST_IN_PEACE = registerCard({
+	id: "baby-rest-in-peace",
+	name: "Baby Rest in Peace",
 	types: ["enchantment"],
 	colors: ["w"],
 	manaCost: {
@@ -310,7 +312,7 @@ export const REST_IN_PEACE = registerCard({
 		{
 			label: "rip",
 			layer: "other",
-			text: "If a card would be put into a graveyard from anywhere, exile it instead.",
+			text: "If a card or token would be put into a graveyard from anywhere, exile it instead.",
 			applies: (ev, ctx) => onBattlefield(ctx) && goingToGraveyard(ev),
 			replace: (ev) =>
 				ev.kind === "change zone" ? [{ ...ev, to: "exile" }] : [ev],

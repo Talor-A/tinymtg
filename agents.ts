@@ -50,6 +50,7 @@ export class ScriptedAgent implements SyncAgent {
 		public blockerChoices: BlockAssignment[][] = [],
 		public targetChoices: EntityRef[] = [],
 		public scryChoices: { top: ObjectId[]; bottom: ObjectId[] }[] = [],
+		public sacrificeChoices: ObjectId[] = [],
 	) {}
 
 	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
@@ -67,6 +68,13 @@ export class ScriptedAgent implements SyncAgent {
 				const target = this.targetChoices.shift();
 				return target
 					? { optionId: targetOptionId(target) }
+					: firstOption(request);
+			}
+
+			case "sacrifice": {
+				const permanent = this.sacrificeChoices.shift();
+				return permanent
+					? { optionId: String(permanent) }
 					: firstOption(request);
 			}
 
@@ -154,6 +162,7 @@ export class RandomAgent implements SyncAgent {
 			}
 			case "replacement":
 			case "target":
+			case "sacrifice":
 			case "ownHand":
 			case "optional":
 			case "priorityAction":
@@ -178,6 +187,11 @@ export class KeyboardAgent implements SyncAgent {
 				break;
 			case "ownHand":
 				console.log(`\n[Player ${request.player}: choose a card to discard]`);
+				break;
+			case "sacrifice":
+				console.log(
+					`\n[Player ${request.player}: choose a permanent to sacrifice]`,
+				);
 				break;
 			case "mana":
 				console.log(

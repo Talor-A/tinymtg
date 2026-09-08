@@ -49,6 +49,12 @@ export interface OwnHandChoiceRequest extends ChoiceRequestBase {
 	context: { hand: ObjectId[] };
 }
 
+/** Choosing a permanent to sacrifice is not targeting. */
+export interface SacrificeChoiceRequest extends ChoiceRequestBase {
+	kind: "sacrifice";
+	context: { permanents: ObjectId[] };
+}
+
 export interface OptionalChoiceRequest extends ChoiceRequestBase {
 	kind: "optional";
 	context: { ability: TriggeredAbilityStackItem | ActivatedAbilityStackItem };
@@ -138,6 +144,7 @@ export type ChoiceRequest =
 	| TargetChoiceRequest
 	| ReplacementChoiceRequest
 	| OwnHandChoiceRequest
+	| SacrificeChoiceRequest
 	| OptionalChoiceRequest
 	| PriorityActionChoiceRequest
 	| ManaChoiceRequest
@@ -227,6 +234,7 @@ type RequestInput =
 	| Omit<TargetChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<ReplacementChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OwnHandChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
+	| Omit<SacrificeChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OptionalChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<ManaChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<
@@ -770,6 +778,24 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			options: options.map((option) => ({
 				id: String(option.id),
 				label: option.label,
+			})),
+		});
+		return this.choose(state, request, candidates);
+	}
+
+	chooseSacrifice(
+		state: GameState,
+		player: PlayerId,
+		permanents: ObjectId[],
+	): ObjectId {
+		const candidates = permanents.map((id) => ({ id: String(id), value: id }));
+		const request = this.request({
+			kind: "sacrifice",
+			player,
+			context: { permanents: [...permanents] },
+			options: permanents.map((id) => ({
+				id: String(id),
+				label: `${objectLabel(state, id)}#${id}`,
 			})),
 		});
 		return this.choose(state, request, candidates);

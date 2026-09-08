@@ -121,7 +121,8 @@ Normal progression through `advance()` currently supports:
 - priority passing and one ordinary land play from the active player's hand during either main phase while the stack is empty;
 - fixed tap-for-mana abilities and mana pools;
 - casting from hand with mana already in the pool, including supported single-target instants and sorceries;
-- tap-self activated abilities, with or without a target (e.g. Merfolk Looter, Prodigal Sorcerer);
+- activated abilities with tap-self or single-permanent sacrifice costs, with or without a target;
+- relative-player and targeted-player sacrifice effects in which that player chooses one matching permanent;
 - the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith), and targeted triggers (e.g. Flametongue Kavu, Manic Vandal);
 - declaring attackers, and unblocked two-player combat damage; and
 - replacement, prohibition, and state-based effects encountered by those events.
@@ -176,7 +177,7 @@ During either precombat or postcombat main phase, the active player's priority c
 
 The allowance starts at one and includes finite positive additions from battlefield static abilities affecting their source's current controller, such as Exploration and Azusa, Lost but Seeking. These additions are derived from current ability possession and source control rather than stored on the player. Temporary adjustments such as Explore and Summer Bloom, unlimited allowances such as Fastbond, conditional or negative adjustments, playing from alternate zones, and effects granting special timing are not implemented. Invalid or stale land actions are rejected before action-specific state changes.
 
-Deck construction, opening hands, mulligans, and alternative activation costs are not implemented yet.
+Sacrifice effects and costs currently support one permanent at a time. Multiple sacrifice costs, optional sacrifices, and sacrifice as an additional spell-casting cost are not implemented. Deck construction, opening hands, mulligans, and alternative activation costs are also not implemented yet.
 
 ### Targeting
 

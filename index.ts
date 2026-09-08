@@ -498,6 +498,16 @@ interface DestroyEvent extends EventCommon {
 	source?: ObjectId;
 }
 
+/**
+ * CR 701.21: sacrificing is an action performed by a permanent's controller.
+ * Its child movement can be replaced, but the sacrifice is still successful
+ * when that replacement moves the permanent somewhere other than a graveyard.
+ */
+interface SacrificeEvent extends EventCommon {
+	kind: "sacrifice";
+	object: ObjectId;
+}
+
 /** The compound "instead" half of a regeneration shield (CR 701.19). */
 interface RegenerateEvent extends EventCommon {
 	kind: "regenerate";
@@ -667,6 +677,7 @@ export type GameEvent =
 	| DiscardEvent
 	| DamageEvent
 	| DestroyEvent
+	| SacrificeEvent
 	| RegenerateEvent
 	| ZoneChangeEvent
 	| AddCountersEvent
@@ -1816,6 +1827,13 @@ export type EffectDef<
 	| { kind: "damage"; targetSlot: string; amount: number }
 	| { kind: "destroy"; targetSlot: string }
 	| {
+			kind: "sacrifice";
+			/** A relative player, or the player bound to a target slot. */
+			player: Player | { targetSlot: string };
+			selector: TargetSelectorDef;
+			amount: 1;
+	  }
+	| {
 			kind: "modify-pt";
 			targetSlot: string;
 			power: number;
@@ -2002,10 +2020,18 @@ export interface SpellAbilityDef {
 	effects: EffectDef[];
 }
 
+export type ActivatedAbilityCostDef =
+	| { kind: "tap-self" }
+	| {
+			kind: "sacrifice";
+			selector: TargetSelectorDef;
+			amount: 1;
+	  };
+
 interface ActivatedAbilityDefBase {
 	id: string;
 	text: string;
-	costs: { kind: "tap-self" }[];
+	costs: ActivatedAbilityCostDef[];
 }
 
 export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
@@ -3575,6 +3601,7 @@ export function affectedPlayer(
 				: affectedObjectPlayer(state, ev.target.id);
 
 		case "destroy":
+		case "sacrifice":
 		case "regenerate":
 			return affectedObjectPlayer(state, ev.object);
 		case "tap":
@@ -3984,6 +4011,8 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 		}
 		case "destroy":
 			return `destroy(${name(state, ev.object)})`;
+		case "sacrifice":
+			return `sacrifice(${name(state, ev.object)})`;
 		case "regenerate":
 			return `regenerate(${name(state, ev.object)})`;
 		case "change zone": {
@@ -4905,6 +4934,41 @@ function executeIn(
 			break;
 		}
 
+		case "sacrifice": {
+			const o = maybePermanent(state, ev.object);
+			if (o?.zone !== "battlefield") {
+				happened = false;
+				break;
+			}
+			const snapshot = readObject(before, o.id);
+			assert(snapshot.kind === "permanent");
+			const movement = performIn(
+				state,
+				{
+					kind: "change zone",
+					object: o.id,
+					from: "battlefield",
+					to: "graveyard",
+					cause: "sacrifice",
+					toController: snapshot.controller,
+				},
+				choices,
+				scope,
+				depth + 1,
+			);
+			childResults.push(movement);
+			// A destination replacement such as Rest in Peace does not undo the
+			// sacrifice. It only changes where the permanent arrives.
+			happened = movement.executed.some(
+				(child) =>
+					child.kind === "change zone" &&
+					child.object === o.id &&
+					child.from === "battlefield" &&
+					child.cause === "sacrifice",
+			);
+			break;
+		}
+
 		case "destroy": {
 			const o = maybePermanent(state, ev.object);
 			if (o?.zone !== "battlefield") {
@@ -5619,13 +5683,62 @@ function resolveEffects(
 			continue;
 		}
 		let bound: EntityRef | null = null;
-		if (effect.kind === "damage" || effect.kind === "destroy") {
+		const sacrificeTarget =
+			effect.kind === "sacrifice" && typeof effect.player !== "string"
+				? effect.player
+				: null;
+		if (
+			effect.kind === "damage" ||
+			effect.kind === "destroy" ||
+			sacrificeTarget !== null
+		) {
+			let targetSlot: string;
+			if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
+			else {
+				assert(effect.kind === "damage" || effect.kind === "destroy");
+				targetSlot = effect.targetSlot;
+			}
 			const binding = item.targets[0];
+			assertDefined(binding, "effect has no target binding");
 			assert(
-				binding?.slot === effect.targetSlot,
+				binding.slot === targetSlot,
 				"effect has no matching target binding",
 			);
 			bound = binding.target;
+		}
+		if (effect.kind === "sacrifice") {
+			const sacrificingPlayer =
+				typeof effect.player === "string"
+					? relativeEffectPlayer(item, effect.player)
+					: (() => {
+							assert(
+								bound?.type === "player",
+								"sacrifice effect requires a bound player target",
+							);
+							return bound.player;
+						})();
+			const candidates = legalSacrifices(
+				createReadContext(state),
+				sacrificingPlayer,
+				effect.selector,
+				{ controller: item.controller, source: item.source },
+			);
+			// CR 701.21: an impossible sacrifice does nothing; it does not make
+			// the resolving spell or ability illegal.
+			if (candidates.length === 0) continue;
+			const chosen = choices.chooseSacrifice(
+				state,
+				sacrificingPlayer,
+				candidates,
+			);
+			performIn(
+				state,
+				{ kind: "sacrifice", object: chosen },
+				choices,
+				scope,
+				0,
+			);
+			continue;
 		}
 		performIn(
 			state,
@@ -5641,48 +5754,52 @@ function resolveEffects(
  * Turns one definition-time instruction into the event it performs. `bound` is
  * the target chosen for the effect's slot, which only targeting effects have.
  */
+function relativeEffectPlayer(
+	item: ResolutionSource,
+	relative: TriggerEffectPlayer,
+): PlayerId {
+	if (relative === "you") return item.controller;
+	if (relative === "opponent") return (1 - item.controller) as PlayerId;
+	assert(
+		item.ability?.kind === "triggered ability",
+		"triggering-player requires a triggered ability",
+	);
+	assert(
+		"player" in item.ability.triggeringEvent,
+		`triggering ${item.ability.triggeringEvent.kind} event has no player`,
+	);
+	return item.ability.triggeringEvent.player;
+}
+
 function effectToEvent(
 	state: GameState,
 	item: ResolutionSource,
 	effect: Exclude<EffectDef<TriggerEffectPlayer>, { kind: "may" }>,
 	bound: EntityRef | null,
 ): GameEvent {
-	const player = (relative: TriggerEffectPlayer): PlayerId => {
-		if (relative === "you") return item.controller;
-		if (relative === "opponent") return (1 - item.controller) as PlayerId;
-		assert(
-			item.ability?.kind === "triggered ability",
-			"triggering-player requires a triggered ability",
-		);
-		assert(
-			"player" in item.ability.triggeringEvent,
-			`triggering ${item.ability.triggeringEvent.kind} event has no player`,
-		);
-		return item.ability.triggeringEvent.player;
-	};
 	switch (effect.kind) {
 		case "gain-life":
 			return {
 				kind: "gain life",
-				player: player(effect.player),
+				player: relativeEffectPlayer(item, effect.player),
 				amount: effect.amount,
 			};
 		case "lose-life":
 			return {
 				kind: "lose life",
-				player: player(effect.player),
+				player: relativeEffectPlayer(item, effect.player),
 				amount: effect.amount,
 			};
 		case "draw":
 			return {
 				kind: "draw cards",
-				player: player(effect.player),
+				player: relativeEffectPlayer(item, effect.player),
 				amount: effect.amount,
 			};
 		case "scry":
 			return {
 				kind: "scry",
-				player: player(effect.player),
+				player: relativeEffectPlayer(item, effect.player),
 				amount: effect.amount,
 			};
 		case "discard": {
@@ -5693,7 +5810,7 @@ function effectToEvent(
 			if (effect.selector === "any") {
 				return {
 					kind: "discard",
-					player: player(effect.player),
+					player: relativeEffectPlayer(item, effect.player),
 					cards: { kind: "any" },
 				};
 			}
@@ -5731,12 +5848,14 @@ function effectToEvent(
 				source: item.source,
 				noRegen: false,
 			};
+		case "sacrifice":
+			throw new Error("sacrifice effects are resolved with a player choice");
 		case "modify-pt":
 			throw new Error("temporary P/T effects are not implemented");
 		case "add-mana":
 			return {
 				kind: "add mana",
-				player: player(effect.player),
+				player: relativeEffectPlayer(item, effect.player),
 				source: item.source,
 				mana: effect.mana,
 			};
@@ -5882,15 +6001,47 @@ function requiredTargetDefinition(
 			effect.kind !== "modify-pt",
 			"temporary P/T effects are not implemented",
 		);
-		if (effect.kind !== "damage" && effect.kind !== "destroy") return;
+		if (effect.kind === "sacrifice" && typeof effect.player === "string") {
+			assert(
+				effect.amount === 1,
+				"only sacrificing one permanent is implemented",
+			);
+			return;
+		}
+		if (
+			effect.kind !== "damage" &&
+			effect.kind !== "destroy" &&
+			effect.kind !== "sacrifice"
+		)
+			return;
+		const sacrificeTarget =
+			effect.kind === "sacrifice" && typeof effect.player !== "string"
+				? effect.player
+				: null;
+		let targetSlot: string;
+		if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
+		else {
+			assert(effect.kind === "damage" || effect.kind === "destroy");
+			targetSlot = effect.targetSlot;
+		}
 		assert(
-			target !== null && effect.targetSlot === target.id,
+			target !== null && targetSlot === target.id,
 			"effect must reference its ability's target slot",
 		);
 		if (effect.kind === "destroy") {
 			assert(
 				target.legal.kind === "permanent",
 				"destroy requires a permanent target",
+			);
+		}
+		if (effect.kind === "sacrifice") {
+			assert(
+				target.legal.kind === "player",
+				"a targeted sacrifice effect requires a player target",
+			);
+			assert(
+				effect.amount === 1,
+				"only sacrificing one permanent is implemented",
 			);
 		}
 	};
@@ -5951,6 +6102,25 @@ function legalTargets(
 	return candidates.filter((target) =>
 		isLegalTarget(read, definition, target, ctx),
 	);
+}
+
+function legalSacrifices(
+	read: ReadContext,
+	player: PlayerId,
+	selector: TargetSelectorDef,
+	context: TargetContext,
+): ObjectId[] {
+	return read.state.battlefield.filter((id) => {
+		const snapshot = read.view.objects.get(id);
+		return (
+			snapshot?.kind === "permanent" &&
+			snapshot.controller === player &&
+			selectorMatches(selector, snapshot, {
+				controller: context.controller,
+				id: context.source,
+			})
+		);
+	});
 }
 
 /**
@@ -6100,20 +6270,30 @@ function activatedAbilityActions(
 		return [];
 	return state.battlefield.flatMap((id) => {
 		const object = maybeObject(state, id);
-		if (
-			object?.kind !== "permanent" ||
-			object.controller !== player ||
-			object.tapped
-		)
-			return [];
+		if (object?.kind !== "permanent" || object.controller !== player) return [];
 		const snapshot = readObject(read, id);
 		if (snapshot.kind !== "permanent") return [];
 		const actions: ActivateAbilityAction[] = [];
 		for (const ability of snapshot.currentCharacteristics.abilities.activated) {
 			const definition = getAbilityDefinition("activated", ability);
+			if (definition.costs.length === 0) continue;
 			if (
-				definition.costs.length !== 1 ||
-				definition.costs[0]?.kind !== "tap-self"
+				definition.costs.some(
+					(cost) => cost.kind === "tap-self" && object.tapped,
+				)
+			)
+				continue;
+			const sacrificeCosts = definition.costs.filter(
+				(cost) => cost.kind === "sacrifice",
+			);
+			if (sacrificeCosts.length > 1) continue;
+			const sacrificeCost = sacrificeCosts[0];
+			if (
+				sacrificeCost?.kind === "sacrifice" &&
+				legalSacrifices(read, player, sacrificeCost.selector, {
+					controller: player,
+					source: id,
+				}).length === 0
 			)
 				continue;
 			if (definition.kind === "activated") {
@@ -6163,8 +6343,8 @@ export function getObservableActions(
 
 /**
  * Executes a currently possessed fixed-cost activated ability. The priority
- * holder is supplied by the scheduler and all legality is rechecked before the
- * tap cost mutates canonical state.
+ * holder is supplied by the scheduler and all legality is rechecked before its
+ * tap and/or sacrifice costs mutate canonical state.
  */
 export function executeAbilityAction(
 	state: GameState,
@@ -6224,12 +6404,6 @@ function activateAbilityIn(
 			`P${priorityPlayer} does not control object ${action.source}`,
 		);
 	}
-	if (object.tapped) {
-		throw new IllegalAbilityActivationError(
-			`object ${action.source} is already tapped`,
-		);
-	}
-
 	const snapshot = readObject(createReadContext(state), object.id);
 	assert(snapshot.kind === "permanent");
 	if (
@@ -6242,9 +6416,22 @@ function activateAbilityIn(
 		);
 	}
 	const ability = getAbilityDefinition("activated", action.ability);
-	if (ability.costs.length !== 1 || ability.costs[0]?.kind !== "tap-self") {
+	if (ability.costs.length === 0) {
 		throw new IllegalAbilityActivationError(
-			`ability ${action.ability} does not have the supported tap-self cost`,
+			`ability ${action.ability} has no supported cost`,
+		);
+	}
+	if (ability.costs.some((cost) => cost.kind === "tap-self") && object.tapped) {
+		throw new IllegalAbilityActivationError(
+			`object ${action.source} is already tapped`,
+		);
+	}
+	const sacrificeCosts = ability.costs.filter(
+		(cost) => cost.kind === "sacrifice",
+	);
+	if (sacrificeCosts.length > 1) {
+		throw new IllegalAbilityActivationError(
+			"multiple sacrifice costs are not implemented",
 		);
 	}
 
@@ -6354,10 +6541,12 @@ function activateAbilityIn(
 		for (const effect of ability.effects) {
 			if (
 				effect.kind === "draw" ||
+				effect.kind === "scry" ||
 				effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||
 				effect.kind === "damage" ||
-				effect.kind === "destroy"
+				effect.kind === "destroy" ||
+				effect.kind === "sacrifice"
 			) {
 				continue;
 			}
@@ -6377,7 +6566,7 @@ function activateAbilityIn(
 		}
 
 		// CR 601.2c and CR 601.2h in order: the target is chosen, and rejected if
-		// illegal, strictly before the tap cost below is paid. Nothing above this
+		// illegal, strictly before the costs below are paid. Nothing above this
 		// point has mutated the game, so a refused activation leaves no trace.
 		targetDefinitions = structuredClone(ability.targets);
 		const target = requiredTargetDefinition(targetDefinitions, ability.effects);
@@ -6404,6 +6593,32 @@ function activateAbilityIn(
 			targets = [{ slot: target.id, target: chosen }];
 		}
 	}
+	// Cost choices are made while announcing the ability, before payment.
+	let sacrificePayment: ObjectId | null = null;
+	const sacrificeCost = sacrificeCosts[0];
+	if (sacrificeCost?.kind === "sacrifice") {
+		assert(
+			sacrificeCost.amount === 1,
+			"only sacrificing one permanent is implemented",
+		);
+		const candidates = legalSacrifices(
+			createReadContext(state),
+			priorityPlayer,
+			sacrificeCost.selector,
+			{ controller: priorityPlayer, source: object.id },
+		);
+		if (candidates.length === 0) {
+			throw new IllegalAbilityActivationError(
+				`ability ${action.ability} has no permanent that can pay its sacrifice cost`,
+			);
+		}
+		sacrificePayment = choices.chooseSacrifice(
+			state,
+			priorityPlayer,
+			candidates,
+		);
+	}
+
 	// CR 602.2b puts the ability on the stack before its cost is paid, so the
 	// announcement mutates before the activation is known to be legal. CR 733.1
 	// requires an attempt that cannot be completed to rewind everything it did.
@@ -6434,33 +6649,37 @@ function activateAbilityIn(
 	}
 
 	const scope = newScope();
-	let payment: PerformResult;
 	try {
-		payment = performIn(
-			state,
-			{ kind: "tap", ref: { kind: "object", object: object.id } },
-			choices,
-			scope,
-			0,
-		);
+		for (const cost of ability.costs) {
+			let costEvent: GameEvent;
+			if (cost.kind === "tap-self") {
+				costEvent = {
+					kind: "tap",
+					ref: { kind: "object", object: object.id },
+				};
+			} else {
+				assertDefined(sacrificePayment);
+				costEvent = { kind: "sacrifice", object: sacrificePayment };
+			}
+			const payment = performIn(state, costEvent, choices, scope, 0);
+			const paid = payment.executed.some((event) =>
+				cost.kind === "tap-self"
+					? event.kind === "tap" &&
+						event.ref.kind === "object" &&
+						event.ref.object === object.id
+					: event.kind === "sacrifice" && event.object === sacrificePayment,
+			);
+			if (!paid) {
+				throw new IllegalAbilityActivationError(
+					`the ${cost.kind} cost for ability ${action.ability} was not paid`,
+				);
+			}
+		}
 	} catch (error) {
 		// A rejected or suspended choice during payment leaves the same
 		// half-finished activation as an unpayable cost does.
 		restoreCheckpoint(state, checkpoint);
 		throw error;
-	}
-	if (
-		!payment.executed.some(
-			(event) =>
-				event.kind === "tap" &&
-				event.ref.kind === "object" &&
-				event.ref.object === object.id,
-		)
-	) {
-		restoreCheckpoint(state, checkpoint);
-		throw new IllegalAbilityActivationError(
-			`the tap cost for ability ${action.ability} was not paid`,
-		);
 	}
 	if (ability.kind === "mana") {
 		log(state, `  [mana ability] ${ability.text}`);

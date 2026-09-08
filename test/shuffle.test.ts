@@ -16,7 +16,7 @@ const DECK = [
 	"walking-ballista",
 	"darksteel-relic",
 	"revitalize",
-	"rest-in-peace",
+	"baby-rest-in-peace",
 	"root-maze",
 	"necropotence",
 	"clone",

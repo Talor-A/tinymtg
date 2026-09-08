@@ -80,7 +80,7 @@ describe("destroy event success", () => {
 
 	test("exile-instead movement executes without reporting a destroy", () => {
 		const state = newGame();
-		spawnPermanent(state, "rest-in-peace", BOB);
+		spawnPermanent(state, "baby-rest-in-peace", BOB);
 		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
 
 		const result = perform(
@@ -156,7 +156,7 @@ describe("when two effects change where a destroyed creature goes", () => {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent(p1Prefs)];
 		spawnPermanent(state, "kalitas", ALICE);
-		spawnPermanent(state, "rest-in-peace", BOB);
+		spawnPermanent(state, "baby-rest-in-peace", BOB);
 		const bears = spawnPermanent(state, "grizzly-bears", BOB);
 		perform(
 			state,
