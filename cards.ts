@@ -47,6 +47,7 @@ registerCardFixture("v/viscera_seer");
 registerCardFixture("b/blazing_hellhound");
 registerCardFixture("a/acolyte_of_aclazotz");
 registerCardFixture("c/counterspell");
+registerCardFixture("b/beast_whisperer");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family

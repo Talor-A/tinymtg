@@ -65,6 +65,7 @@ const POSITIVE_FIXTURES = [
 	"b/blazing_hellhound",
 	"a/acolyte_of_aclazotz",
 	"c/counterspell",
+	"b/beast_whisperer",
 ];
 
 describe("lowerForgeCard: positive acceptance matrix", () => {
@@ -566,6 +567,46 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		const result = importFixture("g/giant_spider");
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.keywords).toEqual(["reach"]);
+	});
+
+	test("Beast Whisperer lowers only the supported typed cast trigger", () => {
+		const result = importFixture("b/beast_whisperer");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigDraw",
+				text: expect.any(String),
+				condition: {
+					kind: "cast",
+					player: "you",
+					types: ["creature"],
+				},
+				targets: [],
+				effects: [{ kind: "draw", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
+	test("SpellCast rejects broad and decorated Forge selectors", () => {
+		const card = (triggerParams: string) =>
+			[
+				"Name:Cast Watcher",
+				"ManaCost:1 U",
+				"Types:Enchantment",
+				`T:Mode$ SpellCast | ${triggerParams} | ValidActivatingPlayer$ You | TriggerZones$ Battlefield | Execute$ Trig | TriggerDescription$ x`,
+				"SVar:Trig:DB$ Draw | Defined$ You | NumCards$ 1",
+				"Oracle:",
+				"",
+			].join("\n");
+
+		for (const selector of ["Card", "Card.nonCreature", "Creature.cmcGE5"]) {
+			const result = importText(card(`ValidCard$ ${selector}`));
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.message).toBe(
+				"SpellCast ValidCard$ must contain only card types",
+			);
+		}
 	});
 
 	test("Raging Goblin keeps Haste", () => {

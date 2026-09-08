@@ -1073,6 +1073,70 @@ function lowerTrigger(
 	if (slotIssue) return slotIssue;
 
 	switch (mode) {
+		case "SpellCast": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					"mode",
+					"validcard",
+					"validactivatingplayer",
+					"triggerzones",
+					"execute",
+					"optionaldecider",
+					"triggerdescription",
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			if (getForgeParam(params, "TriggerZones") !== "Battlefield")
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"only battlefield SpellCast triggers are supported",
+					where,
+				);
+
+			const rawPlayer = getForgeParam(params, "ValidActivatingPlayer");
+			const castPlayer = rawPlayer ? parseValidPlayer(rawPlayer) : null;
+			if (castPlayer === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"SpellCast requires a supported ValidActivatingPlayer$",
+					where,
+				);
+
+			const rawTypes = getForgeParam(params, "ValidCard");
+			const types = rawTypes?.split(",").map((part) => {
+				const word = part
+					.trim()
+					.replace(/^Card\./, "")
+					.toLowerCase();
+				return [...CARD_TYPES].find((type) => type === word) ?? null;
+			});
+			if (
+				!types ||
+				types.length === 0 ||
+				!types.every((type): type is CardType => type !== null)
+			)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"SpellCast ValidCard$ must contain only card types",
+					where,
+				);
+			const firstType = types[0];
+			assert(firstType, "validated SpellCast types must be nonempty");
+			const castTypes: [CardType, ...CardType[]] = [
+				firstType,
+				...types.slice(1),
+			];
+
+			return {
+				id: execute,
+				text,
+				condition: { kind: "cast", player: castPlayer, types: castTypes },
+				targets,
+				effects,
+			};
+		}
 		case "ChangesZone": {
 			const badParams = checkParams(
 				params,

@@ -57,6 +57,51 @@ registerCard({
 	],
 });
 
+registerCard({
+	id: "test-free-instant",
+	name: "Test Free Instant",
+	types: ["instant"],
+	colors: [],
+	manaCost: "zero",
+	spell: {
+		id: "test-free-instant-spell",
+		text: "Do nothing.",
+		targets: [],
+		effects: [],
+	},
+});
+
+registerCard({
+	id: "test-cast-watcher",
+	name: "Test Cast Watcher",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	triggers: [
+		{
+			id: "instant-or-sorcery",
+			text: "Whenever you cast an instant or sorcery spell, you gain 1 life.",
+			condition: {
+				kind: "cast",
+				player: "you",
+				types: ["instant", "sorcery"],
+			},
+			targets: [],
+			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+		},
+	],
+});
+
+registerCard({
+	id: "test-free-creature",
+	name: "Test Free Creature",
+	types: ["creature"],
+	colors: [],
+	manaCost: "zero",
+	power: 1,
+	toughness: 1,
+});
+
 const forestMana = abilityId("activated", "forest", 0);
 const whiteMana = abilityId("activated", "test-white-source", 0);
 
@@ -250,6 +295,55 @@ describe("authoritative cast rejection", () => {
 });
 
 describe("casting onto the stack", () => {
+	test("emits a cast event with the caster and new spell object", () => {
+		const state = setupMain();
+		const watcher = spawnPermanent(state, "test-cast-watcher", ALICE);
+		const opposingInstant = spawnCard(state, "test-free-instant", BOB, "hand");
+		const artifact = spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const instant = spawnCard(state, "test-free-instant", ALICE, "hand");
+
+		executeCastAction(state, ALICE, castAction(artifact.id), passingAgents());
+		expect(state.pendingTriggers).toHaveLength(0);
+
+		executeCastAction(
+			state,
+			BOB,
+			castAction(opposingInstant.id),
+			passingAgents(),
+		);
+		expect(state.pendingTriggers).toHaveLength(0);
+
+		executeCastAction(state, ALICE, castAction(instant.id), passingAgents());
+		expect(state.pendingTriggers).toHaveLength(1);
+		const spellEntry = state.stack.at(-1);
+		expect(spellEntry?.kind).toBe("spell");
+		if (spellEntry?.kind !== "spell") throw new Error("expected spell");
+		expect(state.pendingTriggers[0]).toMatchObject({
+			source: watcher.id,
+			triggeringEvent: {
+				kind: "cast",
+				player: ALICE,
+				spell: spellEntry.objectId,
+			},
+		});
+	});
+
+	test("a Forge-imported Beast Whisperer trigger resolves before its creature spell", () => {
+		const state = setupMain();
+		spawnPermanent(state, "beast-whisperer", ALICE);
+		const creature = spawnCard(state, "test-free-creature", ALICE, "hand");
+		const librarySize = state.players[ALICE].library.length;
+
+		executeCastAction(state, ALICE, castAction(creature.id), passingAgents());
+		expect(state.pendingTriggers[0]?.triggerId).toBe(
+			abilityId("triggered", "beast-whisperer", 0),
+		);
+
+		settlePriority(state, passingAgents());
+		expect(state.players[ALICE].library).toHaveLength(librarySize - 1);
+		expect(state.battlefield).toHaveLength(2);
+	});
+
 	test("pays from the pool, moves to the stack, and keeps the card off the battlefield", () => {
 		const state = setupMain();
 		const bears = spawnCard(state, "grizzly-bears", ALICE, "hand");

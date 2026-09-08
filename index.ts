@@ -427,6 +427,13 @@ interface DrawEvent extends EventCommon {
 	player: PlayerId;
 }
 
+/** A spell has finished being cast and is now on the stack. */
+interface CastEvent extends EventCommon {
+	kind: "cast";
+	player: PlayerId;
+	spell: ObjectId;
+}
+
 interface MillEvent extends EventCommon {
 	kind: "mill";
 	player: PlayerId;
@@ -680,6 +687,7 @@ interface WinGameEvent extends EventCommon {
 export type GameEvent =
 	| DeclareAttackersEvent
 	| DeclareBlockersEvent
+	| CastEvent
 	| DrawCardsEvent
 	| DrawEvent
 	| MillEvent
@@ -1900,6 +1908,13 @@ interface DrawTriggerCondition {
 	player: ValidPlayer;
 }
 
+/** Matches a cast by player and any one of the spell's current card types. */
+interface CastTriggerCondition {
+	kind: "cast";
+	player: ValidPlayer;
+	types: [CardType, ...CardType[]];
+}
+
 /** Matches the player declaring attackers and/or each matching attacker. */
 interface DeclareAttackersTriggerCondition {
 	kind: "declare attackers";
@@ -1931,6 +1946,7 @@ interface TapTriggerCondition {
 type TriggerCondition =
 	| GainLifeTriggerCondition
 	| DrawTriggerCondition
+	| CastTriggerCondition
 	| DeclareAttackersTriggerCondition
 	| BeginStepTriggerCondition
 	| ZoneChangeTriggerCondition
@@ -3638,6 +3654,7 @@ export function affectedPlayer(
 	ev: GameEvent,
 ): PlayerId {
 	switch (ev.kind) {
+		case "cast":
 		case "draw":
 		case "draw cards":
 		case "mill":
@@ -4049,6 +4066,8 @@ function moveObject(
 /** Convenience for logs/tests. */
 export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 	switch (ev.kind) {
+		case "cast":
+			return `cast(P${ev.player}, ${name(state, ev.spell)}#${ev.spell})`;
 		case "draw cards":
 			return `draw cards(P${ev.player}, ${ev.amount})`;
 		case "draw":
@@ -4589,6 +4608,17 @@ function triggerMatches(
 	if (ev.kind !== condition.kind) return false;
 
 	switch (condition.kind) {
+		case "cast": {
+			assert(ev.kind === "cast");
+			if (!relativePlayerMatches(ev.player, condition.player, source))
+				return false;
+			const spell = readObject(read, ev.spell);
+			assert(spell.kind === "spell", "cast event subject is not a spell");
+			return condition.types.some((type) =>
+				spell.currentCharacteristics.types.includes(type),
+			);
+		}
+
 		case "gain life":
 		case "lose life":
 		case "draw":
@@ -4840,6 +4870,17 @@ function executeIn(
 	let selfDeathTriggers: SelfDeathTriggerCandidate[] = [];
 
 	switch (ev.kind) {
+		case "cast": {
+			const spell = maybeObject(state, ev.spell);
+			assert(spell?.kind === "spell", "cast event subject is not a spell");
+			assert(spell.zone === "stack", "cast event subject is not on the stack");
+			assert(
+				spell.controller === ev.player,
+				"cast event player does not control its spell",
+			);
+			break;
+		}
+
 		case "draw cards": {
 			// Should this be >= 0? could a replacement effect alter this legally?
 			assert(
@@ -7085,7 +7126,7 @@ function castSpellIn(
 		} for ${characteristics.name}`,
 	);
 
-	performIn(
+	const movement = performIn(
 		state,
 		{
 			kind: "change zone",
@@ -7096,6 +7137,19 @@ function castSpellIn(
 			toController: priorityPlayer,
 			spellTargets: targets,
 		},
+		choices,
+		newScope(),
+		0,
+	);
+	assert(
+		movement.created.length === 1,
+		"casting did not create exactly one object",
+	);
+	const spell = movement.created[0];
+	assertDefined(spell);
+	performIn(
+		state,
+		{ kind: "cast", player: priorityPlayer, spell },
 		choices,
 		newScope(),
 		0,
