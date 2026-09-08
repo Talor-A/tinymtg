@@ -1771,6 +1771,7 @@ export function lowerForgeCard(
 			const exactDuplicate = activatedAbilities.some(
 				(ability) =>
 					ability.kind === "mana" &&
+					!("manaOptions" in ability) &&
 					ability.costs.length === 1 &&
 					ability.costs[0]?.kind === "tap-self" &&
 					ability.effects.length === 1 &&

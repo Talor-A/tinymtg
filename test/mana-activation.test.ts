@@ -4,7 +4,11 @@ import "../cards.ts";
 import type {
 	ActivateAbilityAction,
 	Agent,
+	ChoiceAnswer,
+	ChoiceRequest,
+	ChoiceTranscript,
 	GameState,
+	ManaAmount,
 	ObjectId,
 	PlayerId,
 	SyncAgent,
@@ -13,9 +17,11 @@ import {
 	abilityId,
 	advance,
 	advanceWithReplay,
+	ChoiceController,
 	executeAbilityAction,
 	getObservableActions,
 	IllegalAbilityActivationError,
+	InvalidChoiceAnswerError,
 	newGame,
 	perform,
 	registerCard,
@@ -35,6 +41,40 @@ import {
 } from "./utils/engine-helpers.ts";
 
 registerCardFixture("m/merfolk_looter");
+
+registerCard({
+	id: "test-five-color-mana-ability",
+	name: "Test Five Color Mana Ability",
+	types: ["artifact"],
+	colors: [],
+	manaCost: "zero",
+	activatedAbilities: [
+		{
+			kind: "mana",
+			id: "choose-color",
+			text: "{T}: Add one mana of any color.",
+			costs: [{ kind: "tap-self" }],
+			manaOptions: [{ w: 1 }, { u: 1 }, { b: 1 }, { r: 1 }, { g: 1 }],
+		},
+	],
+});
+
+registerCard({
+	id: "test-two-color-mana-ability",
+	name: "Test Two Color Mana Ability",
+	types: ["land"],
+	colors: [],
+	manaCost: "none",
+	activatedAbilities: [
+		{
+			kind: "mana",
+			id: "choose-white-or-blue",
+			text: "{T}: Add {W} or {U}.",
+			costs: [{ kind: "tap-self" }],
+			manaOptions: [{ w: 1 }, { u: 1 }],
+		},
+	],
+});
 
 registerCard({
 	id: "test-unsupported-activated-ability",
@@ -62,9 +102,26 @@ registerCard({
 });
 
 const forestMana = abilityId("activated", "forest", 0);
+const fiveColorMana = abilityId("activated", "test-five-color-mana-ability", 0);
+const twoColorMana = abilityId("activated", "test-two-color-mana-ability", 0);
 
 function manaAction(source: ObjectId): ActivateAbilityAction {
 	return { kind: "activate ability", source, ability: forestMana };
+}
+
+function choosingMana(
+	choose: (request: Extract<ChoiceRequest, { kind: "mana" }>) => ChoiceAnswer,
+): SyncAgent {
+	return {
+		choose(_view, request) {
+			if (request.kind !== "mana") {
+				const first = request.options[0];
+				if (!first) throw new Error("expected a choice option");
+				return { optionId: first.id };
+			}
+			return choose(request);
+		},
+	};
 }
 
 describe("priority-time mana abilities", () => {
@@ -115,6 +172,166 @@ describe("priority-time mana abilities", () => {
 		expect(getObservableActions(state, ALICE)).not.toContainEqual(
 			manaAction(firstForest.id),
 		);
+	});
+
+	test("offers five exclusive colors as one ability and produces only the chosen color", () => {
+		const outcomes: [keyof ManaAmount, ManaAmount][] = [
+			["w", { w: 1 }],
+			["u", { u: 1 }],
+			["b", { b: 1 }],
+			["r", { r: 1 }],
+			["g", { g: 1 }],
+		];
+
+		for (let selected = 0; selected < outcomes.length; selected++) {
+			const state = setupMain();
+			const source = spawnPermanent(
+				state,
+				"test-five-color-mana-ability",
+				ALICE,
+			);
+			const action: ActivateAbilityAction = {
+				kind: "activate ability",
+				source: source.id,
+				ability: fiveColorMana,
+			};
+			const offered = getObservableActions(state, ALICE).filter(
+				(candidate) =>
+					candidate.kind === "activate ability" &&
+					candidate.source === source.id,
+			);
+			expect(offered).toEqual([action]);
+
+			let seen: Extract<ChoiceRequest, { kind: "mana" }> | undefined;
+			const agent = choosingMana((request) => {
+				seen = request;
+				return { optionId: String(selected) };
+			});
+			executeAbilityAction(state, ALICE, action, [agent, new ScriptedAgent()]);
+
+			expect(seen?.context.amounts).toEqual(outcomes.map((entry) => entry[1]));
+			expect(seen?.options).toHaveLength(5);
+			expect(state.objects.get(source.id)).toMatchObject({ tapped: true });
+			for (const [type] of outcomes) {
+				expect(state.players[ALICE].manaPool[type]).toBe(
+					type === outcomes[selected]?.[0] ? 1 : 0,
+				);
+			}
+			expect(state.players[ALICE].manaPool.c).toBe(0);
+		}
+	});
+
+	test("chooses between two colors without creating two abilities", () => {
+		const state = setupMain();
+		const source = spawnPermanent(state, "test-two-color-mana-ability", ALICE);
+		const action: ActivateAbilityAction = {
+			kind: "activate ability",
+			source: source.id,
+			ability: twoColorMana,
+		};
+		const agent = choosingMana(() => ({ optionId: "1" }));
+
+		executeAbilityAction(state, ALICE, action, [agent, new ScriptedAgent()]);
+
+		expect(state.players[ALICE].manaPool).toEqual({
+			w: 0,
+			u: 1,
+			b: 0,
+			r: 0,
+			g: 0,
+			c: 0,
+		});
+	});
+
+	test("records, serializes, and replays a modal mana choice", () => {
+		const checkpoint = setupMain();
+		const source = spawnPermanent(
+			checkpoint,
+			"test-five-color-mana-ability",
+			ALICE,
+		);
+		const action: ActivateAbilityAction = {
+			kind: "activate ability",
+			source: source.id,
+			ability: fiveColorMana,
+		};
+		const replayState = structuredClone(checkpoint);
+		const agent = choosingMana(() => ({ optionId: "3" }));
+		const recorder = ChoiceController.record([agent, new ScriptedAgent()]);
+
+		executeAbilityAction(checkpoint, ALICE, action, recorder);
+		const serialized = JSON.stringify(recorder.transcript());
+		const transcript = JSON.parse(serialized) as ChoiceTranscript;
+		expect(transcript.choices).toMatchObject([
+			{
+				request: {
+					kind: "mana",
+					context: {
+						source: source.id,
+						ability: fiveColorMana,
+					},
+				},
+				answer: { optionId: "3" },
+			},
+		]);
+
+		const replay = ChoiceController.replay(transcript);
+		executeAbilityAction(replayState, ALICE, action, replay);
+		replay.assertComplete();
+		expect(replayState).toEqual(checkpoint);
+	});
+
+	test("rejects absent, multiple, or unlisted selections before tapping", () => {
+		for (const answer of [
+			{ optionIds: [] },
+			{ optionIds: ["0", "1"] },
+			{ optionId: "not-an-option" },
+		] satisfies ChoiceAnswer[]) {
+			const state = setupMain();
+			const source = spawnPermanent(
+				state,
+				"test-two-color-mana-ability",
+				ALICE,
+			);
+			const action: ActivateAbilityAction = {
+				kind: "activate ability",
+				source: source.id,
+				ability: twoColorMana,
+			};
+			const before = structuredClone(state);
+			const agent = choosingMana(() => answer);
+
+			expect(() =>
+				executeAbilityAction(state, ALICE, action, [
+					agent,
+					new ScriptedAgent(),
+				]),
+			).toThrow(InvalidChoiceAnswerError);
+			expect(state).toEqual(before);
+		}
+	});
+
+	test("fixed production remains immediate and does not ask for an outcome", () => {
+		const state = setupMain();
+		const forest = spawnPermanent(state, "forest", ALICE);
+		const rejectingModalChoice: SyncAgent = {
+			choose(_view, request) {
+				if (request.kind === "mana") {
+					throw new Error("fixed mana ability asked for a mana option");
+				}
+				const first = request.options[0];
+				if (!first) throw new Error("expected a choice option");
+				return { optionId: first.id };
+			},
+		};
+
+		executeAbilityAction(state, ALICE, manaAction(forest.id), [
+			rejectingModalChoice,
+			new ScriptedAgent(),
+		]);
+
+		expect(state.objects.get(forest.id)).toMatchObject({ tapped: true });
+		expect(state.players[ALICE].manaPool.g).toBe(1);
 	});
 
 	test("replays an async activation without mutating its checkpoint", async () => {

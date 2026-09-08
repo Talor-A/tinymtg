@@ -78,7 +78,7 @@ export const MANA_COST_TYPES: readonly ManaCostType[] = [...MANA_TYPES, "n"];
 export type ManaPool = Record<ManaType, number>;
 
 /** A quantity of one or more kinds of mana. Missing kinds mean zero. */
-type ManaAmount = Partial<ManaPool>;
+export type ManaAmount = Partial<ManaPool>;
 
 export type Supertype = "legendary" | "basic" | "snow";
 
@@ -2006,18 +2006,33 @@ interface ActivatedAbilityDefBase {
 	id: string;
 	text: string;
 	costs: { kind: "tap-self" }[];
-	effects: EffectDef[];
 }
 
 export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
 	kind: "activated";
 	targets: TargetDef[];
+	effects: EffectDef[];
+}
+
+/** A mana ability whose instructions always produce the same mana. */
+export interface FixedManaAbilityDef extends ActivatedAbilityDefBase {
+	kind: "mana";
+	effects: EffectDef[];
+	manaOptions?: never;
+}
+
+/**
+ * A single mana ability that requires its controller to choose exactly one
+ * mutually exclusive outcome as it is activated.
+ */
+export interface ModalManaAbilityDef extends ActivatedAbilityDefBase {
+	kind: "mana";
+	effects?: never;
+	manaOptions: [ManaAmount, ManaAmount, ...ManaAmount[]];
 }
 
 /** CR 605.1a mana abilities cannot require targets. */
-export interface ManaAbilityDef extends ActivatedAbilityDefBase {
-	kind: "mana";
-}
+export type ManaAbilityDef = FixedManaAbilityDef | ModalManaAbilityDef;
 
 /** Every ability definition possessed through an activated-ability reference. */
 export type AnyActivatedAbilityDefinition =
@@ -6239,32 +6254,100 @@ function activateAbilityIn(
 		ability: null,
 		targets: [],
 	};
-	const events =
-		ability.kind === "mana"
-			? ability.effects.map((effect) => {
-					if (effect.kind !== "add-mana") {
+	let events: GameEvent[] = [];
+	if (ability.kind === "mana") {
+		if ("manaOptions" in ability) {
+			if (
+				!Array.isArray(ability.manaOptions) ||
+				ability.manaOptions.length < 2
+			) {
+				throw new IllegalAbilityActivationError(
+					`modal mana ability ${action.ability} must have at least two options`,
+				);
+			}
+			if ("effects" in ability) {
+				throw new IllegalAbilityActivationError(
+					`modal mana ability ${action.ability} cannot also have fixed effects`,
+				);
+			}
+			for (const option of ability.manaOptions) {
+				if (
+					typeof option !== "object" ||
+					option === null ||
+					Array.isArray(option)
+				) {
+					throw new IllegalAbilityActivationError(
+						`mana ability ${action.ability} has an invalid option`,
+					);
+				}
+				for (const type of Object.keys(option)) {
+					if (!MANA_TYPES.includes(type as ManaType)) {
 						throw new IllegalAbilityActivationError(
-							"only fixed mana production is supported for mana abilities",
+							`mana ability ${action.ability} produces an invalid mana type`,
 						);
 					}
-					let total = 0;
-					for (const type of MANA_TYPES) {
-						const amount = effect.mana[type] ?? 0;
-						if (!Number.isSafeInteger(amount) || amount < 0) {
-							throw new IllegalAbilityActivationError(
-								`mana ability ${action.ability} produces an invalid quantity`,
-							);
-						}
-						total += amount;
-					}
-					if (total <= 0) {
+				}
+				let total = 0;
+				for (const type of MANA_TYPES) {
+					const amount = option[type] ?? 0;
+					if (!Number.isSafeInteger(amount) || amount < 0) {
 						throw new IllegalAbilityActivationError(
-							`mana ability ${action.ability} produces no mana`,
+							`mana ability ${action.ability} produces an invalid quantity`,
 						);
 					}
-					return effectToEvent(state, context, effect, null);
-				})
-			: [];
+					total += amount;
+				}
+				if (total <= 0) {
+					throw new IllegalAbilityActivationError(
+						`mana ability ${action.ability} produces no mana`,
+					);
+				}
+			}
+			const chosen = choices.chooseManaAmount(
+				state,
+				priorityPlayer,
+				object.id,
+				action.ability,
+				ability.manaOptions,
+			);
+			assert(
+				ability.manaOptions.includes(chosen),
+				"chooseManaAmount returned an option outside its own candidate list",
+			);
+			events = [
+				effectToEvent(
+					state,
+					context,
+					{ kind: "add-mana", player: "you", mana: { ...chosen } },
+					null,
+				),
+			];
+		} else {
+			events = ability.effects.map((effect) => {
+				if (effect.kind !== "add-mana") {
+					throw new IllegalAbilityActivationError(
+						"only fixed mana production is supported for mana abilities",
+					);
+				}
+				let total = 0;
+				for (const type of MANA_TYPES) {
+					const amount = effect.mana[type] ?? 0;
+					if (!Number.isSafeInteger(amount) || amount < 0) {
+						throw new IllegalAbilityActivationError(
+							`mana ability ${action.ability} produces an invalid quantity`,
+						);
+					}
+					total += amount;
+				}
+				if (total <= 0) {
+					throw new IllegalAbilityActivationError(
+						`mana ability ${action.ability} produces no mana`,
+					);
+				}
+				return effectToEvent(state, context, effect, null);
+			});
+		}
+	}
 	let targets: TargetBindings = [];
 	let targetDefinitions: TargetDef[] = [];
 	if (ability.kind === "activated") {

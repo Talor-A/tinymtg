@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import type {
+	ActivatedAbilityId,
 	ActivatedAbilityStackItem,
 	BlockAssignment,
 	BoundReplacement,
 	EntityRef,
 	GameEvent,
 	GameState,
+	ManaAmount,
 	ObjectId,
 	PendingTrigger,
 	PlayerId,
@@ -57,6 +59,16 @@ export interface PriorityActionChoiceRequest extends ChoiceRequestBase {
 	context: {
 		activePlayer: PlayerId | null;
 		location: TurnLocation | null;
+	};
+}
+
+/** A modal mana ability's mutually exclusive outcomes. */
+export interface ManaChoiceRequest extends ChoiceRequestBase {
+	kind: "mana";
+	context: {
+		source: ObjectId;
+		ability: ActivatedAbilityId;
+		amounts: ManaAmount[];
 	};
 }
 
@@ -128,6 +140,7 @@ export type ChoiceRequest =
 	| OwnHandChoiceRequest
 	| OptionalChoiceRequest
 	| PriorityActionChoiceRequest
+	| ManaChoiceRequest
 	| TriggerOrderChoiceRequest
 	| DeclareAttackersChoiceRequest
 	| DeclareBlockersChoiceRequest
@@ -215,6 +228,7 @@ type RequestInput =
 	| Omit<ReplacementChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OwnHandChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OptionalChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
+	| Omit<ManaChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<
 			TriggerOrderChoiceRequest,
 			"version" | "id" | "ordinal" | "fingerprint"
@@ -774,6 +788,42 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			options: hand.map((id) => ({
 				id: String(id),
 				label: `${objectLabel(state, id)}#${id}`,
+			})),
+		});
+		return this.choose(state, request, candidates);
+	}
+
+	chooseManaAmount(
+		state: GameState,
+		player: PlayerId,
+		source: ObjectId,
+		ability: ActivatedAbilityId,
+		amounts: readonly ManaAmount[],
+	): ManaAmount {
+		const candidates = amounts.map((amount, index) => ({
+			id: String(index),
+			value: amount,
+		}));
+		const request = this.request({
+			kind: "mana",
+			player,
+			context: {
+				source,
+				ability,
+				amounts: amounts.map((amount) => ({ ...amount })),
+			},
+			options: amounts.map((amount, index) => ({
+				id: String(index),
+				label: `Add ${(["w", "u", "b", "r", "g", "c"] as const)
+					.map((type) => {
+						const quantity = amount[type] ?? 0;
+						return quantity === 0
+							? ""
+							: quantity === 1
+								? `{${type.toUpperCase()}}`
+								: `${quantity}{${type.toUpperCase()}}`;
+					})
+					.join("")}.`,
 			})),
 		});
 		return this.choose(state, request, candidates);

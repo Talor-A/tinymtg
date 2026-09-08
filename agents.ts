@@ -71,6 +71,7 @@ export class ScriptedAgent implements SyncAgent {
 			}
 
 			case "ownHand":
+			case "mana":
 				return firstOption(request);
 
 			case "optional":
@@ -156,6 +157,7 @@ export class RandomAgent implements SyncAgent {
 			case "ownHand":
 			case "optional":
 			case "priorityAction":
+			case "mana":
 				return { optionId: randomElement(request.options).id };
 			default:
 				return assertNever(request);
@@ -176,6 +178,11 @@ export class KeyboardAgent implements SyncAgent {
 				break;
 			case "ownHand":
 				console.log(`\n[Player ${request.player}: choose a card to discard]`);
+				break;
+			case "mana":
+				console.log(
+					`\n[Player ${request.player}: choose mana for ability ${request.context.ability}]`,
+				);
 				break;
 			case "optional":
 				console.log(`\n[Optional ability: ${request.context.ability.text}]`);
