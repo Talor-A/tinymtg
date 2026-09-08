@@ -382,20 +382,25 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			effect.kind !== "modify-pt"
 		)
 			continue;
-		let effectSlot: string;
-		if (damageTarget) effectSlot = damageTarget.targetSlot;
-		else if (effect.kind === "modify-pt") {
-			// An effect on its own source declares no target to check.
-			if (effect.object === "source") continue;
-			effectSlot = effect.object.targetSlot;
-		} else {
-			assert(
-				effect.kind === "destroy" ||
-					effect.kind === "counter" ||
-					effect.kind === "return to hand",
-			);
-			effectSlot = effect.targetSlot;
-		}
+		const objectTarget =
+			(effect.kind === "destroy" ||
+				effect.kind === "return to hand" ||
+				effect.kind === "modify-pt") &&
+			effect.object !== "source"
+				? effect.object
+				: null;
+		// An effect on its own source declares no target to check.
+		if (
+			(effect.kind === "return to hand" || effect.kind === "modify-pt") &&
+			effect.object === "source"
+		)
+			continue;
+		const counterTarget = effect.kind === "counter" ? effect.spell : null;
+		const effectSlot =
+			damageTarget?.targetSlot ??
+			objectTarget?.targetSlot ??
+			counterTarget?.targetSlot;
+		assert(effectSlot !== undefined);
 		const target = targets[0];
 		if (targets.length !== 1 || !target || effectSlot !== target.id) {
 			return issue(
@@ -509,6 +514,7 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 	api: string,
 	where: { nodeId?: string; line?: number },
 	parsePlayer: (value: string | undefined) => Player | null,
+	allowSourceObject: boolean,
 ): Exclude<EffectDef<Player>, { kind: "may" }> | ImportIssue {
 	switch (api) {
 		case "gainlife":
@@ -678,7 +684,10 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				where,
 			);
 			if (badParams) return badParams;
-			return { kind: "destroy", targetSlot: TARGET_SLOT };
+			return {
+				kind: "destroy",
+				object: { targetSlot: TARGET_SLOT },
+			};
 		}
 		case "counter": {
 			const badParams = checkParams(
@@ -693,7 +702,10 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				where,
 			);
 			if (badParams) return badParams;
-			return { kind: "counter", targetSlot: TARGET_SLOT };
+			return {
+				kind: "counter",
+				spell: { targetSlot: TARGET_SLOT },
+			};
 		}
 		case "changezone": {
 			const badParams = checkParams(
@@ -702,6 +714,7 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					discriminatorLower,
 					"origin",
 					"destination",
+					"defined",
 					"validtgts",
 					"tgtprompt",
 					...COMMON_EFFECT_PARAMS,
@@ -721,14 +734,29 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					where,
 				);
 			}
-			if (getForgeParam(params, "ValidTgts") === undefined) {
+			const validTargets = getForgeParam(params, "ValidTgts");
+			const defined = getForgeParam(params, "Defined");
+			if (validTargets !== undefined) {
+				if (defined !== undefined)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"targeted ChangeZone cannot also use Defined$",
+						where,
+					);
+				return {
+					kind: "return to hand",
+					object: { targetSlot: TARGET_SLOT },
+				};
+			}
+			// Forge defaults an omitted Defined$ to the source object. Accept the
+			// explicit spelling too, but reject every other non-target subject.
+			if (!allowSourceObject || (defined !== undefined && defined !== "Self"))
 				return issue(
-					"UNSUPPORTED_TARGET",
-					"ChangeZone to hand must declare targets",
+					"UNSUPPORTED_PARAMETER",
+					"unsupported Defined$ ChangeZone subject",
 					where,
 				);
-			}
-			return { kind: "return to hand", targetSlot: TARGET_SLOT };
+			return { kind: "return to hand", object: "source" };
 		}
 		case "putcounter": {
 			const badParams = checkParams(
@@ -918,6 +946,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 	rejectAtRoot: boolean,
 	rootTokens: readonly (typeof ABILITY_DISCRIMINATOR_TOKENS)[number][],
 	parsePlayer: (value: string | undefined) => Player | null,
+	allowSourceObject: boolean,
 ): { effects: EffectDef<Player>[]; usedSVarNames: string[] } | ImportIssue {
 	const effects: EffectDef<Player>[] = [];
 	const usedSVarNames: string[] = [];
@@ -960,6 +989,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			disc.api,
 			where,
 			parsePlayer,
+			allowSourceObject,
 		);
 		if ("code" in effect) return effect;
 		effects.push(effect);
@@ -1461,6 +1491,7 @@ function lowerTrigger(
 		true,
 		["DB"],
 		mode === "SpellCast" ? spellCastEffectPlayer : triggerEffectPlayer,
+		true,
 	);
 	if ("code" in chain) return chain;
 	for (const n of chain.usedSVarNames) used.add(n);
@@ -2379,6 +2410,7 @@ export function lowerForgeCard(
 			false,
 			disc.token === "SP" ? ["SP"] : ["AB"],
 			player,
+			disc.token === "AB",
 		);
 		if ("code" in chain) return reject(chain);
 		const targets = parseTarget(

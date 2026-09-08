@@ -39,6 +39,7 @@ const POSITIVE_FIXTURES = [
 	"p/preordain",
 	"s/sorins_thirst",
 	"a/arashin_cleric",
+	"a/arcanis_the_omnipotent",
 	"a/ajanis_mantra",
 	"n/necrogen_mists",
 	"s/seizan_perverter_of_truth",
@@ -257,7 +258,9 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
-			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 3 }],
+			effects: [
+				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 3 },
+			],
 		});
 
 		const murder = importFixture("m/murder");
@@ -274,7 +277,17 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					},
 				},
 			],
-			effects: [{ kind: "destroy", targetSlot: "target-1" }],
+			effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
+		});
+	});
+
+	test("Arcanis lowers its nontargeted self-bounce ability", () => {
+		const result = importFixture("a/arcanis_the_omnipotent");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated[1]).toMatchObject({
+			cost: { mana: { n: 2, u: 2 }, tapSelf: false },
+			targets: [],
+			effects: [{ kind: "return to hand", object: "source" }],
 		});
 	});
 
@@ -294,7 +307,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 						legal: { kind: "spell" },
 					},
 				],
-				effects: [{ kind: "counter", targetSlot: "target-1" }],
+				effects: [{ kind: "counter", spell: { targetSlot: "target-1" } }],
 			},
 		});
 	});
@@ -343,7 +356,9 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				targets: [
 					{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 				],
-				effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 1 }],
+				effects: [
+					{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 1 },
+				],
 			},
 		]);
 
@@ -359,7 +374,11 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		const kavu = importFixture("f/flametongue_kavu");
 		if (!kavu.ok) throw new Error("expected ok");
 		expect(kavu.card.abilityDefinitions.triggered[0]).toMatchObject({
-			condition: { kind: "change zone", to: "battlefield", selector: { kind: "self" } },
+			condition: {
+				kind: "change zone",
+				to: "battlefield",
+				selector: { kind: "self" },
+			},
 			targets: [
 				{
 					id: "target-1",
@@ -369,7 +388,9 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					},
 				},
 			],
-			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 4 }],
+			effects: [
+				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 4 },
+			],
 		});
 
 		const vandal = importFixture("m/manic_vandal");
@@ -384,7 +405,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					},
 				},
 			],
-			effects: [{ kind: "destroy", targetSlot: "target-1" }],
+			effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
 		});
 	});
 
@@ -1126,14 +1147,37 @@ describe("lowerForgeCard: ChangeZone is limited to bounce", () => {
 		});
 	}
 
-	test("rejects a bounce with no declared target", () => {
+	test("rejects a spell bounce with no declared target", () => {
 		const result = importForgeCard(
 			unsummon.replace(" | ValidTgts$ Creature", ""),
 			{ id: "mutated-unsummon" },
 		);
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
-		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_TARGET");
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects an unsupported defined bounce subject", () => {
+		const result = importForgeCard(
+			unsummon.replace("ValidTgts$ Creature", "Defined$ Remembered"),
+			{ id: "mutated-unsummon" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
+	test("rejects a bounce with both a target and a defined subject", () => {
+		const result = importForgeCard(
+			unsummon.replace(
+				"ValidTgts$ Creature",
+				"ValidTgts$ Creature | Defined$ Self",
+			),
+			{ id: "mutated-unsummon" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
 	});
 });
 

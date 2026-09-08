@@ -57,7 +57,9 @@ registerCard({
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
-			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 }],
+			effects: [
+				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
+			],
 		},
 	],
 });

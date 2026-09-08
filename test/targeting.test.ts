@@ -18,6 +18,7 @@ import {
 	InvalidChoiceAnswerError,
 	newGame,
 	type ObjectId,
+	type ObjectSelectorDef,
 	perform,
 	readObject,
 	registerCard,
@@ -27,7 +28,6 @@ import {
 	spawnPermanent,
 	type TargetBindings,
 	type TargetDef,
-	type ObjectSelectorDef,
 	turnLocation,
 } from "../index.ts";
 import {

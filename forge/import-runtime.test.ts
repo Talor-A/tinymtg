@@ -65,6 +65,7 @@ registerRuntimeFixture("a/aesthir_glider", "rt-aesthir-glider");
 registerRuntimeFixture("r/root_maze", "rt-root-maze");
 registerRuntimeFixture("f/faithful_watchdog", "rt-faithful-watchdog");
 registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
+registerRuntimeFixture("a/arcanis_the_omnipotent", "rt-arcanis");
 registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("p/preordain", "rt-preordain");
@@ -269,10 +270,7 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("Firebrand Archer and Kessig Flamebreather damage their controller's opponent", () => {
-		for (const cardId of [
-			"rt-firebrand-archer",
-			"rt-kessig-flamebreather",
-		]) {
+		for (const cardId of ["rt-firebrand-archer", "rt-kessig-flamebreather"]) {
 			const state = setupMain();
 			spawnPermanent(state, cardId, ALICE);
 			const spell = spawnCard(state, "darksteel-relic", ALICE, "hand");
@@ -285,11 +283,12 @@ describe("forge-import runtime: triggers", () => {
 			);
 			settlePriority(state, passingAgents());
 
-			expect(state.players[ALICE].life, `${cardId} does not damage you`).toBe(20);
-			expect(
-				state.players[BOB].life,
-				`${cardId} damages your opponent`,
-			).toBe(19);
+			expect(state.players[ALICE].life, `${cardId} does not damage you`).toBe(
+				20,
+			);
+			expect(state.players[BOB].life, `${cardId} damages your opponent`).toBe(
+				19,
+			);
 		}
 	});
 
@@ -601,14 +600,42 @@ describe("forge-import runtime: spell effects", () => {
 		expect(state.players[ALICE].hand.map((id) => name(state, id))).toContain(
 			"Forest",
 		);
-		expect(state.players[ALICE].graveyard.map((id) => name(state, id))).toContain(
-			"Grizzly Bears",
-		);
+		expect(
+			state.players[ALICE].graveyard.map((id) => name(state, id)),
+		).toContain("Grizzly Bears");
 		expect(agents[ALICE].surveilChoices).toHaveLength(0);
 	});
 });
 
 describe("forge-import runtime: activated abilities", () => {
+	test("Arcanis's imported nontargeted ability returns its source to its owner's hand", () => {
+		const state = setupMain();
+		const arcanis = spawnPermanent(state, "rt-arcanis", ALICE);
+		const handSize = state.players[ALICE].hand.length;
+		const ability = abilityId("activated", "rt-arcanis", 1);
+		state.players[ALICE].manaPool.u = 2;
+		state.players[ALICE].manaPool.c = 2;
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: arcanis.id, ability },
+			passingAgents(),
+		);
+
+		expect(state.stack).toHaveLength(1);
+		expect(state.battlefield).toContain(arcanis.id);
+		settlePriority(state, passingAgents());
+		expect(state.battlefield).not.toContain(arcanis.id);
+		expect(state.players[ALICE].hand).toHaveLength(handSize + 1);
+		expect(
+			state.players[ALICE].hand.some(
+				(object) => name(state, object) === "Arcanis the Omnipotent",
+			),
+		).toBe(true);
+		expect(state.stack).toHaveLength(0);
+	});
+
 	test("Timeless Lotus's imported fixed list adds W/U and the other symbols in one activation", () => {
 		const state = setupMain();
 		const lotus = spawnPermanent(state, "rt-timeless-lotus", ALICE);

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 
 const TOKEN_SCRIPT_ROOT = join(import.meta.dir, "..", "cards", "tokenscripts");

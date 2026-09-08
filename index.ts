@@ -1318,7 +1318,7 @@ function buildFilteredGameView(
 				assertDefined(bound, `temporary P/T effect has no binding for ${slot}`);
 				if (bound.type !== "permanent") continue;
 				const current = characteristics.get(bound.id);
-				if (!current || current.kind !== "creature") continue;
+				if (current?.kind !== "creature") continue;
 				current.power += definition.power;
 				current.toughness += definition.toughness;
 			}
@@ -2028,6 +2028,10 @@ export function temporaryEffectDefinition(
 export type RelativeEffectPlayer = "you" | "opponent";
 export type TriggerEffectPlayer = RelativeEffectPlayer | "triggering-player";
 
+export interface TargetSlotRef {
+	targetSlot: string;
+}
+
 export type EffectDef<
 	Player extends TriggerEffectPlayer = RelativeEffectPlayer,
 > =
@@ -2044,22 +2048,22 @@ export type EffectDef<
 	  }
 	| {
 			kind: "damage";
-			recipient: { player: Player } | { targetSlot: string };
+			recipient: { player: Player } | TargetSlotRef;
 			amount: number;
 	  }
-	| { kind: "destroy"; targetSlot: string }
-	| { kind: "counter"; targetSlot: string }
+	| { kind: "destroy"; object: TargetSlotRef }
+	| { kind: "counter"; spell: TargetSlotRef }
 	| {
 			/** Put counters on the object that created this effect. */
 			kind: "add-counters-to-source";
 			counter: PermanentCounter;
 			amount: number;
 	  }
-	| { kind: "return to hand"; targetSlot: string }
+	| { kind: "return to hand"; object: "source" | TargetSlotRef }
 	| {
 			kind: "sacrifice";
 			/** A relative player, or the player bound to a target slot. */
-			player: Player | { targetSlot: string };
+			player: Player | TargetSlotRef;
 			selector: ObjectSelectorDef;
 			amount: 1;
 	  }
@@ -2070,7 +2074,7 @@ export type EffectDef<
 			 * +1/+1"), or the creature bound to a declared target slot ("target
 			 * creature gets +3/+3").
 			 */
-			object: "source" | { targetSlot: string };
+			object: "source" | TargetSlotRef;
 			power: number;
 			toughness: number;
 			duration: "until-end-of-turn";
@@ -4967,7 +4971,10 @@ function triggerSubjectsMatch(
 	selector: ObjectSelectorDef,
 ): boolean {
 	const controller = controllerOf(source);
-	assertDefined(controller, "a functioning trigger source must have a controller");
+	assertDefined(
+		controller,
+		"a functioning trigger source must have a controller",
+	);
 	return subjects.some((subject) =>
 		selectorMatches(selector, readObject(read, subject.id), {
 			controller,
@@ -5038,10 +5045,7 @@ function triggerMatches(
 			if (condition.from === "battlefield") {
 				// The exact self-death form is detected from the pre-event context. A
 				// surviving permanent with the same ability is not the departed self.
-				if (
-					condition.to === "graveyard" &&
-					condition.selector.kind === "self"
-				)
+				if (condition.to === "graveyard" && condition.selector.kind === "self")
 					return false;
 				throw new Error("leaves the battlefield triggers are not supported");
 			}
@@ -6433,31 +6437,26 @@ function resolveEffects(
 			effect.kind === "sacrifice" && typeof effect.player !== "string"
 				? effect.player
 				: null;
-		const modifyPtSlot =
-			effect.kind === "modify-pt" && effect.object !== "source"
-				? effect.object.targetSlot
+		const objectTarget =
+			(effect.kind === "destroy" ||
+				effect.kind === "return to hand" ||
+				effect.kind === "modify-pt") &&
+			effect.object !== "source"
+				? effect.object
 				: null;
+		const counterTarget = effect.kind === "counter" ? effect.spell : null;
 		if (
 			damageTarget !== null ||
-			effect.kind === "destroy" ||
-			effect.kind === "counter" ||
-			effect.kind === "return to hand" ||
-			modifyPtSlot !== null ||
+			objectTarget !== null ||
+			counterTarget !== null ||
 			sacrificeTarget !== null
 		) {
-			let targetSlot: string;
-			if (damageTarget) targetSlot = damageTarget.targetSlot;
-			else if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
-			else if (modifyPtSlot !== null) targetSlot = modifyPtSlot;
-			else {
-				assert(
-					effect.kind === "destroy" ||
-						effect.kind === "counter" ||
-						effect.kind === "return to hand",
-				);
-
-				targetSlot = effect.targetSlot;
-			}
+			const targetSlot =
+				damageTarget?.targetSlot ??
+				objectTarget?.targetSlot ??
+				counterTarget?.targetSlot ??
+				sacrificeTarget?.targetSlot;
+			assertDefined(targetSlot);
 			const binding = item.targets[0];
 			assertDefined(binding, "effect has no target binding");
 			assert(
@@ -6519,6 +6518,21 @@ function resolveEffects(
 			);
 			continue;
 		}
+		if (effect.kind === "return to hand" && effect.object === "source") {
+			const self = maybePermanent(state, item.source);
+			if (!self) continue;
+			performIn(
+				state,
+				effectToEvent(state, item, effect, {
+					type: "permanent",
+					id: self.id,
+				}),
+				choices,
+				scope,
+				0,
+			);
+			continue;
+		}
 		if (effect.kind === "modify-pt") {
 			let slot: string;
 			let subject: EntityRef;
@@ -6557,8 +6571,9 @@ function resolveEffects(
 }
 
 /**
- * Turns one definition-time instruction into the event it performs. `bound` is
- * the target chosen for the effect's slot, which only targeting effects have.
+ * Turns one definition-time instruction into the event it performs. `subject`
+ * is the entity resolved for the instruction's semantic operand, when it has
+ * one; it can come from either a target slot or the ability's source.
  */
 function relativeEffectPlayer(
 	item: ResolutionSource,
@@ -6581,7 +6596,7 @@ function effectToEvent(
 	state: GameState,
 	item: ResolutionSource,
 	effect: Exclude<EffectDef<TriggerEffectPlayer>, { kind: "may" }>,
-	bound: EntityRef | null,
+	subject: EntityRef | null,
 ): GameEvent {
 	switch (effect.kind) {
 		case "gain-life":
@@ -6645,8 +6660,11 @@ function effectToEvent(
 		case "damage": {
 			const target =
 				"player" in effect.recipient
-					? { type: "player" as const, player: relativeEffectPlayer(item, effect.recipient.player) }
-					: bound;
+					? {
+							type: "player" as const,
+							player: relativeEffectPlayer(item, effect.recipient.player),
+						}
+					: subject;
 			assert(
 				target?.type === "player" || target?.type === "permanent",
 				"damage target must be a player or permanent",
@@ -6669,33 +6687,33 @@ function effectToEvent(
 		}
 		case "destroy":
 			assert(
-				bound !== null && bound.type === "permanent",
+				subject !== null && subject.type === "permanent",
 				"destroy requires a bound permanent target",
 			);
 			return {
 				kind: "destroy",
-				object: bound.id,
+				object: subject.id,
 				source: item.source,
 				noRegen: false,
 			};
 		case "counter":
 			assert(
-				bound !== null && bound.type === "spell",
+				subject !== null && subject.type === "spell",
 				"counter requires a bound spell target",
 			);
 			return {
 				kind: "counter",
-				spell: bound.id,
+				spell: subject.id,
 				source: item.source,
 			};
 		case "add-counters-to-source":
 			throw new Error("source counter effects resolve directly");
 		case "return to hand": {
 			assert(
-				bound !== null && bound.type === "permanent",
-				"return to hand requires a bound permanent target",
+				subject !== null && subject.type === "permanent",
+				"return to hand requires a permanent object",
 			);
-			const object = state.objects.get(bound.id);
+			const object = state.objects.get(subject.id);
 			assertDefined(object);
 			return {
 				kind: "change zone",
@@ -6703,7 +6721,7 @@ function effectToEvent(
 				destination: { zone: "hand" },
 				cause: "resolve",
 				// CR 400.3: a card in a hand has an owner and no controller.
-				object: bound.id,
+				object: subject.id,
 			};
 		}
 		case "sacrifice":
@@ -6864,7 +6882,11 @@ function requiredTargetDefinition(
 		}
 		// An effect on its own source declares no target, so there is no slot to
 		// check it against.
-		if (effect.kind === "modify-pt" && effect.object === "source") return;
+		if (
+			(effect.kind === "modify-pt" || effect.kind === "return to hand") &&
+			effect.object === "source"
+		)
+			return;
 		const damageTarget =
 			effect.kind === "damage" && "targetSlot" in effect.recipient
 				? effect.recipient
@@ -6882,20 +6904,20 @@ function requiredTargetDefinition(
 			effect.kind === "sacrifice" && typeof effect.player !== "string"
 				? effect.player
 				: null;
-		let targetSlot: string;
-		if (damageTarget) targetSlot = damageTarget.targetSlot;
-		else if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
-		else if (effect.kind === "modify-pt") {
-			assert(effect.object !== "source", "self effects return above");
-			targetSlot = effect.object.targetSlot;
-		} else {
-			assert(
-				effect.kind === "destroy" ||
-					effect.kind === "counter" ||
-					effect.kind === "return to hand",
-			);
-			targetSlot = effect.targetSlot;
-		}
+		const objectTarget =
+			(effect.kind === "destroy" ||
+				effect.kind === "return to hand" ||
+				effect.kind === "modify-pt") &&
+			effect.object !== "source"
+				? effect.object
+				: null;
+		const counterTarget = effect.kind === "counter" ? effect.spell : null;
+		const targetSlot =
+			damageTarget?.targetSlot ??
+			objectTarget?.targetSlot ??
+			counterTarget?.targetSlot ??
+			sacrificeTarget?.targetSlot;
+		assertDefined(targetSlot);
 		assert(
 			target !== null && targetSlot === target.id,
 			"effect must reference its ability's target slot",
@@ -7451,6 +7473,7 @@ function activateAbilityIn(
 				effect.kind === "damage" ||
 				effect.kind === "destroy" ||
 				effect.kind === "counter" ||
+				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "sacrifice" ||
 				effect.kind === "create-token"

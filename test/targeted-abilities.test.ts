@@ -87,7 +87,9 @@ registerCard({
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
-			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 }],
+			effects: [
+				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
+			],
 		},
 	],
 });
@@ -160,7 +162,7 @@ registerCard({
 				},
 			],
 			effects: [
-				{ kind: "destroy", targetSlot: "target-1" },
+				{ kind: "destroy", object: { targetSlot: "target-1" } },
 				{ kind: "gain-life", player: "you", amount: 3 },
 			],
 		},
@@ -188,7 +190,7 @@ registerCard({
 			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
 			effects: [
-				{ kind: "destroy", targetSlot: "target-1" },
+				{ kind: "destroy", object: { targetSlot: "target-1" } },
 				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
 			],
 		},
@@ -228,7 +230,7 @@ registerCard({
 					},
 				},
 			],
-			effects: [{ kind: "destroy", targetSlot: "target-1" }],
+			effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
 		},
 	],
 });
@@ -302,7 +304,9 @@ registerCard({
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
-			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 }],
+			effects: [
+				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
+			],
 		},
 	],
 });
@@ -324,7 +328,9 @@ registerCard({
 			text: "{T}: This creature deals 1 damage to target artifact.",
 			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
-			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 1 }],
+			effects: [
+				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 1 },
+			],
 		},
 	],
 });

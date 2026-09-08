@@ -71,6 +71,7 @@ Aragorn, the Uniter
 Arashin Cleric
 Arasta of the Endless Web
 Arcane Encyclopedia
+Arcanis the Omnipotent
 Archangel
 Archivist
 Arctic Treeline
@@ -157,6 +158,7 @@ Blighted Cataract
 Blighted Gorge
 Blighted Shaman
 Blind Phantasm
+Blinking Spirit
 Blisterstick Shaman
 Blood Bairn
 Blood Glutton
@@ -285,6 +287,7 @@ Copper Tablet
 Coral Commando
 Coral Eel
 Coral Merfolk
+Corroding Dragonstorm
 Corrupt Eunuchs
 Council of Advisors
 Counsel of the Soratami
@@ -338,6 +341,7 @@ Darksteel Myr
 Darksteel Pendant
 Darksteel Relic
 Darkwater Catacombs
+Darting Merfolk
 Dawn Gryff
 Dawnhart Geist
 Dawning Angel
@@ -531,6 +535,7 @@ Flamecast Wheel
 Flamekin Spitfire
 Flametongue Kavu
 Fledgling Djinn
+Fleeting Image
 Flowstone Charger
 Flowstone Crusher
 Flowstone Giant
@@ -683,6 +688,7 @@ Hapless Researcher
 Happy Hogan, Dauntless Driver
 Harmonize
 Harrier Naga
+Haru-Onna
 Haunted Mire
 Havenwood Battleground
 Havoc
@@ -850,6 +856,7 @@ Lady Orca
 Lagac Lizard
 Lampad of Death's Vigil
 Lantern Kami
+Lantern Spirit
 Last Kiss
 Lathnu Sailback
 Lava Flow
@@ -998,6 +1005,7 @@ Night of Souls' Betrayal
 Night's Whisper
 Nightscape Master
 Nightshade Stinger
+Nikko-Onna
 Nimble Birdsticker
 Nimble Innovator
 Nimble Thopterist
@@ -1015,6 +1023,7 @@ Nyxborn Colossus
 Nyxborn Courser
 Nyxborn Marauder
 Nyxborn Seaguard
+Oboro, Palace in the Clouds
 Obsianus Golem
 Obsidian Giant
 Octoprophet
@@ -1193,6 +1202,7 @@ Roc Hunter
 Roc of Kher Ridges
 Rockslide Sorcerer
 Rod of Ruin
+Roiling Dragonstorm
 Romantic Rendezvous
 Ronom Unicorn
 Root Maze
@@ -1355,6 +1365,7 @@ Slagdrill Scrapper
 Slice in Twain
 Slingshot Goblin
 Slinking Skirge
+Sliptide Serpent
 Sliver Construct
 Sliver Queen
 Smash
@@ -1443,6 +1454,7 @@ Storm Spirit
 Stormcaller of Keranos
 Stormcloud Spirit
 Stormfront Pegasus
+Stormwatch Eagle
 Story Seeker
 Strafe
 Strangle
@@ -1504,6 +1516,7 @@ Tanglespan Lookout
 Tasseled Dromedary
 Tattered Apparition
 Tatyova, Benthic Druid
+Teeming Dragonstorm
 Teferi's Protege
 Tel-Jilad Justice
 Tempest Drake
@@ -1578,6 +1591,9 @@ Treetop Recluse
 Treetop Warden
 Trench Wurm
 Treva's Attendant
+Trial of Knowledge
+Trial of Strength
+Trial of Zeal
 Triton Shorethief
 Trokin High Guard
 Tropical Island
@@ -1744,6 +1760,7 @@ Yoked Ox
 Yotian Soldier
 Young Pyromancer
 Young Wei Recruits
+Yuki-Onna
 Zap
 Zarichi Tiger
 Zealot of the God-Pharaoh
@@ -1759,4 +1776,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1756`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1773`;
