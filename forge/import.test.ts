@@ -370,6 +370,38 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		});
 	});
 
+	test("Icy Manipulator lowers its paid tap ability and permanent target union", () => {
+		const result = importFixture("i/icy_manipulator");
+		if (!result.ok) throw new Error("expected Icy Manipulator to import");
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: "Tap target artifact, creature, or land.",
+				cost: { mana: { n: 1 }, tapSelf: true },
+				targets: [
+					{
+						id: "target-1",
+						min: 1,
+						max: 1,
+						legal: {
+							kind: "permanent",
+							selector: {
+								kind: "any",
+								selectors: [
+									{ kind: "type", type: "artifact" },
+									{ kind: "type", type: "creature" },
+									{ kind: "type", type: "land" },
+								],
+							},
+						},
+					},
+				],
+				effects: [{ kind: "tap", object: { targetSlot: "target-1" } }],
+			},
+		]);
+	});
+
 	test("targeted triggers carry their target declaration, not the T: line", () => {
 		const kavu = importFixture("f/flametongue_kavu");
 		if (!kavu.ok) throw new Error("expected ok");
@@ -1646,6 +1678,15 @@ describe("lowerForgeCard: required negative mutations", () => {
 			`Name:Bad Destroy\nManaCost:1 B\nTypes:Instant\nA:SP$ Destroy | ValidTgts$ Player | SpellDescription$ x.\n`,
 		);
 		expect(result.ok).toBe(false);
+	});
+
+	test("rejects Tap targeting a non-permanent slot", () => {
+		const result = importText(
+			`Name:Bad Tap\nManaCost:1 U\nTypes:Instant\nA:SP$ Tap | ValidTgts$ Player | SpellDescription$ x.\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_TARGET");
 	});
 
 	test("rejects an unused SVar", () => {

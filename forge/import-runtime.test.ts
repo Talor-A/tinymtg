@@ -77,6 +77,7 @@ registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
 registerRuntimeFixture("b/blazing_hellhound", "rt-blazing-hellhound");
 registerRuntimeFixture("a/acolyte_of_aclazotz", "rt-acolyte-of-aclazotz");
 registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
+registerRuntimeFixture("i/icy_manipulator", "rt-icy-manipulator");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
 registerRuntimeFixture("c/clone", "rt-clone");
@@ -878,6 +879,33 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(permanent(state, rod.id).tapped).toBe(true);
 		expect(state.players[ALICE].manaPool.c).toBe(0);
 		expect(state.players[BOB].life).toBe(19);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Icy Manipulator's imported ability pays its costs and taps its target on resolution", () => {
+		const state = setupMain();
+		const icy = spawnPermanent(state, "rt-icy-manipulator", ALICE);
+		const target = spawnPermanent(state, "rt-grizzly-bears", BOB);
+		const ability = abilityId("activated", "rt-icy-manipulator", 0);
+		state.players[ALICE].manaPool.c = 1;
+		const alice = new ScriptedAgent();
+		alice.targetChoices.push({ type: "permanent", id: target.id });
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: icy.id, ability },
+			[alice, new ScriptedAgent()],
+		);
+
+		expect(permanent(state, icy.id).tapped).toBe(true);
+		expect(permanent(state, target.id).tapped).toBe(false);
+		expect(state.players[ALICE].manaPool.c).toBe(0);
+		expect(state.stack).toHaveLength(1);
+
+		settlePriority(state, passingAgents());
+
+		expect(permanent(state, target.id).tapped).toBe(true);
 		expect(state.stack).toHaveLength(0);
 	});
 

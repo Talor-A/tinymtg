@@ -2053,6 +2053,7 @@ export type EffectDef<
 			amount: number;
 	  }
 	| { kind: "destroy"; object: TargetSlotRef }
+	| { kind: "tap"; object: TargetSlotRef }
 	| { kind: "counter"; spell: TargetSlotRef }
 	| {
 			kind: "add counters";
@@ -6528,6 +6529,7 @@ function resolveEffects(
 				: null;
 		const objectTarget =
 			(effect.kind === "destroy" ||
+				effect.kind === "tap" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "add counters") &&
@@ -6806,6 +6808,15 @@ function effectToEvent(
 				source: item.source,
 				noRegen: false,
 			};
+		case "tap":
+			assert(
+				subject !== null && subject.type === "permanent",
+				"tap requires a bound permanent target",
+			);
+			return {
+				kind: "tap",
+				ref: { kind: "object", object: subject.id },
+			};
 		case "counter":
 			assert(
 				subject !== null && subject.type === "spell",
@@ -7026,6 +7037,7 @@ function requiredTargetDefinition(
 		if (
 			damageTarget === null &&
 			effect.kind !== "destroy" &&
+			effect.kind !== "tap" &&
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt" &&
@@ -7055,6 +7067,7 @@ function requiredTargetDefinition(
 				: null;
 		const objectTarget =
 			(effect.kind === "destroy" ||
+				effect.kind === "tap" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "add counters") &&
@@ -7077,6 +7090,12 @@ function requiredTargetDefinition(
 			assert(
 				target.legal.kind === "permanent",
 				"destroy requires a permanent target",
+			);
+		}
+		if (effect.kind === "tap") {
+			assert(
+				target.legal.kind === "permanent",
+				"tap requires a permanent target",
 			);
 		}
 		if (effect.kind === "counter") {
@@ -7655,6 +7674,7 @@ function activateAbilityIn(
 				effect.kind === "lose-life" ||
 				effect.kind === "damage" ||
 				effect.kind === "destroy" ||
+				effect.kind === "tap" ||
 				effect.kind === "counter" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||

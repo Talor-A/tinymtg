@@ -392,6 +392,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			damageTarget === null &&
 			playerTarget === null &&
 			effect.kind !== "destroy" &&
+			effect.kind !== "tap" &&
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt" &&
@@ -400,6 +401,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			continue;
 		const objectTarget =
 			(effect.kind === "destroy" ||
+				effect.kind === "tap" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "add counters") &&
@@ -440,6 +442,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			return issue(
 				"UNSUPPORTED_TARGET",
 				"Destroy requires a permanent target",
+				where,
+			);
+		}
+		if (effect.kind === "tap" && target.legal.kind !== "permanent") {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"Tap requires a permanent target",
 				where,
 			);
 		}
@@ -773,6 +782,23 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			if (badParams) return badParams;
 			return {
 				kind: "destroy",
+				object: { targetSlot: TARGET_SLOT },
+			};
+		}
+		case "tap": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"validtgts",
+					"tgtprompt",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			return {
+				kind: "tap",
 				object: { targetSlot: TARGET_SLOT },
 			};
 		}
