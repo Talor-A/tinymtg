@@ -107,6 +107,7 @@ registerRuntimeFixture("k/kessig_flamebreather", "rt-kessig-flamebreather");
 registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
 registerRuntimeFixture("f/flayed_one", "rt-flayed-one");
 registerRuntimeFixture("m/mire_triton", "rt-mire-triton");
+registerRuntimeFixture("b/baleful_strix", "rt-baleful-strix");
 registerRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter");
 registerRuntimeFixture("t/timberland_guide", "rt-timberland-guide");
 registerCardFixture("d/darksteel_relic");
@@ -313,6 +314,32 @@ describe("forge-import runtime: triggers", () => {
 			["Forest", "Forest"],
 		);
 		expect(state.players[ALICE].life).toBe(19);
+	});
+
+	test("Baleful Strix's imported ETB draws one card on resolution", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		stockLibraries(state);
+		beginFirstTurn(state, agents);
+		const library = [...state.players[ALICE].library];
+
+		const strix = enterFromHand(state, "rt-baleful-strix", ALICE, agents);
+		const characteristics = readObject(
+			createReadContext(state),
+			strix,
+		).currentCharacteristics;
+		expect(characteristics.types).toEqual(["artifact", "creature"]);
+		expect(characteristics.keywords).toEqual(["flying", "deathtouch"]);
+		expect(state.players[ALICE].library).toEqual(library);
+		expect(state.players[ALICE].hand).toHaveLength(0);
+		expect(state.pendingTriggers).toHaveLength(1);
+
+		settlePriority(state, agents);
+		expect(state.players[ALICE].library).toEqual(library.slice(0, -1));
+		expect(state.players[ALICE].hand.map((id) => name(state, id))).toEqual([
+			"Forest",
+		]);
+		expect(state.stack).toHaveLength(0);
 	});
 
 	test("Resolute Reinforcements casts during an opponent's turn and creates its Soldier", () => {

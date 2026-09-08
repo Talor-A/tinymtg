@@ -86,6 +86,7 @@ const POSITIVE_FIXTURES = [
 	"i/impulse",
 	"s/stock_up",
 	"m/mire_triton",
+	"b/baleful_strix",
 	"t/thrashing_brontodon",
 	"c/cathar_commando",
 	"r/resolute_reinforcements",
@@ -658,6 +659,35 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					{ kind: "mill", player: "you", amount: 2 },
 					{ kind: "gain-life", player: "you", amount: 2 },
 				],
+			},
+		]);
+	});
+
+	test("Baleful Strix keeps every characteristic and its complete ETB trigger", () => {
+		const result = importFixture("b/baleful_strix");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card).toMatchObject({
+			name: "Baleful Strix",
+			types: ["artifact", "creature"],
+			subtypes: ["Bird"],
+			colors: ["u", "b"],
+			manaCost: { u: 1, b: 1 },
+			power: 1,
+			toughness: 1,
+			keywords: ["flying", "deathtouch"],
+		});
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigDraw",
+				text: "When CARDNAME enters, draw a card.",
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: { kind: "self" },
+				},
+				targets: [],
+				effects: [{ kind: "draw", player: "you", amount: 1 }],
 			},
 		]);
 	});
