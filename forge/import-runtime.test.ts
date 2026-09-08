@@ -88,6 +88,7 @@ registerRuntimeFixture("k/kessig_flamebreather", "rt-kessig-flamebreather");
 registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
 registerRuntimeFixture("f/flayed_one", "rt-flayed-one");
 registerRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter");
+registerRuntimeFixture("t/timberland_guide", "rt-timberland-guide");
 registerCardFixture("d/darksteel_relic");
 
 {
@@ -251,6 +252,26 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].graveyard.map((id) => name(state, id))).toEqual(
 			["Forest", "Forest", "Forest"],
 		);
+	});
+
+	test("Timberland Guide's imported ETB trigger puts a counter on its chosen creature", () => {
+		const state = newGame();
+		const alice = new ScriptedAgent();
+		const agents: SyncAgents = [alice, new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+		const target = spawnPermanent(state, "rt-grizzly-bears", BOB);
+		alice.targetChoices.push({ type: "permanent", id: target.id });
+
+		const guide = enterFromHand(state, "rt-timberland-guide", ALICE, agents);
+
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(permanent(state, target.id).counters).toEqual({});
+		settlePriority(state, agents);
+		expect(permanent(state, target.id).counters).toEqual({ "+1/+1": 1 });
+		expect(permanent(state, guide).counters).toEqual({});
+		expect(
+			readObject(createReadContext(state), target.id).currentCharacteristics,
+		).toMatchObject({ power: 3, toughness: 3 });
 	});
 
 	test("Ajani's Mantra's imported upkeep trigger fires only for its controller, and its choice is genuinely optional", () => {

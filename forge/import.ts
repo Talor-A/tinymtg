@@ -877,6 +877,8 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				new Set([
 					discriminatorLower,
 					"defined",
+					"validtgts",
+					"tgtprompt",
 					"countertype",
 					"counternum",
 					...COMMON_EFFECT_PARAMS,
@@ -888,14 +890,32 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				getForgeParam(params, "CounterType") ?? "",
 			);
 			const amount = positiveInteger(getForgeParam(params, "CounterNum"));
-			if (
-				getForgeParam(params, "Defined") !== "Self" ||
-				counter === undefined ||
-				amount === null
-			)
+			if (counter === undefined || amount === null)
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"PutCounter requires Defined$ Self, a supported CounterType$, and a positive CounterNum$",
+					"PutCounter requires a supported CounterType$ and a positive CounterNum$",
+					where,
+				);
+			const defined = getForgeParam(params, "Defined");
+			const validTargets = getForgeParam(params, "ValidTgts");
+			if (validTargets !== undefined) {
+				if (defined !== undefined)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"targeted PutCounter cannot also use Defined$",
+						where,
+					);
+				return {
+					kind: "add counters",
+					object: { targetSlot: TARGET_SLOT },
+					counter,
+					amount,
+				};
+			}
+			if (defined !== "Self")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"non-targeted PutCounter requires Defined$ Self",
 					where,
 				);
 			return { kind: "add counters", object: "source", counter, amount };

@@ -73,6 +73,7 @@ const POSITIVE_FIXTURES = [
 	"u/unsummon",
 	"b/boar_q_pine",
 	"d/deeproot_champion",
+	"t/timberland_guide",
 	"s/spellgorger_weird",
 	"f/firebrand_archer",
 	"k/kessig_flamebreather",
@@ -747,6 +748,53 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				],
 			},
 		]);
+	});
+
+	test("Timberland Guide lowers its targeted PutCounter ETB trigger", () => {
+		const result = importFixture("t/timberland_guide");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "GoodWood",
+				text: expect.any(String),
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					selector: { kind: "self" },
+				},
+				targets: [
+					{
+						id: "target-1",
+						min: 1,
+						max: 1,
+						legal: {
+							kind: "permanent",
+							selector: { kind: "type", type: "creature" },
+						},
+					},
+				],
+				effects: [
+					{
+						kind: "add counters",
+						object: { targetSlot: "target-1" },
+						counter: "+1/+1",
+						amount: 1,
+					},
+				],
+			},
+		]);
+	});
+
+	test("PutCounter rejects ambiguous targeted and Defined subjects", () => {
+		const result = importText(
+			`Name:Ambiguous Counter\nManaCost:G\nTypes:Instant\nA:SP$ PutCounter | ValidTgts$ Creature | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1 | SpellDescription$ x\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.message).toBe(
+			"targeted PutCounter cannot also use Defined$",
+		);
 	});
 
 	test("Student of Ojutai lowers its noncreature cast trigger", () => {
