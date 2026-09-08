@@ -3,6 +3,7 @@
 exports[`the accepted-card list matches its snapshot: accepted card names 1`] = `
 "A-Dragonborn Looter
 A-Elderleaf Mentor
+A-Rockslide Sorcerer
 A.I.M. Bot
 A.I.M. Synthoids
 Aardvark Sloth
@@ -17,7 +18,9 @@ Aeolipile
 Aerial Responder
 Aesthir Glider
 Aether Adept
+Aether Sting
 Affa Protector
+Aftershock
 Ageless Guardian
 Agent of Stromgald
 Aggressive Urge
@@ -167,8 +170,10 @@ Bog Imp
 Bog Initiate
 Bogstomper
 Bolt of Keranos
+Boltwave
 Bombard
 Bonebreaker Giant
+Boomerang, Blade Flinger
 Border Guard
 Border Patrol
 Borderland Minotaur
@@ -184,6 +189,7 @@ Brass Secretary
 Brazen Scourge
 Breakneck Berserker
 Breath of Fire
+Breath of Malfegor
 Breathstealer
 Brilliant Plan
 Brimstone Dragon
@@ -275,6 +281,7 @@ Contingency Plan
 Contraband Kingpin
 Contradict
 Copper Myr
+Copper Tablet
 Coral Commando
 Coral Eel
 Coral Merfolk
@@ -384,6 +391,7 @@ Dragon Trainer
 Dragonborn Looter
 Dragoon's Wyvern
 Dramatic Rescue
+Drana's Emissary
 Dread Reaper
 Dread Shade
 Dread of Night
@@ -443,6 +451,7 @@ Elvish Visionary
 Elvish Warrior
 Ember Hauler
 Ember Shot
+Embraal Gear-Smasher
 Emmessi Tome
 Enchantress's Presence
 Encroaching Wastes
@@ -453,6 +462,7 @@ Enlightened Maniac
 Enormous Baloth
 Enraged Killbot
 Envoy of Okinec Ahau
+Erebor Flamesmith
 Erratic Visionary
 Ertai, Wizard Adept
 Ertai, the Corrupted
@@ -508,15 +518,19 @@ Fire Ambush
 Fire Diamond
 Fire Elemental
 Fire Imp
+Fire Nation Archers
 Fire Nation Soldier
 Fire Sprites
+Firebrand Archer
 Fireforger's Puzzleknot
+Firespitter Whelp
 Flame Lash
 Flame Slash
 Flameborn Viron
 Flamecast Wheel
 Flamekin Spitfire
 Flametongue Kavu
+Fledgling Djinn
 Flowstone Charger
 Flowstone Crusher
 Flowstone Giant
@@ -586,6 +600,7 @@ Gilded Sentinel
 Gin'tak Charge
 Glacial Floodplain
 Glass Golem
+Glidedive Duo
 Glider Kids
 Glimmerburst
 Gloom Pangolin
@@ -655,6 +670,7 @@ Guardian of Pilgrims
 Gumato
 Gutless Ghoul
 Gutter Skulk
+Guttersnipe
 Gyre Engineer
 Haazda Exonerator
 Haazda Officer
@@ -729,6 +745,7 @@ Iceridge Serpent
 Icewind Elemental
 Idyllic Beachfront
 Imaginary Friends
+Impact Tremors
 Impale
 Imperial Outrider
 Imperious Inkmage
@@ -738,6 +755,7 @@ Incurable Ogre
 Independent Troops
 Indomitable Ancients
 Indrik Stomphowler
+Infectious Horror
 Infernal Grasp
 Infernal Idol
 Infuriate
@@ -747,6 +765,7 @@ Insight
 Inspired Insurgent
 Inspiring Cleric
 Introduction to Prophecy
+Intruding Soulrager
 Invoke the Divine
 Iron Myr
 Iron-Barb Hellion
@@ -775,6 +794,7 @@ Jibbirik Omnivore
 Joraga Visionary
 Joven
 Jungle Lion
+Juzám Djinn
 Jwari Scuttler
 Kabira Crossroads
 Kabuto Moth
@@ -795,6 +815,7 @@ Keepers of the Faith
 Keldon Necropolis
 Kelinore Bat
 Kemba's Skyguard
+Kessig Flamebreather
 Khalni Garden
 Kher Keep
 Killer Bees
@@ -827,10 +848,12 @@ Kyoshi Warriors
 Kyren Glider
 Lady Orca
 Lagac Lizard
+Lampad of Death's Vigil
 Lantern Kami
 Last Kiss
 Lathnu Sailback
 Lava Flow
+Lava Hounds
 Lazotep Behemoth
 Leaden Myr
 Leaf Gilder
@@ -900,6 +923,7 @@ Memorial to War
 Memory Drain
 Meng Huo's Horde
 Merchant of Secrets
+Merciless Enforcers
 Merfolk Looter
 Merfolk Traders
 Merfolk of the Pearl Trident
@@ -964,6 +988,7 @@ Nessian Courser
 Nest Robber
 Nether Horror
 Nettle Swine
+Nettletooth Djinn
 Neurok Replica
 New Benalia
 Nexus Wardens
@@ -980,6 +1005,7 @@ Nimbus of the Isles
 Northern Paladin
 Norwood Archers
 Norwood Ranger
+Notion Rain
 Nourish
 Noxious Grasp
 Nuisance Engine
@@ -1023,6 +1049,7 @@ Oxidda Scrapmelter
 Oyobi, Who Split the Heavens
 Paladin of the Bloodstained
 Palladium Myr
+Panicked Altisaur
 Panther Warriors
 Parcel Myr
 Patagia Tiger
@@ -1070,6 +1097,7 @@ Prodigal Sorcerer
 Prophet of the Peak
 Protector of Gondor
 Prowling Caracal
+Pulse Tracker
 Pyrite Spellbomb
 Pyroclastic Elemental
 Pyromantic Pilgrim
@@ -1110,6 +1138,7 @@ Ravaging Horde
 Ravenous Baboons
 Ravenous Baloth
 Ravenous Chupacabra
+Ravenous Giant
 Ravenous Harpy
 Ravenous Lindwurm
 Ray of Dissolution
@@ -1120,9 +1149,11 @@ Reach Through Mists
 Read the Bones
 Rearing Embermare
 Reckless Barbarian
+Reckless Fireweaver
 Reckless Pangolin
 Reckless Reveler
 Reclaiming Vines
+Red Dragon
 Redwood Treefolk
 Refute
 Regal Unicorn
@@ -1160,6 +1191,7 @@ River Hoopoe
 River Kaijin
 Roc Hunter
 Roc of Kher Ridges
+Rockslide Sorcerer
 Rod of Ruin
 Romantic Rendezvous
 Ronom Unicorn
@@ -1187,6 +1219,7 @@ Rusted Sentinel
 Rustspore Ram
 Rustwing Falcon
 S.H.I.E.L.D. Deployment Drone
+Sabotender
 Sacred Nectar
 Sacred Peaks
 Sage of Lat-Nam
@@ -1194,6 +1227,7 @@ Sage's Row Savant
 Saltblast
 Sanctify
 Sanctuary Cat
+Sanguine Syphoner
 Sanitation Automaton
 Sarpadian Simulacrum
 Satyr Enchanter
@@ -1243,6 +1277,7 @@ Sephiroth's Intervention
 Seraph Sanctuary
 Seraph of Dawn
 Seraph of the Suns
+Serendib Efreet
 Serpent Warrior
 Serra Angel
 Serra Sphinx
@@ -1259,6 +1294,7 @@ Shatter
 Shatterskull Giant
 Shauku's Minion
 Shining Aerosaur
+Shivan Gorge
 Shivan Hellkite
 Shock
 Shock Troops
@@ -1294,6 +1330,7 @@ Sire of the Storm
 Sisay's Ring
 Sisters of the Flame
 Sivitri Scarzam
+Sizzle
 Skeletal Crocodile
 Skeletal Snake
 Skeleton Archer
@@ -1325,6 +1362,7 @@ Smelt
 Snake Pit
 Snapping Drake
 Snare Thopter
+Sneering Shadewriter
 Snow-Covered Forest
 Snow-Covered Island
 Snow-Covered Mountain
@@ -1340,6 +1378,7 @@ Soothsayer Adept
 Sorcerer of the Fang
 Sorin's Thirst
 Soul Shred
+Soul of Magma
 Soulmender
 Southern Elephant
 Southern Paladin
@@ -1360,6 +1399,7 @@ Spineless Thug
 Spirited Companion
 Spiritual Guardian
 Spiteful Bully
+Spitfire Lagac
 Spock, Logical Choice
 Spore Swarm
 Sporecap Spider
@@ -1397,6 +1437,7 @@ Stone Haven Medic
 Stone Rain
 Stonework Puma
 Stony-Voiced Goblins
+Storm Caller
 Storm Crow
 Storm Spirit
 Stormcaller of Keranos
@@ -1543,6 +1584,7 @@ Tropical Island
 Tuknir Deathlock
 Tundra
 Tunnel Surveyor
+Tunneling Geopede
 Tura Kennerüd, Skyknight
 Turntimber Ascetic
 Turntimber Grove
@@ -1576,8 +1618,11 @@ Valiant Guard
 Valkyrior Skyrider
 Valorous Steed
 Vampire Interloper
+Vampire Neonate
 Vampire Noble
+Vampire Opportunist
 Vampire Revenant
+Vampire Spawn
 Vampiric Feast
 Vampiric Spirit
 Vampiric Touch
@@ -1589,12 +1634,14 @@ Venerable Lammasu
 Venerable Monk
 Verdigris
 Verduran Enchantress
+Vermin Gorger
 Vessel of Ephemera
 Vessel of Volatility
 Veteran Cavalier
 Vial of Dragonfire
 Viashino Fangtail
 Viashino Warrior
+Vicious Conquistador
 Vicious Hunger
 Vigilant Baloth
 Vigilante Justice
@@ -1627,6 +1674,7 @@ Wand of the Elements
 Wandering Ones
 Wandering Tombshell
 Warden of Geometries
+Warleader's Call
 Warleader's Helix
 Warmth
 Warpath Ghoul
@@ -1646,6 +1694,7 @@ Weaver of Currents
 Weaver of Lightning
 Wei Infantry
 Weirding Shaman
+Welder Automaton
 Western Paladin
 Wetland Sambar
 Whiptail Wurm
@@ -1710,4 +1759,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1707`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `1756`;

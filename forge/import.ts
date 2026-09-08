@@ -245,7 +245,7 @@ function signedInteger(value: string | undefined): number | null {
 
 function player(value: string | undefined): RelativeEffectPlayer | null {
 	if (value === undefined || value === "You") return "you";
-	if (value === "Opponent") return "opponent";
+	if (value === "Opponent" || value === "Player.Opponent") return "opponent";
 	return null;
 }
 
@@ -370,8 +370,12 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			if (inner) return inner;
 			continue;
 		}
+		const damageTarget =
+			effect.kind === "damage" && "targetSlot" in effect.recipient
+				? effect.recipient
+				: null;
 		if (
-			effect.kind !== "damage" &&
+			damageTarget === null &&
 			effect.kind !== "destroy" &&
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
@@ -379,11 +383,19 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 		)
 			continue;
 		let effectSlot: string;
-		if (effect.kind === "modify-pt") {
+		if (damageTarget) effectSlot = damageTarget.targetSlot;
+		else if (effect.kind === "modify-pt") {
 			// An effect on its own source declares no target to check.
 			if (effect.object === "source") continue;
 			effectSlot = effect.object.targetSlot;
-		} else effectSlot = effect.targetSlot;
+		} else {
+			assert(
+				effect.kind === "destroy" ||
+					effect.kind === "counter" ||
+					effect.kind === "return to hand",
+			);
+			effectSlot = effect.targetSlot;
+		}
 		const target = targets[0];
 		if (targets.length !== 1 || !target || effectSlot !== target.id) {
 			return issue(
@@ -628,6 +640,7 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					discriminatorLower,
 					"validtgts",
 					"tgtprompt",
+					"defined",
 					"numdmg",
 					...COMMON_EFFECT_PARAMS,
 				]),
@@ -637,7 +650,21 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			const amount = positiveInteger(getForgeParam(params, "NumDmg"));
 			if (!amount)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported NumDmg", where);
-			return { kind: "damage", targetSlot: TARGET_SLOT, amount };
+			const defined = getForgeParam(params, "Defined");
+			if (defined === undefined)
+				return {
+					kind: "damage",
+					recipient: { targetSlot: TARGET_SLOT },
+					amount,
+				};
+			const player = parsePlayer(defined);
+			if (!player)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"unsupported Defined$ damage recipient",
+					where,
+				);
+			return { kind: "damage", recipient: { player }, amount };
 		}
 		case "destroy": {
 			const badParams = checkParams(
@@ -2460,15 +2487,18 @@ export function lowerForgeCard(
 	// Recognized non-referenced SVars, kept exactly as data by design (AI hints /
 	// deck-building metadata), scoped to when the feature they describe is present.
 	const buffedBy = lookupForgeSVar(face, "BuffedBy")?.parsed;
-	// `BuffedBy` is an AI/deck-building hint. PutCounter cast triggers carry
-	// their complete rules in the trigger and executed SVar, so retain this
-	// conventional hint only when that trigger is present.
+	// `BuffedBy` is an AI/deck-building hint. A cast trigger carries its complete
+	// rules in the trigger and executed SVar, so retain this conventional hint
+	// only when the card has a supported cast-triggered source modification or
+	// direct-damage effect.
 	if (
 		triggers.some(
 			(trigger) =>
 				trigger.condition.kind === "cast" &&
 				trigger.effects.some(
-					(effect) => effect.kind === "add-counters-to-source",
+					(effect) =>
+						effect.kind === "add-counters-to-source" ||
+						effect.kind === "damage",
 				),
 		) &&
 		buffedBy?.kind === "scalar"

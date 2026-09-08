@@ -2042,7 +2042,11 @@ export type EffectDef<
 			amount: number;
 			player: Player;
 	  }
-	| { kind: "damage"; targetSlot: string; amount: number }
+	| {
+			kind: "damage";
+			recipient: { player: Player } | { targetSlot: string };
+			amount: number;
+	  }
 	| { kind: "destroy"; targetSlot: string }
 	| { kind: "counter"; targetSlot: string }
 	| {
@@ -6421,6 +6425,10 @@ function resolveEffects(
 			continue;
 		}
 		let bound: EntityRef | null = null;
+		const damageTarget =
+			effect.kind === "damage" && "targetSlot" in effect.recipient
+				? effect.recipient
+				: null;
 		const sacrificeTarget =
 			effect.kind === "sacrifice" && typeof effect.player !== "string"
 				? effect.player
@@ -6430,7 +6438,7 @@ function resolveEffects(
 				? effect.object.targetSlot
 				: null;
 		if (
-			effect.kind === "damage" ||
+			damageTarget !== null ||
 			effect.kind === "destroy" ||
 			effect.kind === "counter" ||
 			effect.kind === "return to hand" ||
@@ -6438,12 +6446,12 @@ function resolveEffects(
 			sacrificeTarget !== null
 		) {
 			let targetSlot: string;
-			if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
+			if (damageTarget) targetSlot = damageTarget.targetSlot;
+			else if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
 			else if (modifyPtSlot !== null) targetSlot = modifyPtSlot;
 			else {
 				assert(
-					effect.kind === "damage" ||
-						effect.kind === "destroy" ||
+					effect.kind === "destroy" ||
 						effect.kind === "counter" ||
 						effect.kind === "return to hand",
 				);
@@ -6635,8 +6643,12 @@ function effectToEvent(
 			throw new Error("unexpected discard effect kind");
 		}
 		case "damage": {
+			const target =
+				"player" in effect.recipient
+					? { type: "player" as const, player: relativeEffectPlayer(item, effect.recipient.player) }
+					: bound;
 			assert(
-				bound?.type === "player" || bound?.type === "permanent",
+				target?.type === "player" || target?.type === "permanent",
 				"damage target must be a player or permanent",
 			);
 			// CR 119.3: lifelink life goes to the controller of the damage source,
@@ -6647,7 +6659,7 @@ function effectToEvent(
 				source: item.source,
 				sourceController: source.controller,
 				sourceColors: source.colors,
-				target: bound,
+				target,
 				amount: effect.amount,
 				combat: false,
 				deathtouch: false,
@@ -6853,8 +6865,12 @@ function requiredTargetDefinition(
 		// An effect on its own source declares no target, so there is no slot to
 		// check it against.
 		if (effect.kind === "modify-pt" && effect.object === "source") return;
+		const damageTarget =
+			effect.kind === "damage" && "targetSlot" in effect.recipient
+				? effect.recipient
+				: null;
 		if (
-			effect.kind !== "damage" &&
+			damageTarget === null &&
 			effect.kind !== "destroy" &&
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
@@ -6867,14 +6883,14 @@ function requiredTargetDefinition(
 				? effect.player
 				: null;
 		let targetSlot: string;
-		if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
+		if (damageTarget) targetSlot = damageTarget.targetSlot;
+		else if (sacrificeTarget) targetSlot = sacrificeTarget.targetSlot;
 		else if (effect.kind === "modify-pt") {
 			assert(effect.object !== "source", "self effects return above");
 			targetSlot = effect.object.targetSlot;
 		} else {
 			assert(
-				effect.kind === "damage" ||
-					effect.kind === "destroy" ||
+				effect.kind === "destroy" ||
 					effect.kind === "counter" ||
 					effect.kind === "return to hand",
 			);

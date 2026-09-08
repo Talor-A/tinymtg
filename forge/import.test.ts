@@ -73,6 +73,8 @@ const POSITIVE_FIXTURES = [
 	"b/boar_q_pine",
 	"d/deeproot_champion",
 	"s/spellgorger_weird",
+	"f/firebrand_archer",
+	"k/kessig_flamebreather",
 	"t/third_path_iconoclast",
 ];
 
@@ -233,6 +235,21 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		]);
 	});
 
+	test("Firebrand Archer and Kessig Flamebreather lower opponent damage recipients", () => {
+		for (const fixture of ["f/firebrand_archer", "k/kessig_flamebreather"]) {
+			const result = importFixture(fixture);
+			if (!result.ok) throw new Error(`expected ${fixture} to import`);
+			expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+				{ kind: "damage", recipient: { player: "opponent" }, amount: 1 },
+			]);
+		}
+	});
+
+	test("Cindervines remains unsupported", () => {
+		const result = importFixture("c/cindervines");
+		expect(result.ok).toBe(false);
+	});
+
 	test("Lightning Bolt and Murder lower a single required target slot", () => {
 		const bolt = importFixture("l/lightning_bolt");
 		if (!bolt.ok) throw new Error("expected ok");
@@ -240,7 +257,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
-			effects: [{ kind: "damage", targetSlot: "target-1", amount: 3 }],
+			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 3 }],
 		});
 
 		const murder = importFixture("m/murder");
@@ -326,7 +343,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				targets: [
 					{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 				],
-				effects: [{ kind: "damage", targetSlot: "target-1", amount: 1 }],
+				effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 1 }],
 			},
 		]);
 
@@ -352,7 +369,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					},
 				},
 			],
-			effects: [{ kind: "damage", targetSlot: "target-1", amount: 4 }],
+			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 4 }],
 		});
 
 		const vandal = importFixture("m/manic_vandal");
@@ -435,7 +452,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.spell?.targets).toHaveLength(1);
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "damage", targetSlot: "target-1", amount: 2 },
+			{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
 			{ kind: "gain-life", player: "you", amount: 2 },
 		]);
 	});

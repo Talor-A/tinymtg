@@ -78,6 +78,8 @@ registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
 registerRuntimeFixture("c/clone", "rt-clone");
+registerRuntimeFixture("f/firebrand_archer", "rt-firebrand-archer");
+registerRuntimeFixture("k/kessig_flamebreather", "rt-kessig-flamebreather");
 registerRuntimeFixture("k/kambal_consul_of_allocation", "rt-kambal");
 registerCardFixture("d/darksteel_relic");
 
@@ -264,6 +266,31 @@ describe("forge-import runtime: triggers", () => {
 
 		expect(state.players[ALICE].life).toBe(22);
 		expect(state.players[BOB].life).toBe(18);
+	});
+
+	test("Firebrand Archer and Kessig Flamebreather damage their controller's opponent", () => {
+		for (const cardId of [
+			"rt-firebrand-archer",
+			"rt-kessig-flamebreather",
+		]) {
+			const state = setupMain();
+			spawnPermanent(state, cardId, ALICE);
+			const spell = spawnCard(state, "darksteel-relic", ALICE, "hand");
+
+			executeCastAction(
+				state,
+				ALICE,
+				{ kind: "cast", card: spell.id },
+				passingAgents(),
+			);
+			settlePriority(state, passingAgents());
+
+			expect(state.players[ALICE].life, `${cardId} does not damage you`).toBe(20);
+			expect(
+				state.players[BOB].life,
+				`${cardId} damages your opponent`,
+			).toBe(19);
+		}
 	});
 
 	test("a self PutCounter trigger adds its counter to its source", () => {

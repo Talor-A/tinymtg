@@ -87,7 +87,7 @@ registerCard({
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
-			effects: [{ kind: "damage", targetSlot: "target-1", amount: 2 }],
+			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 }],
 		},
 	],
 });
@@ -189,7 +189,7 @@ registerCard({
 			targets: [artifactTarget],
 			effects: [
 				{ kind: "destroy", targetSlot: "target-1" },
-				{ kind: "damage", targetSlot: "target-1", amount: 2 },
+				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
 			],
 		},
 	],
@@ -302,7 +302,7 @@ registerCard({
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
-			effects: [{ kind: "damage", targetSlot: "target-1", amount: 2 }],
+			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 }],
 		},
 	],
 });
@@ -324,7 +324,7 @@ registerCard({
 			text: "{T}: This creature deals 1 damage to target artifact.",
 			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
-			effects: [{ kind: "damage", targetSlot: "target-1", amount: 1 }],
+			effects: [{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 1 }],
 		},
 	],
 });
@@ -718,7 +718,7 @@ describe("captured stack items", () => {
 		if (item?.kind !== "activated ability") throw new Error("expected ability");
 		expect(item.targetDefinitions).toHaveLength(1);
 		expect(item.effects).toEqual([
-			{ kind: "damage", targetSlot: "target-1", amount: 2 },
+			{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
 		]);
 
 		// A clone carries the same detached instructions, and resolving it runs
