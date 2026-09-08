@@ -882,6 +882,7 @@ export interface PermanentSnapshot extends SnapshotBase {
 		  };
 
 	tapped: boolean;
+	summoningSick: boolean;
 	attacking: boolean;
 	blocking: boolean;
 	damage: number;
@@ -1266,6 +1267,7 @@ function buildFilteredGameView(
 					copiableValues: copy,
 					currentCharacteristics: current,
 					tapped: object.tapped,
+					summoningSick: object.summoningSick,
 					attacking: object.attacking,
 					blocking: object.blocking,
 					damage: object.damage,
@@ -1526,6 +1528,10 @@ export interface PermanentObject extends ObjectBase {
 	copiableOverride?: CharacteristicsSnapshot;
 
 	tapped: boolean;
+	/** Set until this permanent has been continuously controlled since this
+	 * controller's most recent turn began. Only creatures without haste are
+	 * restricted by this state. */
+	summoningSick: boolean;
 	counters: PermanentCounterBag;
 	damage: number;
 	attacking: boolean;
@@ -1935,7 +1941,12 @@ export interface TriggeredAbilityDefinition {
  * Cards
  * ------------------------------------------------------------------ */
 
-export type Keyword = "indestructible" | "lifelink" | "flying" | "vigilance";
+export type Keyword =
+	| "indestructible"
+	| "lifelink"
+	| "flying"
+	| "haste"
+	| "vigilance";
 
 /**
  * Object restrictions shared by targeting and by imported continuous effects.
@@ -2563,6 +2574,7 @@ function spawnOnBattlefield(
 	representation: PermanentObject["representation"],
 	opts: {
 		tapped?: boolean;
+		summoningSick?: boolean;
 		counters?: PermanentCounterBag;
 		token?: boolean;
 	} = {},
@@ -2577,6 +2589,7 @@ function spawnOnBattlefield(
 		controller: owner,
 
 		tapped: opts.tapped ?? false,
+		summoningSick: opts.summoningSick ?? true,
 		counters: { ...opts.counters },
 		effectData: {},
 		damage: 0,
@@ -2597,6 +2610,7 @@ export function spawnPermanent(
 	owner: PlayerId,
 	opts: {
 		tapped?: boolean;
+		summoningSick?: boolean;
 		counters?: PermanentCounterBag;
 		token?: boolean;
 	} = {},
@@ -2799,11 +2813,10 @@ export function permanentsInPlay(
 }
 
 /**
- * The single source of truth for who may be declared as an attacker (CR 508.1a,
- * deliberately simplified): a creature controlled by the declaring player,
- * untapped, currently on the battlefield. All creatures are treated as if they
- * have haste, so control duration and summoning sickness are not checked.
- * Battlefield order is preserved.
+ * The single source of truth for who may be declared as an attacker (CR 508.1a):
+ * a creature controlled by the declaring player, untapped, currently on the
+ * battlefield, and not affected by summoning sickness. Battlefield order is
+ * preserved.
  */
 export function eligibleAttackers(
 	state: ReadonlyGameState,
@@ -2818,7 +2831,9 @@ export function eligibleAttackers(
 			object.controller === player &&
 			!object.tapped &&
 			snapshot?.kind === "permanent" &&
-			snapshot.currentCharacteristics.types.includes("creature")
+			snapshot.currentCharacteristics.types.includes("creature") &&
+			(!object.summoningSick ||
+				snapshot.currentCharacteristics.keywords.includes("haste"))
 		);
 	});
 }
@@ -3936,6 +3951,7 @@ function moveObject(
 					}
 				: {}),
 			tapped: opts.tapped ?? false,
+			summoningSick: true,
 			counters: { ...opts.counters },
 			effectData: {},
 			damage: 0,
@@ -6377,6 +6393,13 @@ function activatedAbilityActions(
 			const definition = getAbilityDefinition("activated", ability);
 			if (definition.cost.tapSelf && object.tapped) continue;
 			if (
+				definition.cost.tapSelf &&
+				object.summoningSick &&
+				snapshot.currentCharacteristics.types.includes("creature") &&
+				!snapshot.currentCharacteristics.keywords.includes("haste")
+			)
+				continue;
+			if (
 				!planManaPayment(state.players[player].manaPool, definition.cost.mana)
 			)
 				continue;
@@ -6508,10 +6531,21 @@ function activateAbilityIn(
 		);
 	}
 	const ability = getAbilityDefinition("activated", action.ability);
-	if (ability.cost.tapSelf && object.tapped) {
-		throw new IllegalAbilityActivationError(
-			`object ${action.source} is already tapped`,
-		);
+	if (ability.cost.tapSelf) {
+		if (object.tapped) {
+			throw new IllegalAbilityActivationError(
+				`object ${action.source} is already tapped`,
+			);
+		}
+		if (
+			object.summoningSick &&
+			snapshot.currentCharacteristics.types.includes("creature") &&
+			!snapshot.currentCharacteristics.keywords.includes("haste")
+		) {
+			throw new IllegalAbilityActivationError(
+				`object ${action.source} cannot pay a tap cost due to summoning sickness`,
+			);
+		}
 	}
 	const manaPayment = planManaPayment(
 		state.players[priorityPlayer].manaPool,
@@ -7526,6 +7560,14 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				) {
 					scheduler.nextAction = { kind: "advanceTurn" };
 					continue;
+				}
+
+				// CR 302.6: permanents already controlled as this turn begins are no
+				// longer affected by summoning sickness. This applies to every
+				// permanent because a later type-changing effect may make it a creature.
+				for (const id of state.battlefield) {
+					const object = permanent(state, id);
+					if (object.controller === turn.player) object.summoningSick = false;
 				}
 
 				// The turn is now current even though no phase of it has begun,

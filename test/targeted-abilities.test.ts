@@ -367,7 +367,9 @@ function activateAt(
 describe("targeted activated abilities", () => {
 	test("Prodigal Sorcerer offers every any-target and damages the one chosen", () => {
 		const state = mainPhaseGame();
-		const sorcerer = spawnPermanent(state, "prodigal-sorcerer", 0);
+		const sorcerer = spawnPermanent(state, "prodigal-sorcerer", 0, {
+			summoningSick: false,
+		});
 		const bears = spawnPermanent(state, "grizzly-bears", 1);
 		spawnPermanent(state, "forest", 1);
 
@@ -406,7 +408,9 @@ describe("targeted activated abilities", () => {
 
 	test("a restricted activation is not offered and cannot be forced without a target", () => {
 		const state = mainPhaseGame();
-		const pinger = spawnPermanent(state, "test-artifact-pinger", 0);
+		const pinger = spawnPermanent(state, "test-artifact-pinger", 0, {
+			summoningSick: false,
+		});
 		expect(getObservableActions(state, 0)).not.toContainEqual({
 			kind: "activate ability",
 			source: pinger.id,
@@ -437,7 +441,9 @@ describe("targeted activated abilities", () => {
 
 	test("an invalid target answer leaves the source untapped and the stack empty", () => {
 		const state = mainPhaseGame();
-		const sorcerer = spawnPermanent(state, "prodigal-sorcerer", 0);
+		const sorcerer = spawnPermanent(state, "prodigal-sorcerer", 0, {
+			summoningSick: false,
+		});
 		const before = structuredClone(state);
 		expect(() =>
 			executeAbilityAction(
@@ -460,7 +466,9 @@ describe("targeted activated abilities", () => {
 
 	test("a controller restriction is rechecked, and only the opponent's creatures qualify", () => {
 		const state = mainPhaseGame();
-		const assassin = spawnPermanent(state, "test-assassin", 0);
+		const assassin = spawnPermanent(state, "test-assassin", 0, {
+			summoningSick: false,
+		});
 		const mine = spawnPermanent(state, "grizzly-bears", 0);
 		const theirs = spawnPermanent(state, "grizzly-bears", 1);
 
@@ -494,7 +502,9 @@ describe("targeted activated abilities", () => {
 
 	test("an illegal target at resolution stops the ability", () => {
 		const state = mainPhaseGame();
-		const sorcerer = spawnPermanent(state, "prodigal-sorcerer", 0);
+		const sorcerer = spawnPermanent(state, "prodigal-sorcerer", 0, {
+			summoningSick: false,
+		});
 		const bears = spawnPermanent(state, "grizzly-bears", 1);
 		activateAt(state, sorcerer.id, PRODIGAL_SORCERER_TAP, {
 			type: "permanent",
@@ -516,7 +526,9 @@ describe("targeted activated abilities", () => {
 describe("an ability outliving its source", () => {
 	test("lifelink and the life's recipient come from the source's last existence", () => {
 		const state = mainPhaseGame();
-		const pinger = spawnPermanent(state, "test-pinger", 0);
+		const pinger = spawnPermanent(state, "test-pinger", 0, {
+			summoningSick: false,
+		});
 		// P0 controls the ability and points it at themself, so the damage and the
 		// lifelink life go to different players and cannot be confused.
 		activateAt(state, pinger.id, PINGER_TAP, { type: "player", player: 0 });
@@ -542,7 +554,9 @@ describe("an ability outliving its source", () => {
 
 	test("the departed source's colors still decide whether prevention applies", () => {
 		const state = mainPhaseGame();
-		const pinger = spawnPermanent(state, "test-pinger", 0);
+		const pinger = spawnPermanent(state, "test-pinger", 0, {
+			summoningSick: false,
+		});
 		activateAt(state, pinger.id, PINGER_TAP, { type: "player", player: 1 });
 
 		// The source is blue when activated and red when it leaves.
@@ -562,7 +576,9 @@ describe("an ability outliving its source", () => {
 		const state = mainPhaseGame();
 		spawnPermanent(state, "test-tap-backlash", 1);
 		spawnPermanent(state, "test-lifelink-grant", 1);
-		const pinger = spawnPermanent(state, "test-pinger", 0);
+		const pinger = spawnPermanent(state, "test-pinger", 0, {
+			summoningSick: false,
+		});
 
 		activateAt(state, pinger.id, PINGER_TAP, { type: "player", player: 1 });
 		// The tap cost was paid and the same replacement then destroyed the source.
@@ -579,7 +595,9 @@ describe("an ability outliving its source", () => {
 	test("an unpayable tap cost rewinds the announcement and everything with it", () => {
 		const state = mainPhaseGame();
 		spawnPermanent(state, "test-tap-fizzle", 1);
-		const pinger = spawnPermanent(state, "test-pinger", 0);
+		const pinger = spawnPermanent(state, "test-pinger", 0, {
+			summoningSick: false,
+		});
 		const before = structuredClone(state);
 
 		const agents = passingAgents();
@@ -603,7 +621,9 @@ describe("an ability outliving its source", () => {
 		// Two copies make the tap replacement a real decision for P0.
 		spawnPermanent(state, "test-tap-fizzle", 1);
 		spawnPermanent(state, "test-tap-fizzle", 1);
-		const pinger = spawnPermanent(state, "test-pinger", 0);
+		const pinger = spawnPermanent(state, "test-pinger", 0, {
+			summoningSick: false,
+		});
 		const before = structuredClone(state);
 
 		expect(() =>
@@ -627,7 +647,9 @@ describe("an ability outliving its source", () => {
 
 	test("a source that destroys itself mid-resolution still finishes the ability", () => {
 		const state = mainPhaseGame();
-		const destroyer = spawnPermanent(state, "test-self-destroyer", 0);
+		const destroyer = spawnPermanent(state, "test-self-destroyer", 0, {
+			summoningSick: false,
+		});
 		activateAt(state, destroyer.id, SELF_DESTROYER_TAP, {
 			type: "permanent",
 			id: destroyer.id,
@@ -645,7 +667,9 @@ describe("an ability outliving its source", () => {
 describe("captured stack items", () => {
 	test("a stack item survives its card definition changing under it", () => {
 		const state = mainPhaseGame();
-		const probe = spawnPermanent(state, "test-registry-probe", 0);
+		const probe = spawnPermanent(state, "test-registry-probe", 0, {
+			summoningSick: false,
+		});
 		const ability = abilityId("activated", "test-registry-probe", 0);
 		activateAt(state, probe.id, ability, { type: "player", player: 1 });
 
@@ -916,7 +940,9 @@ describe("asynchronous target selection", () => {
 
 	test("a targeted activation replays without paying its tap cost twice", async () => {
 		const state = mainPhaseGame();
-		const sorcerer = spawnPermanent(state, "prodigal-sorcerer", 0);
+		const sorcerer = spawnPermanent(state, "prodigal-sorcerer", 0, {
+			summoningSick: false,
+		});
 		const activate = {
 			kind: "activate ability" as const,
 			source: sorcerer.id,

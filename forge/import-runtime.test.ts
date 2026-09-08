@@ -479,7 +479,9 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Llanowar Elves' imported mana ability taps and adds green mana immediately", () => {
 		const state = setupMain();
-		const elves = spawnPermanent(state, "rt-llanowar-elves", ALICE);
+		const elves = spawnPermanent(state, "rt-llanowar-elves", ALICE, {
+			summoningSick: false,
+		});
 		const ability = abilityId("activated", "rt-llanowar-elves", 0);
 
 		executeAbilityAction(
@@ -519,7 +521,9 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Soulmender's imported targetless activated ability resolves through the stack", () => {
 		const state = setupMain();
-		const soulmender = spawnPermanent(state, "rt-soulmender", ALICE);
+		const soulmender = spawnPermanent(state, "rt-soulmender", ALICE, {
+			summoningSick: false,
+		});
 		const ability = abilityId("activated", "rt-soulmender", 0);
 
 		executeAbilityAction(

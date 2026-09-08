@@ -279,6 +279,7 @@ describe("sacrifice as an activated ability cost", () => {
 			state,
 			"test-combined-activation-cost",
 			ALICE,
+			{ summoningSick: false },
 		);
 		state.players[ALICE].manaPool.b = 1;
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [source.id]);

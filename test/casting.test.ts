@@ -319,7 +319,10 @@ describe("casting onto the stack", () => {
 					object.representation.kind === "card" &&
 					object.representation.cardId === "faithful-watchdog",
 			);
-		expect(dog).toMatchObject({ counters: { "+1/+1": 3 } });
+		expect(dog).toMatchObject({
+			counters: { "+1/+1": 3 },
+			summoningSick: true,
+		});
 		expect(state.players[ALICE].graveyard).toHaveLength(0);
 	});
 

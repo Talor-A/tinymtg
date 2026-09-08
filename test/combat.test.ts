@@ -4,6 +4,7 @@ import "../cards.ts";
 import type { GameState, ObjectId } from "../index.ts";
 import {
 	advance,
+	eligibleAttackers,
 	eligibleBlockers,
 	gameOver,
 	IllegalAttackDeclarationError,
@@ -27,6 +28,7 @@ import {
 } from "./utils/engine-helpers.ts";
 
 registerCardFixture("h/herald_of_faith");
+registerCardFixture("r/raging_goblin");
 
 /** One attacker-eligible creature plus enough library to survive a full turn. */
 function setupAttackTurn(cardId: string): {
@@ -95,8 +97,12 @@ describe("declaring attackers", () => {
 
 	test("a partial subset of eligible creatures taps and marks only those selected", () => {
 		const { state, agents } = declareAttackersSetup();
-		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
-		const stayHome = spawnPermanent(state, "eager-cadet", ALICE);
+		const attacker = spawnPermanent(state, "grizzly-bears", ALICE, {
+			summoningSick: false,
+		});
+		const stayHome = spawnPermanent(state, "eager-cadet", ALICE, {
+			summoningSick: false,
+		});
 
 		perform(
 			state,
@@ -236,7 +242,9 @@ describe("declaring attackers", () => {
 
 	test("regeneration still clears attacking (and blocking), not just damage and tapped state", () => {
 		const { state, agents } = declareAttackersSetup();
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
+		const bears = spawnPermanent(state, "grizzly-bears", ALICE, {
+			summoningSick: false,
+		});
 		perform(
 			state,
 			{ kind: "declare attackers", player: ALICE, attackers: [bears.id] },
@@ -531,10 +539,35 @@ describe("declaring blockers", () => {
 });
 
 describe("declaring attackers during normal progression", () => {
-	test("a creature can attack on the same turn it enters (all creatures are treated as having haste)", () => {
-		// Spawning the creature before combat begins (rather than before the turn
-		// starts, as setupAttackTurn does) is what actually proves the title: the
-		// creature only exists once the game has naturally reached precombat main.
+	test("summoning sickness clears as its controller's turn begins", () => {
+		const state = newGame();
+		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
+		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", BOB, "library");
+
+		expect(permanent(state, attacker.id).summoningSick).toBe(true);
+		advanceUntil(state, agents, (next) => isAt(next, "main"));
+		expect(permanent(state, attacker.id).summoningSick).toBe(false);
+		expect(eligibleAttackers(state, ALICE)).toContain(attacker.id);
+	});
+
+	test("a creature cannot attack on the turn it enters", () => {
+		const state = newGame();
+		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", BOB, "library");
+
+		advanceUntil(state, agents, (next) => isAt(next, "main"));
+		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
+
+		expect(eligibleAttackers(state, ALICE)).not.toContain(attacker.id);
+		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
+		expect(permanent(state, attacker.id).attacking).toBe(false);
+		expect(permanent(state, attacker.id).tapped).toBe(false);
+	});
+
+	test("haste allows a creature to attack on the turn it enters", () => {
 		const state = newGame();
 		const attackerAgent = new ScriptedAgent();
 		const agents: Agents = [attackerAgent, new ScriptedAgent()];
@@ -542,26 +575,13 @@ describe("declaring attackers during normal progression", () => {
 		spawnCard(state, "forest", BOB, "library");
 
 		advanceUntil(state, agents, (next) => isAt(next, "main"));
-
-		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
-		// The attacker choice can only be scripted once the creature's id is known,
-		// which is only after it has been spawned into the already-reached main phase.
+		const attacker = spawnPermanent(state, "raging-goblin", ALICE);
+		expect(eligibleAttackers(state, ALICE)).toContain(attacker.id);
 		attackerAgent.attackerChoices.push([attacker.id]);
 
-		// The attacker choice is requested and committed inside the single advance()
-		// call that begins the declare-attackers step, so by the time the scheduler
-		// records it, the declaration has already happened.
 		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
-		expect(
-			permanent(state, attacker.id).attacking,
-			"declared as an attacker",
-		).toBe(true);
-		expect(permanent(state, attacker.id).tapped, "tapped by attacking").toBe(
-			true,
-		);
-
-		playOneTurn(state, agents);
-		expect(gameOver(state)).toBe(false);
+		expect(permanent(state, attacker.id).attacking).toBe(true);
+		expect(permanent(state, attacker.id).tapped).toBe(true);
 	});
 
 	test("attacking clears at end combat but tapped persists until the next untap", () => {

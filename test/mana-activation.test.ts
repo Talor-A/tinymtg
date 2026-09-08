@@ -826,13 +826,27 @@ describe("authoritative ability rejection", () => {
 describe("targetless activated abilities", () => {
 	const looterAbility = abilityId("activated", "merfolk-looter", 0);
 
+	test("summoning sickness prevents a creature from paying a tap cost", () => {
+		const state = setupMain();
+		const looter = spawnPermanent(state, "merfolk-looter", ALICE);
+		const action = looterAction(looter.id);
+
+		expect(getObservableActions(state, ALICE)).not.toContainEqual(action);
+		expect(() =>
+			executeAbilityAction(state, ALICE, action, passingAgents()),
+		).toThrow(IllegalAbilityActivationError);
+		expect(state.objects.get(looter.id)).toMatchObject({ tapped: false });
+	});
+
 	function looterAction(source: ObjectId): ActivateAbilityAction {
 		return { kind: "activate ability", source, ability: looterAbility };
 	}
 
 	test("taps and captures instructions, then resolves after its source leaves", () => {
 		const state = setupMain();
-		const looter = spawnPermanent(state, "merfolk-looter", ALICE);
+		const looter = spawnPermanent(state, "merfolk-looter", ALICE, {
+			summoningSick: false,
+		});
 		const oldHandCard = spawnCard(state, "forest", ALICE, "hand");
 		const handBefore = [...state.players[ALICE].hand];
 
@@ -905,7 +919,9 @@ describe("targetless activated abilities", () => {
 
 	test("replays an async discard choice from the post-draw hand", async () => {
 		const checkpoint = setupMain();
-		const looter = spawnPermanent(checkpoint, "merfolk-looter", ALICE);
+		const looter = spawnPermanent(checkpoint, "merfolk-looter", ALICE, {
+			summoningSick: false,
+		});
 		spawnCard(checkpoint, "forest", ALICE, "hand");
 		executeAbilityAction(
 			checkpoint,

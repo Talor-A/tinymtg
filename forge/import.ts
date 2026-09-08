@@ -141,11 +141,12 @@ const PRODUCED_MANA_SYMBOLS = new Map<string, ManaType>([
 ]);
 const BARE_KEYWORDS = new Map<
 	string,
-	"indestructible" | "lifelink" | "flying" | "vigilance"
+	"indestructible" | "lifelink" | "flying" | "haste" | "vigilance"
 >([
 	["Flying", "flying"],
 	["Lifelink", "lifelink"],
 	["Indestructible", "indestructible"],
+	["Haste", "haste"],
 	["Vigilance", "vigilance"],
 ]);
 const COUNTER_NAMES = new Map<string, "+1/+1" | "-1/-1">([
@@ -1581,7 +1582,13 @@ export function lowerForgeCard(
 		return reject(issue("UNSUPPORTED_PARAMETER", "creatures require PT$"));
 	}
 
-	const keywords: ("indestructible" | "lifelink" | "flying" | "vigilance")[] =
+	const keywords: (
+		| "indestructible"
+		| "lifelink"
+		| "flying"
+		| "haste"
+		| "vigilance"
+	)[] =
 		[];
 	const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
 	for (const record of face.keywordRecords) {
