@@ -108,6 +108,12 @@ accepts: `TargetSelectorDef` covers the source itself, card type, supertype,
 subtype, color, and controller, combined with all/any/not to any depth. A
 hand-written card definition can use all of it.
 
+`forge/accepted-cards.test.ts` snapshots the display name of every card in
+`cards/cardsfolder` that the bridge currently lowers — 1,113 of 33,664 — so the
+diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
+supported subset reports what it bought or lost. Regenerate it with
+`bun test --update-snapshots forge/accepted-cards.test.ts`.
+
 `test/utils/engine-helpers.ts`'s `registerCardFixture(cardsfolderPath)` reads
 a real card from `cards/cardsfolder`, imports it through this bridge, and
 registers the result — so a card whose printed definition no longer lowers
