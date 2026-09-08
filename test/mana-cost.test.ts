@@ -41,8 +41,7 @@ describe("planManaPayment: generic (n) versus colorless (c)", () => {
 		);
 	});
 
-	test("zero costs pay nothing and no-cost cards cannot be paid at all", () => {
+	test("zero costs pay nothing", () => {
 		expect(planManaPayment(pool({ g: 1 }), "zero")).toEqual(pool({}));
-		expect(planManaPayment(pool({ g: 1 }), "none")).toBeNull();
 	});
 });

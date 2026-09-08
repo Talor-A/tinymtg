@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
 import "../cards.ts";
+import { priorityOptionId } from "../choices.ts";
 import type {
 	ActivateAbilityAction,
 	Agent,
@@ -53,7 +54,7 @@ registerCard({
 			kind: "mana",
 			id: "choose-color",
 			text: "{T}: Add one mana of any color.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			manaOptions: [{ w: 1 }, { u: 1 }, { b: 1 }, { r: 1 }, { g: 1 }],
 		},
 	],
@@ -70,8 +71,115 @@ registerCard({
 			kind: "mana",
 			id: "choose-white-or-blue",
 			text: "{T}: Add {W} or {U}.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			manaOptions: [{ w: 1 }, { u: 1 }],
+		},
+	],
+});
+
+registerCard({
+	id: "test-paid-activated-abilities",
+	name: "Test Paid Activated Abilities",
+	types: ["artifact"],
+	colors: [],
+	manaCost: "zero",
+	activatedAbilities: [
+		{
+			kind: "activated",
+			id: "paid-target",
+			text: "{1}{G}: This deals 1 damage to any target.",
+			cost: { mana: { g: 1, n: 1 }, tapSelf: false },
+			targets: [
+				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
+			],
+			effects: [{ kind: "damage", targetSlot: "target-1", amount: 1 }],
+		},
+		{
+			kind: "activated",
+			id: "paid-tap",
+			text: "{G}, {T}: You gain 1 life.",
+			cost: { mana: { g: 1 }, tapSelf: true },
+			targets: [],
+			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+		},
+		{
+			kind: "mana",
+			id: "paid-mana",
+			text: "{R}: Add {G}.",
+			cost: { mana: { r: 1 }, tapSelf: false },
+			effects: [{ kind: "add-mana", player: "you", mana: { g: 1 } }],
+		},
+	],
+});
+
+registerCard({
+	id: "test-paid-tap-fizzle",
+	name: "Test Paid Tap Fizzle",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	replacements: [
+		{
+			label: "paid-tap-fizzle",
+			text: "If a permanent would become tapped, its controller loses 1 life instead.",
+			layer: "other",
+			functionsFrom: "any",
+			applies: (event) => event.kind === "tap" && event.ref.kind === "object",
+			replace: (_event, context) => [
+				{ kind: "lose life", player: context.controller, amount: 1 },
+			],
+		},
+	],
+});
+
+registerCard({
+	id: "test-paid-tap-pass-through",
+	name: "Test Paid Tap Pass Through",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	replacements: [
+		{
+			label: "paid-tap-pass-through",
+			text: "If the test artifact would become tapped, it becomes tapped instead.",
+			layer: "other",
+			functionsFrom: "any",
+			applies: (event, context) => {
+				if (event.kind !== "tap" || event.ref.kind !== "object") return false;
+				const object = context.state.objects.get(event.ref.object);
+				return (
+					object?.kind === "permanent" &&
+					object.representation.kind === "card" &&
+					object.representation.cardId === "test-paid-activated-abilities"
+				);
+			},
+			replace: (event) => [event],
+		},
+	],
+});
+
+registerCard({
+	id: "test-paid-tap-pass-through-second",
+	name: "Test Paid Tap Pass Through Second",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	replacements: [
+		{
+			label: "paid-tap-pass-through-second",
+			text: "If the test artifact would become tapped, it becomes tapped instead.",
+			layer: "other",
+			functionsFrom: "any",
+			applies: (event, context) => {
+				if (event.kind !== "tap" || event.ref.kind !== "object") return false;
+				const object = context.state.objects.get(event.ref.object);
+				return (
+					object?.kind === "permanent" &&
+					object.representation.kind === "card" &&
+					object.representation.cardId === "test-paid-activated-abilities"
+				);
+			},
+			replace: (event) => [event],
 		},
 	],
 });
@@ -87,7 +195,7 @@ registerCard({
 			kind: "activated",
 			id: "discard-two",
 			text: "{T}: Discard two cards.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			targets: [],
 			effects: [
 				{
@@ -104,6 +212,9 @@ registerCard({
 const forestMana = abilityId("activated", "forest", 0);
 const fiveColorMana = abilityId("activated", "test-five-color-mana-ability", 0);
 const twoColorMana = abilityId("activated", "test-two-color-mana-ability", 0);
+const paidTarget = abilityId("activated", "test-paid-activated-abilities", 0);
+const paidTap = abilityId("activated", "test-paid-activated-abilities", 1);
+const paidMana = abilityId("activated", "test-paid-activated-abilities", 2);
 
 function manaAction(source: ObjectId): ActivateAbilityAction {
 	return { kind: "activate ability", source, ability: forestMana };
@@ -373,6 +484,275 @@ describe("priority-time mana abilities", () => {
 		expect(checkpoint.objects.get(forest.id)).toMatchObject({ tapped: true });
 		expect(checkpoint.players[ALICE].manaPool.g).toBe(1);
 		expect(checkpoint.stack).toHaveLength(0);
+	});
+});
+
+describe("fixed activation payments", () => {
+	function action(
+		source: ObjectId,
+		ability: typeof paidTarget | typeof paidTap | typeof paidMana,
+	): ActivateAbilityAction {
+		return { kind: "activate ability", source, ability };
+	}
+
+	test("activates multiple mana sources and exposes a generic-plus-colored ability at normal priority", () => {
+		const state = setupMain();
+		const firstForest = spawnPermanent(state, "forest", ALICE);
+		const secondForest = spawnPermanent(state, "forest", ALICE);
+		const source = spawnPermanent(
+			state,
+			"test-paid-activated-abilities",
+			ALICE,
+			{ tapped: true },
+		);
+		const paidAction = action(source.id, paidTarget);
+		const scripted = new ScriptedAgent(
+			[],
+			[],
+			[manaAction(firstForest.id), manaAction(secondForest.id), paidAction],
+		);
+		const availability: { green: number; offered: boolean }[] = [];
+		const observingAgent: SyncAgent = {
+			choose(view, request) {
+				if (request.kind === "priorityAction" && request.player === ALICE) {
+					availability.push({
+						green: state.players[ALICE].manaPool.g,
+						offered: request.options.some(
+							(option) => option.id === priorityOptionId(paidAction),
+						),
+					});
+				}
+				return scripted.choose(view, request);
+			},
+		};
+
+		settlePriority(state, [observingAgent, new ScriptedAgent()]);
+
+		expect(scripted.priorityActions).toHaveLength(0);
+		expect(availability.slice(0, 4)).toEqual([
+			{ green: 0, offered: false },
+			{ green: 1, offered: false },
+			{ green: 2, offered: true },
+			{ green: 0, offered: false },
+		]);
+		expect(state.objects.get(firstForest.id)).toMatchObject({ tapped: true });
+		expect(state.objects.get(secondForest.id)).toMatchObject({ tapped: true });
+		expect(state.objects.get(source.id)).toMatchObject({ tapped: true });
+		expect(state.players[ALICE].manaPool.g).toBe(0);
+		expect(state.players[ALICE].life).toBe(19);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("offers each ability according to its own mana and tap requirements", () => {
+		const state = setupMain();
+		const source = spawnPermanent(
+			state,
+			"test-paid-activated-abilities",
+			ALICE,
+			{ tapped: true },
+		);
+		state.players[ALICE].manaPool = { w: 0, u: 0, b: 0, r: 1, g: 2, c: 0 };
+
+		const actions = getObservableActions(state, ALICE);
+		expect(actions).toContainEqual(action(source.id, paidTarget));
+		expect(actions).toContainEqual(action(source.id, paidMana));
+		expect(actions).not.toContainEqual(action(source.id, paidTap));
+
+		state.players[ALICE].manaPool = { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 };
+		const unaffordable = getObservableActions(state, ALICE);
+		expect(unaffordable).not.toContainEqual(action(source.id, paidTarget));
+		expect(unaffordable).not.toContainEqual(action(source.id, paidTap));
+		expect(unaffordable).not.toContainEqual(action(source.id, paidMana));
+	});
+
+	test("chooses a target before paying a mana-only activation on a tapped source", () => {
+		const state = setupMain();
+		const source = spawnPermanent(
+			state,
+			"test-paid-activated-abilities",
+			ALICE,
+			{ tapped: true },
+		);
+		state.players[ALICE].manaPool.g = 1;
+		state.players[ALICE].manaPool.c = 1;
+		let poolSeenWhileTargeting: ManaAmount | undefined;
+		const choosingTarget: SyncAgent = {
+			choose(_view, request) {
+				if (request.kind === "target") {
+					poolSeenWhileTargeting = { ...state.players[ALICE].manaPool };
+					return { optionId: "player:1" };
+				}
+				const first = request.options[0];
+				if (!first) throw new Error("expected a choice option");
+				return { optionId: first.id };
+			},
+		};
+
+		executeAbilityAction(state, ALICE, action(source.id, paidTarget), [
+			choosingTarget,
+			new ScriptedAgent(),
+		]);
+
+		expect(poolSeenWhileTargeting).toMatchObject({ g: 1, c: 1 });
+		expect(state.players[ALICE].manaPool).toMatchObject({ g: 0, c: 0 });
+		expect(state.objects.get(source.id)).toMatchObject({ tapped: true });
+		expect(state.stack).toHaveLength(1);
+	});
+
+	test("an invalid target leaves generic and colored mana untouched", () => {
+		const state = setupMain();
+		const source = spawnPermanent(
+			state,
+			"test-paid-activated-abilities",
+			ALICE,
+		);
+		state.players[ALICE].manaPool.g = 2;
+		const before = structuredClone(state);
+		const invalidTarget: SyncAgent = {
+			choose(_view, request) {
+				if (request.kind === "target") {
+					return { optionId: "permanent:999999" };
+				}
+				const first = request.options[0];
+				if (!first) throw new Error("expected a choice option");
+				return { optionId: first.id };
+			},
+		};
+
+		expect(() =>
+			executeAbilityAction(state, ALICE, action(source.id, paidTarget), [
+				invalidTarget,
+				new ScriptedAgent(),
+			]),
+		).toThrow(InvalidChoiceAnswerError);
+		expect(state).toEqual(before);
+	});
+
+	test("pays mana and tap together for an ordinary activated ability", () => {
+		const state = setupMain();
+		const source = spawnPermanent(
+			state,
+			"test-paid-activated-abilities",
+			ALICE,
+		);
+		state.players[ALICE].manaPool.g = 1;
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			action(source.id, paidTap),
+			passingAgents(),
+		);
+
+		expect(state.players[ALICE].manaPool.g).toBe(0);
+		expect(state.objects.get(source.id)).toMatchObject({ tapped: true });
+		expect(state.stack).toHaveLength(1);
+	});
+
+	test("a paid mana ability resolves immediately at normal priority without tapping or using the stack", () => {
+		const state = setupMain();
+		const source = spawnPermanent(
+			state,
+			"test-paid-activated-abilities",
+			ALICE,
+			{ tapped: true },
+		);
+		state.players[ALICE].manaPool.r = 1;
+		const scripted = new ScriptedAgent([], [], [action(source.id, paidMana)]);
+
+		settlePriority(state, [scripted, new ScriptedAgent()]);
+
+		expect(scripted.priorityActions).toHaveLength(0);
+		expect(state.players[ALICE].manaPool).toMatchObject({ r: 0, g: 1 });
+		expect(state.objects.get(source.id)).toMatchObject({ tapped: true });
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("an unaffordable forced activation changes no state", () => {
+		const state = setupMain();
+		const source = spawnPermanent(
+			state,
+			"test-paid-activated-abilities",
+			ALICE,
+		);
+		const before = structuredClone(state);
+
+		expect(() =>
+			executeAbilityAction(
+				state,
+				ALICE,
+				action(source.id, paidTap),
+				passingAgents(),
+			),
+		).toThrow(IllegalAbilityActivationError);
+		expect(state).toEqual(before);
+	});
+
+	test("async replay pays combined mana and tap costs exactly once", async () => {
+		const checkpoint = setupMain();
+		spawnPermanent(checkpoint, "test-paid-tap-pass-through", BOB);
+		spawnPermanent(checkpoint, "test-paid-tap-pass-through-second", BOB);
+		const forest = spawnPermanent(checkpoint, "forest", ALICE);
+		const source = spawnPermanent(
+			checkpoint,
+			"test-paid-activated-abilities",
+			ALICE,
+		);
+		const activate = action(source.id, paidTap);
+		const before = structuredClone(checkpoint);
+		const scripted = new ScriptedAgent(
+			[],
+			[],
+			[manaAction(forest.id), activate],
+		);
+		let replacementRequests = 0;
+		const asyncReplacement: Agent = {
+			choose(view, request) {
+				if (request.kind !== "replacement") {
+					return scripted.choose(view, request);
+				}
+				replacementRequests++;
+				const first = request.options[0];
+				if (!first) throw new Error("expected a replacement option");
+				return Promise.resolve({ optionId: first.id });
+			},
+		};
+
+		const result = await advanceWithReplay(checkpoint, [
+			asyncReplacement,
+			new ScriptedAgent(),
+		]);
+
+		expect(checkpoint).toEqual(before);
+		expect(result.attempts).toBe(2);
+		expect(replacementRequests).toBe(1);
+		expect(result.state.objects.get(forest.id)).toMatchObject({ tapped: true });
+		expect(result.state.objects.get(source.id)).toMatchObject({ tapped: true });
+		expect(result.state.players[ALICE].manaPool.g).toBe(0);
+		expect(result.state.players[ALICE].life).toBe(21);
+		expect(result.state.stack).toHaveLength(0);
+	});
+
+	test("a replaced-away tap rolls back mana, announcement, and replacement effects", () => {
+		const state = setupMain();
+		spawnPermanent(state, "test-paid-tap-fizzle", BOB);
+		const source = spawnPermanent(
+			state,
+			"test-paid-activated-abilities",
+			ALICE,
+		);
+		state.players[ALICE].manaPool.g = 1;
+		const before = structuredClone(state);
+
+		expect(() =>
+			executeAbilityAction(
+				state,
+				ALICE,
+				action(source.id, paidTap),
+				passingAgents(),
+			),
+		).toThrow(IllegalAbilityActivationError);
+		expect(state).toEqual(before);
 	});
 });
 

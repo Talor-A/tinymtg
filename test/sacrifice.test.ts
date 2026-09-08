@@ -26,13 +26,14 @@ registerCard({
 			kind: "activated",
 			id: "sacrifice-creature-scry",
 			text: "Sacrifice a creature: Scry 1.",
-			costs: [
-				{
-					kind: "sacrifice",
+			cost: {
+				mana: "zero",
+				tapSelf: false,
+				sacrifice: {
 					selector: { kind: "type", type: "creature" },
 					amount: 1,
 				},
-			],
+			},
 			targets: [],
 			effects: [{ kind: "scry", player: "you", amount: 1 }],
 		},
@@ -50,14 +51,39 @@ registerCard({
 			kind: "mana",
 			id: "sacrifice-creature-for-mana",
 			text: "Sacrifice a creature: Add {C}{C}.",
-			costs: [
-				{
-					kind: "sacrifice",
+			cost: {
+				mana: "zero",
+				tapSelf: false,
+				sacrifice: {
 					selector: { kind: "type", type: "creature" },
 					amount: 1,
 				},
-			],
+			},
 			effects: [{ kind: "add-mana", player: "you", mana: { c: 2 } }],
+		},
+	],
+});
+
+registerCard({
+	id: "test-combined-activation-cost",
+	name: "Test Combined Activation Cost",
+	types: ["creature"],
+	colors: ["b"],
+	manaCost: { b: 1 },
+	power: 1,
+	toughness: 1,
+	activatedAbilities: [
+		{
+			kind: "activated",
+			id: "mana-tap-sacrifice",
+			text: "{B}, {T}, Sacrifice this creature: You gain 1 life.",
+			cost: {
+				mana: { b: 1 },
+				tapSelf: true,
+				sacrifice: { selector: { kind: "self" }, amount: 1 },
+			},
+			targets: [],
+			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
 		},
 	],
 });
@@ -73,7 +99,7 @@ registerCard({
 			kind: "activated",
 			id: "edict",
 			text: "{T}: Target player sacrifices a creature.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			targets: [
 				{
 					id: "player",
@@ -95,7 +121,7 @@ registerCard({
 			kind: "activated",
 			id: "controller-sacrifices",
 			text: "{T}: You sacrifice a creature.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			targets: [],
 			effects: [
 				{
@@ -247,6 +273,35 @@ describe("sacrifice as an effect", () => {
 });
 
 describe("sacrifice as an activated ability cost", () => {
+	test("pays mana, then taps and sacrifices the source atomically", () => {
+		const state = setupMain();
+		const source = spawnPermanent(
+			state,
+			"test-combined-activation-cost",
+			ALICE,
+		);
+		state.players[ALICE].manaPool.b = 1;
+		const alice = new ScriptedAgent([], [], [], [], [], [], [], [source.id]);
+		const bob = new ScriptedAgent();
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{
+				kind: "activate ability",
+				source: source.id,
+				ability: abilityId("activated", "test-combined-activation-cost", 0),
+			},
+			[alice, bob],
+		);
+
+		expect(state.players[ALICE].manaPool.b).toBe(0);
+		expect(state.battlefield).not.toContain(source.id);
+		expect(state.stack).toHaveLength(1);
+		settlePriority(state, [alice, bob]);
+		expect(state.players[ALICE].life).toBe(21);
+	});
+
 	test("can sacrifice the ability's source and the ability still resolves", () => {
 		const state = setupMain();
 		const top = spawnCard(state, "forest", ALICE, "library");

@@ -45,7 +45,7 @@ registerCard({
 			kind: "mana",
 			id: "intrinsic-mana-w",
 			text: "Add {W}.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			effects: [
 				{
 					kind: "add-mana",

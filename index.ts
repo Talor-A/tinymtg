@@ -2020,18 +2020,15 @@ export interface SpellAbilityDef {
 	effects: EffectDef[];
 }
 
-export type ActivatedAbilityCostDef =
-	| { kind: "tap-self" }
-	| {
-			kind: "sacrifice";
-			selector: TargetSelectorDef;
-			amount: 1;
-	  };
+export interface SacrificeActivationCost {
+	selector: TargetSelectorDef;
+	amount: 1;
+}
 
 interface ActivatedAbilityDefBase {
 	id: string;
 	text: string;
-	costs: ActivatedAbilityCostDef[];
+	cost: ActivationCost;
 }
 
 export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
@@ -2065,39 +2062,56 @@ export type AnyActivatedAbilityDefinition =
 	| ActivatedAbilityDef
 	| ManaAbilityDef;
 
-export type CardDefManaCost =
+/** A finite fixed mana cost. Omitted symbols require zero mana. */
+export interface FixedManaCost {
+	w?: number;
+	u?: number;
+	b?: number;
+	r?: number;
+	g?: number;
+	/** Colorless: payable only with colorless mana, as in {C}. */
+	c?: number;
+	/** Generic: payable with mana of any type, as in {3}. */
+	n?: number;
+}
+
+/** A fixed mana cost that can be paid from a mana pool. */
+export type PayableManaCost = FixedManaCost | "zero";
+
+/**
+ * Mana supported in an activation cost under the TINY-65 scope.
+ *
+ * The parent scope says generic/coloured mana. That includes {1} and WUBRG,
+ * but not specifically colorless {C}; `c?: never` makes that choice explicit.
+ * "none" is also absent because it is a card-only absence of a mana cost, not
+ * a payable activation cost.
+ */
+export type PayableActivationManaCost =
 	| {
 			w?: number;
 			u?: number;
 			b?: number;
 			r?: number;
 			g?: number;
-			/** colorless: payable only with colorless mana, as in {C}. */
-			c?: number;
-			/** generic: payable with mana of any type, as in {3}. */
+			c?: never;
 			n?: number;
 	  }
+	| "zero";
+
+/** The fixed components supported for one activation cost. */
+export interface ActivationCost {
+	mana: PayableActivationManaCost;
+	tapSelf: boolean;
+	sacrifice?: SacrificeActivationCost;
+}
+
+export type CardDefManaCost =
+	| PayableManaCost
 	/**
-	 * Some cards have zero mana cost.
+	 * Some cards have no mana cost. These cannot be cast from hand.
 	 *
-	 * @example
-	 * darksteel relic costs 0, and can be cast from hand like any
-	 * other spell. It resolves via the stack.
-	 */
-	| "zero"
-	/**
-	 * Some cards have no mana cost.  These cannot be cast from hand.
-	 *
-	 * @example
-	 * generic tokens have no mana cost, and their mana value is zero.
-	 *
-	 * @example
-	 * crashing footfalls is a sorcery with no mana cost, and cannot be cast
-	 * from the hand. it must be suspended, which later causes a triggered
-	 * ability allowing it to be cast from exile.
-	 *
-	 * token copies of a card *do* have a mana cost, equal to that of the
-	 * original card.
+	 * This differs from "zero": a zero-cost card can be cast normally. Tokens
+	 * and cards such as Crashing Footfalls can instead have no mana cost.
 	 */
 	| "none";
 
@@ -4703,10 +4717,7 @@ function enqueueSelfDeathTriggers(
 ): void {
 	for (const { pending, sourceName } of candidates) {
 		state.pendingTriggers.push({ ...pending, triggeringEvent });
-		log(
-			state,
-			`  [trigger] ${sourceName}#${pending.source} — ${pending.text}`,
-		);
+		log(state, `  [trigger] ${sourceName}#${pending.source} — ${pending.text}`);
 	}
 }
 
@@ -6001,8 +6012,7 @@ interface ManaCostBreakdown {
 	generic: number;
 }
 
-function manaCostBreakdown(cost: CardDefManaCost): ManaCostBreakdown | null {
-	if (cost === "none") return null;
+function manaCostBreakdown(cost: PayableManaCost): ManaCostBreakdown {
 	if (cost === "zero") return { specific: {}, generic: 0 };
 	const specific: Partial<Record<ManaType, number>> = {};
 	for (const type of MANA_TYPES) {
@@ -6036,10 +6046,9 @@ function manaCostBreakdown(cost: CardDefManaCost): ManaCostBreakdown | null {
  */
 export function planManaPayment(
 	pool: DeepReadOnly<ManaPool>,
-	cost: CardDefManaCost,
+	cost: PayableManaCost,
 ): ManaAmount | null {
 	const breakdown = manaCostBreakdown(cost);
-	if (!breakdown) return null;
 
 	const payment: ManaPool = { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 };
 	const remaining: ManaPool = { ...pool };
@@ -6366,21 +6375,14 @@ function activatedAbilityActions(
 		const actions: ActivateAbilityAction[] = [];
 		for (const ability of snapshot.currentCharacteristics.abilities.activated) {
 			const definition = getAbilityDefinition("activated", ability);
-			if (definition.costs.length === 0) continue;
+			if (definition.cost.tapSelf && object.tapped) continue;
 			if (
-				definition.costs.some(
-					(cost) => cost.kind === "tap-self" && object.tapped,
-				)
+				!planManaPayment(state.players[player].manaPool, definition.cost.mana)
 			)
 				continue;
-			const sacrificeCosts = definition.costs.filter(
-				(cost) => cost.kind === "sacrifice",
-			);
-			if (sacrificeCosts.length > 1) continue;
-			const sacrificeCost = sacrificeCosts[0];
 			if (
-				sacrificeCost?.kind === "sacrifice" &&
-				legalSacrifices(read, player, sacrificeCost.selector, {
+				definition.cost.sacrifice &&
+				legalSacrifices(read, player, definition.cost.sacrifice.selector, {
 					controller: player,
 					source: id,
 				}).length === 0
@@ -6433,8 +6435,8 @@ export function getObservableActions(
 
 /**
  * Executes a currently possessed fixed-cost activated ability. The priority
- * holder is supplied by the scheduler and all legality is rechecked before its
- * tap and/or sacrifice costs mutate canonical state.
+ * holder is supplied by the scheduler and all legality is rechecked before
+ * payment mutates canonical state.
  */
 export function executeAbilityAction(
 	state: GameState,
@@ -6506,22 +6508,18 @@ function activateAbilityIn(
 		);
 	}
 	const ability = getAbilityDefinition("activated", action.ability);
-	if (ability.costs.length === 0) {
-		throw new IllegalAbilityActivationError(
-			`ability ${action.ability} has no supported cost`,
-		);
-	}
-	if (ability.costs.some((cost) => cost.kind === "tap-self") && object.tapped) {
+	if (ability.cost.tapSelf && object.tapped) {
 		throw new IllegalAbilityActivationError(
 			`object ${action.source} is already tapped`,
 		);
 	}
-	const sacrificeCosts = ability.costs.filter(
-		(cost) => cost.kind === "sacrifice",
+	const manaPayment = planManaPayment(
+		state.players[priorityPlayer].manaPool,
+		ability.cost.mana,
 	);
-	if (sacrificeCosts.length > 1) {
+	if (!manaPayment) {
 		throw new IllegalAbilityActivationError(
-			"multiple sacrifice costs are not implemented",
+			`P${priorityPlayer} cannot pay ability ${action.ability}'s mana cost from their mana pool`,
 		);
 	}
 
@@ -6656,7 +6654,7 @@ function activateAbilityIn(
 		}
 
 		// CR 601.2c and CR 601.2h in order: the target is chosen, and rejected if
-		// illegal, strictly before the costs below are paid. Nothing above this
+		// illegal, strictly before the activation cost below is paid. Nothing above this
 		// point has mutated the game, so a refused activation leaves no trace.
 		targetDefinitions = structuredClone(ability.targets);
 		const target = requiredTargetDefinition(targetDefinitions, ability.effects);
@@ -6685,8 +6683,8 @@ function activateAbilityIn(
 	}
 	// Cost choices are made while announcing the ability, before payment.
 	let sacrificePayment: ObjectId | null = null;
-	const sacrificeCost = sacrificeCosts[0];
-	if (sacrificeCost?.kind === "sacrifice") {
+	const sacrificeCost = ability.cost.sacrifice;
+	if (sacrificeCost) {
 		assert(
 			sacrificeCost.amount === 1,
 			"only sacrificing one permanent is implemented",
@@ -6740,34 +6738,67 @@ function activateAbilityIn(
 
 	const scope = newScope();
 	try {
-		for (const cost of ability.costs) {
-			let costEvent: GameEvent;
-			if (cost.kind === "tap-self") {
-				costEvent = {
-					kind: "tap",
-					ref: { kind: "object", object: object.id },
-				};
-			} else {
-				assertDefined(sacrificePayment);
-				costEvent = { kind: "sacrifice", object: sacrificePayment };
-			}
-			const payment = performIn(state, costEvent, choices, scope, 0);
-			const paid = payment.executed.some((event) =>
-				cost.kind === "tap-self"
-					? event.kind === "tap" &&
-						event.ref.kind === "object" &&
-						event.ref.object === object.id
-					: event.kind === "sacrifice" && event.object === sacrificePayment,
+		// Spending mana is not an event, but it shares the activation checkpoint
+		// with replaceable tap and sacrifice events. If payment fails after a
+		// replacement changes the game, every component and the announcement rewind.
+		const pool = state.players[priorityPlayer].manaPool;
+		let spentMana = false;
+		for (const type of MANA_TYPES) {
+			const spent = manaPayment[type] ?? 0;
+			assert(
+				pool[type] >= spent,
+				`payment plan spends ${spent} ${type} from a pool holding ${pool[type]}`,
 			);
-			if (!paid) {
+			pool[type] -= spent;
+			if (spent > 0) spentMana = true;
+		}
+		if (spentMana) state.revision++;
+
+		if (ability.cost.tapSelf) {
+			const tapPayment = performIn(
+				state,
+				{ kind: "tap", ref: { kind: "object", object: object.id } },
+				choices,
+				scope,
+				0,
+			);
+			if (
+				!tapPayment.executed.some(
+					(event) =>
+						event.kind === "tap" &&
+						event.ref.kind === "object" &&
+						event.ref.object === object.id,
+				)
+			) {
 				throw new IllegalAbilityActivationError(
-					`the ${cost.kind} cost for ability ${action.ability} was not paid`,
+					`the tap cost for ability ${action.ability} was not paid`,
+				);
+			}
+		}
+
+		if (sacrificeCost) {
+			assertDefined(sacrificePayment);
+			const sacrifice = performIn(
+				state,
+				{ kind: "sacrifice", object: sacrificePayment },
+				choices,
+				scope,
+				0,
+			);
+			if (
+				!sacrifice.executed.some(
+					(event) =>
+						event.kind === "sacrifice" && event.object === sacrificePayment,
+				)
+			) {
+				throw new IllegalAbilityActivationError(
+					`the sacrifice cost for ability ${action.ability} was not paid`,
 				);
 			}
 		}
 	} catch (error) {
-		// A rejected or suspended choice during payment leaves the same
-		// half-finished activation as an unpayable cost does.
+		// Rejected/suspended replacement choices and replaced-away taps leave the
+		// same half-finished activation as any other unpayable cost.
 		restoreCheckpoint(state, checkpoint);
 		throw error;
 	}

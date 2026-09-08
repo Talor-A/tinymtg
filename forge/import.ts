@@ -1655,7 +1655,7 @@ export function lowerForgeCard(
 				text:
 					getForgeParam(params, "SpellDescription") ??
 					`Add ${producedSymbols.map((symbol) => `{${symbol}}`).join("")}.`,
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				effects: [{ kind: "add-mana", player: "you", mana }],
 			});
 			continue;
@@ -1739,7 +1739,7 @@ export function lowerForgeCard(
 				kind: "activated",
 				id: `activated-${activatedCount}`,
 				text: description,
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				targets,
 				effects: chain.effects,
 			});
@@ -1772,8 +1772,8 @@ export function lowerForgeCard(
 				(ability) =>
 					ability.kind === "mana" &&
 					!("manaOptions" in ability) &&
-					ability.costs.length === 1 &&
-					ability.costs[0]?.kind === "tap-self" &&
+					ability.cost.mana === "zero" &&
+					ability.cost.tapSelf &&
 					ability.effects.length === 1 &&
 					ability.effects[0]?.kind === "add-mana" &&
 					(() => {
@@ -1794,7 +1794,7 @@ export function lowerForgeCard(
 				kind: "mana",
 				id: `intrinsic-mana-${color}`,
 				text: `Add {${color.toUpperCase()}}.`,
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				effects: [{ kind: "add-mana", player: "you", mana: fullMana(color) }],
 			});
 		}

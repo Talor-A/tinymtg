@@ -81,7 +81,7 @@ registerCard({
 			kind: "activated",
 			id: "ping",
 			text: "{T}: This creature deals 2 damage to any target.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
@@ -183,7 +183,7 @@ registerCard({
 			kind: "activated",
 			id: "wreck",
 			text: "{T}: Destroy target artifact. This deals 2 damage to it.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
 			effects: [
 				{ kind: "destroy", targetSlot: "target-1" },
@@ -208,7 +208,7 @@ registerCard({
 			kind: "activated",
 			id: "slay",
 			text: "{T}: Destroy target creature an opponent controls.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			targets: [
 				{
 					id: "target-1",
@@ -296,7 +296,7 @@ registerCard({
 			kind: "activated",
 			id: "ping",
 			text: "{T}: This creature deals 2 damage to any target.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			targets: [
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
@@ -320,7 +320,7 @@ registerCard({
 			kind: "activated",
 			id: "ping",
 			text: "{T}: This creature deals 1 damage to target artifact.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
 			effects: [{ kind: "damage", targetSlot: "target-1", amount: 1 }],
 		},

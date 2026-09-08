@@ -118,7 +118,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				kind: "mana",
 				id: "activated-1",
 				text: "Add {W}{U}.",
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				effects: [
 					{
 						kind: "add-mana",
@@ -139,7 +139,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				kind: "mana",
 				id: "activated-1",
 				text: "Add {W}{U}{B}{R}{G}.",
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				effects: [
 					{
 						kind: "add-mana",
@@ -160,7 +160,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				kind: "mana",
 				id: "activated-1",
 				text: "Add {C}.",
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				effects: [
 					{
 						kind: "add-mana",
@@ -185,7 +185,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 					kind: "mana",
 					id: expect.stringContaining("intrinsic-mana"),
 					text: expect.any(String),
-					costs: [{ kind: "tap-self" }],
+					cost: { mana: "zero", tapSelf: true },
 					effects: [
 						{
 							kind: "add-mana",
@@ -206,7 +206,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				kind: "mana",
 				id: "activated-1",
 				text: expect.any(String),
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				effects: [
 					{
 						kind: "add-mana",
@@ -276,7 +276,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				kind: "activated",
 				id: "activated-1",
 				text: "CARDNAME deals 1 damage to any target.",
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				targets: [
 					{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 				],
@@ -594,7 +594,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				kind: "activated",
 				id: "activated-1",
 				text: expect.any(String),
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				targets: [],
 				effects: [{ kind: "gain-life", player: "you", amount: 1 }],
 			},
@@ -609,7 +609,7 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 				kind: "activated",
 				id: "activated-1",
 				text: expect.any(String),
-				costs: [{ kind: "tap-self" }],
+				cost: { mana: "zero", tapSelf: true },
 				targets: [],
 				effects: [
 					{ kind: "draw", player: "you", amount: 1 },
@@ -883,7 +883,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 			kind: "mana",
 			id: "intrinsic-mana-g",
 			text: "Add {G}.",
-			costs: [{ kind: "tap-self" }],
+			cost: { mana: "zero", tapSelf: true },
 			effects: [
 				{
 					kind: "add-mana",
