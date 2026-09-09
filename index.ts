@@ -1923,8 +1923,8 @@ export interface BoundProhibition {
  * A resolving spell or ability can create a continuous effect that is not an
  * ability of an object (CR 611.2). Keep its rules data directly in game state.
  * The discriminant says which rules consumer interprets it: the layer walk
- * handles characteristic changes and the replacement pipeline handles
- * replacement and prevention effects.
+ * handles characteristic changes, the action rules handle cast permissions,
+ * and the replacement pipeline handles replacement and prevention effects.
  * ------------------------------------------------------------------ */
 
 interface TemporaryEffectCommon {
@@ -1972,7 +1972,7 @@ export type BuiltinTemporaryEffect =
  *
  * Which rules consumer reads it follows from the definition, not from a field
  * here: a characteristic-changing `EffectDef` is applied by the layer walk, and
- * a replacement definition is offered to the replacement pipeline.
+ * a `may-cast` definition is read while offering and executing cast actions.
  */
 export type TemporaryEffect = TemporaryEffectCommon & {
 	source: TemporaryEffectSource;
@@ -2048,7 +2048,7 @@ export function temporaryEffectDefinition(
  * One serializable effect language is shared by card definitions, imported IR,
  * stack items, and the resolver. An effect never carries a chosen target: it
  * names a target slot its own ability declared, and the resolver looks the
- * binding up. Temporary P/T effects remain definition-only.
+ * binding up. Temporary continuous effects remain definition-only.
  * ------------------------------------------------------------------ */
 
 export type RelativeEffectPlayer = "you" | "opponent";
@@ -2138,6 +2138,13 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			/** The first supported temporary keyword grant is indestructible. */
 			keyword: "indestructible";
 			object: "source" | TargetSlotRef;
+			duration: "until-end-of-turn";
+	  }
+	| {
+			kind: "may-cast";
+			/** The card in exile that this effect's controller may cast. */
+			object: TargetSlotRef;
+			from: "exile";
 			duration: "until-end-of-turn";
 	  }
 	| {
@@ -4031,9 +4038,8 @@ export function collectReplacements(
 
 	for (const effect of state.temporaryEffects) {
 		// A spell-effect-sourced temporary effect is defined by an `EffectDef`.
-		// None of those are replacement effects today -- `modify-pt` is a
-		// characteristic change the layer walk applies -- so only builtins reach
-		// the replacement pipeline.
+		// None of those are replacement effects today: their definitions are read
+		// by the layer walk or action rules, so only builtins reach this pipeline.
 		if (effect.source.origin !== "builtin") continue;
 		// `collectReplacements` reads a ReadonlyGameState, but a consumed shield
 		// has to record its own consumption. `onApplied` runs only while the
@@ -6681,6 +6687,7 @@ function resolveEffects(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
+				effect.kind === "may-cast" ||
 				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
@@ -6827,6 +6834,22 @@ function resolveEffects(
 			addTemporaryEffect(state, item.controller, {
 				source: resolvingEffectSource(state, item, effectIndex),
 				bindings: { [slot]: subject },
+			});
+			continue;
+		}
+		if (effect.kind === "may-cast") {
+			assert(
+				bound?.type === "card",
+				"temporary cast permission requires a bound card target",
+			);
+			const object = maybeObject(state, bound.id);
+			// A preceding instruction can move a target after the spell or ability's
+			// single CR 608.2b legality check. In that case this instruction does
+			// nothing; it never grants permission to the new object.
+			if (object?.kind !== "card" || object.zone !== effect.from) continue;
+			addTemporaryEffect(state, item.controller, {
+				source: resolvingEffectSource(state, item, effectIndex),
+				bindings: { [effect.object.targetSlot]: bound },
 			});
 			continue;
 		}
@@ -7066,6 +7089,10 @@ function effectToEvent(
 			throw new Error(
 				"temporary keyword effects resolve without creating an event",
 			);
+		case "may-cast":
+			throw new Error(
+				"temporary cast permissions resolve without creating an event",
+			);
 		case "add-mana":
 			return {
 				kind: "add mana",
@@ -7259,6 +7286,7 @@ function requiredTargetDefinition(
 			effect.kind !== "change-zone" &&
 			effect.kind !== "modify-pt" &&
 			effect.kind !== "grant-keyword" &&
+			effect.kind !== "may-cast" &&
 			effect.kind !== "add counters" &&
 			effect.kind !== "sacrifice" &&
 			effect.kind !== "gain-life" &&
@@ -7290,6 +7318,7 @@ function requiredTargetDefinition(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
+				effect.kind === "may-cast" ||
 				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
@@ -7344,6 +7373,12 @@ function requiredTargetDefinition(
 			assert(
 				target.legal.kind === "permanent",
 				"temporary keyword grant requires a permanent target",
+			);
+		}
+		if (effect.kind === "may-cast") {
+			assert(
+				target.legal.kind === "card" && target.legal.zone === effect.from,
+				"temporary cast permission requires a card target in its origin",
 			);
 		}
 		if (effect.kind === "add counters") {
@@ -7502,9 +7537,42 @@ function legalSacrifices(
  * ------------------------------------------------------------------ */
 
 /**
- * Whether `player` could begin casting `object` from hand right now. This is an
- * action-offering preflight only: the actual announcement puts the spell on the
- * stack before choosing targets and paying, and rewinds a failed attempt.
+ * Whether the rules currently permit `player` to cast this exact card object
+ * from its current zone. A zone change creates a new object id, so a temporary
+ * permission cannot follow a card that leaves exile and later returns.
+ */
+function hasCastPermission(
+	read: ReadContext,
+	player: PlayerId,
+	object: DeepReadOnly<CardObject>,
+): boolean {
+	if (object.zone === "hand")
+		return (
+			object.owner === player &&
+			read.state.players[player].hand.includes(object.id)
+		);
+	if (object.zone !== "exile") return false;
+
+	for (const temporary of read.state.temporaryEffects) {
+		if (temporary.controller !== player) continue;
+		const definition = temporaryEffectDefinition(temporary);
+		if (definition?.kind !== "may-cast") continue;
+		assert(definition.from === "exile");
+		const subject = temporary.bindings[definition.object.targetSlot];
+		assert(
+			subject?.type === "card",
+			"temporary cast permission has no bound card",
+		);
+		if (subject.id === object.id) return true;
+	}
+	return false;
+}
+
+/**
+ * Whether `player` could begin casting `object` right now. This is an
+ * action-offering preflight only: the actual announcement rechecks permission,
+ * puts the spell on the stack, chooses targets, pays, and rewinds a failed
+ * attempt.
  */
 function canCast(
 	object: DeepReadOnly<CardObject>,
@@ -7512,11 +7580,9 @@ function canCast(
 	read: ReadContext,
 	player: PlayerId,
 ): boolean {
-	// TODO: this is simplified, and only accounts for the basics of casting
-	// from hand. it does not account for special cast actions.
+	// TODO: this is simplified and does not account for alternative costs.
 	assert(object.kind === "card");
-	assert(object.zone === "hand");
-	assert(object.owner === player);
+	if (!hasCastPermission(read, player, object)) return false;
 
 	const snapshot = getSnapshot(read, object.id);
 	assert(snapshot.kind === "card");
@@ -7582,17 +7648,12 @@ function castableSpells(
 	player: PlayerId,
 ): CastAction[] {
 	const castable: CastAction[] = [];
-	for (const objectId of state.players[player].hand) {
-		const object = maybeObject(state, objectId);
-		assertDefined(object, `hand contains missing object ${objectId}`);
-		assert(
-			object.kind === "card" || object.kind === "nonbattlefield-token",
-			`hand contains unexpected object kind ${object.kind}`,
-		);
-		// CR 704.5d will remove a token in hand; it is never castable meanwhile.
+	for (const object of state.objects.values()) {
+		// CR 704.5d removes nonbattlefield tokens; they are never castable in the
+		// interval before the next state-based action check.
 		if (object.kind !== "card") continue;
 		if (canCast(object, state, read, player)) {
-			castable.push({ kind: "cast", card: objectId });
+			castable.push({ kind: "cast", card: object.id });
 		}
 	}
 	return castable;
@@ -7993,6 +8054,7 @@ function activateAbilityIn(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
+				effect.kind === "may-cast" ||
 				effect.kind === "add counters" ||
 				effect.kind === "sacrifice" ||
 				effect.kind === "create-token"
@@ -8245,18 +8307,19 @@ function castSpellIn(
 	}
 
 	const object = maybeObject(state, action.card);
-	if (
-		object?.kind !== "card" ||
-		object.zone !== "hand" ||
-		object.owner !== priorityPlayer ||
-		!state.players[priorityPlayer].hand.includes(action.card)
-	) {
+	if (object?.kind !== "card") {
 		throw new IllegalCastError(
-			`object ${action.card} is not a card in P${priorityPlayer}'s hand`,
+			`object ${action.card} is not a card P${priorityPlayer} can cast`,
 		);
 	}
 
 	const read = createReadContext(state);
+	if (!hasCastPermission(read, priorityPlayer, object)) {
+		throw new IllegalCastError(
+			`P${priorityPlayer} has no permission to cast object ${action.card} from ${object.zone}`,
+		);
+	}
+	const origin = object.zone;
 	const snapshot = getSnapshot(read, action.card);
 	assert(snapshot.kind === "card");
 	const characteristics = snapshot.currentCharacteristics;
@@ -8329,7 +8392,7 @@ function castSpellIn(
 			{
 				kind: "change zone",
 				object: action.card,
-				from: "hand",
+				from: origin,
 				destination: {
 					zone: "stack",
 					controller: priorityPlayer,
@@ -8345,7 +8408,7 @@ function castSpellIn(
 			(event): event is ZoneChangeEvent =>
 				event.kind === "change zone" &&
 				event.object === action.card &&
-				event.from === "hand" &&
+				event.from === origin &&
 				event.destination.zone === "stack" &&
 				event.cause === "cast" &&
 				event.destination.controller === priorityPlayer,

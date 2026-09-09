@@ -10,6 +10,7 @@ import type {
 } from "../index.ts";
 import {
 	abilityId,
+	activePlayer,
 	advance,
 	executeAbilityAction,
 	executeCastAction,
@@ -17,6 +18,7 @@ import {
 	getObservableActions,
 	IllegalCastError,
 	newGame,
+	perform,
 	registerCard,
 	settlePriority,
 	spawnCard,
@@ -69,6 +71,36 @@ registerCard({
 		text: "Do nothing.",
 		targets: [],
 		effects: [],
+	},
+});
+
+// Synthetic: isolates a temporary permission for one already-exiled card.
+// It is not an implementation claim about a printed card.
+registerCard({
+	id: "test-may-cast-from-exile",
+	name: "Test May Cast From Exile",
+	types: ["instant"],
+	colors: [],
+	manaCost: "zero",
+	spell: {
+		id: "test-may-cast-from-exile-spell",
+		text: "Until end of turn, you may cast target card from exile.",
+		targets: [
+			{
+				id: "target-1",
+				min: 1,
+				max: 1,
+				legal: { kind: "card", zone: "exile" },
+			},
+		],
+		effects: [
+			{
+				kind: "may-cast",
+				object: { targetSlot: "target-1" },
+				from: "exile",
+				duration: "until-end-of-turn",
+			},
+		],
 	},
 });
 
@@ -323,6 +355,120 @@ describe("cast actions offered at priority", () => {
 		const actions = castActionsFor(state, ALICE);
 		expect(actions).toEqual([castAction(first.id), castAction(second.id)]);
 		expect(first.id).not.toBe(second.id);
+	});
+});
+
+describe("temporary permission to cast one card from exile", () => {
+	test("the effect controller is offered and can cast the bound card", () => {
+		const state = setupMain();
+		const exiled = spawnCard(state, "test-free-instant", BOB, "exile");
+		const permission = spawnCard(
+			state,
+			"test-may-cast-from-exile",
+			ALICE,
+			"hand",
+		);
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
+
+		executeCastAction(state, ALICE, castAction(permission.id), agents);
+		settlePriority(state, agents);
+
+		expect(castActionsFor(state, ALICE)).toContainEqual(castAction(exiled.id));
+		expect(castActionsFor(state, BOB)).not.toContainEqual(
+			castAction(exiled.id),
+		);
+		const beforeIllegalCast = structuredClone(state);
+		expect(() =>
+			executeCastAction(state, BOB, castAction(exiled.id), passingAgents()),
+		).toThrow(IllegalCastError);
+		expect(state).toEqual(beforeIllegalCast);
+
+		executeCastAction(state, ALICE, castAction(exiled.id), passingAgents());
+		expect(state.objects.has(exiled.id)).toBe(false);
+		const entry = state.stack.at(-1);
+		expect(entry).toMatchObject({ kind: "spell" });
+		if (entry?.kind !== "spell") throw new Error("expected spell");
+		expect(entry.objectId).not.toBe(exiled.id);
+		expect(state.objects.get(entry.objectId)).toMatchObject({
+			kind: "spell",
+			controller: ALICE,
+		});
+	});
+
+	test("the permission does not follow a card through a zone change", () => {
+		const state = setupMain();
+		const exiled = spawnCard(state, "test-free-instant", ALICE, "exile");
+		const permission = spawnCard(
+			state,
+			"test-may-cast-from-exile",
+			ALICE,
+			"hand",
+		);
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
+		executeCastAction(state, ALICE, castAction(permission.id), agents);
+		settlePriority(state, agents);
+
+		const graveyard = perform(
+			state,
+			{
+				kind: "change zone",
+				object: exiled.id,
+				from: "exile",
+				destination: { zone: "graveyard" },
+				cause: "effect",
+			},
+			passingAgents(),
+		);
+		const graveyardId = graveyard.created[0];
+		if (graveyardId === undefined) throw new Error("expected graveyard card");
+		const returned = perform(
+			state,
+			{
+				kind: "change zone",
+				object: graveyardId,
+				from: "graveyard",
+				destination: { zone: "exile" },
+				cause: "effect",
+			},
+			passingAgents(),
+		);
+		const returnedId = returned.created[0];
+		if (returnedId === undefined) throw new Error("expected exiled card");
+		expect(returnedId).not.toBe(exiled.id);
+		expect(castActionsFor(state, ALICE)).not.toContainEqual(
+			castAction(returnedId),
+		);
+		expect(() =>
+			executeCastAction(state, ALICE, castAction(returnedId), passingAgents()),
+		).toThrow(IllegalCastError);
+	});
+
+	test("the permission expires during cleanup", () => {
+		const state = setupMain();
+		const exiled = spawnCard(state, "test-free-instant", ALICE, "exile");
+		const permission = spawnCard(
+			state,
+			"test-may-cast-from-exile",
+			ALICE,
+			"hand",
+		);
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
+		executeCastAction(state, ALICE, castAction(permission.id), agents);
+		settlePriority(state, agents);
+		expect(castActionsFor(state, ALICE)).toContainEqual(castAction(exiled.id));
+
+		advanceUntil(
+			state,
+			passingAgents(),
+			(next) =>
+				activePlayer(next) === BOB && turnLocation(next)?.kind === "mainPhase",
+		);
+		expect(castActionsFor(state, ALICE)).not.toContainEqual(
+			castAction(exiled.id),
+		);
 	});
 });
 
