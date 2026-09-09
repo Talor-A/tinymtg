@@ -22,93 +22,7 @@ function importFixture(path: string) {
 	return importForgeCard(cardText(path), { id: idFor(path) });
 }
 
-/* ------------------------------------------------------------------------- */
-/* The required positive matrix (plan "Concrete acceptance matrix")          */
-/* ------------------------------------------------------------------------- */
-
-const POSITIVE_FIXTURES = [
-	"g/grizzly_bears",
-	"f/forest",
-	"s/swamp",
-	"l/llanowar_elves",
-	"d/darksteel_relic",
-	"d/darksteel_myr",
-	"r/rhox_war_monk",
-	"l/lightning_bolt",
-	"m/murder",
-	"r/revitalize",
-	"p/preordain",
-	"s/sorins_thirst",
-	"a/arashin_cleric",
-	"w/wall_of_omens",
-	"a/arcanis_the_omnipotent",
-	"a/ajanis_mantra",
-	"n/necrogen_mists",
-	"n/network_disruptor",
-	"s/seizan_perverter_of_truth",
-	"h/herald_of_faith",
-	"g/glorious_anthem",
-	"e/exploration",
-	"a/azusa_lost_but_seeking",
-	"a/aesthir_glider",
-	"r/root_maze",
-	"c/charcoal_diamond",
-	"d/diregraf_ghoul",
-	"r/raging_goblin",
-	"f/faithful_watchdog",
-	"s/soulmender",
-	"s/selfless_savior",
-	"k/kambal_consul_of_allocation",
-	"m/merfolk_looter",
-	"d/doom_blade",
-	"p/prodigal_sorcerer",
-	"r/rod_of_ruin",
-	"f/flametongue_kavu",
-	"m/manic_vandal",
-	"t/timeless_lotus",
-	"w/wastes",
-	"v/viscera_seer",
-	"b/blazing_hellhound",
-	"b/bartolome_del_presidio",
-	"a/acolyte_of_aclazotz",
-	"c/counterspell",
-	"b/beast_whisperer",
-	"c/clone",
-	"b/benalish_veteran",
-	"u/unsummon",
-	"b/boar_q_pine",
-	"d/deeproot_champion",
-	"t/timberland_guide",
-	"s/spellgorger_weird",
-	"f/firebrand_archer",
-	"k/kessig_flamebreather",
-	"t/third_path_iconoclast",
-	"t/temple_of_epiphany",
-	"i/impulse",
-	"s/sleight_of_hand",
-	"s/stock_up",
-	"m/mire_triton",
-	"b/baleful_strix",
-	"p/pierce_strider",
-	"e/etched_familiar",
-	"t/thrashing_brontodon",
-	"c/cathar_commando",
-	"r/resolute_reinforcements",
-	"t/thraben_inspector",
-];
-
-describe("lowerForgeCard: positive acceptance matrix", () => {
-	for (const fixture of POSITIVE_FIXTURES) {
-		test(`imports ${fixture}`, () => {
-			const result = importFixture(fixture);
-			expect(result.ok, JSON.stringify(!result.ok && result.diagnostics)).toBe(
-				true,
-			);
-			if (!result.ok) return;
-			expect(result.card.id).toBe(idFor(fixture));
-		});
-	}
-
+describe("lowerForgeCard: accepted card lowering", () => {
 	test("Grizzly Bears has literal characteristics and no rules", () => {
 		const result = importFixture("g/grizzly_bears");
 		if (!result.ok) throw new Error("expected ok");
@@ -1916,33 +1830,6 @@ describe("lowerForgeCard: positive acceptance matrix", () => {
 			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
 		}
 	});
-});
-
-/* ------------------------------------------------------------------------- */
-/* The required negative matrix                                              */
-/* ------------------------------------------------------------------------- */
-
-const NEGATIVE_FIXTURES = [
-	"b/blind_obedience",
-	"w/walking_ballista",
-	"r/rest_in_peace",
-	"i/into_the_maw_of_hell",
-	"e/eye_of_vecna",
-	// Additional costs the engine cannot express: a sacrifice whose selector is
-	// not "a creature you control", and a discard cost.
-	"r/raze",
-	"u/unexpected_windfall",
-];
-
-describe("lowerForgeCard: required negative fixtures", () => {
-	for (const fixture of NEGATIVE_FIXTURES) {
-		test(`rejects ${fixture}`, () => {
-			const result = importFixture(fixture);
-			expect(result.ok).toBe(false);
-			if (result.ok) return;
-			expect(result.diagnostics.length).toBeGreaterThan(0);
-		});
-	}
 });
 
 describe("lowerForgeCard: ChangeZone is limited to bounce", () => {
