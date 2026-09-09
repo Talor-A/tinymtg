@@ -521,6 +521,17 @@ interface MillEvent extends EventCommon {
 	player: PlayerId;
 	amount: number;
 }
+/**
+ * Exiling cards off the top of a library. This is the same operation as
+ * {@link MillEvent} with a different destination, and is deliberately the same
+ * shape: a player and a count, never the cards. Which cards move is decided as
+ * each child zone change executes, not when the event is built.
+ */
+interface ExileTopEvent extends EventCommon {
+	kind: "exile top";
+	player: PlayerId;
+	amount: number;
+}
 interface ScryEvent extends EventCommon {
 	kind: "scry";
 	player: PlayerId;
@@ -721,6 +732,7 @@ type MoveCause =
 	| "play land"
 	| "discard"
 	| "mill"
+	| "exile top"
 	| "surveil"
 	| "destroy"
 	| "counter"
@@ -849,6 +861,7 @@ export type GameEvent =
 	| DrawCardsEvent
 	| DrawEvent
 	| MillEvent
+	| ExileTopEvent
 	| ScryEvent
 	| SurveilEvent
 	| ChooseFromTopEvent
@@ -2099,7 +2112,14 @@ export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
 
 export type EffectDef<Player extends TriggerEffectPlayer> =
 	| {
-			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
+			kind:
+				| "gain-life"
+				| "lose-life"
+				| "draw"
+				| "scry"
+				| "surveil"
+				| "mill"
+				| "exile-top";
 			/** A relative player, or the player bound to a target slot. */
 			player: Player | TargetSlotRef;
 			amount: number;
@@ -4215,6 +4235,7 @@ export function affectedPlayer(
 		case "draw":
 		case "draw cards":
 		case "mill":
+		case "exile top":
 		case "scry":
 		case "surveil":
 		case "choose from top":
@@ -4624,6 +4645,8 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 			return `draw(P${ev.player})`;
 		case "mill":
 			return `mill(P${ev.player}, ${ev.amount})`;
+		case "exile top":
+			return `exile top(P${ev.player}, ${ev.amount})`;
 		case "scry":
 			return `scry(P${ev.player}, ${ev.amount})`;
 		case "surveil":
@@ -5198,6 +5221,34 @@ function executeIn(
 							from: "library",
 							destination: { zone: "graveyard" },
 							cause: "mill",
+						},
+						choices,
+						scope,
+						depth + 1,
+					),
+				);
+			}
+			break;
+		}
+
+		case "exile top": {
+			const p = state.players[ev.player];
+			if (ev.amount <= 0 || p.library.length === 0) {
+				happened = false;
+				break;
+			}
+			for (let i = 0; i < ev.amount; i++) {
+				const top = p.library[p.library.length - 1];
+				if (top === undefined) break;
+				childResults.push(
+					performIn(
+						state,
+						{
+							kind: "change zone",
+							object: top,
+							from: "library",
+							destination: { zone: "exile" },
+							cause: "exile top",
 						},
 						choices,
 						scope,
@@ -6694,7 +6745,8 @@ function resolveEffects(
 				effect.kind === "draw" ||
 				effect.kind === "scry" ||
 				effect.kind === "surveil" ||
-				effect.kind === "mill") &&
+				effect.kind === "mill" ||
+				effect.kind === "exile-top") &&
 			typeof effect.player !== "string"
 				? effect.player
 				: null;
@@ -6972,6 +7024,12 @@ function effectToEvent(
 		case "mill":
 			return {
 				kind: "mill",
+				player: effectPlayer(effect.player),
+				amount: effect.amount,
+			};
+		case "exile-top":
+			return {
+				kind: "exile top",
 				player: effectPlayer(effect.player),
 				amount: effect.amount,
 			};
@@ -7287,7 +7345,8 @@ function requiredTargetDefinition(
 				effect.kind === "draw" ||
 				effect.kind === "scry" ||
 				effect.kind === "surveil" ||
-				effect.kind === "mill") &&
+				effect.kind === "mill" ||
+				effect.kind === "exile-top") &&
 			typeof effect.player === "string"
 		)
 			return;
@@ -7322,7 +7381,8 @@ function requiredTargetDefinition(
 			effect.kind !== "draw" &&
 			effect.kind !== "scry" &&
 			effect.kind !== "surveil" &&
-			effect.kind !== "mill"
+			effect.kind !== "mill" &&
+			effect.kind !== "exile-top"
 		)
 			return;
 		const sacrificeTarget =
@@ -7335,7 +7395,8 @@ function requiredTargetDefinition(
 				effect.kind === "draw" ||
 				effect.kind === "scry" ||
 				effect.kind === "surveil" ||
-				effect.kind === "mill") &&
+				effect.kind === "mill" ||
+				effect.kind === "exile-top") &&
 			typeof effect.player !== "string"
 				? effect.player
 				: null;
@@ -8079,6 +8140,7 @@ function activateAbilityIn(
 				effect.kind === "surveil" ||
 				effect.kind === "choose-from-top" ||
 				effect.kind === "mill" ||
+				effect.kind === "exile-top" ||
 				effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||
 				effect.kind === "damage" ||
