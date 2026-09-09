@@ -2344,7 +2344,7 @@ function lowerTrigger(
 }
 
 /* ------------------------------------------------------------------------- */
-/* Mana cost                                                                  */
+/* Mana costs, and the costs an ability is activated for                     */
 /* ------------------------------------------------------------------------- */
 
 function parseManaCost(text: string): CardDefInput["manaCost"] | null {

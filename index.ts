@@ -320,6 +320,83 @@ function makeSteps(state: GameState, phase: PhaseOccurrence): StepOccurrence[] {
 export type ObjectId = Brand<number, "ObjectId">;
 export type StackItemId = Brand<number, "StackItemId">;
 
+export type GameObject =
+	| CardObject
+	| SpellObject
+	| PermanentObject
+	| NonbattlefieldTokenObject;
+
+interface ObjectBase {
+	id: ObjectId;
+	owner: PlayerId;
+	effectData: Record<string, Record<string, number>>;
+}
+
+interface CardObject extends ObjectBase {
+	kind: "card";
+	zone: "library" | "hand" | "graveyard" | "exile";
+	controller?: never;
+
+	/** The card's underlying definition, unaffected by temporary copying.
+	 */
+	cardId: string;
+}
+
+interface SpellObject extends ObjectBase {
+	kind: "spell";
+	zone: "stack";
+	controller: PlayerId;
+
+	representation:
+		| { kind: "card"; cardId: string }
+		| {
+				kind: "copy";
+				copyEffect: CharacteristicsSnapshot;
+		  };
+}
+
+export interface PermanentObject extends ObjectBase {
+	kind: "permanent";
+	zone: "battlefield";
+	controller: PlayerId;
+
+	representation:
+		| { kind: "card"; cardId: string }
+		| {
+				kind: "token";
+				createdValues: CharacteristicsSnapshot;
+		  };
+
+	/** Owned layer-1 override captured by a copy effect. */
+	copiableOverride?: CharacteristicsSnapshot;
+
+	tapped: boolean;
+	/** Set until this permanent has been continuously controlled since this
+	 * controller's most recent turn began. Only creatures without haste are
+	 * restricted by this state. */
+	summoningSick: boolean;
+	counters: PermanentCounterBag;
+	damage: number;
+	attacking: boolean;
+	blocking: boolean;
+	/** Compatibility discriminator; representation is canonical. */
+	readonly token: boolean;
+	attributes: {
+		deathtouched?: boolean;
+	};
+}
+
+interface NonbattlefieldTokenObject extends ObjectBase {
+	kind: "nonbattlefield-token";
+	zone: "hand" | "graveyard" | "library" | "exile";
+
+	createdValues: CharacteristicsSnapshot;
+}
+
+/* ------------------------------------------------------------------ *
+ * Counters
+ * ------------------------------------------------------------------ */
+
 export type PermanentCounter = "+1/+1" | "-1/-1" | "charge";
 export type PlayerCounter = "poison";
 export type PermanentCounterBag = Partial<Record<PermanentCounter, number>>;
@@ -787,8 +864,9 @@ export type GameEvent =
 	| BeginPhaseEvent;
 
 /* ------------------------------------------------------------------ *
- * Game state
+ * Abilities: definitions and possession
  * ------------------------------------------------------------------ */
+
 /**
  * The kinds of abilities a card can carry.
  *
@@ -878,6 +956,10 @@ export interface AbilityReferences {
 	replacement: ReplacementAbilityId[];
 	prohibition: ProhibitionAbilityId[];
 }
+
+/* ------------------------------------------------------------------ *
+ * Characteristics and snapshots
+ * ------------------------------------------------------------------ */
 
 /**
  * A complete set of an object's characteristics (CR 109.3).
@@ -1135,6 +1217,10 @@ export function cloneCharacteristics(
 			}
 		: { ...base, kind: "non-creature" };
 }
+
+/* ------------------------------------------------------------------ *
+ * Views: what a player is allowed to see
+ * ------------------------------------------------------------------ */
 
 export interface GameView {
 	readonly objects: ReadonlyMap<ObjectId, GameObjectSnapshot>;
@@ -1424,10 +1510,9 @@ function buildFilteredGameView(
 	return { objects: snapshots };
 }
 
-/**
- * ------------------------------------------------
- *
- */
+/* ------------------------------------------------------------------ *
+ * Game state
+ * ------------------------------------------------------------------ */
 
 type EffectId = Brand<string, "EffectId">;
 
@@ -1602,83 +1687,6 @@ export type DeepReadOnly<T> = T extends
 						: T extends object
 							? { readonly [Key in keyof T]: DeepReadOnly<T[Key]> }
 							: T;
-
-/* ------------------------------------------------------------------ *
- * Game Objects
- * ------------------------------------------------------------------ */
-
-export type GameObject =
-	| CardObject
-	| SpellObject
-	| PermanentObject
-	| NonbattlefieldTokenObject;
-
-interface ObjectBase {
-	id: ObjectId;
-	owner: PlayerId;
-	effectData: Record<string, Record<string, number>>;
-}
-
-interface CardObject extends ObjectBase {
-	kind: "card";
-	zone: "library" | "hand" | "graveyard" | "exile";
-	controller?: never;
-
-	/** The card's underlying definition, unaffected by temporary copying.
-	 */
-	cardId: string;
-}
-
-interface SpellObject extends ObjectBase {
-	kind: "spell";
-	zone: "stack";
-	controller: PlayerId;
-
-	representation:
-		| { kind: "card"; cardId: string }
-		| {
-				kind: "copy";
-				copyEffect: CharacteristicsSnapshot;
-		  };
-}
-
-export interface PermanentObject extends ObjectBase {
-	kind: "permanent";
-	zone: "battlefield";
-	controller: PlayerId;
-
-	representation:
-		| { kind: "card"; cardId: string }
-		| {
-				kind: "token";
-				createdValues: CharacteristicsSnapshot;
-		  };
-
-	/** Owned layer-1 override captured by a copy effect. */
-	copiableOverride?: CharacteristicsSnapshot;
-
-	tapped: boolean;
-	/** Set until this permanent has been continuously controlled since this
-	 * controller's most recent turn began. Only creatures without haste are
-	 * restricted by this state. */
-	summoningSick: boolean;
-	counters: PermanentCounterBag;
-	damage: number;
-	attacking: boolean;
-	blocking: boolean;
-	/** Compatibility discriminator; representation is canonical. */
-	readonly token: boolean;
-	attributes: {
-		deathtouched?: boolean;
-	};
-}
-
-interface NonbattlefieldTokenObject extends ObjectBase {
-	kind: "nonbattlefield-token";
-	zone: "hand" | "graveyard" | "library" | "exile";
-
-	createdValues: CharacteristicsSnapshot;
-}
 
 /* ------------------------------------------------------------------ *
  * Replacement effects
@@ -3204,6 +3212,11 @@ function mutableZoneList(
 	}
 }
 
+export function name(state: ReadonlyGameState, id: ObjectId): string {
+	const object = maybeObject(state, id);
+	return object ? initialCharacteristics(object).name : `<gone#${id}>`;
+}
+
 export function permanentsInPlay(state: GameState): PermanentObject[];
 export function permanentsInPlay(
 	state: ReadonlyGameState,
@@ -3213,6 +3226,10 @@ export function permanentsInPlay(
 ): DeepReadOnly<PermanentObject>[] {
 	return state.battlefield.map((id) => permanent(state, id));
 }
+
+/* ------------------------------------------------------------------ *
+ * Combat eligibility
+ * ------------------------------------------------------------------ */
 
 /**
  * The single source of truth for who may be declared as an attacker (CR 508.1a):
@@ -3239,15 +3256,6 @@ export function eligibleAttackers(
 				snapshot.currentCharacteristics.keywords.includes("haste"))
 		);
 	});
-}
-
-/** Thrown when a "declare attackers" event fails validation. Nothing is
- * mutated: the whole event is rejected atomically. */
-export class IllegalAttackDeclarationError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "IllegalAttackDeclarationError";
-	}
 }
 
 /**
@@ -3295,6 +3303,22 @@ export function eligibleBlockers(
 	});
 }
 
+/* ------------------------------------------------------------------ *
+ * Rejected actions
+ *
+ * Every one of these is thrown before anything is mutated, or after the
+ * attempt has been rewound: an illegal action never leaves a partial game.
+ * ------------------------------------------------------------------ */
+
+/** Thrown when a "declare attackers" event fails validation. Nothing is
+ * mutated: the whole event is rejected atomically. */
+export class IllegalAttackDeclarationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "IllegalAttackDeclarationError";
+	}
+}
+
 /** Thrown when a "declare blockers" event fails validation. Nothing is
  * mutated: the whole event is rejected atomically. */
 export class IllegalBlockDeclarationError extends Error {
@@ -3325,13 +3349,12 @@ export class IllegalCastError extends Error {
 	}
 }
 
+/* ------------------------------------------------------------------ *
+ * Logging
+ * ------------------------------------------------------------------ */
+
 export function log(state: GameState, line: string): void {
 	state.log.push(line);
-}
-
-export function name(state: ReadonlyGameState, id: ObjectId): string {
-	const object = maybeObject(state, id);
-	return object ? initialCharacteristics(object).name : `<gone#${id}>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -5097,326 +5120,6 @@ function performIn(
 	return { executed, created };
 }
 
-/* ------------------------------------------------------------------ *
- * Trigger detection
- * ------------------------------------------------------------------ */
-
-/** Adds a trigger to `state.pendingTriggers`. */
-function enqueueTrigger(
-	state: GameState,
-	source: GameObject,
-	triggerId: TriggeredAbilityId,
-	trigger: TriggeredAbilityDefinition,
-	triggeringEvent: DeepReadOnly<GameEvent>,
-): void {
-	const controller = controllerOf(source);
-	assertDefined(controller);
-	// Copied, not referenced: the pending trigger and the stack item built from
-	// it outlive the source and must not write back into the card registry.
-	state.pendingTriggers.push({
-		source: source.id,
-		triggerId,
-		controller,
-		text: trigger.text,
-		triggeringEvent,
-		targetDefinitions: structuredClone(trigger.targets),
-		effects: structuredClone(trigger.effects),
-		sourceLastKnown: null,
-	});
-	log(
-		state,
-		`  [trigger] ${name(state, source.id)}#${source.id} — ${trigger.text}`,
-	);
-}
-
-function relativePlayerMatches(
-	actual: PlayerId,
-	expected: ValidPlayer,
-	source: DeepReadOnly<GameObject>,
-): boolean {
-	if (expected === "either") return true;
-	const controller = controllerOf(source);
-	assertDefined(controller);
-	return expected === "you" ? actual === controller : actual !== controller;
-}
-
-function triggerSubjectsMatch(
-	read: ReadContext,
-	source: DeepReadOnly<GameObject>,
-	subjects: DeepReadOnly<GameObject>[],
-	selector: ObjectSelectorDef,
-): boolean {
-	const controller = controllerOf(source);
-	assertDefined(
-		controller,
-		"a functioning trigger source must have a controller",
-	);
-	return subjects.some((subject) =>
-		selectorMatches(selector, getSnapshot(read, subject.id), {
-			controller,
-			id: source.id,
-		}),
-	);
-}
-
-function triggerMatches(
-	read: ReadContext,
-	source: DeepReadOnly<GameObject>,
-	condition: TriggerCondition,
-	ev: GameEvent,
-	created: ObjectId[],
-	changed: ObjectId[],
-): boolean {
-	if (ev.kind !== condition.kind) return false;
-
-	switch (condition.kind) {
-		case "cast": {
-			assert(ev.kind === "cast");
-			if (!relativePlayerMatches(ev.player, condition.player, source))
-				return false;
-			const spell = maybeObject(read.state, ev.spell);
-			assert(spell?.kind === "spell", "cast event subject is not a spell");
-			return triggerSubjectsMatch(read, source, [spell], condition.selector);
-		}
-
-		case "gain life":
-		case "lose life":
-		case "draw":
-			assert(
-				ev.kind === "gain life" ||
-					ev.kind === "lose life" ||
-					ev.kind === "draw",
-			);
-			return relativePlayerMatches(ev.player, condition.player, source);
-
-		case "damage":
-			assert(ev.kind === "damage");
-			return (
-				ev.source === source.id && ev.combat && ev.recipient.type === "player"
-			);
-
-		case "begin step":
-			assert(ev.kind === "begin step");
-			return (
-				ev.step === condition.step &&
-				relativePlayerMatches(ev.player, condition.player, source)
-			);
-
-		case "declare attackers": {
-			assert(ev.kind === "declare attackers");
-			if (
-				condition.attacker &&
-				!relativePlayerMatches(ev.player, condition.attacker, source)
-			) {
-				return false;
-			}
-			if (!condition.selector) return true;
-			const attackers = ev.attackers.flatMap((id) => {
-				const attacker = maybeObject(read.state, id);
-				return attacker ? [attacker] : [];
-			});
-			return triggerSubjectsMatch(read, source, attackers, condition.selector);
-		}
-
-		case "declare blockers": {
-			assert(ev.kind === "declare blockers");
-			// Either side of the assignment: the source blocking something, or
-			// something blocking the source.
-			return ev.blockers.some(
-				({ blocker, attacker }) =>
-					blocker === source.id || attacker === source.id,
-			);
-		}
-
-		case "change zone": {
-			assert(ev.kind === "change zone");
-			if (condition.from !== "any" && ev.from !== condition.from) return false;
-			if (condition.to !== "any" && ev.destination.zone !== condition.to)
-				return false;
-
-			if (condition.from === "battlefield") {
-				// The exact self-death form is detected from the pre-event context. A
-				// surviving permanent with the same ability is not the departed self.
-				if (condition.to === "graveyard" && condition.selector.kind === "self")
-					return false;
-				throw new Error("leaves the battlefield triggers are not supported");
-			}
-			// CR 400.7: ev.object names the old object, which no longer exists after
-			// execution. Match against the new object(s) returned by moveObject instead.
-			// Leaves-the-battlefield triggers will need last-known information here.
-			const movedObjects = created.flatMap((id) => {
-				const moved = maybeObject(read.state, id);
-				return moved ? [moved] : [];
-			});
-			return triggerSubjectsMatch(
-				read,
-				source,
-				movedObjects,
-				condition.selector,
-			);
-		}
-
-		case "tap":
-		case "untap": {
-			assert(ev.kind === "tap" || ev.kind === "untap");
-			const subjects = changed.flatMap((id) => {
-				const subject = maybeObject(read.state, id);
-				return subject ? [subject] : [];
-			});
-			return triggerSubjectsMatch(read, source, subjects, condition.selector);
-		}
-	}
-}
-
-/** Observe events only after they successfully execute and all replacements are final. */
-function detectTriggers(
-	state: GameState,
-	read: ReadContext,
-	ev: GameEvent,
-	created: ObjectId[],
-	changed: ObjectId[],
-): void {
-	for (const abilitySource of state.objects.values()) {
-		const snapshot = read.view.objects.get(abilitySource.id);
-		assertDefined(snapshot, `no derived view for object ${abilitySource.id}`);
-		for (const triggerId of snapshot.currentCharacteristics.abilities
-			.triggered) {
-			const trigger = getAbilityDefinition("triggered", triggerId);
-			const functionsFrom = trigger.functionsFrom ?? ["battlefield"];
-			if (!functionsFrom.includes(abilitySource.zone)) continue;
-			if (
-				triggerMatches(
-					read,
-					abilitySource,
-					trigger.condition,
-					ev,
-					created,
-					changed,
-				)
-			) {
-				enqueueTrigger(state, abilitySource, triggerId, trigger, ev);
-			}
-		}
-	}
-}
-
-interface SelfDeathTriggerCandidate {
-	pending: Omit<PendingTrigger, "triggeringEvent">;
-	sourceName: string;
-}
-
-/**
- * Read the one supported leaves-the-battlefield trigger shape while its source
- * and derived abilities still exist. Other matching battlefield-origin forms
- * remain explicit unsupported cases.
- */
-function selfDeathTriggerCandidates(
-	before: ReadContext,
-	ev: ZoneChangeEvent,
-): SelfDeathTriggerCandidate[] {
-	if (ev.from !== "battlefield") return [];
-
-	const source = maybeObject(before.state, ev.object);
-	assert(
-		source?.kind === "permanent" && source.zone === "battlefield",
-		"a battlefield departure source must be a battlefield permanent",
-	);
-	const snapshot = getSnapshot(before, source.id);
-	assert(
-		snapshot.kind === "permanent" && snapshot.zone === "battlefield",
-		"a battlefield departure source must have a permanent snapshot",
-	);
-	const controller = snapshot.controller;
-	assertDefined(controller, "a departing permanent must have a controller");
-
-	const candidates: SelfDeathTriggerCandidate[] = [];
-	for (const triggerId of snapshot.currentCharacteristics.abilities.triggered) {
-		const trigger = getAbilityDefinition("triggered", triggerId);
-		if (!functionsHere(trigger.functionsFrom, "battlefield")) continue;
-		const condition = trigger.condition;
-		if (condition.kind !== "change zone" || condition.from !== "battlefield")
-			continue;
-		if (condition.to !== "any" && condition.to !== ev.destination.zone)
-			continue;
-
-		if (
-			ev.destination.zone !== "graveyard" ||
-			condition.to !== "graveyard" ||
-			condition.selector.kind !== "self"
-		) {
-			throw new Error("leaves the battlefield triggers are not supported");
-		}
-
-		candidates.push({
-			pending: {
-				source: source.id,
-				triggerId,
-				controller,
-				text: trigger.text,
-				targetDefinitions: structuredClone(trigger.targets),
-				effects: structuredClone(trigger.effects),
-				sourceLastKnown: {
-					controller,
-					colors: [...snapshot.currentCharacteristics.colors],
-					deathtouch:
-						snapshot.currentCharacteristics.keywords.includes("deathtouch"),
-					lifelink:
-						snapshot.currentCharacteristics.keywords.includes("lifelink"),
-				},
-			},
-			sourceName: snapshot.currentCharacteristics.name,
-		});
-	}
-	return candidates;
-}
-
-function enqueueSelfDeathTriggers(
-	state: GameState,
-	candidates: SelfDeathTriggerCandidate[],
-	triggeringEvent: DeepReadOnly<ZoneChangeEvent>,
-): void {
-	for (const { pending, sourceName } of candidates) {
-		state.pendingTriggers.push({ ...pending, triggeringEvent });
-		log(state, `  [trigger] ${sourceName}#${pending.source} — ${pending.text}`);
-	}
-}
-
-/**
- * Capture the limited SourceLastKnown approximation before departure for
- * waiting abilities. This does not preserve a full characteristic snapshot.
- */
-function recordSourceDeparture(
-	state: GameState,
-	before: ReadContext,
-	id: ObjectId,
-	from: Zone,
-): void {
-	if (from !== "battlefield" && from !== "stack") return;
-	const waiting = [
-		...state.pendingTriggers,
-		...state.stack.filter(
-			(entry): entry is TriggeredAbilityStackItem | ActivatedAbilityStackItem =>
-				entry.kind !== "spell",
-		),
-	].filter((item) => item.source === id);
-	if (waiting.length === 0) return;
-
-	const snapshot = getSnapshot(before, id);
-	assert(
-		snapshot.kind === "permanent" || snapshot.kind === "spell",
-		"an ability source left a zone it could not have been an ability source in",
-	);
-	const characteristics = snapshot.currentCharacteristics;
-	for (const item of waiting) {
-		item.sourceLastKnown = {
-			controller: snapshot.controller,
-			colors: [...characteristics.colors],
-			deathtouch: characteristics.keywords.includes("deathtouch"),
-			lifelink: characteristics.keywords.includes("lifelink"),
-		};
-	}
-}
-
 /**
  * Executes an event after replacements. New events are fed back through
  * `performIn` so they receive their own replacement pass.
@@ -6328,7 +6031,327 @@ function executeIn(
 }
 
 /* ------------------------------------------------------------------ *
- * Priority and the stack
+ * Trigger detection
+ * ------------------------------------------------------------------ */
+
+/** Adds a trigger to `state.pendingTriggers`. */
+function enqueueTrigger(
+	state: GameState,
+	source: GameObject,
+	triggerId: TriggeredAbilityId,
+	trigger: TriggeredAbilityDefinition,
+	triggeringEvent: DeepReadOnly<GameEvent>,
+): void {
+	const controller = controllerOf(source);
+	assertDefined(controller);
+	// Copied, not referenced: the pending trigger and the stack item built from
+	// it outlive the source and must not write back into the card registry.
+	state.pendingTriggers.push({
+		source: source.id,
+		triggerId,
+		controller,
+		text: trigger.text,
+		triggeringEvent,
+		targetDefinitions: structuredClone(trigger.targets),
+		effects: structuredClone(trigger.effects),
+		sourceLastKnown: null,
+	});
+	log(
+		state,
+		`  [trigger] ${name(state, source.id)}#${source.id} — ${trigger.text}`,
+	);
+}
+
+function relativePlayerMatches(
+	actual: PlayerId,
+	expected: ValidPlayer,
+	source: DeepReadOnly<GameObject>,
+): boolean {
+	if (expected === "either") return true;
+	const controller = controllerOf(source);
+	assertDefined(controller);
+	return expected === "you" ? actual === controller : actual !== controller;
+}
+
+function triggerSubjectsMatch(
+	read: ReadContext,
+	source: DeepReadOnly<GameObject>,
+	subjects: DeepReadOnly<GameObject>[],
+	selector: ObjectSelectorDef,
+): boolean {
+	const controller = controllerOf(source);
+	assertDefined(
+		controller,
+		"a functioning trigger source must have a controller",
+	);
+	return subjects.some((subject) =>
+		selectorMatches(selector, getSnapshot(read, subject.id), {
+			controller,
+			id: source.id,
+		}),
+	);
+}
+
+function triggerMatches(
+	read: ReadContext,
+	source: DeepReadOnly<GameObject>,
+	condition: TriggerCondition,
+	ev: GameEvent,
+	created: ObjectId[],
+	changed: ObjectId[],
+): boolean {
+	if (ev.kind !== condition.kind) return false;
+
+	switch (condition.kind) {
+		case "cast": {
+			assert(ev.kind === "cast");
+			if (!relativePlayerMatches(ev.player, condition.player, source))
+				return false;
+			const spell = maybeObject(read.state, ev.spell);
+			assert(spell?.kind === "spell", "cast event subject is not a spell");
+			return triggerSubjectsMatch(read, source, [spell], condition.selector);
+		}
+
+		case "gain life":
+		case "lose life":
+		case "draw":
+			assert(
+				ev.kind === "gain life" ||
+					ev.kind === "lose life" ||
+					ev.kind === "draw",
+			);
+			return relativePlayerMatches(ev.player, condition.player, source);
+
+		case "damage":
+			assert(ev.kind === "damage");
+			return (
+				ev.source === source.id && ev.combat && ev.recipient.type === "player"
+			);
+
+		case "begin step":
+			assert(ev.kind === "begin step");
+			return (
+				ev.step === condition.step &&
+				relativePlayerMatches(ev.player, condition.player, source)
+			);
+
+		case "declare attackers": {
+			assert(ev.kind === "declare attackers");
+			if (
+				condition.attacker &&
+				!relativePlayerMatches(ev.player, condition.attacker, source)
+			) {
+				return false;
+			}
+			if (!condition.selector) return true;
+			const attackers = ev.attackers.flatMap((id) => {
+				const attacker = maybeObject(read.state, id);
+				return attacker ? [attacker] : [];
+			});
+			return triggerSubjectsMatch(read, source, attackers, condition.selector);
+		}
+
+		case "declare blockers": {
+			assert(ev.kind === "declare blockers");
+			// Either side of the assignment: the source blocking something, or
+			// something blocking the source.
+			return ev.blockers.some(
+				({ blocker, attacker }) =>
+					blocker === source.id || attacker === source.id,
+			);
+		}
+
+		case "change zone": {
+			assert(ev.kind === "change zone");
+			if (condition.from !== "any" && ev.from !== condition.from) return false;
+			if (condition.to !== "any" && ev.destination.zone !== condition.to)
+				return false;
+
+			if (condition.from === "battlefield") {
+				// The exact self-death form is detected from the pre-event context. A
+				// surviving permanent with the same ability is not the departed self.
+				if (condition.to === "graveyard" && condition.selector.kind === "self")
+					return false;
+				throw new Error("leaves the battlefield triggers are not supported");
+			}
+			// CR 400.7: ev.object names the old object, which no longer exists after
+			// execution. Match against the new object(s) returned by moveObject instead.
+			// Leaves-the-battlefield triggers will need last-known information here.
+			const movedObjects = created.flatMap((id) => {
+				const moved = maybeObject(read.state, id);
+				return moved ? [moved] : [];
+			});
+			return triggerSubjectsMatch(
+				read,
+				source,
+				movedObjects,
+				condition.selector,
+			);
+		}
+
+		case "tap":
+		case "untap": {
+			assert(ev.kind === "tap" || ev.kind === "untap");
+			const subjects = changed.flatMap((id) => {
+				const subject = maybeObject(read.state, id);
+				return subject ? [subject] : [];
+			});
+			return triggerSubjectsMatch(read, source, subjects, condition.selector);
+		}
+	}
+}
+
+/** Observe events only after they successfully execute and all replacements are final. */
+function detectTriggers(
+	state: GameState,
+	read: ReadContext,
+	ev: GameEvent,
+	created: ObjectId[],
+	changed: ObjectId[],
+): void {
+	for (const abilitySource of state.objects.values()) {
+		const snapshot = read.view.objects.get(abilitySource.id);
+		assertDefined(snapshot, `no derived view for object ${abilitySource.id}`);
+		for (const triggerId of snapshot.currentCharacteristics.abilities
+			.triggered) {
+			const trigger = getAbilityDefinition("triggered", triggerId);
+			const functionsFrom = trigger.functionsFrom ?? ["battlefield"];
+			if (!functionsFrom.includes(abilitySource.zone)) continue;
+			if (
+				triggerMatches(
+					read,
+					abilitySource,
+					trigger.condition,
+					ev,
+					created,
+					changed,
+				)
+			) {
+				enqueueTrigger(state, abilitySource, triggerId, trigger, ev);
+			}
+		}
+	}
+}
+
+interface SelfDeathTriggerCandidate {
+	pending: Omit<PendingTrigger, "triggeringEvent">;
+	sourceName: string;
+}
+
+/**
+ * Read the one supported leaves-the-battlefield trigger shape while its source
+ * and derived abilities still exist. Other matching battlefield-origin forms
+ * remain explicit unsupported cases.
+ */
+function selfDeathTriggerCandidates(
+	before: ReadContext,
+	ev: ZoneChangeEvent,
+): SelfDeathTriggerCandidate[] {
+	if (ev.from !== "battlefield") return [];
+
+	const source = maybeObject(before.state, ev.object);
+	assert(
+		source?.kind === "permanent" && source.zone === "battlefield",
+		"a battlefield departure source must be a battlefield permanent",
+	);
+	const snapshot = getSnapshot(before, source.id);
+	assert(
+		snapshot.kind === "permanent" && snapshot.zone === "battlefield",
+		"a battlefield departure source must have a permanent snapshot",
+	);
+	const controller = snapshot.controller;
+	assertDefined(controller, "a departing permanent must have a controller");
+
+	const candidates: SelfDeathTriggerCandidate[] = [];
+	for (const triggerId of snapshot.currentCharacteristics.abilities.triggered) {
+		const trigger = getAbilityDefinition("triggered", triggerId);
+		if (!functionsHere(trigger.functionsFrom, "battlefield")) continue;
+		const condition = trigger.condition;
+		if (condition.kind !== "change zone" || condition.from !== "battlefield")
+			continue;
+		if (condition.to !== "any" && condition.to !== ev.destination.zone)
+			continue;
+
+		if (
+			ev.destination.zone !== "graveyard" ||
+			condition.to !== "graveyard" ||
+			condition.selector.kind !== "self"
+		) {
+			throw new Error("leaves the battlefield triggers are not supported");
+		}
+
+		candidates.push({
+			pending: {
+				source: source.id,
+				triggerId,
+				controller,
+				text: trigger.text,
+				targetDefinitions: structuredClone(trigger.targets),
+				effects: structuredClone(trigger.effects),
+				sourceLastKnown: {
+					controller,
+					colors: [...snapshot.currentCharacteristics.colors],
+					deathtouch:
+						snapshot.currentCharacteristics.keywords.includes("deathtouch"),
+					lifelink:
+						snapshot.currentCharacteristics.keywords.includes("lifelink"),
+				},
+			},
+			sourceName: snapshot.currentCharacteristics.name,
+		});
+	}
+	return candidates;
+}
+
+function enqueueSelfDeathTriggers(
+	state: GameState,
+	candidates: SelfDeathTriggerCandidate[],
+	triggeringEvent: DeepReadOnly<ZoneChangeEvent>,
+): void {
+	for (const { pending, sourceName } of candidates) {
+		state.pendingTriggers.push({ ...pending, triggeringEvent });
+		log(state, `  [trigger] ${sourceName}#${pending.source} — ${pending.text}`);
+	}
+}
+
+/**
+ * Capture the limited SourceLastKnown approximation before departure for
+ * waiting abilities. This does not preserve a full characteristic snapshot.
+ */
+function recordSourceDeparture(
+	state: GameState,
+	before: ReadContext,
+	id: ObjectId,
+	from: Zone,
+): void {
+	if (from !== "battlefield" && from !== "stack") return;
+	const waiting = [
+		...state.pendingTriggers,
+		...state.stack.filter(
+			(entry): entry is TriggeredAbilityStackItem | ActivatedAbilityStackItem =>
+				entry.kind !== "spell",
+		),
+	].filter((item) => item.source === id);
+	if (waiting.length === 0) return;
+
+	const snapshot = getSnapshot(before, id);
+	assert(
+		snapshot.kind === "permanent" || snapshot.kind === "spell",
+		"an ability source left a zone it could not have been an ability source in",
+	);
+	const characteristics = snapshot.currentCharacteristics;
+	for (const item of waiting) {
+		item.sourceLastKnown = {
+			controller: snapshot.controller,
+			colors: [...characteristics.colors],
+			deathtouch: characteristics.keywords.includes("deathtouch"),
+			lifelink: characteristics.keywords.includes("lifelink"),
+		};
+	}
+}
+
+/* ------------------------------------------------------------------ *
+ * Resolving the stack
  * ------------------------------------------------------------------ */
 
 function putPendingTriggersOnStack(
@@ -7080,6 +7103,10 @@ function effectToEvent(
 	}
 }
 
+/* ------------------------------------------------------------------ *
+ * Cast timing and mana payment
+ * ------------------------------------------------------------------ */
+
 /**
  * CR 601.3 / CR 702.8: when a spell may be *begun*. Instants and spells with
  * flash may be cast whenever their controller has priority. The engine has no
@@ -7190,6 +7217,10 @@ export function planManaPayment(
 
 	return payment;
 }
+
+/* ------------------------------------------------------------------ *
+ * Targeting
+ * ------------------------------------------------------------------ */
 
 /**
  * The single required target slot a spell or ability declares, or null, after
@@ -7464,6 +7495,10 @@ function legalSacrifices(
 	});
 }
 
+/* ------------------------------------------------------------------ *
+ * The actions a player is offered
+ * ------------------------------------------------------------------ */
+
 /**
  * Whether `player` could begin casting `object` from hand right now. This is an
  * action-offering preflight only: the actual announcement puts the spell on the
@@ -7701,6 +7736,10 @@ export function getObservableActions(
  * holder is supplied by the scheduler and all legality is rechecked before
  * payment mutates canonical state.
  */
+/* ------------------------------------------------------------------ *
+ * Activating an ability
+ * ------------------------------------------------------------------ */
+
 export function executeAbilityAction(
 	state: GameState,
 	priorityPlayer: PlayerId,
@@ -8145,6 +8184,10 @@ function activateAbilityIn(
  * all rechecked before announcement mutates canonical state. Mana abilities
  * are still activated beforehand at priority rather than during casting.
  */
+/* ------------------------------------------------------------------ *
+ * Casting a spell
+ * ------------------------------------------------------------------ */
+
 export function executeCastAction(
 	state: GameState,
 	priorityPlayer: PlayerId,
@@ -8405,6 +8448,10 @@ function castSpellIn(
  * Executes a land action for the priority holder supplied by the scheduler.
  * Timing, actor, card, zone, and allowance are rechecked before mutation.
  */
+/* ------------------------------------------------------------------ *
+ * Playing a land
+ * ------------------------------------------------------------------ */
+
 export function executeLandAction(
 	state: GameState,
 	priorityPlayer: PlayerId,
@@ -8493,6 +8540,10 @@ function playLandIn(
    4. all pass + stack non-empty  -> resolve top, goto 1
    5. all pass + stack empty      -> step ends
  */
+/* ------------------------------------------------------------------ *
+ * Passing priority
+ * ------------------------------------------------------------------ */
+
 export function settlePriority(state: GameState, source: ChoiceSource): void {
 	settlePriorityIn(state, asChoiceController(source));
 }

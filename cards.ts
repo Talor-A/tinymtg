@@ -309,8 +309,13 @@ export const AESTHIR_GLIDER = registerCard({
 		},
 	],
 });
+
 /* ------------------------------------------------------------------ *
- * Zone-change replacement — the classic two-hate-cards conflict
+ * Zone-change replacement — a card headed for a graveyard is exiled instead
+ *
+ * The conflict this pairs with (two of these racing for the same movement)
+ * is exercised against the Kalitas-style fixture at the bottom of this file
+ * and the imported Samurai of the Pale Curtain.
  * ------------------------------------------------------------------ */
 
 // this only implements the graveyard-replacement half of leyline of the void
