@@ -1511,9 +1511,7 @@ export type PriorityAction =
  * instructions. CR 113.7a lets the source leave in the meantime, so none of it
  * is read back off the source object or the card registry.
  */
-interface AbilityStackItemBase<
-	Player extends TriggerEffectPlayer = RelativeEffectPlayer,
-> {
+interface AbilityStackItemBase<Player extends TriggerEffectPlayer> {
 	id: StackItemId;
 	source: ObjectId;
 	controller: PlayerId;
@@ -1531,7 +1529,8 @@ export interface TriggeredAbilityStackItem
 	readonly triggeringEvent: DeepReadOnly<GameEvent>;
 }
 
-export interface ActivatedAbilityStackItem extends AbilityStackItemBase {
+export interface ActivatedAbilityStackItem
+	extends AbilityStackItemBase<RelativeEffectPlayer> {
 	kind: "activated ability";
 	abilityId: ActivatedAbilityId;
 }
@@ -2040,9 +2039,7 @@ export interface TargetSlotRef {
 	targetSlot: string;
 }
 
-export type EffectDef<
-	Player extends TriggerEffectPlayer = RelativeEffectPlayer,
-> =
+export type EffectDef<Player extends TriggerEffectPlayer> =
 	| {
 			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
 			/** A relative player, or the player bound to a target slot. */
@@ -2307,7 +2304,7 @@ export interface SpellAbilityDef {
 	text: string;
 	additionalCost?: SpellAdditionalCostDef;
 	targets: TargetDef[];
-	effects: EffectDef[];
+	effects: EffectDef<RelativeEffectPlayer>[];
 }
 
 /** The one required additional spell cost currently supported. */
@@ -2331,13 +2328,13 @@ interface ActivatedAbilityDefBase {
 export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
 	kind: "activated";
 	targets: TargetDef[];
-	effects: EffectDef[];
+	effects: EffectDef<RelativeEffectPlayer>[];
 }
 
 /** A mana ability whose instructions always produce the same mana. */
 export interface FixedManaAbilityDef extends ActivatedAbilityDefBase {
 	kind: "mana";
-	effects: EffectDef[];
+	effects: EffectDef<RelativeEffectPlayer>[];
 	manaOptions?: never;
 }
 

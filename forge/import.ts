@@ -3069,7 +3069,10 @@ export function lowerForgeCard(
 					ability.effects[0]?.kind === "add-mana" &&
 					(() => {
 						const mana = (
-							ability.effects[0] as Extract<EffectDef, { kind: "add-mana" }>
+							ability.effects[0] as Extract<
+								EffectDef<RelativeEffectPlayer>,
+								{ kind: "add-mana" }
+							>
 						).mana;
 						return (
 							mana[color] === 1 &&
