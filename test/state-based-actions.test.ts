@@ -5,13 +5,17 @@ import {
 	addTemporaryEffect,
 	type CharacteristicsSnapshot,
 	checkStateBasedActions,
+	createReadContext,
+	getSnapshot,
 	newGame,
 	perform,
 	permanent,
 	physicalCardId,
+	registerCard,
 	spawnPermanent,
 	spawnToken,
 } from "../index.ts";
+import { assert } from "../lib/assert.ts";
 import {
 	type SyncAgents as Agents,
 	ALICE,
@@ -39,7 +43,73 @@ const ZOMBIE_TOKEN: CharacteristicsSnapshot = {
 	toughness: 2,
 };
 
+const INDESTRUCTIBLE_ANTHEM = registerCard({
+	id: "test-indestructible-anthem",
+	name: "Indestructible Anthem",
+	types: ["enchantment"],
+	colors: ["w"],
+	manaCost: { w: 1 },
+	statics: [
+		{
+			layer: "6-ability-changing",
+			text: "Creatures you control have indestructible.",
+			applies: (view, _state, source) =>
+				source.kind === "permanent" &&
+				source.zone === "battlefield" &&
+				view.currentCharacteristics.types.includes("creature") &&
+				view.controller === source.controller,
+			modify: (view) => {
+				assert(
+					!view.keywords.includes("indestructible"),
+					"test fixture cannot grant duplicate indestructible",
+				);
+				view.keywords.push("indestructible");
+			},
+		},
+	],
+});
+
 describe("indestructible permanents", () => {
+	test("a layer-6 grant follows its source without changing copiable values", () => {
+		const state = newGame();
+		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
+		const anthem = spawnPermanent(state, INDESTRUCTIBLE_ANTHEM.id, ALICE);
+		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
+
+		const granted = getSnapshot(createReadContext(state), bears.id);
+		expect(granted.currentCharacteristics.keywords).toContain("indestructible");
+		expect(granted.copiableValues.keywords).not.toContain("indestructible");
+		perform(
+			state,
+			{ kind: "destroy", object: bears.id, noRegen: false },
+			agents,
+		);
+		expect(state.battlefield).toContain(bears.id);
+
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: anthem.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "effect",
+			},
+			agents,
+		);
+		const expired = getSnapshot(createReadContext(state), bears.id);
+		expect(expired.currentCharacteristics.keywords).not.toContain(
+			"indestructible",
+		);
+
+		perform(
+			state,
+			{ kind: "destroy", object: bears.id, noRegen: false },
+			agents,
+		);
+		expect(state.battlefield).not.toContain(bears.id);
+	});
+
 	test("a failed destruction attempt doesn't consume a regeneration shield", () => {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
