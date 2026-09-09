@@ -1845,6 +1845,53 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		});
 	});
 
+	test("Diabolic Edict lowers its sacrifice instruction as serializable data", () => {
+		const result = importFixture("d/diabolic_edict");
+		if (!result.ok) throw new Error("expected Diabolic Edict to import");
+		expect(result.card.spell).toEqual({
+			id: "spell-1",
+			text: "Target player sacrifices a creature.",
+			targets: [
+				{
+					id: "target-1",
+					min: 1,
+					max: 1,
+					legal: { kind: "player", player: "either" },
+				},
+			],
+			effects: [
+				{
+					kind: "sacrifice",
+					player: { targetSlot: "target-1" },
+					selector: { kind: "type", type: "creature" },
+					amount: 1,
+				},
+			],
+		});
+		expect(structuredClone(result.card.spell?.effects)).toEqual(
+			result.card.spell?.effects,
+		);
+	});
+
+	test("Sacrifice rejects unsupported mutations of Diabolic Edict", () => {
+		const definition = cardText("d/diabolic_edict");
+		for (const mutated of [
+			definition.replace("SacValid$ Creature", "SacValid$ Creature.attacking"),
+			definition.replace(
+				"SacValid$ Creature",
+				"SacValid$ Creature | Amount$ 2",
+			),
+			definition.replace("SacValid$ Creature |", ""),
+			definition.replace(
+				"ValidTgts$ Player",
+				"ValidTgts$ Player | Defined$ You",
+			),
+		]) {
+			const result = importForgeCard(mutated, { id: "mutated-diabolic-edict" });
+			expect(result.ok).toBe(false);
+		}
+	});
+
 	test("an additional cost does not double-charge the printed mana cost", () => {
 		// `Cost$ R Sac<1/Creature>` restates the {R} from `ManaCost:`. The {R} must
 		// land on the card once, and only the sacrifice may reach the spell.

@@ -425,9 +425,14 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			typeof effect.player !== "string"
 				? effect.player
 				: null;
+		const sacrificeTarget =
+			effect.kind === "sacrifice" && typeof effect.player !== "string"
+				? effect.player
+				: null;
 		if (
 			damageTarget === null &&
 			playerTarget === null &&
+			sacrificeTarget === null &&
 			effect.kind !== "destroy" &&
 			effect.kind !== "tap" &&
 			effect.kind !== "untap" &&
@@ -462,6 +467,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 		const effectSlot =
 			damageTarget?.targetSlot ??
 			playerTarget?.targetSlot ??
+			sacrificeTarget?.targetSlot ??
 			objectTarget?.targetSlot ??
 			counterTarget?.targetSlot;
 		assert(effectSlot !== undefined);
@@ -477,6 +483,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			return issue(
 				"UNSUPPORTED_TARGET",
 				"a targeted player effect requires a player target",
+				where,
+			);
+		}
+		if (sacrificeTarget !== null && target.legal.kind !== "player") {
+			return issue(
+				"UNSUPPORTED_TARGET",
+				"Sacrifice requires a player target",
 				where,
 			);
 		}
@@ -887,6 +900,45 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					where,
 				);
 			return { kind: "discard", selector: "any", amount: 1, player: who };
+		}
+		case "sacrifice": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					discriminatorLower,
+					"defined",
+					"validtgts",
+					"tgtprompt",
+					"sacvalid",
+					"amount",
+					...COMMON_EFFECT_PARAMS,
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			const defined = getForgeParam(params, "Defined");
+			const validTargets = getForgeParam(params, "ValidTgts");
+			if (
+				validTargets !== undefined &&
+				defined !== undefined &&
+				defined !== "Targeted"
+			)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"targeted Sacrifice cannot also name a different Defined$ player",
+					where,
+				);
+			const who = parseEffectPlayer(params, parsePlayer);
+			const selectorText = getForgeParam(params, "SacValid");
+			const selector = selectorText ? parseSelector(selectorText) : null;
+			const amount = positiveInteger(getForgeParam(params, "Amount"), 1);
+			if (!who || !selector || amount !== 1)
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"Sacrifice requires a supported player, selector, and an amount of one",
+					where,
+				);
+			return { kind: "sacrifice", player: who, selector, amount: 1 };
 		}
 		case "dealdamage": {
 			const badParams = checkParams(

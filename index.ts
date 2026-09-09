@@ -6673,6 +6673,10 @@ function resolveEffects(
 			bound = binding.target;
 		}
 		if (effect.kind === "sacrifice") {
+			assert(
+				effect.amount === 1,
+				"only sacrificing one permanent is implemented",
+			);
 			const sacrificingPlayer =
 				typeof effect.player === "string"
 					? relativeEffectPlayer(item, effect.player)

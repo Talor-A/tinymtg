@@ -104,8 +104,9 @@ such as Sleight of Hand, Impulse, and Stock Up, which put a card-defined
 number into hand (defaulting Forge's omitted `ChangeNum$` to one) and order the
 rest on the bottom; the unmodified `Investigate` effect, which creates one
 canonical Clue token for the ability's controller; damage, destroy, counter,
-targeted or self-directed fixed counter placement (including Forge's omitted
-`Defined$` default for a nontargeted permanent ability), and return-to-hand effects; spells,
+one-permanent sacrifice for a relative or targeted player, targeted or
+self-directed fixed counter placement (including Forge's omitted `Defined$`
+default for a nontargeted permanent ability), and return-to-hand effects; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, `Opponent`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
 `ValidTgts$` selector whose base is a card type, a subtype, `Card`, or
@@ -125,12 +126,12 @@ player; random/multi-card discard, alternate costs, hexproof/shroud/protection,
 and more).
 
 The engine's own selector vocabulary is wider than the spellings the bridge
-accepts: `TargetSelectorDef` covers the source itself, card type, supertype,
+accepts: `ObjectSelectorDef` covers the source itself, card type, supertype,
 subtype, color, and controller, combined with all/any/not to any depth. A
 hand-written card definition can use all of it.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 2,654 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 2,708 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
@@ -206,7 +207,10 @@ During either precombat or postcombat main phase, the active player's priority c
 
 The allowance starts at one and includes finite positive additions from battlefield static abilities affecting their source's current controller, such as Exploration and Azusa, Lost but Seeking. These additions are derived from current ability possession and source control rather than stored on the player. Temporary adjustments such as Explore and Summer Bloom, unlimited allowances such as Fastbond, conditional or negative adjustments, playing from alternate zones, and effects granting special timing are not implemented. Invalid or stale land actions are rejected before action-specific state changes.
 
-Sacrifice effects and costs currently support one permanent at a time. Multiple sacrifice costs, optional sacrifices, and sacrifice as an additional spell-casting cost are not implemented. Deck construction, opening hands, mulligans, and alternative activation costs are also not implemented yet.
+Sacrifice effects and costs currently support one permanent at a time. Multiple
+and optional sacrifices are not implemented. A spell can have one additional
+cost that sacrifices a creature. Deck construction, opening hands, mulligans,
+and alternative activation costs are also not implemented yet.
 
 ### Targeting
 

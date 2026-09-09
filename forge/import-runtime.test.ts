@@ -86,6 +86,8 @@ registerRuntimeFixture("i/impulse", "rt-impulse");
 registerRuntimeFixture("s/stock_up", "rt-stock-up");
 registerRuntimeFixture("c/consider", "rt-consider");
 registerRuntimeFixture("v/village_rites", "rt-village-rites");
+registerRuntimeFixture("d/diabolic_edict", "rt-diabolic-edict");
+registerRuntimeFixture("d/dredge", "rt-dredge");
 registerRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves");
 registerRuntimeFixture("s/soulmender", "rt-soulmender");
 registerRuntimeFixture("v/viscera_seer", "rt-viscera-seer");
@@ -1152,6 +1154,54 @@ describe("forge-import runtime: spell effects", () => {
 			(action) => action.kind === "cast" && action.card === spell.id,
 		);
 		expect(castable).toBe(false);
+	});
+
+	test("Diabolic Edict's targeted player chooses the creature sacrificed on resolution", () => {
+		const state = setupMain();
+		const first = spawnPermanent(state, "rt-grizzly-bears", BOB);
+		const chosen = spawnPermanent(state, "rt-doomed-dissenter", BOB);
+		const spell = spawnCard(state, "rt-diabolic-edict", ALICE, "hand");
+		state.players[ALICE].manaPool.c = 1;
+		state.players[ALICE].manaPool.b = 1;
+		const alice = new ScriptedAgent();
+		alice.targetChoices.push({ type: "player", player: BOB });
+		const bob = new ScriptedAgent();
+		bob.sacrificeChoices.push(chosen.id);
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, [
+			alice,
+			bob,
+		]);
+		expect(state.battlefield).toContain(chosen.id);
+		settlePriority(state, [alice, bob]);
+
+		expect(state.battlefield).toContain(first.id);
+		expect(state.battlefield).not.toContain(chosen.id);
+		expect(state.players[BOB].graveyard).toHaveLength(1);
+		expect(bob.sacrificeChoices).toHaveLength(0);
+	});
+
+	test("Dredge's controller sacrifices before the following draw resolves", () => {
+		const state = setupMain();
+		const drawn = spawnCard(state, "forest", ALICE, "library");
+		const creature = spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const spell = spawnCard(state, "rt-dredge", ALICE, "hand");
+		state.players[ALICE].manaPool.b = 1;
+		const alice = new ScriptedAgent();
+		alice.sacrificeChoices.push(creature.id);
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, [
+			alice,
+			new ScriptedAgent(),
+		]);
+		settlePriority(state, [alice, new ScriptedAgent()]);
+
+		expect(state.battlefield).not.toContain(creature.id);
+		expect(state.players[ALICE].hand.map((id) => name(state, id))).toContain(
+			"Forest",
+		);
+		expect(state.players[ALICE].library).not.toContain(drawn.id);
+		expect(alice.sacrificeChoices).toHaveLength(0);
 	});
 
 	test("Blood Pact's imported halves both act on the one targeted player", () => {

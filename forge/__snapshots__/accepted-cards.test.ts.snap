@@ -225,6 +225,7 @@ Blazing Hellhound
 Blessed Spirits
 Blight Keeper
 Blighted Cataract
+Blighted Fen
 Blighted Gorge
 Blighted Shaman
 Blind Phantasm
@@ -280,6 +281,7 @@ Bottle Gnomes
 Bounce Off
 Bounding Wolf
 Bounty Agent
+Braids, Cabal Minion
 Braidwood Cup
 Bramblecrush
 Brambleweft Behemoth
@@ -466,6 +468,7 @@ Crooked Custodian
 Crookshank Kobolds
 Crosis's Attendant
 Crow of Dark Tidings
+Cruel Edict
 Cruel Truths
 Crumbling Necropolis
 Crush
@@ -546,6 +549,7 @@ Deliberate
 Delighted Killbot
 Demolish
 Demon's Due
+Demonic Taskmaster
 Demystify
 Depths of Desire
 Deranged Outcast
@@ -563,6 +567,7 @@ Devkarin Dissident
 Devoted Hero
 Devotee of Strength
 Devout Monk
+Diabolic Edict
 Dictate of Heliod
 Dimension X
 Dimir Cluestone
@@ -615,6 +620,7 @@ Dread of Night
 Dreadbore
 Dream Beavers
 Dreamstone Hedron
+Dredge
 Dreg Reaver
 Dreg Recycler
 Drifting Shade
@@ -884,6 +890,7 @@ Geothermal Bog
 Geothermal Crevice
 Gerrard's Irregulars
 Get the Point
+Geth's Verdict
 Ghirapur Gearcrafter
 Ghirapur Osprey
 Ghost Warden
@@ -1445,6 +1452,7 @@ Mindeye Drake
 Minotaur Abomination
 Minotaur Warrior
 Mire Triton
+Mire in Misery
 Mirran Spy
 Misshapen Fiend
 Mist Raven
@@ -1457,6 +1465,7 @@ Moat Piranhas
 Mogg Fanatic
 Mogg Raider
 Mold Adder
+Molder Slug
 Moldering Karok
 Molten Tributary
 Moment of Triumph
@@ -1711,6 +1720,7 @@ Prosperous Pirates
 Protector of Gondor
 Prowling Caracal
 Pulse Tracker
+Puppet Conjurer
 Purple-Crystal Crab
 Pygmy Razorback
 Pym Technologies
@@ -2195,6 +2205,7 @@ Stern Proctor
 Steward of Valeron
 Stimulus Package
 Stinging Barrier
+Stitcher's Apprentice
 Stitcher's Supplier
 Stock Up
 Stolen Grain
@@ -2424,6 +2435,7 @@ Treva's Attendant
 Trial of Knowledge
 Trial of Strength
 Trial of Zeal
+Tribute to the Wild
 Trip Noose
 Triton Shorethief
 Trokin High Guard
@@ -2674,6 +2686,7 @@ Yargle, Glutton of Urborg
 Yavimaya Sapherd
 Yavimaya Wurm
 Yawgmoth's Edict
+Yawning Fissure
 Yellow Scarves Troops
 Yeva's Forcemage
 Yoked Ox
@@ -2698,4 +2711,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2695`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2708`;
