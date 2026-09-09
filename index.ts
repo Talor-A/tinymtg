@@ -1,6 +1,6 @@
 import {
-	INDESTRUCTIBLE_PROHIBITION,
 	printedKeywordTriggers,
+	prohibitionsFromKeywords,
 } from "./abilities.ts";
 import {
 	type AgentPair,
@@ -4283,11 +4283,8 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 	const out: BoundProhibition[] = [];
 	for (const object of read.state.objects.values()) {
 		const snapshot = getSnapshot(read, object.id);
-		const indestructible =
-			snapshot.kind === "permanent" &&
-			snapshot.currentCharacteristics.keywords.includes("indestructible");
 		const definitions: ProhibitionDef[] = [
-			...(indestructible ? [INDESTRUCTIBLE_PROHIBITION] : []),
+			...prohibitionsFromKeywords(snapshot.currentCharacteristics.keywords),
 			...abilityReferencesOf(read.view, object).prohibition.map((id) =>
 				getAbilityDefinition("prohibition", id),
 			),

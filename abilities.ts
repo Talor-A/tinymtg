@@ -6,12 +6,21 @@ import type {
 import { assert } from "./lib/assert";
 
 /** CR 702.12b: a permanent with indestructible can't be destroyed. */
-export const INDESTRUCTIBLE_PROHIBITION: ProhibitionDef = {
+const INDESTRUCTIBLE_PROHIBITION: ProhibitionDef = {
 	label: "keyword:indestructible",
 	text: "This permanent can't be destroyed.",
 	applies: (event, ctx) =>
 		event.kind === "destroy" && event.object === ctx.self?.id,
 };
+
+/** Prohibitions supplied by an object's effective keyword abilities. */
+export function prohibitionsFromKeywords(
+	keywords: readonly Keyword[],
+): ProhibitionDef[] {
+	return keywords.includes("indestructible")
+		? [INDESTRUCTIBLE_PROHIBITION]
+		: [];
+}
 
 /**
  * CR 702.108a and CR 702.45a: prowess and bushido are triggered ability
