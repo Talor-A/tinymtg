@@ -4363,26 +4363,10 @@ function applyCtxFor(
 
 function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 	const out: BoundProhibition[] = [];
-	const abilityCanChangeKeywords = anyPossessedCharacteristicStatic(
-		read.state,
-		(effect) => effect.layer === "6-ability-changing",
-	);
-	const temporaryEffectCanGrantIndestructible =
-		read.state.temporaryEffects.some(
-			(effect) => temporaryEffectDefinition(effect)?.kind === "grant-keyword",
-		);
 	for (const object of read.state.objects.values()) {
-		const mightBeIndestructible =
-			object.kind === "permanent" &&
-			(baseCharacteristics(object).keywords.includes("indestructible") ||
-				abilityCanChangeKeywords ||
-				temporaryEffectCanGrantIndestructible);
-		const snapshot = mightBeIndestructible
-			? read.view.objects.get(object.id)
-			: undefined;
+		const snapshot = getSnapshot(read, object.id);
 		const indestructible =
-			object.kind === "permanent" &&
-			snapshot?.kind === "permanent" &&
+			snapshot.kind === "permanent" &&
 			snapshot.currentCharacteristics.keywords.includes("indestructible");
 		const definitions: ProhibitionDef[] = [
 			...(indestructible
