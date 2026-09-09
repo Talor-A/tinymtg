@@ -16,9 +16,9 @@ import {
 	activePlayer,
 	cloneCharacteristics,
 	etbPreview,
+	getSnapshot,
 	maybeObject,
 	maybePermanent,
-	readObject,
 	registerCard,
 	turnLocation,
 } from "./index.ts";
@@ -112,7 +112,7 @@ function counterRecipientController(
 
 function isCreatureRecipient(ctx: EffectCtx, ev: GameEvent): boolean {
 	if (ev.kind === "add counters") {
-		const snapshot = readObject(ctx.read, ev.target.id);
+		const snapshot = getSnapshot(ctx.read, ev.target.id);
 		return (
 			snapshot.kind === "permanent" &&
 			snapshot.currentCharacteristics.types.includes("creature")
@@ -211,7 +211,7 @@ export const DOUBLING_SEASON = registerCard({
 				return counterRecipientController(ctx.state, ev) === ctx.controller;
 			},
 			replace(ev) {
-				const bag = { ...eventCounters(ev)! };
+				const bag = { ...eventCounters(ev) };
 				for (const k of Object.keys(bag) as PermanentCounter[])
 					bag[k] = (bag[k] ?? 0) * 2;
 				return withCounters(ev, bag);
@@ -604,7 +604,7 @@ function pickForcedCopyTarget(
 	read: ReadContext,
 ): CharacteristicsSnapshot | null {
 	for (const id of read.state.battlefield) {
-		const snapshot = readObject(read, id);
+		const snapshot = getSnapshot(read, id);
 		if (
 			snapshot.kind !== "permanent" ||
 			!snapshot.currentCharacteristics.types.includes("creature")
@@ -767,7 +767,7 @@ export const TEST_KALITAS_REPLACEMENT = registerCard({
 					return false;
 				const o = maybePermanent(ctx.state, ev.object);
 				if (!o || o.token || o.controller === ctx.controller) return false;
-				const snapshot = readObject(ctx.read, o.id);
+				const snapshot = getSnapshot(ctx.read, o.id);
 				return (
 					snapshot.kind === "permanent" &&
 					snapshot.currentCharacteristics.types.includes("creature")

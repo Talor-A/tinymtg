@@ -85,11 +85,6 @@ export type ManaAmount = Partial<ManaPool>;
 
 export type Supertype = "legendary" | "basic" | "snow";
 
-/**
- * CR 110.4a: the permanent card types. A resolving spell of one of these
- * becomes a permanent; anything else finishes resolving and is put into its
- * owner's graveyard.
- */
 const PERMANENT_CARD_TYPES = [
 	"artifact",
 	"creature",
@@ -319,22 +314,12 @@ function makeSteps(state: GameState, phase: PhaseOccurrence): StepOccurrence[] {
 export type ObjectId = Brand<number, "ObjectId">;
 export type StackItemId = Brand<number, "StackItemId">;
 
-/**
- * CR 122.1 splits counters in two: counters on objects and counters on players.
- * They are disjoint sets, so they get disjoint types — a creature cannot carry
- * poison and a player cannot carry -1/-1.
- */
 export type PermanentCounter = "+1/+1" | "-1/-1" | "charge";
 export type PlayerCounter = "poison";
 export type PermanentCounterBag = Partial<Record<PermanentCounter, number>>;
 export type PlayerCounterBag = Partial<Record<PlayerCounter, number>>;
 
-/**
- * The bag left after taking `request` out of `bag`. Removal is the same
- * arithmetic for a permanent's counters and a player's counters, and the
- * generic parameter is what keeps the two counter vocabularies from mixing.
- */
-function bagAfterRemoval<C extends string>(
+function bagAfterRemoval<C extends PermanentCounter | PlayerCounter>(
 	bag: Partial<Record<C, number>>,
 	request: "all" | Partial<Record<C, number | "all">>,
 ): Partial<Record<C, number>> {
@@ -500,8 +485,8 @@ interface DamageEvent extends EventCommon {
 	deathtouch: boolean;
 	lifelink: boolean;
 	/**
-	 * CR 615.12
-	 * "can't be prevented" skips prevention effects but not other replacements.
+	 * "can't be prevented" skips prevention effects {@link ReplacementEffectDefinition}
+	 * but not other replacements.
 	 */
 	unpreventable: boolean;
 }
@@ -526,7 +511,6 @@ interface DestroyEvent extends EventCommon {
 	source?: ObjectId;
 }
 
-/** CR 701.5a: countering a spell removes it from the stack without resolving it. */
 interface CounterEvent extends EventCommon {
 	kind: "counter";
 	spell: ObjectId;
@@ -534,7 +518,7 @@ interface CounterEvent extends EventCommon {
 }
 
 /**
- * CR 701.21: sacrificing is an action performed by a permanent's controller.
+ * sacrificing is an action performed by a permanent's controller.
  * Its child movement can be replaced, but the sacrifice is still successful
  * when that replacement moves the permanent somewhere other than a graveyard.
  */
@@ -543,7 +527,6 @@ interface SacrificeEvent extends EventCommon {
 	object: ObjectId;
 }
 
-/** The compound "instead" half of a regeneration shield (CR 701.19). */
 interface RegenerateEvent extends EventCommon {
 	kind: "regenerate";
 	object: ObjectId;
@@ -561,17 +544,12 @@ interface RegenerateEvent extends EventCommon {
  */
 interface BattlefieldDestination {
 	zone: "battlefield";
-	/** Who the object will be controlled by. Drives CR 616.1's chooser. */
+	/** Who the object will be controlled by when it enters. */
 	controller: PlayerId;
 	// --- CR 614.1c-d: replacements that modify how the object enters ---
 	tapped?: boolean;
 	counters?: PermanentCounterBag;
-	/**
-	 * Serializable copiable-values override set by copy-tier replacements
-	 * (CR 616.1c). It carries the copied object's ability *references*, which is
-	 * all the rest of the event needs: nothing has to look up "which card was
-	 * this a copy of" to find the copied abilities' implementations.
-	 */
+
 	copiableOverride?: CharacteristicsSnapshot;
 }
 
@@ -618,15 +596,11 @@ interface ObjectZoneChangeEvent extends ZoneChangeEventBase {
 }
 
 /**
- * A token entering as part of its creation (CR 111.2).
- *
- * A created token is not in a zone before it enters the battlefield. Its
- * identity and copiable values therefore travel on the event until execution,
- * instead of staging a fake object in a hand, graveyard, or other zone.
+ * A created token is not in a zone before it enters the battlefield.
  */
 interface TokenZoneChangeEvent extends ZoneChangeEventBase {
 	from: null;
-	/** Token creation is always an effect doing it (CR 111.1). */
+	/** Tokens are always created from effects. (CR 111.1). */
 	cause: "effect";
 	destination: BattlefieldDestination;
 	createdToken: {
@@ -666,12 +640,6 @@ type MoveCause =
 	| "return"
 	| "put";
 
-/**
- * CR 122.1 keeps counters on objects and counters on players in disjoint sets,
- * so they are disjoint events. Splitting on the event kind — rather than on a
- * target that could be either — is what lets a permanent's counter names and a
- * player's counter names stay apart everywhere they are read.
- */
 interface AddCountersEvent extends EventCommon {
 	kind: "add counters";
 	target: PermanentRef;
@@ -689,7 +657,7 @@ interface RemoveCountersEvent extends EventCommon {
 
 interface AddPlayerCountersEvent extends EventCommon {
 	kind: "add player counters";
-	target: PlayerRef;
+	player: PlayerId;
 	counter: PlayerCounter;
 	amount: number;
 	source?: ObjectId;
@@ -697,7 +665,7 @@ interface AddPlayerCountersEvent extends EventCommon {
 
 interface RemovePlayerCountersEvent extends EventCommon {
 	kind: "remove player counters";
-	target: PlayerRef;
+	player: PlayerId;
 	counters: "all" | Partial<Record<PlayerCounter, number | "all">>;
 	source?: ObjectId;
 }
@@ -1359,9 +1327,7 @@ function buildFilteredGameView(
 			}
 		}
 
-		// CR 613.4: +1/+1 and -1/-1 counters apply in layer 7c, so they are
-		// scheduled by the layer list like everything else -- notably before the
-		// 7d swap.
+		// +1/+1 and -1/-1 counters apply in layer 7c.
 		if (layer === "7c-modify-power-toughness")
 			applyCounters(state, characteristics);
 	}
@@ -2911,26 +2877,6 @@ export function newGame(seed = 0): GameState {
  * Object creation
  * ------------------------------------------------------------------ */
 
-function _defaultVisibility(
-	zone: Zone,
-	to: PlayerId,
-	owner: PlayerId,
-): boolean {
-	switch (zone) {
-		case "stack":
-		case "battlefield":
-		case "graveyard":
-		case "exile":
-			return true;
-		case "hand":
-			return to === owner;
-		case "library":
-			return false;
-		default:
-			assertNever(zone);
-	}
-}
-
 export function spawnCard(
 	state: GameState,
 	cardId: string,
@@ -3246,7 +3192,7 @@ export function eligibleBlockers(
 ): ObjectId[] {
 	const read = createReadContext(state);
 	const attackerSnapshot =
-		attacker === undefined ? undefined : readObject(read, attacker);
+		attacker === undefined ? undefined : getSnapshot(read, attacker);
 	if (attackerSnapshot !== undefined) {
 		assert(attackerSnapshot.kind === "permanent");
 		assert(attackerSnapshot.currentCharacteristics.kind === "creature");
@@ -3541,7 +3487,7 @@ export function etbPreview(
 		assertDefined(maybeObject(state, ev.object));
 		id = moveObject(preview, ev.object, ev.from, ev.destination);
 	}
-	const snapshot = readObject(createReadContext(preview), id);
+	const snapshot = getSnapshot(createReadContext(preview), id);
 	assert(snapshot.kind === "permanent");
 	return snapshot;
 }
@@ -3574,7 +3520,7 @@ export function createReadContext(state: ReadonlyGameState): ReadContext {
 	};
 }
 
-export function readObject(
+export function getSnapshot(
 	read: ReadContext,
 	id: ObjectId,
 ): GameObjectSnapshot {
@@ -3726,7 +3672,7 @@ export function effectiveCharacteristics(
 	read: ReadContext,
 	object: DeepReadOnly<GameObject>,
 ): DeepReadOnly<CharacteristicsSnapshot> {
-	const snapshot = readObject(read, object.id);
+	const snapshot = getSnapshot(read, object.id);
 	return snapshot.currentCharacteristics;
 }
 
@@ -3765,7 +3711,7 @@ export function lethalDamage(
 	const o = read.state.objects.get(id);
 	assertDefined(o);
 	assert(o.kind === "permanent");
-	const snapshot = readObject(read, id);
+	const snapshot = getSnapshot(read, id);
 	assert(snapshot.kind === "permanent");
 	const characteristics = snapshot.currentCharacteristics;
 	if (characteristics.kind !== "creature") return false;
@@ -4225,7 +4171,7 @@ export function affectedPlayer(
 
 		case "add player counters":
 		case "remove player counters":
-			return ev.target.player;
+			return ev.player;
 
 		case "create token":
 			return ev.controller;
@@ -4678,13 +4624,13 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 		case "add counters":
 			return `counters(${ev.amount}x ${ev.counter} on ${name(state, ev.target.id)})`;
 		case "add player counters":
-			return `counters(${ev.amount}x ${ev.counter} on P${ev.target.player})`;
+			return `counters(${ev.amount}x ${ev.counter} on P${ev.player})`;
 		case "remove counters":
 		case "remove player counters": {
 			const tgt =
 				ev.kind === "remove counters"
 					? name(state, ev.target.id)
-					: `P${ev.target.player}`;
+					: `P${ev.player}`;
 			if (ev.counters === "all") return `counters(rm all on ${tgt})`;
 			return `counters(rm ${Object.entries(ev.counters)
 				.map(([k, v]) => `${v}x ${k}`)
@@ -4928,7 +4874,7 @@ function checkStateBasedActionsIn(
 		for (const id of [...state.battlefield]) {
 			const o = maybePermanent(state, id);
 			if (!o) continue;
-			const snapshot = readObject(sbaRead, id);
+			const snapshot = getSnapshot(sbaRead, id);
 			assert(snapshot.kind === "permanent");
 			const characteristics = snapshot.currentCharacteristics;
 			if (characteristics.kind !== "creature") continue;
@@ -5131,7 +5077,7 @@ function triggerSubjectsMatch(
 		"a functioning trigger source must have a controller",
 	);
 	return subjects.some((subject) =>
-		selectorMatches(selector, readObject(read, subject.id), {
+		selectorMatches(selector, getSnapshot(read, subject.id), {
 			controller,
 			id: source.id,
 		}),
@@ -5290,7 +5236,7 @@ function selfDeathTriggerCandidates(
 		source?.kind === "permanent" && source.zone === "battlefield",
 		"a battlefield departure source must be a battlefield permanent",
 	);
-	const snapshot = readObject(before, source.id);
+	const snapshot = getSnapshot(before, source.id);
 	assert(
 		snapshot.kind === "permanent" && snapshot.zone === "battlefield",
 		"a battlefield departure source must have a permanent snapshot",
@@ -5370,7 +5316,7 @@ function recordSourceDeparture(
 	].filter((item) => item.source === id);
 	if (waiting.length === 0) return;
 
-	const snapshot = readObject(before, id);
+	const snapshot = getSnapshot(before, id);
 	assert(
 		snapshot.kind === "permanent" || snapshot.kind === "spell",
 		"an ability source left a zone it could not have been an ability source in",
@@ -5764,7 +5710,7 @@ function executeIn(
 					happened = false;
 					break;
 				}
-				const characteristics = readObject(before, o.id);
+				const characteristics = getSnapshot(before, o.id);
 				assert(characteristics.kind === "permanent");
 				assert(
 					!characteristics.currentCharacteristics.types.includes(
@@ -5836,7 +5782,7 @@ function executeIn(
 				happened = false;
 				break;
 			}
-			const snapshot = readObject(before, o.id);
+			const snapshot = getSnapshot(before, o.id);
 			assert(snapshot.kind === "permanent");
 			const movement = performIn(
 				state,
@@ -5870,7 +5816,7 @@ function executeIn(
 				happened = false;
 				break;
 			}
-			const snapshot = readObject(before, o.id);
+			const snapshot = getSnapshot(before, o.id);
 			assert(snapshot.kind === "permanent");
 			const movement = performIn(
 				state,
@@ -5989,7 +5935,7 @@ function executeIn(
 					"undefined behavior: tried to add non-natural quantity of counters.",
 				);
 			}
-			const p = state.players[ev.target.player];
+			const p = state.players[ev.player];
 			p.counters[ev.counter] = (p.counters[ev.counter] ?? 0) + ev.amount;
 			log(
 				state,
@@ -6007,7 +5953,7 @@ function executeIn(
 			break;
 		}
 		case "remove player counters": {
-			const p = state.players[ev.target.player];
+			const p = state.players[ev.player];
 			p.counters = bagAfterRemoval(p.counters, ev.counters);
 			break;
 		}
@@ -6162,7 +6108,7 @@ function executeIn(
 				// CR 508.1f / 702.20b: attacking taps the creature, unless it has
 				// vigilance. Read the derived characteristics rather than the printed
 				// card, so a granted or copied vigilance counts.
-				const attackerSnapshot = readObject(before, id);
+				const attackerSnapshot = getSnapshot(before, id);
 				assert(attackerSnapshot.kind === "permanent");
 				if (
 					!attackerSnapshot.currentCharacteristics.keywords.includes(
@@ -6419,7 +6365,7 @@ function resolveSpell(
 	);
 
 	const read = createReadContext(state);
-	const snapshot = readObject(read, object.id);
+	const snapshot = getSnapshot(read, object.id);
 	assert(snapshot.kind === "spell", "a spell object read back as another kind");
 	const characteristics = snapshot.currentCharacteristics;
 
@@ -6585,7 +6531,7 @@ function sourceInformation(
 ): SourceLastKnown {
 	const object = maybeObject(state, item.source);
 	if (object && (object.kind === "permanent" || object.kind === "spell")) {
-		const snapshot = readObject(createReadContext(state), item.source);
+		const snapshot = getSnapshot(createReadContext(state), item.source);
 		assert(
 			snapshot.kind === "permanent" || snapshot.kind === "spell",
 			"source object read back as another kind",
@@ -7347,9 +7293,7 @@ function isLegalTarget(
 		)
 			return false;
 		const validPlayer =
-			definition.legal.kind === "player"
-				? definition.legal.player
-				: "either";
+			definition.legal.kind === "player" ? definition.legal.player : "either";
 		const matchesController = target.player === ctx.controller;
 		return (
 			(validPlayer === "either" ||
@@ -7443,7 +7387,7 @@ function canCast(
 	assert(object.zone === "hand");
 	assert(object.owner === player);
 
-	const snapshot = readObject(read, object.id);
+	const snapshot = getSnapshot(read, object.id);
 	assert(snapshot.kind === "card");
 	const characteristics = snapshot.currentCharacteristics;
 
@@ -7586,7 +7530,7 @@ function activatedAbilityActions(
 	return state.battlefield.flatMap((id) => {
 		const object = maybeObject(state, id);
 		if (object?.kind !== "permanent" || object.controller !== player) return [];
-		const snapshot = readObject(read, id);
+		const snapshot = getSnapshot(read, id);
 		if (snapshot.kind !== "permanent") return [];
 		const actions: ActivateAbilityAction[] = [];
 		for (const ability of snapshot.currentCharacteristics.abilities.activated) {
@@ -7642,7 +7586,7 @@ export function getObservableActions(
 		for (const id of state.players[player].hand) {
 			const object = maybeObject(state, id);
 			if (object?.kind !== "card" || object.zone !== "hand") continue;
-			const snapshot = readObject(read, id);
+			const snapshot = getSnapshot(read, id);
 			if (
 				snapshot.kind === "card" &&
 				snapshot.currentCharacteristics.types.includes("land")
@@ -7719,7 +7663,7 @@ function activateAbilityIn(
 			`P${priorityPlayer} does not control object ${action.source}`,
 		);
 	}
-	const snapshot = readObject(createReadContext(state), object.id);
+	const snapshot = getSnapshot(createReadContext(state), object.id);
 	assert(snapshot.kind === "permanent");
 	if (
 		!snapshot.currentCharacteristics.abilities.activated.includes(
@@ -8090,7 +8034,7 @@ function castSpellIn(
 	}
 
 	const read = createReadContext(state);
-	const snapshot = readObject(read, action.card);
+	const snapshot = getSnapshot(read, action.card);
 	assert(snapshot.kind === "card");
 	const characteristics = snapshot.currentCharacteristics;
 
@@ -8371,7 +8315,7 @@ function playLandIn(
 			`object ${action.card} is not in P${priorityPlayer}'s hand`,
 		);
 	}
-	const snapshot = readObject(read, action.card);
+	const snapshot = getSnapshot(read, action.card);
 	if (
 		snapshot.kind !== "card" ||
 		!snapshot.currentCharacteristics.types.includes("land")
@@ -8508,18 +8452,17 @@ function performPreGameActions(
 ): void {
 	switch (step) {
 		case "shuffle":
-			// CR 103.2. Both libraries are shuffled before anything is drawn.
 			for (const player of state.players) shuffleLibrary(state, player.id);
 			break;
-		case "opening hand": // increment 2: deal 7 through the draw path
-		case "mulligan": // increment 7
-		case "opening hand actions": // increment 8: Leyline
+		case "opening hand":
+		case "mulligan":
+		case "opening hand actions":
 			break;
 		default:
 			assertNever(step);
 	}
 }
-/** CR 703 actions, dispatched only after the corresponding step began. */
+
 function performTurnBasedActions(
 	state: GameState,
 	choices: AnyChoiceController,
@@ -8633,7 +8576,7 @@ function performTurnBasedActions(
 			for (const id of state.battlefield) {
 				const o = maybePermanent(state, id);
 				if (!o?.attacking) continue;
-				const snapshot = readObject(read, id);
+				const snapshot = getSnapshot(read, id);
 				assert(snapshot.kind === "permanent");
 				const characteristics = snapshot.currentCharacteristics;
 				if (characteristics.kind !== "creature") continue;
@@ -8668,7 +8611,7 @@ function performTurnBasedActions(
 					assertDefined(blockerId);
 					const blocker = maybePermanent(state, blockerId);
 					assertDefined(blocker);
-					const blockerSnapshot = readObject(read, blockerId);
+					const blockerSnapshot = getSnapshot(read, blockerId);
 					assert(blockerSnapshot.kind === "permanent");
 					const blockerCharacteristics = blockerSnapshot.currentCharacteristics;
 					if (blockerCharacteristics.kind !== "creature") continue;
@@ -8710,7 +8653,7 @@ function performTurnBasedActions(
 				const blockerObject = maybePermanent(state, blocker);
 				const attackerObject = maybePermanent(state, attacker);
 				if (!blockerObject?.blocking || !attackerObject?.attacking) continue;
-				const blockerSnapshot = readObject(read, blocker);
+				const blockerSnapshot = getSnapshot(read, blocker);
 				assert(blockerSnapshot.kind === "permanent");
 				const characteristics = blockerSnapshot.currentCharacteristics;
 				if (characteristics.kind !== "creature" || characteristics.power <= 0)

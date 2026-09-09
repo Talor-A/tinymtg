@@ -5,8 +5,8 @@ import {
 	createReadContext,
 	executeAbilityAction,
 	getAbilityDefinition,
+	getSnapshot,
 	perform,
-	readObject,
 	settlePriority,
 } from "../index.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
@@ -67,7 +67,7 @@ describe("named artifact tokens", () => {
 			passingAgents(),
 		);
 		const clue = created(result);
-		const snapshot = readObject(createReadContext(state), clue);
+		const snapshot = getSnapshot(createReadContext(state), clue);
 		expect(snapshot.currentCharacteristics).toEqual(CLUE_TOKEN);
 
 		state.players[ALICE].manaPool.c = 2;

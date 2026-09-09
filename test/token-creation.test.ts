@@ -4,10 +4,10 @@ import {
 	abilityId,
 	type CharacteristicsSnapshot,
 	createReadContext,
+	getSnapshot,
 	newGame,
 	perform,
 	permanent,
-	readObject,
 	registerCard,
 	spawnPermanent,
 } from "../index.ts";
@@ -117,7 +117,8 @@ describe("token creation", () => {
 		expect(token.token).toBe(true);
 		expect(token.representation.kind).toBe("token");
 		expect(
-			readObject(createReadContext(state), tokenId).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), tokenId).currentCharacteristics
+				.name,
 		).toBe("Test Artifact Token");
 		expect(() => structuredClone(state)).not.toThrow();
 	});
@@ -166,7 +167,8 @@ describe("token creation", () => {
 		expect(token.token).toBe(true);
 		expect(token.representation.kind).toBe("token");
 		expect(
-			readObject(createReadContext(state), tokenId).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), tokenId).currentCharacteristics
+				.name,
 		).toBe("Grizzly Bears");
 	});
 

@@ -8,13 +8,13 @@ import {
 	eligibleAttackers,
 	eligibleBlockers,
 	gameOver,
+	getSnapshot,
 	IllegalAttackDeclarationError,
 	IllegalBlockDeclarationError,
 	isTurnStep,
 	newGame,
 	perform,
 	permanent,
-	readObject,
 	spawnCard,
 	spawnPermanent,
 	winner,
@@ -716,7 +716,7 @@ describe("declaring attackers during normal progression", () => {
 		expect(state.players[BOB].life).toBe(17);
 		// The bonus is gone once the turn ends, and the printed 2/2 is back.
 		expect(
-			readObject(createReadContext(state), veteran.id).currentCharacteristics,
+			getSnapshot(createReadContext(state), veteran.id).currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 		expect(state.temporaryEffects).toHaveLength(0);
 		expect(state.pendingTriggers).toHaveLength(0);

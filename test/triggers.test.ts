@@ -15,11 +15,11 @@ import {
 	ChoiceController,
 	checkStateBasedActions,
 	createReadContext,
+	getSnapshot,
 	isTurnStep,
 	newGame,
 	perform,
 	permanent,
-	readObject,
 	registerCard,
 	settlePriority,
 	spawnCard,
@@ -231,7 +231,8 @@ describe("triggered abilities", () => {
 
 		const entered = created(result);
 		expect(
-			readObject(createReadContext(state), entered).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), entered).currentCharacteristics
+				.name,
 		).toBe("Arashin Cleric");
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(state.pendingTriggers[0]).toMatchObject({

@@ -198,7 +198,7 @@ describe("player counters", () => {
 			state,
 			{
 				kind: "add player counters",
-				target: { type: "player", player: ALICE },
+				player: ALICE,
 				counter: "poison",
 				amount: 10,
 			},
@@ -212,7 +212,7 @@ describe("player counters", () => {
 			state,
 			{
 				kind: "remove player counters",
-				target: { type: "player", player: ALICE },
+				player: ALICE,
 				counters: { poison: 9 },
 			},
 			agents,
@@ -225,7 +225,7 @@ describe("player counters", () => {
 			state,
 			{
 				kind: "add player counters",
-				target: { type: "player", player: ALICE },
+				player: ALICE,
 				counter: "poison",
 				amount: 9,
 			},

@@ -9,17 +9,18 @@ import {
 	createReadContext,
 	effectiveCharacteristics,
 	getAbilityDefinition,
+	getSnapshot,
 	newGame,
 	type PlayerId,
 	perform,
 	permanent,
 	physicalCardId,
-	readObject,
 	registerCard,
 	spawnCard,
 	spawnPermanent,
 	spawnToken,
 } from "../index.ts";
+import { assert, assertDefined } from "../lib/assert.ts";
 
 const P1 = 0 as PlayerId;
 const P2 = 1 as PlayerId;
@@ -144,7 +145,7 @@ describe("derived game views", () => {
 	test("static ability IDs are exact cardId:index registry references", () => {
 		const state = newGame();
 		const source = spawnPermanent(state, "baby-mycosynth-lattice", P1);
-		const snapshot = readObject(createReadContext(state), source.id);
+		const snapshot = getSnapshot(createReadContext(state), source.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
 		expect(snapshot.copiableValues.abilities.static.map(String)).toEqual([
@@ -167,10 +168,11 @@ describe("derived game views", () => {
 		const id = abilityId("static", "card:id:with:colons", 0);
 		expect(String(id)).toBe("card:id:with:colons:0");
 		expect(getAbilityDefinition("static", id)).toBe(colonCardStatic);
+		assertDefined(snapshot.copiableValues.abilities.static[0]);
 		expect(
 			getAbilityDefinition(
 				"static",
-				snapshot.copiableValues.abilities.static[0]!,
+				snapshot.copiableValues.abilities.static[0],
 			),
 		).toBeDefined();
 	});
@@ -197,7 +199,7 @@ describe("derived game views", () => {
 		});
 		const state = newGame();
 		const source = spawnPermanent(state, "snapshot-activation-test", P1);
-		const sourceSnapshot = readObject(createReadContext(state), source.id);
+		const sourceSnapshot = getSnapshot(createReadContext(state), source.id);
 		expect(sourceSnapshot.kind).toBe("permanent");
 		if (sourceSnapshot.kind !== "permanent") return;
 		expect(
@@ -213,7 +215,7 @@ describe("derived game views", () => {
 			P1,
 			structuredClone(sourceSnapshot.copiableValues),
 		);
-		const tokenSnapshot = readObject(createReadContext(state), token.id);
+		const tokenSnapshot = getSnapshot(createReadContext(state), token.id);
 		expect(tokenSnapshot.kind).toBe("permanent");
 		if (tokenSnapshot.kind !== "permanent") return;
 		expect(
@@ -232,7 +234,8 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const copied = readObject(createReadContext(state), result.created[0]!);
+		assert(result.created[0]);
+		const copied = getSnapshot(createReadContext(state), result.created[0]);
 		expect(copied.kind).toBe("permanent");
 		if (copied.kind !== "permanent") return;
 		expect(copied.copiableValues.abilities.activated.map(String)).toEqual([
@@ -244,7 +247,7 @@ describe("derived game views", () => {
 	test("triggered ability IDs resolve directly by cardId:index", () => {
 		const state = newGame();
 		const cleric = spawnPermanent(state, "arashin-cleric", P1);
-		const snapshot = readObject(createReadContext(state), cleric.id);
+		const snapshot = getSnapshot(createReadContext(state), cleric.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
 		expect(snapshot.copiableValues.abilities.triggered.map(String)).toEqual([
@@ -262,7 +265,7 @@ describe("derived game views", () => {
 			counters: { "+1/+1": 1 },
 		});
 		const read = createReadContext(state);
-		const snapshot = readObject(read, bears.id);
+		const snapshot = getSnapshot(read, bears.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
 		expect(snapshot.copiableValues).toMatchObject({
@@ -288,7 +291,7 @@ describe("derived game views", () => {
 		const source = spawnPermanent(state, LAYER_ONE_SOURCE.id, P1);
 
 		const beforeCopy = createReadContext(state);
-		const modifiedTarget = readObject(beforeCopy, target.id);
+		const modifiedTarget = getSnapshot(beforeCopy, target.id);
 		if (modifiedTarget.kind !== "permanent")
 			throw new Error("expected a permanent");
 		expect(modifiedTarget.copiableValues.name).toBe("Layer-One Grizzly Bears");
@@ -326,8 +329,8 @@ describe("derived game views", () => {
 		);
 
 		const afterSourceLeaves = createReadContext(state);
-		const revertedTarget = readObject(afterSourceLeaves, target.id);
-		const retainedCopy = readObject(afterSourceLeaves, entered);
+		const revertedTarget = getSnapshot(afterSourceLeaves, target.id);
+		const retainedCopy = getSnapshot(afterSourceLeaves, entered);
 		if (
 			revertedTarget.kind !== "permanent" ||
 			retainedCopy.kind !== "permanent"
@@ -341,7 +344,10 @@ describe("derived game views", () => {
 		);
 
 		const roundTripped = structuredClone(state);
-		const replaySnapshot = readObject(createReadContext(roundTripped), entered);
+		const replaySnapshot = getSnapshot(
+			createReadContext(roundTripped),
+			entered,
+		);
 		if (replaySnapshot.kind !== "permanent")
 			throw new Error("expected a permanent");
 		expect(replaySnapshot.copiableValues).toEqual(captured);
@@ -351,7 +357,7 @@ describe("derived game views", () => {
 		const state = newGame();
 		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		const read = createReadContext(state);
-		expect(readObject(read, bears.id).kind).toBe("permanent");
+		expect(getSnapshot(read, bears.id).kind).toBe("permanent");
 		perform(
 			state,
 			{
@@ -362,13 +368,13 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		expect(() => readObject(read, bears.id)).toThrow(/stale ReadContext/);
+		expect(() => getSnapshot(read, bears.id)).toThrow(/stale ReadContext/);
 	});
 
 	test("the forced-copy fixture copies a creature token's actual copiable values", () => {
 		const state = newGame();
 		const bears = spawnPermanent(state, "grizzly-bears", P1);
-		const bearsSnapshot = readObject(createReadContext(state), bears.id);
+		const bearsSnapshot = getSnapshot(createReadContext(state), bears.id);
 		expect(bearsSnapshot.kind).toBe("permanent");
 		if (bearsSnapshot.kind !== "permanent") return;
 		perform(
@@ -400,7 +406,7 @@ describe("derived game views", () => {
 		const copiedId = result.created[0];
 		expect(copiedId).toBeDefined();
 		if (copiedId === undefined) return;
-		const copied = readObject(createReadContext(state), copiedId);
+		const copied = getSnapshot(createReadContext(state), copiedId);
 		expect(copied.kind).toBe("permanent");
 		if (copied.kind !== "permanent") return;
 		expect(copied.copiableValues.name).toBe("Test Bear Token");
@@ -443,8 +449,8 @@ describe("derived game views", () => {
 			kind: "permanent",
 			currentCharacteristics: { name: arbitraryName },
 		});
-		expect(() => readObject(createReadContext(state), token.id)).not.toThrow();
-		expect(readObject(createReadContext(state), token.id)).toMatchObject({
+		expect(() => getSnapshot(createReadContext(state), token.id)).not.toThrow();
+		expect(getSnapshot(createReadContext(state), token.id)).toMatchObject({
 			currentCharacteristics: { name: arbitraryName },
 			representation: { kind: "token" },
 		});
@@ -471,7 +477,7 @@ describe("derived game views", () => {
 		expect(copiedId).toBeDefined();
 		if (copiedId === undefined) return;
 		expect(
-			readObject(createReadContext(state), copiedId).currentCharacteristics
+			getSnapshot(createReadContext(state), copiedId).currentCharacteristics
 				.name,
 		).toBe(arbitraryName);
 		expect(physicalCardId(token)).toBe(null);
@@ -492,7 +498,8 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const firstId = firstResult.created[0]!;
+		const firstId = firstResult.created[0];
+		assertDefined(firstId);
 		perform(
 			state,
 			{
@@ -516,10 +523,11 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const first = readObject(createReadContext(state), firstId);
-		const second = readObject(
+		const first = getSnapshot(createReadContext(state), firstId);
+		assertDefined(secondResult.created[0]);
+		const second = getSnapshot(
 			createReadContext(state),
-			secondResult.created[0]!,
+			secondResult.created[0],
 		);
 		expect(first.kind).toBe("permanent");
 		expect(second.kind).toBe("permanent");
@@ -537,7 +545,8 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const graveyardObject = state.objects.get(leave.created[0]!);
+		assertDefined(leave.created[0]);
+		const graveyardObject = state.objects.get(leave.created[0]);
 		expect(graveyardObject).toMatchObject({
 			kind: "card",
 			cardId: "test-forced-copy",
@@ -548,7 +557,7 @@ describe("derived game views", () => {
 	test("callback-bearing token state is structuredClone and replay safe", async () => {
 		const state = newGame();
 		const lattice = spawnPermanent(state, "baby-mycosynth-lattice", P1);
-		const source = readObject(createReadContext(state), lattice.id);
+		const source = getSnapshot(createReadContext(state), lattice.id);
 		expect(source.kind).toBe("permanent");
 		if (source.kind !== "permanent") return;
 		const values = structuredClone(
@@ -572,7 +581,7 @@ describe("derived game views", () => {
 		]);
 		expect(physicalCardId(token)).toBe(null);
 		expect(
-			readObject(createReadContext(state), bears.id).currentCharacteristics
+			getSnapshot(createReadContext(state), bears.id).currentCharacteristics
 				.types,
 		).toContain("artifact");
 		expect(() => structuredClone(state)).not.toThrow();
@@ -661,7 +670,7 @@ describe("layer 6 ability grants", () => {
 	test("a granted ability reaches current characteristics, never copiable values", () => {
 		const { state } = withInstruction();
 		const bears = spawnPermanent(state, "grizzly-bears", P1);
-		const snapshot = readObject(createReadContext(state), bears.id);
+		const snapshot = getSnapshot(createReadContext(state), bears.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
 
@@ -690,14 +699,14 @@ describe("layer 6 ability grants", () => {
 		const mine = spawnPermanent(state, "baby-mycosynth-lattice", P1);
 		const read = createReadContext(state);
 
-		const theirSnapshot = readObject(read, theirs.id);
+		const theirSnapshot = getSnapshot(read, theirs.id);
 		if (theirSnapshot.kind !== "permanent")
 			throw new Error("expected permanent");
 		expect(theirSnapshot.currentCharacteristics.abilities.activated).toEqual(
 			[],
 		);
 
-		const noncreature = readObject(read, mine.id);
+		const noncreature = getSnapshot(read, mine.id);
 		if (noncreature.kind !== "permanent") throw new Error("expected permanent");
 		expect(noncreature.currentCharacteristics.abilities.activated).toEqual([]);
 	});
@@ -719,7 +728,7 @@ describe("layer 6 ability grants", () => {
 		).toBe("granted-etb-life");
 
 		const { state, instruction } = withInstruction();
-		const snapshot = readObject(createReadContext(state), instruction.id);
+		const snapshot = getSnapshot(createReadContext(state), instruction.id);
 		if (snapshot.kind !== "permanent") throw new Error("expected permanent");
 		expect(snapshot.currentCharacteristics.abilities.activated).toEqual([]);
 		expect(snapshot.currentCharacteristics.abilities.triggered).toEqual([]);
@@ -772,7 +781,7 @@ describe("layer 6 ability grants", () => {
 		expect(copiedId).toBeDefined();
 		if (copiedId === undefined) return;
 
-		const copied = readObject(createReadContext(state), copiedId);
+		const copied = getSnapshot(createReadContext(state), copiedId);
 		if (copied.kind !== "permanent") throw new Error("expected permanent");
 		expect(copied.copiableValues.name).toBe("Grizzly Bears");
 		// The fixture copies copiable values, and the grant was never part of them.
@@ -795,7 +804,7 @@ describe("layer 6 ability grants", () => {
 			agents,
 		);
 
-		const afterwards = readObject(createReadContext(state), copiedId);
+		const afterwards = getSnapshot(createReadContext(state), copiedId);
 		if (afterwards.kind !== "permanent") throw new Error("expected permanent");
 		expect(afterwards.currentCharacteristics.abilities.activated).toEqual([]);
 		expect(afterwards.currentCharacteristics.abilities.triggered).toEqual([]);
@@ -815,7 +824,8 @@ describe("layer 6 ability grants", () => {
 			},
 			agents,
 		);
-		expect(state.objects.get(left.created[0]!)).toMatchObject({
+		assertDefined(left.created[0]);
+		expect(state.objects.get(left.created[0])).toMatchObject({
 			kind: "card",
 			cardId: "test-forced-copy",
 			zone: "graveyard",
@@ -826,7 +836,7 @@ describe("layer 6 ability grants", () => {
 		const { state } = withInstruction();
 		const bears = spawnPermanent(state, "grizzly-bears", P1);
 		const cloned = structuredClone(state);
-		const snapshot = readObject(createReadContext(cloned), bears.id);
+		const snapshot = getSnapshot(createReadContext(cloned), bears.id);
 		if (snapshot.kind !== "permanent") throw new Error("expected permanent");
 		expect(
 			snapshot.currentCharacteristics.abilities.activated.map(String),
@@ -847,8 +857,8 @@ describe("granted replacements and prohibitions resolve through references", () 
 	test("the grant shows up as references on the creature, not on the ward", () => {
 		const { state, ward, bears } = withWard();
 		const read = createReadContext(state);
-		const creature = readObject(read, bears.id);
-		const source = readObject(read, ward.id);
+		const creature = getSnapshot(read, bears.id);
+		const source = getSnapshot(read, ward.id);
 		if (creature.kind !== "permanent" || source.kind !== "permanent")
 			throw new Error("expected permanents");
 
@@ -977,12 +987,12 @@ describe("functionsFrom and affects are separate questions", () => {
 		const state = newGame();
 		const bear = spawnPermanent(state, "grizzly-bears", P1);
 		expect(
-			readObject(createReadContext(state), bear.id).currentCharacteristics,
+			getSnapshot(createReadContext(state), bear.id).currentCharacteristics,
 		).toMatchObject({ power: 2 });
 
 		spawnCard(state, GRAVEYARD_ANTHEM.id, P1, "graveyard");
 		expect(
-			readObject(createReadContext(state), bear.id).currentCharacteristics,
+			getSnapshot(createReadContext(state), bear.id).currentCharacteristics,
 		).toMatchObject({ power: 3, toughness: 3 });
 	});
 
@@ -991,7 +1001,7 @@ describe("functionsFrom and affects are separate questions", () => {
 		const bear = spawnPermanent(state, "grizzly-bears", P1);
 		spawnPermanent(state, GRAVEYARD_ANTHEM.id, P1);
 		expect(
-			readObject(createReadContext(state), bear.id).currentCharacteristics,
+			getSnapshot(createReadContext(state), bear.id).currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 	});
 });

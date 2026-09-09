@@ -16,6 +16,7 @@ import {
 	type GameState,
 	getAbilityDefinition,
 	getObservableActions,
+	getSnapshot,
 	IllegalAbilityActivationError,
 	InvalidChoiceAnswerError,
 	newGame,
@@ -23,7 +24,6 @@ import {
 	type PlayerId,
 	type PlayerView,
 	perform,
-	readObject,
 	registerCard,
 	type SyncAgent,
 	settlePriority,
@@ -380,7 +380,7 @@ describe("self-pumping activated abilities", () => {
 		state.players[0].manaPool.c = 2;
 
 		const read = () =>
-			readObject(createReadContext(state), shade.id).currentCharacteristics;
+			getSnapshot(createReadContext(state), shade.id).currentCharacteristics;
 		expect(read()).toMatchObject({ power: 2, toughness: 2 });
 
 		executeAbilityAction(

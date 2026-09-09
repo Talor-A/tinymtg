@@ -15,7 +15,7 @@ import {
 	createReadContext,
 	executeCastAction,
 	getAbilityDefinition,
-	readObject,
+	getSnapshot,
 	registerCard,
 	settlePriority,
 	spawnCard,
@@ -59,7 +59,7 @@ function castAction(card: ObjectId): CastAction {
 
 /** Power and toughness as the layer walk currently derives them. */
 function currentPT(state: GameState, id: ObjectId): [number, number] {
-	const snapshot = readObject(createReadContext(state), id);
+	const snapshot = getSnapshot(createReadContext(state), id);
 	const current = snapshot.currentCharacteristics;
 	if (current.kind !== "creature")
 		throw new Error("expected a creature snapshot");
@@ -70,7 +70,7 @@ describe("prowess", () => {
 	test("Monastery Swiftspear prints the keyword and the ability it stands for", () => {
 		const state = setupMain();
 		const swiftspear = spawnPermanent(state, "monastery-swiftspear", ALICE);
-		const snapshot = readObject(createReadContext(state), swiftspear.id);
+		const snapshot = getSnapshot(createReadContext(state), swiftspear.id);
 
 		expect(snapshot.currentCharacteristics.keywords).toEqual([
 			"haste",

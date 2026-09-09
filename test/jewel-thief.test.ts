@@ -5,9 +5,9 @@ import {
 	abilityId,
 	createReadContext,
 	executeAbilityAction,
+	getSnapshot,
 	perform,
 	permanent,
-	readObject,
 	settlePriority,
 	spawnCard,
 	spawnPermanent,
@@ -44,7 +44,7 @@ describe("Jewel Thief", () => {
 		const jewel = created(entry);
 
 		expect(
-			readObject(createReadContext(state), jewel).currentCharacteristics,
+			getSnapshot(createReadContext(state), jewel).currentCharacteristics,
 		).toMatchObject({
 			kind: "creature",
 			name: "Jewel Thief",
@@ -64,7 +64,7 @@ describe("Jewel Thief", () => {
 		);
 		if (treasure === undefined) throw new Error("Jewel Thief created no token");
 		expect(
-			readObject(createReadContext(state), treasure).currentCharacteristics,
+			getSnapshot(createReadContext(state), treasure).currentCharacteristics,
 		).toEqual({
 			kind: "non-creature",
 			name: "Treasure Token",

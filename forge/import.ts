@@ -71,8 +71,8 @@ import {
 	cloneCharacteristics,
 	defineCard,
 	etbPreview,
+	getSnapshot,
 	MANA_COST_TYPES,
-	readObject,
 	selectorMatches,
 } from "../index.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
@@ -526,10 +526,8 @@ function parseTarget(
 	if (value === "Card" && targetType === "Spell") legal = { kind: "spell" };
 	else if (targetType !== undefined) return null;
 	else if (value === "Any") legal = { kind: "any-target" };
-	else if (value === "Player")
-		legal = { kind: "player", player: "either" };
-	else if (value === "Opponent")
-		legal = { kind: "player", player: "opponent" };
+	else if (value === "Player") legal = { kind: "player", player: "either" };
+	else if (value === "Opponent") legal = { kind: "player", player: "opponent" };
 	else if (value === "Permanent") legal = { kind: "permanent" };
 	else if (value === "Creature.Other+YouCtrl") {
 		legal = {
@@ -1049,10 +1047,7 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			// Forge defaults an omitted Defined$ to the source object when the
 			// ability declares no targets. Only permanent abilities can use that
 			// source as the recipient of counters.
-			if (
-				!allowSourceObject ||
-				(defined !== undefined && defined !== "Self")
-			)
+			if (!allowSourceObject || (defined !== undefined && defined !== "Self"))
 				return issue(
 					"UNSUPPORTED_PARAMETER",
 					"unsupported non-targeted PutCounter subject",
@@ -1564,7 +1559,7 @@ function lowerCopyEtbKeyword(
 				copyableCreatureCandidates(ctx.read),
 			);
 			if (targetId === null) return [ev];
-			const target = readObject(ctx.read, targetId);
+			const target = getSnapshot(ctx.read, targetId);
 			assert(
 				target.kind === "permanent",
 				"copy-as candidate must be a permanent",
@@ -1587,7 +1582,7 @@ function lowerCopyEtbKeyword(
 function copyableCreatureCandidates(read: ReadContext): ObjectId[] {
 	const candidates: ObjectId[] = [];
 	for (const id of read.state.battlefield) {
-		const snapshot = readObject(read, id);
+		const snapshot = getSnapshot(read, id);
 		if (
 			snapshot.kind === "permanent" &&
 			snapshot.currentCharacteristics.types.includes("creature")
@@ -1917,8 +1912,7 @@ function lowerTrigger(
 			// which matches the engine's battlefield-by-default functionsFrom.
 			// Forge also omits Origin$ on some enters-the-battlefield triggers
 			// (Priest of Ancient Lore), which defaults to Any.
-			const etb =
-				(origin ?? "Any") === "Any" && destination === "Battlefield";
+			const etb = (origin ?? "Any") === "Any" && destination === "Battlefield";
 			const dies = origin === "Battlefield" && destination === "Graveyard";
 			if (
 				!(etb || dies) ||

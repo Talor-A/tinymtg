@@ -12,12 +12,12 @@ import {
 	executeAbilityAction,
 	executeCastAction,
 	getObservableActions,
+	getSnapshot,
 	isTurnStep,
 	name,
 	newGame,
 	perform,
 	permanent,
-	readObject,
 	registerCard,
 	settlePriority,
 	spawnCard,
@@ -323,7 +323,7 @@ describe("forge-import runtime: triggers", () => {
 		const library = [...state.players[ALICE].library];
 
 		const strix = enterFromHand(state, "rt-baleful-strix", ALICE, agents);
-		const characteristics = readObject(
+		const characteristics = getSnapshot(
 			createReadContext(state),
 			strix,
 		).currentCharacteristics;
@@ -395,7 +395,7 @@ describe("forge-import runtime: triggers", () => {
 			token: true,
 		});
 		expect(
-			readObject(createReadContext(state), clue).currentCharacteristics,
+			getSnapshot(createReadContext(state), clue).currentCharacteristics,
 		).toMatchObject({
 			types: ["artifact"],
 			subtypes: ["Clue"],
@@ -464,7 +464,7 @@ describe("forge-import runtime: triggers", () => {
 			controller: BOB,
 		});
 		expect(
-			readObject(createReadContext(state), soldier).currentCharacteristics,
+			getSnapshot(createReadContext(state), soldier).currentCharacteristics,
 		).toMatchObject({
 			kind: "creature",
 			colors: ["w"],
@@ -491,7 +491,7 @@ describe("forge-import runtime: triggers", () => {
 		expect(permanent(state, target.id).counters).toEqual({ "+1/+1": 1 });
 		expect(permanent(state, guide).counters).toEqual({});
 		expect(
-			readObject(createReadContext(state), target.id).currentCharacteristics,
+			getSnapshot(createReadContext(state), target.id).currentCharacteristics,
 		).toMatchObject({ power: 3, toughness: 3 });
 	});
 
@@ -619,7 +619,7 @@ describe("forge-import runtime: triggers", () => {
 
 		expect(permanent(state, source.id).counters).toEqual({ "+1/+1": 1 });
 		expect(
-			readObject(createReadContext(state), source.id).currentCharacteristics,
+			getSnapshot(createReadContext(state), source.id).currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 	});
 
@@ -720,7 +720,7 @@ describe("forge-import runtime: triggers", () => {
 		const zombie = permanent(state, zombieId);
 		expect(zombie.token).toBe(true);
 		expect(zombie.controller).toBe(ALICE);
-		const characteristics = readObject(
+		const characteristics = getSnapshot(
 			createReadContext(state),
 			zombieId,
 		).currentCharacteristics;
@@ -763,7 +763,7 @@ describe("forge-import runtime: statics and replacements", () => {
 			new ScriptedAgent(),
 		]);
 		expect(
-			readObject(createReadContext(copying), copied).currentCharacteristics
+			getSnapshot(createReadContext(copying), copied).currentCharacteristics
 				.name,
 		).toBe("Eager Cadet");
 
@@ -774,8 +774,8 @@ describe("forge-import runtime: statics and replacements", () => {
 			new ScriptedAgent(),
 		]);
 		expect(
-			readObject(createReadContext(declining), unchanged).currentCharacteristics
-				.name,
+			getSnapshot(createReadContext(declining), unchanged)
+				.currentCharacteristics.name,
 		).toBe("Clone");
 	});
 
@@ -812,10 +812,10 @@ describe("forge-import runtime: statics and replacements", () => {
 		const theirs = spawnPermanent(state, "rt-grizzly-bears", BOB);
 
 		expect(
-			readObject(createReadContext(state), mine.id).currentCharacteristics,
+			getSnapshot(createReadContext(state), mine.id).currentCharacteristics,
 		).toMatchObject({ power: 3, toughness: 3 });
 		expect(
-			readObject(createReadContext(state), theirs.id).currentCharacteristics,
+			getSnapshot(createReadContext(state), theirs.id).currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 	});
 
@@ -861,7 +861,7 @@ describe("forge-import runtime: statics and replacements", () => {
 		const dog = enterFromHand(state, "rt-faithful-watchdog", ALICE, agents);
 		expect(permanent(state, dog).counters).toEqual({ "+1/+1": 3 });
 		expect(
-			readObject(createReadContext(state), dog).currentCharacteristics,
+			getSnapshot(createReadContext(state), dog).currentCharacteristics,
 		).toMatchObject({
 			power: 3,
 			toughness: 3,
@@ -1523,12 +1523,12 @@ describe("forge-import runtime: activated abilities", () => {
 
 		expect(state.battlefield).not.toContain(savior.id);
 		expect(
-			readObject(createReadContext(state), target.id).currentCharacteristics
+			getSnapshot(createReadContext(state), target.id).currentCharacteristics
 				.keywords,
 		).not.toContain("indestructible");
 		settlePriority(state, passingAgents());
 		expect(
-			readObject(createReadContext(state), target.id).currentCharacteristics
+			getSnapshot(createReadContext(state), target.id).currentCharacteristics
 				.keywords,
 		).toContain("indestructible");
 		expect(state.temporaryEffects[0]).toMatchObject({
@@ -1671,12 +1671,12 @@ describe("forge-import runtime: registry and clone integrity", () => {
 		spawnPermanent(state, "rt-root-maze", ALICE);
 		const bear = spawnPermanent(state, "rt-grizzly-bears", ALICE);
 
-		const before = readObject(
+		const before = getSnapshot(
 			createReadContext(state),
 			bear.id,
 		).currentCharacteristics;
 		const cloned = structuredClone(state);
-		const after = readObject(
+		const after = getSnapshot(
 			createReadContext(cloned),
 			bear.id,
 		).currentCharacteristics;

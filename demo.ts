@@ -31,9 +31,9 @@ import {
 	advance,
 	createReadContext,
 	gameOver,
+	getSnapshot,
 	newGame,
 	permanent,
-	readObject,
 	spawnCard,
 	spawnPermanent,
 	turnLocation,
@@ -113,7 +113,7 @@ function lifeBar(life: number, max = 20): string {
 
 function creatureBadge(state: GameState, id: ObjectId): string {
 	const p = permanent(state, id);
-	const snapshot = readObject(createReadContext(state), id);
+	const snapshot = getSnapshot(createReadContext(state), id);
 	if (snapshot.kind !== "permanent") throw new Error("expected a permanent");
 	const characteristics = snapshot.currentCharacteristics;
 	if (characteristics.kind !== "creature")
@@ -139,7 +139,7 @@ function printBoard(state: GameState): void {
 		console.log(`  ${name}  ${lifeBar(player.life)}`);
 		const creatures = state.battlefield.filter((id) => {
 			const perm = permanent(state, id);
-			const snapshot = readObject(createReadContext(state), id);
+			const snapshot = getSnapshot(createReadContext(state), id);
 			return (
 				perm.controller === pid &&
 				snapshot.currentCharacteristics.types.includes("creature")
@@ -147,7 +147,7 @@ function printBoard(state: GameState): void {
 		});
 		const permanents = state.battlefield.filter((id) => {
 			const perm = permanent(state, id);
-			const snapshot = readObject(createReadContext(state), id);
+			const snapshot = getSnapshot(createReadContext(state), id);
 			return (
 				perm.controller === pid &&
 				!snapshot.currentCharacteristics.types.includes("creature")
@@ -160,7 +160,7 @@ function printBoard(state: GameState): void {
 			console.log(`    ${creatureBadge(state, id)}`);
 		}
 		for (const id of permanents) {
-			const snapshot = readObject(createReadContext(state), id);
+			const snapshot = getSnapshot(createReadContext(state), id);
 			console.log(`    ${dim(snapshot.currentCharacteristics.name)}`);
 		}
 	}

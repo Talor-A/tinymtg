@@ -13,10 +13,10 @@ import {
 	advanceWithReplay,
 	cloneCharacteristics,
 	createReadContext,
+	getSnapshot,
 	newGame,
 	perform,
 	permanent,
-	readObject,
 	registerCard,
 	spawnCard,
 	spawnPermanent,
@@ -141,7 +141,7 @@ registerCard({
 
 function firstCreature(read: ReadContext): CharacteristicsSnapshot | null {
 	for (const id of read.state.battlefield) {
-		const snapshot = readObject(read, id);
+		const snapshot = getSnapshot(read, id);
 		if (
 			snapshot.kind === "permanent" &&
 			snapshot.currentCharacteristics.types.includes("creature")
@@ -222,7 +222,7 @@ function leave(state: GameState, object: ObjectId): ObjectId {
 
 /** Copiable values of a permanent, ready to hand to `spawnToken`. */
 function copiableOf(state: GameState, id: ObjectId): CharacteristicsSnapshot {
-	const snapshot = readObject(createReadContext(state), id);
+	const snapshot = getSnapshot(createReadContext(state), id);
 	if (snapshot.kind !== "permanent") throw new Error("expected a permanent");
 	return structuredClone(snapshot.copiableValues);
 }
@@ -237,7 +237,8 @@ describe("copied enter-the-battlefield replacements", () => {
 		const copy = permanent(state, entered);
 
 		expect(
-			readObject(createReadContext(state), entered).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), entered).currentCharacteristics
+				.name,
 		).toBe("Entry Guard");
 		// The replacement reached the event during the fixture's own entry, not
 		// afterwards: both fields are written by `moveObject`, not by any later
@@ -252,7 +253,7 @@ describe("copied enter-the-battlefield replacements", () => {
 		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
 		const entered = enter(state, clone.id);
 
-		const snapshot = readObject(createReadContext(state), entered);
+		const snapshot = getSnapshot(createReadContext(state), entered);
 		if (snapshot.kind !== "permanent") throw new Error("expected a permanent");
 		expect(
 			snapshot.copiableValues.abilities.replacement.map(String),
@@ -282,7 +283,7 @@ describe("copied enter-the-battlefield replacements", () => {
 			enter(tapped, spawnCard(tapped, "test-forced-copy", P1, "hand").id),
 		);
 		expect(
-			readObject(createReadContext(tapped), sentinelCopy.id)
+			getSnapshot(createReadContext(tapped), sentinelCopy.id)
 				.currentCharacteristics.name,
 		).toBe("TEST ONLY — Entertapped Body");
 		expect(sentinelCopy.tapped, "copied entersTapped applied").toBe(true);
@@ -301,7 +302,7 @@ describe("copied enter-the-battlefield replacements", () => {
 			enter(counters, spawnCard(counters, "test-forced-copy", P1, "hand").id),
 		);
 		expect(
-			readObject(createReadContext(counters), countersCopy.id)
+			getSnapshot(createReadContext(counters), countersCopy.id)
 				.currentCharacteristics.name,
 		).toBe("TEST ONLY — Enters With Counters");
 		expect(countersCopy.counters["+1/+1"], "copied entersWith applied").toBe(2);
@@ -316,7 +317,7 @@ describe("copied enter-the-battlefield replacements", () => {
 		const entered = permanent(state, enter(state, mimic.id));
 
 		expect(
-			readObject(createReadContext(state), entered.id).currentCharacteristics
+			getSnapshot(createReadContext(state), entered.id).currentCharacteristics
 				.name,
 		).toBe("Plain Bear");
 		expect(entered.tapped, "the mimic's own entersTapped was copied away").toBe(
@@ -339,7 +340,7 @@ describe("copied enter-the-battlefield replacements", () => {
 		const entered = permanent(state, enter(state, mimic.id));
 
 		expect(
-			readObject(createReadContext(state), entered.id).currentCharacteristics
+			getSnapshot(createReadContext(state), entered.id).currentCharacteristics
 				.name,
 		).toBe("Entry Guard");
 		expect(entered.tapped).toBe(true);
@@ -378,7 +379,7 @@ describe("copied entry replacements across tokens and copy chains", () => {
 			enter(state, spawnCard(state, "test-forced-copy", P1, "hand").id),
 		);
 		expect(
-			readObject(createReadContext(state), entered.id).currentCharacteristics
+			getSnapshot(createReadContext(state), entered.id).currentCharacteristics
 				.name,
 		).toBe("Guard Token");
 		expect(entered.tapped).toBe(true);
@@ -413,13 +414,13 @@ describe("copied entry replacements across tokens and copy chains", () => {
 		);
 
 		expect(
-			readObject(createReadContext(state), second).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), second).currentCharacteristics.name,
 		).toBe("Entry Guard");
 		expect(permanent(state, second).tapped).toBe(true);
 		expect(permanent(state, second).counters["+1/+1"]).toBe(1);
 		const read = createReadContext(state);
-		const a = readObject(read, first);
-		const b = readObject(read, second);
+		const a = getSnapshot(read, first);
+		const b = getSnapshot(read, second);
 		if (a.kind !== "permanent" || b.kind !== "permanent")
 			throw new Error("expected permanents");
 		expect(b.copiableValues).toEqual(a.copiableValues);
@@ -435,7 +436,8 @@ describe("physical identity and serialization of copied entry replacements", () 
 			spawnCard(state, "test-forced-copy", P1, "hand").id,
 		);
 		expect(
-			readObject(createReadContext(state), entered).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), entered).currentCharacteristics
+				.name,
 		).toBe("Entry Guard");
 
 		const inGraveyard = leave(state, entered);
@@ -456,7 +458,7 @@ describe("physical identity and serialization of copied entry replacements", () 
 
 		expect(() => structuredClone(state)).not.toThrow();
 		const roundTripped = structuredClone(state);
-		const snapshot = readObject(createReadContext(roundTripped), entered);
+		const snapshot = getSnapshot(createReadContext(roundTripped), entered);
 		if (snapshot.kind !== "permanent") throw new Error("expected a permanent");
 		expect(snapshot.copiableValues.abilities.replacement.map(String)).toEqual([
 			GUARD_ENTRY,

@@ -15,13 +15,13 @@ import {
 	executeCastAction,
 	type GameState,
 	getObservableActions,
+	getSnapshot,
 	IllegalCastError,
 	InvalidChoiceAnswerError,
 	newGame,
 	type ObjectId,
 	type ObjectSelectorDef,
 	perform,
-	readObject,
 	registerCard,
 	type SyncAgent,
 	selectorMatches,
@@ -97,7 +97,7 @@ describe("target selectors", () => {
 		const mine = { controller: 0 as const, id: bears.id };
 
 		const matches = (selector: ObjectSelectorDef, id: ObjectId) => {
-			const snapshot = readObject(createReadContext(state), id);
+			const snapshot = getSnapshot(createReadContext(state), id);
 			if (snapshot.kind !== "permanent")
 				throw new Error("expected a permanent");
 			return selectorMatches(selector, snapshot, mine);
@@ -550,7 +550,7 @@ describe("single-target spell casting", () => {
 		castAt(state, spell.id, { type: "permanent", id: bears.id });
 		settlePriority(state, passingAgents());
 
-		const snapshot = readObject(createReadContext(state), bears.id);
+		const snapshot = getSnapshot(createReadContext(state), bears.id);
 		expect(snapshot.currentCharacteristics).toMatchObject({
 			kind: "creature",
 			power: 5,

@@ -13,10 +13,10 @@ import {
 	ChoiceController,
 	ChoicePendingError,
 	createReadContext,
+	getSnapshot,
 	newGame,
 	perform,
 	permanent,
-	readObject,
 	registerCard,
 	spawnCard,
 	spawnPermanent,
@@ -182,7 +182,7 @@ describe("replacement effects that add counters as a permanent enters", () => {
 		seasonFirst.state.log.length = 0;
 		expect(seasonFirst.counters, "Season then Scales").toBe(5);
 		expect(
-			readObject(createReadContext(scalesFirst.state), scalesFirst.entered)
+			getSnapshot(createReadContext(scalesFirst.state), scalesFirst.entered)
 				.currentCharacteristics,
 			"fixture power with 6 counters",
 		).toMatchObject({ power: 6 });
@@ -226,7 +226,7 @@ describe("when two effects change where a destroyed creature goes", () => {
 		const tokenId = tokens[0];
 		if (tokenId === undefined)
 			throw new Error("fixture did not create a token");
-		const token = readObject(createReadContext(kalitasFixtureFirst), tokenId);
+		const token = getSnapshot(createReadContext(kalitasFixtureFirst), tokenId);
 		expect(token.currentCharacteristics).toMatchObject({
 			name: "Zombie Token",
 			subtypes: ["Zombie"],
@@ -499,7 +499,8 @@ describe("interacting effects as permanents enter", () => {
 			cardId: "test-forced-copy",
 		});
 		expect(
-			readObject(createReadContext(state), entered).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), entered).currentCharacteristics
+				.name,
 			"entered as a copy of the counters fixture",
 		).toBe("TEST ONLY — Enters With Counters");
 		// The copy picks up the copied card's printed ETB self-replacement, which is
@@ -539,7 +540,8 @@ describe("Clone's optional copy replacement", () => {
 		const result = perform(state, cloneEvent(clone.id), recorder);
 		const entered = created(result);
 		expect(
-			readObject(createReadContext(state), entered).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), entered).currentCharacteristics
+				.name,
 		).toBe("Eager Cadet");
 		expect(permanent(state, entered).representation).toEqual({
 			kind: "card",
@@ -585,7 +587,8 @@ describe("Clone's optional copy replacement", () => {
 		const entered = created(result);
 		expect(permanent(state, entered).controller).toBe(BOB);
 		expect(
-			readObject(createReadContext(state), entered).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), entered).currentCharacteristics
+				.name,
 		).toBe("Grizzly Bears");
 		expect(recorder.transcript().choices[0]?.request.player).toBe(BOB);
 	});
@@ -601,7 +604,7 @@ describe("Clone's optional copy replacement", () => {
 				new ScriptedAgent(),
 			]),
 		);
-		const snapshot = readObject(createReadContext(state), entered);
+		const snapshot = getSnapshot(createReadContext(state), entered);
 		expect(snapshot.currentCharacteristics.name).toBe("Clone");
 		expect(snapshot.currentCharacteristics).toMatchObject({
 			kind: "creature",
@@ -622,7 +625,7 @@ describe("Clone's optional copy replacement", () => {
 				new ScriptedAgent(),
 			]),
 		);
-		const snapshot = readObject(createReadContext(state), entered);
+		const snapshot = getSnapshot(createReadContext(state), entered);
 		expect(snapshot.copiableValues.name).toBe("Darksteel Relic");
 		expect(snapshot.copiableValues.types).toEqual(["artifact"]);
 		expect(snapshot.currentCharacteristics.types).toEqual([
@@ -642,7 +645,7 @@ describe("Clone's optional copy replacement", () => {
 				new ScriptedAgent(),
 			]),
 		);
-		const snapshot = readObject(createReadContext(state), entered);
+		const snapshot = getSnapshot(createReadContext(state), entered);
 		expect(snapshot.currentCharacteristics.name).toBe("Faithful Watchdog");
 		expect(permanent(state, entered).counters).toEqual({ "+1/+1": 3 });
 	});
@@ -657,7 +660,8 @@ describe("Clone's optional copy replacement", () => {
 
 		const entered = created(perform(state, cloneEvent(clone.id), recorder));
 		expect(
-			readObject(createReadContext(state), entered).currentCharacteristics.name,
+			getSnapshot(createReadContext(state), entered).currentCharacteristics
+				.name,
 		).toBe("Clone");
 		expect(recorder.transcript().choices).toHaveLength(0);
 	});
