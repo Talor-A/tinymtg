@@ -16,13 +16,14 @@
  * the concrete subset documented in the acceptance matrix in README.md lowers.
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
- * `ChangeZone` other than Battlefield to Hand (so no reanimation, tutoring,
- * blinking, or exile); random or multi-card discard; alternate/additional
+ * `ChangeZone` searches, hidden Hand/Library origins, Stack origins, and
+ * multi-object movement; random or multi-card discard; alternate/additional
  * costs on spells, and activation costs other than fixed generic/coloured mana,
  * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
  * and dynamic amounts; `Investigate` with an explicit count or player;
  * more than one target slot,
- * or an optional one; selector modifiers outside `Other`/`YouCtrl`/`OppCtrl`, the exact
+ * or an optional one; selector modifiers outside
+ * `Other`/`YouCtrl`/`OppCtrl`/`YouOwn`/`OppOwn`, the exact
  * target form `Creature.Other+YouCtrl`, and `non`-prefixable color, card type,
  * and supertype words (so hexproof, shroud,
  * protection, and combat- or zone-dependent restrictions all reject, while a
@@ -51,6 +52,7 @@ import type {
 	ManaType,
 	ObjectSelectorDef,
 	PayableActivationManaCost,
+	PublicObjectZone,
 	RelativeEffectPlayer,
 	ReplacementEffectDefinition,
 	SpellAbilityDef,
@@ -62,6 +64,7 @@ import type {
 	TriggerEffectPlayer,
 	TriggeredAbilityDefinition,
 	ValidPlayer,
+	ZoneChangeEffectDestination,
 } from "../index.ts";
 import {
 	abilityId,
@@ -347,6 +350,8 @@ function parseSelectorModifier(modifier: string): ObjectSelectorDef | null {
 	if (modifier === "Other") return { kind: "not", selector: { kind: "self" } };
 	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
+	if (modifier === "YouOwn") return { kind: "owner", player: "you" };
+	if (modifier === "OppOwn") return { kind: "owner", player: "opponent" };
 	const negated = modifier.startsWith("non");
 	const word = (negated ? modifier.slice(3) : modifier).toLowerCase();
 	const color = COLOR_WORDS.get(word);
@@ -453,7 +458,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			effect.kind !== "tap" &&
 			effect.kind !== "untap" &&
 			effect.kind !== "counter" &&
-			effect.kind !== "return to hand" &&
+			effect.kind !== "change-zone" &&
 			effect.kind !== "modify-pt" &&
 			effect.kind !== "grant-keyword" &&
 			effect.kind !== "add counters"
@@ -463,7 +468,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			(effect.kind === "destroy" ||
 				effect.kind === "tap" ||
 				effect.kind === "untap" ||
-				effect.kind === "return to hand" ||
+				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
@@ -472,7 +477,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				: null;
 		// An effect on its own source declares no target to check.
 		if (
-			(effect.kind === "return to hand" ||
+			(effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
@@ -533,12 +538,18 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				where,
 			);
 		}
-		if (effect.kind === "return to hand" && target.legal.kind !== "permanent") {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				"ChangeZone to hand requires a permanent target",
-				where,
-			);
+		if (effect.kind === "change-zone") {
+			if (
+				(effect.from === "battlefield" && target.legal.kind !== "permanent") ||
+				(effect.from !== "battlefield" &&
+					(target.legal.kind !== "card" || target.legal.zone !== effect.from))
+			) {
+				return issue(
+					"UNSUPPORTED_TARGET",
+					"ChangeZone target kind and zone must match Origin$",
+					where,
+				);
+			}
 		}
 		if (effect.kind === "modify-pt" && target.legal.kind !== "permanent") {
 			return issue(
@@ -573,12 +584,38 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 function parseTarget(
 	value: string | undefined,
 	targetType?: string,
+	cardZone?: "graveyard" | "exile",
 ): TargetDef[] | null {
 	if (value === undefined) return [];
 	let legal: TargetDef["legal"];
 	if (value === "Card" && targetType === "Spell") legal = { kind: "spell" };
 	else if (targetType !== undefined) return null;
-	else if (value === "Any") legal = { kind: "any-target" };
+	else if (cardZone !== undefined) {
+		if (value === "Card") legal = { kind: "card", zone: cardZone };
+		else {
+			const parsed = parseSelector(value);
+			if (!parsed) return null;
+			const ownership = (selector: ObjectSelectorDef): ObjectSelectorDef => {
+				switch (selector.kind) {
+					case "controller":
+						// Forge's YouCtrl/OppCtrl restrictions use ownership for cards
+						// outside the battlefield, where cards have no controller.
+						return { kind: "owner", player: selector.player };
+					case "all":
+					case "any":
+						return {
+							kind: selector.kind,
+							selectors: selector.selectors.map(ownership),
+						};
+					case "not":
+						return { kind: "not", selector: ownership(selector.selector) };
+					default:
+						return selector;
+				}
+			};
+			legal = { kind: "card", zone: cardZone, selector: ownership(parsed) };
+		}
+	} else if (value === "Any") legal = { kind: "any-target" };
 	else if (value === "Player") legal = { kind: "player", player: "either" };
 	else if (value === "Opponent") legal = { kind: "player", player: "opponent" };
 	else if (value === "Permanent") legal = { kind: "permanent" };
@@ -1057,46 +1094,165 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					"defined",
 					"validtgts",
 					"tgtprompt",
+					"tgtzone",
+					"changenum",
+					"gaincontrol",
+					"tapped",
+					"libraryposition",
+					"activationzone",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
 			);
 			if (badParams) return badParams;
-			// Only the bounce case is lowered. Every other origin/destination pair
-			// -- reanimation, tutoring, blinking, exile -- needs zone handling this
-			// effect does not have, so they reject rather than approximate.
-			const origin = getForgeParam(params, "Origin");
-			const destination = getForgeParam(params, "Destination");
-			if (origin !== "Battlefield" || destination !== "Hand") {
+			const originText = getForgeParam(params, "Origin");
+			const origin: PublicObjectZone | null =
+				originText === "Battlefield"
+					? "battlefield"
+					: originText === "Graveyard"
+						? "graveyard"
+						: originText === "Exile"
+							? "exile"
+							: null;
+			if (!origin) {
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"only ChangeZone from Battlefield to Hand is supported",
+					"ChangeZone requires one public Battlefield, Graveyard, or Exile origin",
+					where,
+				);
+			}
+			const targetZone = getForgeParam(params, "TgtZone");
+			if (targetZone !== undefined && targetZone !== originText)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"ChangeZone TgtZone$ must match Origin$",
+					where,
+				);
+			const changeNum = getForgeParam(params, "ChangeNum");
+			if (changeNum !== undefined && changeNum !== "1")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"only a one-object ChangeZone is supported",
+					where,
+				);
+
+			const destinationText = getForgeParam(params, "Destination");
+			const libraryPosition = getForgeParam(params, "LibraryPosition");
+			const gainControl = getForgeParam(params, "GainControl");
+			const tapped = getForgeParam(params, "Tapped");
+			let destination: ZoneChangeEffectDestination<Player>;
+			if (
+				destinationText === "Hand" ||
+				destinationText === "Graveyard" ||
+				destinationText === "Exile"
+			) {
+				if (
+					libraryPosition !== undefined ||
+					gainControl !== undefined ||
+					tapped !== undefined
+				)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"ChangeZone destination metadata does not match its destination",
+						where,
+					);
+				destination = {
+					zone: destinationText.toLowerCase() as "hand" | "graveyard" | "exile",
+				};
+			} else if (destinationText === "Library") {
+				if (
+					gainControl !== undefined ||
+					tapped !== undefined ||
+					(libraryPosition !== undefined &&
+						libraryPosition !== "0" &&
+						libraryPosition !== "-1")
+				)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"ChangeZone supports only top or bottom library destinations",
+						where,
+					);
+				destination = {
+					zone: "library",
+					position: libraryPosition === "-1" ? "bottom" : "top",
+				};
+			} else if (destinationText === "Battlefield") {
+				if (
+					libraryPosition !== undefined ||
+					(gainControl !== undefined &&
+						gainControl !== "True" &&
+						gainControl !== "False") ||
+					(tapped !== undefined && tapped !== "True" && tapped !== "False")
+				)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"unsupported battlefield ChangeZone destination metadata",
+						where,
+					);
+				const controller =
+					gainControl === "True" ? parsePlayer("You") : "owner";
+				assert(controller !== null);
+				destination = {
+					zone: "battlefield",
+					controller,
+					...(tapped === "True" ? { tapped: true } : {}),
+				};
+			} else {
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"unsupported ChangeZone destination",
 					where,
 				);
 			}
 			const validTargets = getForgeParam(params, "ValidTgts");
 			const defined = getForgeParam(params, "Defined");
-			if (validTargets !== undefined) {
-				if (defined !== undefined)
+			let object: "source" | TargetSlotRef;
+			if (validTargets !== undefined || defined === "Targeted") {
+				if (defined !== undefined && defined !== "Targeted")
 					return issue(
 						"UNSUPPORTED_PARAMETER",
-						"targeted ChangeZone cannot also use Defined$",
+						"targeted ChangeZone cannot name a different Defined$ subject",
 						where,
 					);
-				return {
-					kind: "return to hand",
-					object: { targetSlot: TARGET_SLOT },
-				};
+				object = { targetSlot: TARGET_SLOT };
+			} else {
+				// Forge defaults an omitted Defined$ to the source object. Accept the
+				// explicit spelling too, but reject every other non-target subject.
+				if (!allowSourceObject || (defined !== undefined && defined !== "Self"))
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"unsupported Defined$ ChangeZone subject",
+						where,
+					);
+				object = "source";
 			}
-			// Forge defaults an omitted Defined$ to the source object. Accept the
-			// explicit spelling too, but reject every other non-target subject.
-			if (!allowSourceObject || (defined !== undefined && defined !== "Self"))
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"unsupported Defined$ ChangeZone subject",
-					where,
-				);
-			return { kind: "return to hand", object: "source" };
+			switch (origin) {
+				case "battlefield":
+					if (destination.zone === "battlefield")
+						return issue(
+							"UNSUPPORTED_PARAMETER",
+							"ChangeZone origin and destination must differ",
+							where,
+						);
+					return { kind: "change-zone", object, from: origin, destination };
+				case "graveyard":
+					if (destination.zone === "graveyard")
+						return issue(
+							"UNSUPPORTED_PARAMETER",
+							"ChangeZone origin and destination must differ",
+							where,
+						);
+					return { kind: "change-zone", object, from: origin, destination };
+				case "exile":
+					if (destination.zone === "exile")
+						return issue(
+							"UNSUPPORTED_PARAMETER",
+							"ChangeZone origin and destination must differ",
+							where,
+						);
+					return { kind: "change-zone", object, from: origin, destination };
+			}
+			throw new Error("unreachable ChangeZone origin");
 		}
 		case "putcounter": {
 			const badParams = checkParams(
@@ -2056,6 +2212,14 @@ function lowerTrigger(
 	// line, and the engine chooses them when the ability goes on the stack.
 	const targets = parseTarget(
 		getForgeParam(executeSVar.parsed.params, "ValidTgts"),
+		undefined,
+		getForgeParam(executeSVar.parsed.params, "DB") === "ChangeZone" &&
+			getForgeParam(executeSVar.parsed.params, "Origin") === "Graveyard"
+			? "graveyard"
+			: getForgeParam(executeSVar.parsed.params, "DB") === "ChangeZone" &&
+					getForgeParam(executeSVar.parsed.params, "Origin") === "Exile"
+				? "exile"
+				: undefined,
 	);
 	if (!targets)
 		return issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where);
@@ -3144,6 +3308,30 @@ export function lowerForgeCard(
 			continue;
 		}
 
+		let functionsFrom: [PublicObjectZone] | undefined;
+		if (disc.token === "AB") {
+			const activationZone = getForgeParam(params, "ActivationZone");
+			if (activationZone !== undefined) {
+				const zone: PublicObjectZone | null =
+					activationZone === "Battlefield"
+						? "battlefield"
+						: activationZone === "Graveyard"
+							? "graveyard"
+							: activationZone === "Exile"
+								? "exile"
+								: null;
+				if (!zone)
+					return reject(
+						issue(
+							"UNSUPPORTED_PARAMETER",
+							"ActivationZone$ must be Battlefield, Graveyard, or Exile",
+							where,
+						),
+					);
+				functionsFrom = [zone];
+			}
+		}
+
 		// A spell's `Cost$` restates the printed mana cost and then appends the
 		// additional costs. Only the appended part is new information, so the
 		// mana part is checked against `ManaCost:` rather than charged again.
@@ -3210,6 +3398,13 @@ export function lowerForgeCard(
 		const targets = parseTarget(
 			getForgeParam(params, "ValidTgts"),
 			getForgeParam(params, "TargetType"),
+			disc.api === "changezone" &&
+				getForgeParam(params, "Origin") === "Graveyard"
+				? "graveyard"
+				: disc.api === "changezone" &&
+						getForgeParam(params, "Origin") === "Exile"
+					? "exile"
+					: undefined,
 		);
 		if (!targets)
 			return reject(
@@ -3251,6 +3446,7 @@ export function lowerForgeCard(
 				id: `activated-${activatedCount}`,
 				text: description,
 				cost: activationCost,
+				...(functionsFrom ? { functionsFrom } : {}),
 				targets,
 				effects: chain.effects,
 			});
@@ -3354,15 +3550,31 @@ export function lowerForgeCard(
 	// the supported shape that gives it that reason.
 	const sacMe = lookupForgeSVar(face, "SacMe")?.parsed;
 	if (
-		triggers.some(
+		(triggers.some(
 			(trigger) =>
 				trigger.condition.kind === "change zone" &&
 				trigger.condition.from === "battlefield",
-		) &&
+		) ||
+			activatedAbilities.some(
+				(ability) =>
+					ability.kind === "activated" &&
+					ability.functionsFrom?.[0] === "graveyard",
+			)) &&
 		sacMe?.kind === "scalar" &&
 		/^[0-9]+$/.test(sacMe.value)
 	)
 		usedSVarNames.add("sacme");
+	const discardMe = lookupForgeSVar(face, "DiscardMe")?.parsed;
+	if (
+		activatedAbilities.some(
+			(ability) =>
+				ability.kind === "activated" &&
+				ability.functionsFrom?.[0] === "graveyard",
+		) &&
+		discardMe?.kind === "scalar" &&
+		/^[0-9]+$/.test(discardMe.value)
+	)
+		usedSVarNames.add("discardme");
 	const nonCombatPriority = lookupForgeSVar(face, "NonCombatPriority")?.parsed;
 	if (
 		activatedAbilities.length > 0 &&

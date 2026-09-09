@@ -77,6 +77,7 @@ registerRuntimeFixture("e/essence_warden", "rt-essence-warden");
 registerRuntimeFixture("w/wall_of_omens", "rt-wall-of-omens");
 registerRuntimeFixture("p/priest_of_ancient_lore", "rt-priest-of-ancient-lore");
 registerRuntimeFixture("a/arcanis_the_omnipotent", "rt-arcanis");
+registerRuntimeFixture("p/persistent_specimen", "rt-persistent-specimen");
 registerRuntimeFixture("a/ajanis_mantra", "rt-ajanis-mantra");
 registerRuntimeFixture("n/necrogen_mists", "rt-necrogen-mists");
 registerRuntimeFixture("n/network_disruptor", "rt-network-disruptor");
@@ -85,6 +86,10 @@ registerRuntimeFixture("s/sleight_of_hand", "rt-sleight-of-hand");
 registerRuntimeFixture("i/impulse", "rt-impulse");
 registerRuntimeFixture("s/stock_up", "rt-stock-up");
 registerRuntimeFixture("c/consider", "rt-consider");
+registerRuntimeFixture("c/cremate", "rt-cremate");
+registerRuntimeFixture("d/disentomb", "rt-disentomb");
+registerRuntimeFixture("r/reclaim", "rt-reclaim");
+registerRuntimeFixture("h/hymn_of_rebirth", "rt-hymn-of-rebirth");
 registerRuntimeFixture("v/village_rites", "rt-village-rites");
 registerRuntimeFixture("d/diabolic_edict", "rt-diabolic-edict");
 registerRuntimeFixture("d/dredge", "rt-dredge");
@@ -1349,6 +1354,112 @@ describe("forge-import runtime: spell effects", () => {
 		).toContain("Grizzly Bears");
 		expect(agents[ALICE].surveilChoices).toHaveLength(0);
 	});
+
+	test("Disentomb targets only a creature card its caster owns", () => {
+		const state = setupMain();
+		const own = spawnCard(state, "rt-grizzly-bears", ALICE, "graveyard");
+		const opposing = spawnCard(state, "rt-grizzly-bears", BOB, "graveyard");
+		const spell = spawnCard(state, "rt-disentomb", ALICE, "hand");
+		state.players[ALICE].manaPool.b = 1;
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "card", id: opposing.id });
+
+		expect(() =>
+			executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents),
+		).toThrow();
+		expect(state.players[ALICE].hand).toContain(spell.id);
+		expect(state.players[BOB].graveyard).toContain(opposing.id);
+
+		agents[ALICE].targetChoices.push({ type: "card", id: own.id });
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		settlePriority(state, agents);
+		expect(state.players[ALICE].graveyard).not.toContain(own.id);
+		expect(state.players[ALICE].hand.map((id) => name(state, id))).toContain(
+			"Grizzly Bears",
+		);
+	});
+
+	test("Cremate fizzles when its graveyard target becomes a new object", () => {
+		const state = setupMain();
+		const drawn = spawnCard(state, "forest", ALICE, "library");
+		const target = spawnCard(state, "rt-grizzly-bears", BOB, "graveyard");
+		const spell = spawnCard(state, "rt-cremate", ALICE, "hand");
+		state.players[ALICE].manaPool.b = 1;
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "card", id: target.id });
+
+		executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, agents);
+		perform(
+			state,
+			{
+				kind: "change zone",
+				object: target.id,
+				from: "graveyard",
+				destination: { zone: "exile" },
+				cause: "effect",
+			},
+			agents,
+		);
+		settlePriority(state, agents);
+
+		expect(state.players[ALICE].library).toContain(drawn.id);
+		expect(state.log.some((line) => line.includes("[illegal target]"))).toBe(
+			true,
+		);
+	});
+
+	test("Reclaim uses the top library position and Hymn of Rebirth uses its controller", () => {
+		const reclaimState = setupMain();
+		const reclaimed = spawnCard(
+			reclaimState,
+			"rt-grizzly-bears",
+			ALICE,
+			"graveyard",
+		);
+		const reclaim = spawnCard(reclaimState, "rt-reclaim", ALICE, "hand");
+		reclaimState.players[ALICE].manaPool.g = 1;
+		const reclaimAgents = passingAgents();
+		reclaimAgents[ALICE].targetChoices.push({
+			type: "card",
+			id: reclaimed.id,
+		});
+		executeCastAction(
+			reclaimState,
+			ALICE,
+			{ kind: "cast", card: reclaim.id },
+			reclaimAgents,
+		);
+		settlePriority(reclaimState, reclaimAgents);
+		const libraryTop = reclaimState.players[ALICE].library.at(-1);
+		if (libraryTop === undefined)
+			throw new Error("Reclaim left no library top");
+		expect(name(reclaimState, libraryTop)).toBe("Grizzly Bears");
+
+		const riseState = setupMain();
+		const risen = spawnCard(riseState, "rt-grizzly-bears", BOB, "graveyard");
+		const rise = spawnCard(riseState, "rt-hymn-of-rebirth", ALICE, "hand");
+		riseState.players[ALICE].manaPool.g = 1;
+		riseState.players[ALICE].manaPool.w = 1;
+		riseState.players[ALICE].manaPool.c = 3;
+		const riseAgents = passingAgents();
+		riseAgents[ALICE].targetChoices.push({ type: "card", id: risen.id });
+		executeCastAction(
+			riseState,
+			ALICE,
+			{ kind: "cast", card: rise.id },
+			riseAgents,
+		);
+		settlePriority(riseState, riseAgents);
+		const permanentId = riseState.battlefield.find(
+			(id) => name(riseState, id) === "Grizzly Bears",
+		);
+		if (permanentId === undefined)
+			throw new Error("Hymn of Rebirth returned no card");
+		expect(permanent(riseState, permanentId)).toMatchObject({
+			owner: BOB,
+			controller: ALICE,
+		});
+	});
 });
 
 describe("forge-import runtime: activated abilities", () => {
@@ -1387,6 +1498,51 @@ describe("forge-import runtime: activated abilities", () => {
 			"one card discarded, one drawn",
 		).toHaveLength(handBefore);
 		expect(state.players[ALICE].library).toHaveLength(libraryBefore - 1);
+	});
+
+	test("Persistent Specimen activates only from its owner's graveyard and returns tapped", () => {
+		const state = setupMain();
+		const specimen = spawnCard(
+			state,
+			"rt-persistent-specimen",
+			ALICE,
+			"graveyard",
+		);
+		const ability = abilityId("activated", "rt-persistent-specimen", 0);
+		state.players[ALICE].manaPool.b = 1;
+		state.players[ALICE].manaPool.c = 2;
+		const action = {
+			kind: "activate ability" as const,
+			source: specimen.id,
+			ability,
+		};
+
+		expect(getObservableActions(state, ALICE)).toContainEqual(action);
+		expect(getObservableActions(state, BOB)).not.toContainEqual(action);
+		executeAbilityAction(state, ALICE, action, passingAgents());
+		expect(state.players[ALICE].graveyard).toContain(specimen.id);
+		settlePriority(state, passingAgents());
+
+		const returned = state.battlefield.find(
+			(id) => name(state, id) === "Persistent Specimen",
+		);
+		if (returned === undefined) throw new Error("specimen did not return");
+		expect(permanent(state, returned)).toMatchObject({
+			controller: ALICE,
+			tapped: true,
+		});
+		expect(getObservableActions(state, ALICE)).not.toContainEqual({
+			...action,
+			source: returned,
+		});
+		expect(() =>
+			executeAbilityAction(
+				state,
+				ALICE,
+				{ ...action, source: returned },
+				passingAgents(),
+			),
+		).toThrow();
 	});
 
 	test("Arcanis's imported nontargeted ability returns its source to its owner's hand", () => {

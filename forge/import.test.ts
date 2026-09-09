@@ -282,7 +282,14 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.abilityDefinitions.activated[1]).toMatchObject({
 			cost: { mana: { n: 2, u: 2 }, tapSelf: false },
 			targets: [],
-			effects: [{ kind: "return to hand", object: "source" }],
+			effects: [
+				{
+					kind: "change-zone",
+					object: "source",
+					from: "battlefield",
+					destination: { zone: "hand" },
+				},
+			],
 		});
 	});
 
@@ -2234,31 +2241,103 @@ describe("lowerForgeCard: accepted card lowering", () => {
 	});
 });
 
-describe("lowerForgeCard: ChangeZone is limited to bounce", () => {
+describe("lowerForgeCard: one-object ChangeZone", () => {
 	const unsummon = cardText("u/unsummon");
 
-	const rejected = [
-		["a graveyard origin", "Origin$ Battlefield", "Origin$ Graveyard"],
-		[
-			"a battlefield destination",
-			"Destination$ Hand",
-			"Destination$ Battlefield",
-		],
-		["an exile destination", "Destination$ Hand", "Destination$ Exile"],
-		["a library destination", "Destination$ Hand", "Destination$ Library"],
-	] as const;
-
-	for (const [name, from, to] of rejected) {
-		test(`rejects ${name}`, () => {
-			expect(unsummon).toContain(from);
-			const result = importForgeCard(unsummon.replace(from, to), {
-				id: "mutated-unsummon",
-			});
-			expect(result.ok).toBe(false);
-			if (result.ok) return;
-			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	test("keeps a graveyard target distinct from a source object", () => {
+		const disentomb = importFixture("d/disentomb");
+		if (!disentomb.ok) throw new Error("expected Disentomb to import");
+		expect(disentomb.card.spell).toMatchObject({
+			targets: [
+				{
+					legal: {
+						kind: "card",
+						zone: "graveyard",
+						selector: {
+							kind: "all",
+							selectors: [
+								{ kind: "type", type: "creature" },
+								{ kind: "owner", player: "you" },
+							],
+						},
+					},
+				},
+			],
+			effects: [
+				{
+					kind: "change-zone",
+					object: { targetSlot: "target-1" },
+					from: "graveyard",
+					destination: { zone: "hand" },
+				},
+			],
 		});
-	}
+
+		const arcanis = importFixture("a/arcanis_the_omnipotent");
+		if (!arcanis.ok) throw new Error("expected Arcanis to import");
+		expect(arcanis.card.abilityDefinitions.activated[1]).toMatchObject({
+			targets: [],
+			effects: [{ kind: "change-zone", object: "source" }],
+		});
+	});
+
+	test("lowers public card targets and each symbolic destination shape", () => {
+		for (const [fixture, destination] of [
+			["c/cremate", { zone: "exile" }],
+			["r/reclaim", { zone: "library", position: "top" }],
+			["j/jade_cast_sentinel", { zone: "library", position: "bottom" }],
+			["r/rise_again", { zone: "battlefield", controller: "owner" }],
+		] as const) {
+			const result = importFixture(fixture);
+			if (!result.ok) throw new Error(`expected ${fixture} to import`);
+			const effects =
+				result.card.spell?.effects ??
+				result.card.abilityDefinitions.activated[0]?.effects;
+			expect(effects?.[0]).toMatchObject({
+				kind: "change-zone",
+				from: "graveyard",
+				destination,
+			});
+		}
+
+		const toGraveyard = importForgeCard(
+			unsummon.replace("Destination$ Hand", "Destination$ Graveyard"),
+			{ id: "put-in-graveyard" },
+		);
+		if (!toGraveyard.ok) throw new Error("expected graveyard destination");
+		expect(toGraveyard.card.spell?.effects[0]).toMatchObject({
+			kind: "change-zone",
+			from: "battlefield",
+			destination: { zone: "graveyard" },
+		});
+
+		const controlled = importFixture("h/hymn_of_rebirth");
+		if (!controlled.ok) throw new Error("expected controlled return");
+		expect(controlled.card.spell?.effects[0]).toMatchObject({
+			destination: { zone: "battlefield", controller: "you" },
+		});
+	});
+
+	test("lowers a graveyard activation and tapped battlefield arrival", () => {
+		const result = importFixture("p/persistent_specimen");
+		if (!result.ok) throw new Error("expected Persistent Specimen to import");
+		expect(result.card.abilityDefinitions.activated[0]).toMatchObject({
+			functionsFrom: ["graveyard"],
+			targets: [],
+			effects: [
+				{
+					kind: "change-zone",
+					object: "source",
+					from: "graveyard",
+					destination: {
+						zone: "battlefield",
+						controller: "owner",
+						tapped: true,
+					},
+				},
+			],
+		});
+	});
 
 	test("rejects a spell bounce with no declared target", () => {
 		const result = importForgeCard(
@@ -2280,7 +2359,7 @@ describe("lowerForgeCard: ChangeZone is limited to bounce", () => {
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
 	});
 
-	test("rejects a bounce with both a target and a defined subject", () => {
+	test("rejects a target with a different defined subject", () => {
 		const result = importForgeCard(
 			unsummon.replace(
 				"ValidTgts$ Creature",
@@ -2292,6 +2371,30 @@ describe("lowerForgeCard: ChangeZone is limited to bounce", () => {
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
 	});
+
+	for (const [name, mutation] of [
+		["a hidden origin", ["Origin$ Battlefield", "Origin$ Hand"]],
+		[
+			"the same origin and destination",
+			["Destination$ Hand", "Destination$ Battlefield"],
+		],
+		[
+			"multiple objects",
+			["SpellDescription$", "ChangeNum$ 2 | SpellDescription$"],
+		],
+		["a search selector", ["ValidTgts$ Creature", "ChangeType$ Creature"]],
+		["a shuffle", ["SpellDescription$", "Shuffle$ True | SpellDescription$"]],
+	] as const) {
+		test(`rejects ${name}`, () => {
+			const result = importForgeCard(
+				unsummon.replace(mutation[0], mutation[1]),
+				{ id: "mutated-unsummon" },
+			);
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+		});
+	}
 });
 
 describe("lowerForgeCard: strict Clone shape", () => {

@@ -115,11 +115,14 @@ rest on the bottom; the unmodified `Investigate` effect, which creates one
 canonical Clue token for the ability's controller; damage, destroy, counter,
 one-permanent sacrifice for a relative or targeted player, targeted or
 self-directed fixed counter placement (including Forge's omitted `Defined$`
-default for a nontargeted permanent ability), and return-to-hand effects; spells,
+default for a nontargeted permanent ability), and one-object zone changes from
+battlefield, graveyard, or exile to hand, graveyard, exile, the top or bottom
+of a library, or the battlefield; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, `Opponent`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
-`ValidTgts$` selector whose base is a card type, a subtype, `Card`, or
-`Permanent`, followed by `YouCtrl`, `OppCtrl`, or a color, card type, or
+public graveyard/exile card, or a `ValidTgts$` selector whose base is a card
+type, a subtype, `Card`, or `Permanent`, followed by `YouCtrl`, `OppCtrl`,
+`YouOwn`, `OppOwn`, or a color, card type, or
 supertype word that may carry Forge's `non` prefix; the exact target form
 `Creature.Other+YouCtrl` is also supported — so it and `Creature.nonBlack` lower, while
 `Creature.attacking` does not); simple self-entry,
@@ -137,11 +140,11 @@ and more).
 
 The engine's own selector vocabulary is wider than the spellings the bridge
 accepts: `ObjectSelectorDef` covers the source itself, card type, supertype,
-subtype, color, and controller, combined with all/any/not to any depth. A
+subtype, color, owner, and controller, combined with all/any/not to any depth. A
 hand-written card definition can use all of it.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 2,708 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 2,883 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
@@ -161,6 +164,7 @@ Normal progression through `advance()` currently supports:
 - fixed tap-for-mana abilities and mana pools;
 - casting from hand with mana already in the pool, including supported single-target instants and sorceries;
 - activated abilities with fixed generic/WUBRG mana, optional tap-self, and optional single-permanent sacrifice costs, with or without a target;
+- activated abilities that explicitly function from a public graveyard or exile zone, with that card's owner as the activator;
 - relative-player and targeted-player sacrifice effects in which that player chooses one matching permanent;
 - the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith), and targeted triggers (e.g. Flametongue Kavu, Manic Vandal);
 - declaring attackers, blockers, and two-player combat damage, including trample; and

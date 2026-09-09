@@ -94,12 +94,11 @@ describe("target selectors", () => {
 		const state = newGame();
 		const bears = spawnPermanent(state, "grizzly-bears", 0);
 		const swamp = spawnPermanent(state, "swamp", 1);
+		const ownedCard = spawnCard(state, "grizzly-bears", 0, "graveyard");
 		const mine = { controller: 0 as const, id: bears.id };
 
 		const matches = (selector: ObjectSelectorDef, id: ObjectId) => {
 			const snapshot = getSnapshot(createReadContext(state), id);
-			if (snapshot.kind !== "permanent")
-				throw new Error("expected a permanent");
 			return selectorMatches(selector, snapshot, mine);
 		};
 
@@ -123,6 +122,13 @@ describe("target selectors", () => {
 		);
 		expect(matches({ kind: "controller", player: "opponent" }, swamp.id)).toBe(
 			true,
+		);
+		expect(matches({ kind: "owner", player: "you" }, ownedCard.id)).toBe(true);
+		expect(matches({ kind: "owner", player: "opponent" }, ownedCard.id)).toBe(
+			false,
+		);
+		expect(matches({ kind: "controller", player: "you" }, ownedCard.id)).toBe(
+			false,
 		);
 		expect(
 			matches(

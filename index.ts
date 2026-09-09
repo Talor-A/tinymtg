@@ -61,6 +61,12 @@ const ALL_ZONES = [
 
 export type Zone = (typeof ALL_ZONES)[number];
 
+/** A zone whose objects are cards rather than permanents or spells. */
+export type CardZone = "library" | "hand" | "graveyard" | "exile";
+
+/** Public zones supported as origins by one-object effects. */
+export type PublicObjectZone = "battlefield" | "graveyard" | "exile";
+
 /* ------------------------------------------------------------------ *
  * Colors
  * ------------------------------------------------------------------ */
@@ -334,7 +340,7 @@ interface ObjectBase {
 
 interface CardObject extends ObjectBase {
 	kind: "card";
-	zone: "library" | "hand" | "graveyard" | "exile";
+	zone: CardZone;
 	controller?: never;
 
 	/** The card's underlying definition, unaffected by temporary copying.
@@ -438,10 +444,11 @@ function bagAfterRemoval<C extends PermanentCounter | PlayerCounter>(
  * TODO: this might be insufficient
  */
 export type PlayerRef = { type: "player"; player: PlayerId };
+export type CardRef = { type: "card"; id: ObjectId };
 export type PermanentRef = { type: "permanent"; id: ObjectId };
 export type SpellRef = { type: "spell"; id: ObjectId };
 export type DamageRecipientRef = PlayerRef | PermanentRef;
-export type EntityRef = PlayerRef | PermanentRef | SpellRef;
+export type EntityRef = PlayerRef | CardRef | PermanentRef | SpellRef;
 
 interface EventCommon {
 	/**
@@ -1003,7 +1010,7 @@ interface SnapshotBase {
 
 interface CardSnapshot extends SnapshotBase {
 	kind: "card";
-	zone: "library" | "hand" | "graveyard" | "exile";
+	zone: CardZone;
 	/** Stable printed identity; characteristics remain exclusively derived below. */
 	cardId: string;
 
@@ -2047,6 +2054,27 @@ export interface TargetSlotRef {
 	targetSlot: string;
 }
 
+/** A destination resolved only when a one-object zone change executes. */
+export type ZoneChangeEffectDestination<Player extends TriggerEffectPlayer> =
+	| { zone: "hand" }
+	| { zone: "graveyard" }
+	| { zone: "exile" }
+	| { zone: "library"; position: "top" | "bottom" }
+	| {
+			zone: "battlefield";
+			controller: "owner" | Player;
+			tapped?: boolean;
+	  };
+
+export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
+	[Origin in PublicObjectZone]: {
+		kind: "change-zone";
+		object: "source" | TargetSlotRef;
+		from: Origin;
+		destination: Exclude<ZoneChangeEffectDestination<Player>, { zone: Origin }>;
+	};
+}[PublicObjectZone];
+
 export type EffectDef<Player extends TriggerEffectPlayer> =
 	| {
 			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
@@ -2081,7 +2109,7 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			counter: PermanentCounter;
 			amount: number;
 	  }
-	| { kind: "return to hand"; object: "source" | TargetSlotRef }
+	| ZoneChangeEffectDef<Player>
 	| {
 			kind: "sacrifice";
 			/** A relative player, or the player bound to a target slot. */
@@ -2263,6 +2291,7 @@ export type ObjectSelectorDef =
 	| { kind: "supertype"; supertype: Supertype }
 	| { kind: "subtype"; subtype: string }
 	| { kind: "color"; color: Color }
+	| { kind: "owner"; player: "you" | "opponent" }
 	| { kind: "controller"; player: "you" | "opponent" }
 	| { kind: "all" | "any"; selectors: ObjectSelectorDef[] }
 	| { kind: "not"; selector: ObjectSelectorDef };
@@ -2275,6 +2304,12 @@ export interface TargetDef {
 	legal:
 		| { kind: "player"; player: ValidPlayer }
 		| { kind: "spell" }
+		| {
+				kind: "card";
+				/** Only public card zones can supply Magic targets in this slice. */
+				zone: Extract<CardZone, "graveyard" | "exile">;
+				selector?: ObjectSelectorDef;
+		  }
 		| {
 				kind: "permanent";
 				/** Omitted when every permanent is legal. */
@@ -2310,6 +2345,10 @@ export function selectorMatches(
 			return characteristics.subtypes.includes(selector.subtype);
 		case "color":
 			return characteristics.colors.includes(selector.color);
+		case "owner":
+			return selector.player === "you"
+				? object.owner === source.controller
+				: object.owner !== source.controller;
 		case "controller":
 			// An object with no controller matches neither "you" nor "opponent".
 			if (object.controller === null) return false;
@@ -2367,6 +2406,8 @@ interface ActivatedAbilityDefBase {
 
 export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
 	kind: "activated";
+	/** Defaults to the battlefield. Hidden zones cannot be activation origins. */
+	functionsFrom?: [PublicObjectZone];
 	targets: TargetDef[];
 	effects: EffectDef<RelativeEffectPlayer>[];
 }
@@ -6747,7 +6788,7 @@ function resolveEffects(
 			(effect.kind === "destroy" ||
 				effect.kind === "tap" ||
 				effect.kind === "untap" ||
-				effect.kind === "return to hand" ||
+				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
@@ -6833,15 +6874,40 @@ function resolveEffects(
 			);
 			continue;
 		}
-		if (effect.kind === "return to hand" && effect.object === "source") {
-			const self = maybePermanent(state, item.source);
-			if (!self) continue;
+		if (effect.kind === "change-zone") {
+			const ref = effect.object === "source" ? null : bound;
+			if (ref !== null)
+				assert(
+					ref.type === "permanent" || ref.type === "card",
+					"change-zone requires a bound object",
+				);
+			const id = ref === null ? item.source : ref.id;
+			const object = maybeObject(state, id);
+			// An instruction cannot move an object that has left its stated origin.
+			if (!object || object.zone !== effect.from) continue;
+			if (effect.from === "battlefield") {
+				assert(
+					object.kind === "permanent" &&
+						(ref === null || ref?.type === "permanent"),
+					"a battlefield change-zone subject must be a permanent",
+				);
+			} else {
+				assert(
+					object.kind === "card" && (ref === null || ref?.type === "card"),
+					"a nonbattlefield change-zone subject must be a card",
+				);
+			}
 			performIn(
 				state,
-				effectToEvent(state, item, effect, {
-					type: "permanent",
-					id: self.id,
-				}),
+				effectToEvent(
+					state,
+					item,
+					effect,
+					ref ??
+						(effect.from === "battlefield"
+							? { type: "permanent", id }
+							: { type: "card", id }),
+				),
 				choices,
 				scope,
 				0,
@@ -7067,19 +7133,36 @@ function effectToEvent(
 				amount: effect.amount,
 				source: item.source,
 			};
-		case "return to hand": {
+		case "change-zone": {
 			assert(
-				subject !== null && subject.type === "permanent",
-				"return to hand requires a permanent object",
+				subject !== null &&
+					"id" in subject &&
+					(effect.from === "battlefield"
+						? subject.type === "permanent"
+						: subject.type === "card"),
+				"change-zone subject type disagrees with its origin",
 			);
 			const object = state.objects.get(subject.id);
-			assertDefined(object);
+			assert(
+				object !== undefined && object.zone === effect.from,
+				"change-zone subject is not in its declared origin",
+			);
+			const destination: ZoneChangeDestination =
+				effect.destination.zone === "battlefield"
+					? {
+							zone: "battlefield",
+							controller:
+								effect.destination.controller === "owner"
+									? object.owner
+									: relativeEffectPlayer(item, effect.destination.controller),
+							...(effect.destination.tapped ? { tapped: true } : {}),
+						}
+					: { ...effect.destination };
 			return {
 				kind: "change zone",
-				from: "battlefield",
-				destination: { zone: "hand" },
-				cause: "resolve",
-				// CR 400.3: a card in a hand has an owner and no controller.
+				from: effect.from,
+				destination,
+				cause: "effect",
 				object: subject.id,
 			};
 		}
@@ -7268,7 +7351,7 @@ function requiredTargetDefinition(
 		if (
 			(effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
-				effect.kind === "return to hand" ||
+				effect.kind === "change-zone" ||
 				effect.kind === "add counters") &&
 			effect.object === "source"
 		)
@@ -7283,7 +7366,7 @@ function requiredTargetDefinition(
 			effect.kind !== "tap" &&
 			effect.kind !== "untap" &&
 			effect.kind !== "counter" &&
-			effect.kind !== "return to hand" &&
+			effect.kind !== "change-zone" &&
 			effect.kind !== "modify-pt" &&
 			effect.kind !== "grant-keyword" &&
 			effect.kind !== "add counters" &&
@@ -7314,7 +7397,7 @@ function requiredTargetDefinition(
 			(effect.kind === "destroy" ||
 				effect.kind === "tap" ||
 				effect.kind === "untap" ||
-				effect.kind === "return to hand" ||
+				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
@@ -7348,11 +7431,18 @@ function requiredTargetDefinition(
 		if (effect.kind === "counter") {
 			assert(target.legal.kind === "spell", "counter requires a spell target");
 		}
-		if (effect.kind === "return to hand") {
-			assert(
-				target.legal.kind === "permanent",
-				"return to hand requires a permanent target",
-			);
+		if (effect.kind === "change-zone") {
+			if (effect.from === "battlefield") {
+				assert(
+					target.legal.kind === "permanent",
+					"a battlefield change-zone effect requires a permanent target",
+				);
+			} else {
+				assert(
+					target.legal.kind === "card" && target.legal.zone === effect.from,
+					"a card change-zone effect requires a target in its origin",
+				);
+			}
 		}
 		if (effect.kind === "modify-pt") {
 			assert(
@@ -7433,8 +7523,22 @@ function isLegalTarget(
 		const snapshot = read.view.objects.get(target.id);
 		return snapshot?.kind === "spell";
 	}
+	if (target.type === "card") {
+		if (definition.legal.kind !== "card") return false;
+		const snapshot = read.view.objects.get(target.id);
+		return (
+			snapshot?.kind === "card" &&
+			snapshot.zone === definition.legal.zone &&
+			(definition.legal.selector === undefined ||
+				selectorMatches(definition.legal.selector, snapshot, {
+					controller: ctx.controller,
+					id: ctx.source,
+				}))
+		);
+	}
 	if (definition.legal.kind === "player" || definition.legal.kind === "spell")
 		return false;
+	if (definition.legal.kind === "card") return false;
 	const snapshot = read.view.objects.get(target.id);
 	// CR 608.2b: a target that left the zone it was targeted in is illegal, and
 	// the object that replaced it is a different object with a different id.
@@ -7470,6 +7574,14 @@ function legalTargets(
 		...read.state.battlefield.map(
 			(id): EntityRef => ({ type: "permanent", id }),
 		),
+		...(definition.legal.kind === "card"
+			? zoneList(read.state, definition.legal.zone, "any").flatMap(
+					(id): EntityRef[] => {
+						const snapshot = read.view.objects.get(id);
+						return snapshot?.kind === "card" ? [{ type: "card", id }] : [];
+					},
+				)
+			: []),
 	];
 	return candidates.filter((target) =>
 		isLegalTarget(read, definition, target, ctx),
@@ -7656,17 +7768,32 @@ function activatedAbilityActions(
 	if (currentStepKind(state) === "untap") return [];
 	if (currentStepKind(state) === "cleanup" && state.stack.length === 0)
 		return [];
-	return state.battlefield.flatMap((id) => {
-		const object = maybeObject(state, id);
-		if (object?.kind !== "permanent" || object.controller !== player) return [];
-		const snapshot = getSnapshot(read, id);
-		if (snapshot.kind !== "permanent") return [];
+	return [...state.objects.values()].flatMap((object) => {
+		if (
+			object.kind !== "permanent" &&
+			!(
+				object.kind === "card" &&
+				(object.zone === "graveyard" || object.zone === "exile")
+			)
+		)
+			return [];
+		const abilityController = controllerOf(object) ?? object.owner;
+		if (abilityController !== player) return [];
+		const snapshot = getSnapshot(read, object.id);
 		const actions: ActivateAbilityAction[] = [];
 		for (const ability of snapshot.currentCharacteristics.abilities.activated) {
 			const definition = getAbilityDefinition("activated", ability);
-			if (definition.cost.tapSelf && object.tapped) continue;
+			const functionsFrom =
+				definition.kind === "activated" ? definition.functionsFrom : undefined;
+			if (!functionsHere(functionsFrom, object.zone)) continue;
 			if (
 				definition.cost.tapSelf &&
+				(object.kind !== "permanent" || object.tapped)
+			)
+				continue;
+			if (
+				definition.cost.tapSelf &&
+				object.kind === "permanent" &&
 				object.summoningSick &&
 				snapshot.currentCharacteristics.types.includes("creature") &&
 				!snapshot.currentCharacteristics.keywords.includes("haste")
@@ -7680,7 +7807,7 @@ function activatedAbilityActions(
 				definition.cost.sacrifice &&
 				legalSacrifices(read, player, definition.cost.sacrifice.selector, {
 					controller: player,
-					source: id,
+					source: object.id,
 				}).length === 0
 			)
 				continue;
@@ -7695,12 +7822,14 @@ function activatedAbilityActions(
 				);
 				if (
 					target &&
-					legalTargets(read, target, { controller: player, source: id })
-						.length === 0
+					legalTargets(read, target, {
+						controller: player,
+						source: object.id,
+					}).length === 0
 				)
 					continue;
 			}
-			actions.push({ kind: "activate ability", source: id, ability });
+			actions.push({ kind: "activate ability", source: object.id, ability });
 		}
 		return actions;
 	});
@@ -7788,18 +7917,24 @@ function activateAbilityIn(
 	}
 
 	const object = maybeObject(state, action.source);
-	if (object?.kind !== "permanent" || object.zone !== "battlefield") {
+	if (
+		object?.kind !== "permanent" &&
+		!(
+			object?.kind === "card" &&
+			(object.zone === "graveyard" || object.zone === "exile")
+		)
+	) {
 		throw new IllegalAbilityActivationError(
-			`object ${action.source} is not a permanent on the battlefield`,
+			`object ${action.source} is not an ability source in a public supported zone`,
 		);
 	}
-	if (object.controller !== priorityPlayer) {
+	const abilityController = controllerOf(object) ?? object.owner;
+	if (abilityController !== priorityPlayer) {
 		throw new IllegalAbilityActivationError(
-			`P${priorityPlayer} does not control object ${action.source}`,
+			`P${priorityPlayer} does not control or own object ${action.source} in its current zone`,
 		);
 	}
 	const snapshot = getSnapshot(createReadContext(state), object.id);
-	assert(snapshot.kind === "permanent");
 	if (
 		!snapshot.currentCharacteristics.abilities.activated.includes(
 			action.ability,
@@ -7810,7 +7945,19 @@ function activateAbilityIn(
 		);
 	}
 	const ability = getAbilityDefinition("activated", action.ability);
+	const functionsFrom =
+		ability.kind === "activated" ? ability.functionsFrom : undefined;
+	if (!functionsHere(functionsFrom, object.zone)) {
+		throw new IllegalAbilityActivationError(
+			`ability ${action.ability} does not function from ${object.zone}`,
+		);
+	}
 	if (ability.cost.tapSelf) {
+		if (object.kind !== "permanent") {
+			throw new IllegalAbilityActivationError(
+				`object ${action.source} cannot pay a tap cost from ${object.zone}`,
+			);
+		}
 		if (object.tapped) {
 			throw new IllegalAbilityActivationError(
 				`object ${action.source} is already tapped`,
@@ -7953,7 +8100,7 @@ function activateAbilityIn(
 				effect.kind === "tap" ||
 				effect.kind === "untap" ||
 				effect.kind === "counter" ||
-				effect.kind === "return to hand" ||
+				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters" ||
