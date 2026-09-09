@@ -1163,6 +1163,49 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Lorescale Coatl lowers its Drawn trigger to the drawing player", () => {
+		const result = importFixture("l/lorescale_coatl");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigPutCounter",
+				text: expect.any(String),
+				condition: { kind: "draw", player: "you" },
+				targets: [],
+				effects: [
+					{
+						kind: "add counters",
+						object: "source",
+						counter: "+1/+1",
+						amount: 1,
+					},
+				],
+			},
+		]);
+	});
+
+	test("a Drawn trigger outside the battlefield is rejected", () => {
+		const result = importText(
+			`Name:Cellar Coatl\nManaCost:1 G U\nTypes:Creature Snake\nPT:2/2\nT:Mode$ Drawn | ValidCard$ Card.YouCtrl | TriggerZones$ Graveyard | Execute$ TrigPutCounter | TriggerDescription$ x\nSVar:TrigPutCounter:DB$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.message).toBe(
+			"only battlefield Drawn triggers are supported",
+		);
+	});
+
+	test("a Drawn trigger's unsupported ValidCard$ is rejected", () => {
+		const result = importText(
+			`Name:Picky Coatl\nManaCost:1 G U\nTypes:Creature Snake\nPT:2/2\nT:Mode$ Drawn | ValidCard$ Card.Land | TriggerZones$ Battlefield | Execute$ TrigPutCounter | TriggerDescription$ x\nSVar:TrigPutCounter:DB$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.message).toBe(
+			"unsupported Drawn ValidCard$ Card.Land",
+		);
+	});
+
 	test("Kambal maps SpellCast TriggeredActivator to the casting player", () => {
 		const result = importFixture("k/kambal_consul_of_allocation");
 		if (!result.ok) throw new Error("expected ok");

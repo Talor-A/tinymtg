@@ -122,6 +122,8 @@ registerRuntimeFixture("e/etched_familiar", "rt-etched-familiar");
 registerRuntimeFixture("t/thraben_inspector", "rt-thraben-inspector");
 registerRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter");
 registerRuntimeFixture("t/timberland_guide", "rt-timberland-guide");
+registerRuntimeFixture("l/lorescale_coatl", "rt-lorescale-coatl");
+registerRuntimeFixture("u/underworld_dreams", "rt-underworld-dreams");
 registerCardFixture("d/darksteel_relic");
 
 {
@@ -664,6 +666,52 @@ describe("forge-import runtime: triggers", () => {
 		expect(
 			getSnapshot(createReadContext(state), source.id).currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
+	});
+
+	test("Lorescale Coatl's imported Drawn trigger fires on its controller's draws only", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		stockLibraries(state);
+		beginFirstTurn(state, agents);
+		const coatl = spawnPermanent(state, "rt-lorescale-coatl", ALICE);
+
+		perform(state, { kind: "draw", player: BOB }, agents);
+		expect(
+			state.pendingTriggers,
+			"an opponent's draw is not this trigger's event",
+		).toHaveLength(0);
+
+		perform(state, { kind: "draw", player: ALICE }, agents);
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(
+			permanent(state, coatl.id).counters,
+			"trigger has not resolved yet",
+		).toEqual({});
+
+		settlePriority(state, agents);
+		expect(permanent(state, coatl.id).counters).toEqual({ "+1/+1": 1 });
+		expect(
+			getSnapshot(createReadContext(state), coatl.id).currentCharacteristics,
+		).toMatchObject({ power: 3, toughness: 3 });
+	});
+
+	test("Underworld Dreams damages the opponent whose draw triggered it", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		stockLibraries(state);
+		beginFirstTurn(state, agents);
+		spawnPermanent(state, "rt-underworld-dreams", ALICE);
+
+		perform(state, { kind: "draw", player: ALICE }, agents);
+		expect(
+			state.pendingTriggers,
+			"your own draw is not an opponent's draw",
+		).toHaveLength(0);
+
+		perform(state, { kind: "draw", player: BOB }, agents);
+		settlePriority(state, agents);
+		expect(state.players[ALICE].life).toBe(20);
+		expect(state.players[BOB].life).toBe(19);
 	});
 
 	test("Necrogen Mists makes the player whose upkeep began discard", () => {

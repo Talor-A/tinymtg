@@ -5,6 +5,7 @@ exports[`the accepted-card list matches its snapshot: accepted card names 1`] = 
 A-Elderleaf Mentor
 A-Glittermonger
 A-Midnight Assassin
+A-Queza, Augur of Agonies
 A-Rockslide Sorcerer
 A-Stimulus Package
 A.I.M. Bot
@@ -310,6 +311,7 @@ Brute Force
 Bull Cerodon
 Bulwark Giant
 Burglar Rat
+Burlfist Oak
 Burning Fields
 Burrog Banemaker
 Burrowing Razormaw
@@ -388,6 +390,7 @@ Civic Gardener
 Clarion Cathars
 Cleansing Screech
 Cliffhaven Sell-Sword
+Clinquant Skymage
 Cloaked Siren
 Clockwork Drawbridge
 Cloistered Telepath
@@ -756,6 +759,7 @@ Fan Bearer
 Fanatical Firebrand
 Fang of Shigeki
 Fangren Hunter
+Fate Unraveler
 Fateful Discovery
 Fateful End
 Fear of Lost Teeth
@@ -1106,6 +1110,7 @@ Hoodwink
 Hoof Skulkin
 Hop to It
 Hordeling Outburst
+Horizon Chimera
 Horizon Scholar
 Horn of Ramos
 Horned Turtle
@@ -1195,6 +1200,7 @@ Ithilien Kingfisher
 Izzet Cluestone
 Izzet Guildgate
 Izzet Signet
+Jace's Erasure
 Jace's Ingenuity
 Jaddi Offshoot
 Jade Mage
@@ -1357,6 +1363,7 @@ Lone Missionary
 Lonely Arroyo
 Looming Altisaur
 Lorehold Campus
+Lorescale Coatl
 Los Diablos Missile Base
 Lost Legion
 Lotus Guardian
@@ -1606,6 +1613,7 @@ Omenspeaker
 Ominous Asylum
 Omni-Cheese Pizza
 Onakke Ogre
+Oneirophage
 Onulet
 Onyx Goblet
 Opaline Unicorn
@@ -1719,6 +1727,7 @@ Prophetic Prism
 Prosperous Pirates
 Protector of Gondor
 Prowling Caracal
+Psychic Corrosion
 Pulse Tracker
 Puppet Conjurer
 Purple-Crystal Crab
@@ -1738,6 +1747,7 @@ Quaketusk Boar
 Quandrix Campus
 Queen's Bay Soldier
 Queen's Commission
+Queza, Augur of Agonies
 Quick Study
 Quicksilver Fisher
 Quicksilver, Pietro Maximoff
@@ -1775,6 +1785,7 @@ Rats of Rath
 Raucous Theater
 Ravaged Highlands
 Ravaging Horde
+Ravenhill Flock
 Ravenous Baboons
 Ravenous Baloth
 Ravenous Chupacabra
@@ -2318,6 +2329,7 @@ Tatyova, Benthic Druid
 Team Transmitter
 Teeming Dragonstorm
 Teferi's Protege
+Teferi's Tutelage
 Tel-Jilad Justice
 Tempest Drake
 Temple Acolyte
@@ -2472,6 +2484,7 @@ Underground Mortuary
 Underground Sea
 Undergrowth Leopard
 Undersea Invader
+Underworld Dreams
 Unexplained Disappearance
 Unfriendly Fire
 Unhallowed Phalanx
@@ -2711,4 +2724,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2708`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2721`;

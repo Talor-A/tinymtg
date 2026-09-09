@@ -327,6 +327,22 @@ function parseValidPlayer(value: string): ValidPlayer | null {
 	return null;
 }
 
+/**
+ * The player who drew, from a `Mode$ Drawn` trigger's `ValidCard$`.
+ *
+ * A card is only ever drawn from its owner's library into that same player's
+ * hand, so both the ownership and the control modifier name the drawer.
+ */
+function parseDrawnPlayer(value: string | undefined): ValidPlayer | null {
+	if (value === undefined) return null;
+	const trimmed = value.trim();
+	if (trimmed === "Card.YouCtrl" || trimmed === "Card.YouOwn") return "you";
+	if (trimmed === "Card.OppCtrl" || trimmed === "Card.OppOwn")
+		return "opponent";
+	if (trimmed === "Card") return "either";
+	return null;
+}
+
 function parseSelectorModifier(modifier: string): ObjectSelectorDef | null {
 	if (modifier === "Other") return { kind: "not", selector: { kind: "self" } };
 	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
@@ -2088,6 +2104,46 @@ function lowerTrigger(
 				id: execute,
 				text,
 				condition: { kind: "begin step", player, step: "upkeep" },
+				targets,
+				effects,
+			};
+		}
+		case "Drawn": {
+			const badParams = checkParams(
+				params,
+				new Set([
+					"mode",
+					"validcard",
+					"triggerzones",
+					"execute",
+					"optionaldecider",
+					"triggerdescription",
+				]),
+				where,
+			);
+			if (badParams) return badParams;
+			if (getForgeParam(params, "TriggerZones") !== "Battlefield")
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"only battlefield Drawn triggers are supported",
+					where,
+				);
+			// Forge matches the drawn card, but a card is only ever drawn from
+			// its owner's library into that same player's hand, so the card's
+			// controller and owner are both the player who drew it. The engine's
+			// draw trigger asks for that player directly.
+			const rawSelector = getForgeParam(params, "ValidCard");
+			const drawPlayer = parseDrawnPlayer(rawSelector);
+			if (drawPlayer === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					`unsupported Drawn ValidCard$ ${rawSelector}`,
+					where,
+				);
+			return {
+				id: execute,
+				text,
+				condition: { kind: "draw", player: drawPlayer },
 				targets,
 				effects,
 			};
