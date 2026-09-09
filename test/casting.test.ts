@@ -77,14 +77,14 @@ registerCard({
 // Synthetic: isolates a temporary permission for one already-exiled card.
 // It is not an implementation claim about a printed card.
 registerCard({
-	id: "test-may-cast-from-exile",
-	name: "Test May Cast From Exile",
+	id: "test-may-play-from-exile",
+	name: "Test May Play From Exile",
 	types: ["instant"],
 	colors: [],
 	manaCost: "zero",
 	spell: {
-		id: "test-may-cast-from-exile-spell",
-		text: "Until end of turn, you may cast target card from exile.",
+		id: "test-may-play-from-exile-spell",
+		text: "Until end of turn, you may play target card from exile.",
 		targets: [
 			{
 				id: "target-1",
@@ -95,7 +95,7 @@ registerCard({
 		],
 		effects: [
 			{
-				kind: "may-cast",
+				kind: "may-play",
 				object: { targetSlot: "target-1" },
 				from: "exile",
 				duration: "until-end-of-turn",
@@ -358,13 +358,13 @@ describe("cast actions offered at priority", () => {
 	});
 });
 
-describe("temporary permission to cast one card from exile", () => {
+describe("temporary permission to play one card from exile", () => {
 	test("the effect controller is offered and can cast the bound card", () => {
 		const state = setupMain();
 		const exiled = spawnCard(state, "test-free-instant", BOB, "exile");
 		const permission = spawnCard(
 			state,
-			"test-may-cast-from-exile",
+			"test-may-play-from-exile",
 			ALICE,
 			"hand",
 		);
@@ -401,7 +401,7 @@ describe("temporary permission to cast one card from exile", () => {
 		const exiled = spawnCard(state, "test-free-instant", ALICE, "exile");
 		const permission = spawnCard(
 			state,
-			"test-may-cast-from-exile",
+			"test-may-play-from-exile",
 			ALICE,
 			"hand",
 		);
@@ -450,7 +450,7 @@ describe("temporary permission to cast one card from exile", () => {
 		const exiled = spawnCard(state, "test-free-instant", ALICE, "exile");
 		const permission = spawnCard(
 			state,
-			"test-may-cast-from-exile",
+			"test-may-play-from-exile",
 			ALICE,
 			"hand",
 		);

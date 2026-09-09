@@ -16,7 +16,9 @@ import type {
 } from "../index.ts";
 import {
 	abilityId,
+	activePlayer,
 	advanceWithReplay,
+	executeCastAction,
 	executeLandAction,
 	getObservableActions,
 	IllegalLandPlayError,
@@ -24,8 +26,10 @@ import {
 	perform,
 	permanent,
 	registerCard,
+	settlePriority,
 	spawnCard,
 	spawnPermanent,
+	turnLocation,
 } from "../index.ts";
 import {
 	type SyncAgents as Agents,
@@ -82,8 +86,52 @@ registerCard({
 	],
 });
 
+// Synthetic: isolates the "may play" wording used by Wrenn's Resolve for one
+// already-exiled card. The duration here remains the engine's current
+// until-end-of-turn subset.
+registerCard({
+	id: "test-may-play-land-from-exile",
+	name: "Test May Play Land From Exile",
+	types: ["instant"],
+	colors: [],
+	manaCost: "zero",
+	spell: {
+		id: "test-may-play-land-from-exile-spell",
+		text: "Until end of turn, you may play target card from exile.",
+		targets: [
+			{
+				id: "target-1",
+				min: 1,
+				max: 1,
+				legal: { kind: "card", zone: "exile" },
+			},
+		],
+		effects: [
+			{
+				kind: "may-play",
+				object: { targetSlot: "target-1" },
+				from: "exile",
+				duration: "until-end-of-turn",
+			},
+		],
+	},
+});
+
 function landAction(card: ObjectId): PlayLandAction {
 	return { kind: "play land", card };
+}
+
+function expectAtomicLandRejection(
+	state: GameState,
+	player: PlayerId,
+	action: PriorityAction,
+): void {
+	if (action.kind !== "play land") throw new Error("expected land action");
+	const before = structuredClone(state);
+	expect(() =>
+		executeLandAction(state, player, action, passingAgents()),
+	).toThrow(IllegalLandPlayError);
+	expect(state).toEqual(before);
 }
 
 function occupyStack(state: GameState): void {
@@ -323,37 +371,184 @@ describe("playing a land through priority", () => {
 	});
 });
 
-describe("authoritative land-play rejection", () => {
-	function expectAtomicRejection(
-		state: GameState,
-		player: PlayerId,
-		action: PriorityAction,
-	): void {
-		if (action.kind !== "play land") throw new Error("expected land action");
-		const before = structuredClone(state);
-		expect(() =>
-			executeLandAction(state, player, action, passingAgents()),
-		).toThrow(IllegalLandPlayError);
-		expect(state).toEqual(before);
-	}
+describe("temporary permission to play one land from exile", () => {
+	test("offers and plays the bound land for the effect controller", () => {
+		const state = setupMain();
+		const exiled = spawnCard(state, "forest", BOB, "exile");
+		const permission = spawnCard(
+			state,
+			"test-may-play-land-from-exile",
+			ALICE,
+			"hand",
+		);
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
 
+		executeCastAction(
+			state,
+			ALICE,
+			{ kind: "cast", card: permission.id },
+			agents,
+		);
+		settlePriority(state, agents);
+
+		expect(getObservableActions(state, ALICE)).toContainEqual(
+			landAction(exiled.id),
+		);
+		executeLandAction(state, ALICE, landAction(exiled.id), passingAgents());
+
+		expect(state.objects.has(exiled.id)).toBe(false);
+		expect(state.players[BOB].exile).not.toContain(exiled.id);
+		expect(state.players[ALICE].landsPlayed).toBe(1);
+		const battlefieldLand = state.battlefield
+			.map((id) => permanent(state, id))
+			.find((object) => object.owner === BOB);
+		expect(battlefieldLand?.controller).toBe(ALICE);
+	});
+
+	test("applies only to the bound exile object", () => {
+		const state = setupMain();
+		const bound = spawnCard(state, "forest", ALICE, "exile");
+		const unbound = spawnCard(state, "forest", ALICE, "exile");
+		const permission = spawnCard(
+			state,
+			"test-may-play-land-from-exile",
+			ALICE,
+			"hand",
+		);
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "card", id: bound.id });
+		executeCastAction(
+			state,
+			ALICE,
+			{ kind: "cast", card: permission.id },
+			agents,
+		);
+		settlePriority(state, agents);
+
+		expect(getObservableActions(state, ALICE)).toContainEqual(
+			landAction(bound.id),
+		);
+		expect(getObservableActions(state, ALICE)).not.toContainEqual(
+			landAction(unbound.id),
+		);
+		expectAtomicLandRejection(state, ALICE, landAction(unbound.id));
+
+		const graveyard = perform(
+			state,
+			{
+				kind: "change zone",
+				object: bound.id,
+				from: "exile",
+				destination: { zone: "graveyard" },
+				cause: "effect",
+			},
+			passingAgents(),
+		);
+		const graveyardId = graveyard.created[0];
+		if (graveyardId === undefined) throw new Error("expected graveyard card");
+		const returned = perform(
+			state,
+			{
+				kind: "change zone",
+				object: graveyardId,
+				from: "graveyard",
+				destination: { zone: "exile" },
+				cause: "effect",
+			},
+			passingAgents(),
+		);
+		const returnedId = returned.created[0];
+		if (returnedId === undefined) throw new Error("expected exiled card");
+		expect(returnedId).not.toBe(bound.id);
+		expect(getObservableActions(state, ALICE)).not.toContainEqual(
+			landAction(returnedId),
+		);
+		expectAtomicLandRejection(state, ALICE, landAction(returnedId));
+	});
+
+	test("does not bypass the land-per-turn allowance", () => {
+		const state = setupMain();
+		const exiled = spawnCard(state, "forest", ALICE, "exile");
+		const permission = spawnCard(
+			state,
+			"test-may-play-land-from-exile",
+			ALICE,
+			"hand",
+		);
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
+		executeCastAction(
+			state,
+			ALICE,
+			{ kind: "cast", card: permission.id },
+			agents,
+		);
+		settlePriority(state, agents);
+		state.players[ALICE].landsPlayed = 1;
+
+		expect(getObservableActions(state, ALICE)).not.toContainEqual(
+			landAction(exiled.id),
+		);
+		expectAtomicLandRejection(state, ALICE, landAction(exiled.id));
+	});
+
+	test("expires during cleanup before the controller's next turn", () => {
+		const state = setupMain();
+		const exiled = spawnCard(state, "forest", ALICE, "exile");
+		const permission = spawnCard(
+			state,
+			"test-may-play-land-from-exile",
+			ALICE,
+			"hand",
+		);
+		const agents = passingAgents();
+		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
+		executeCastAction(
+			state,
+			ALICE,
+			{ kind: "cast", card: permission.id },
+			agents,
+		);
+		settlePriority(state, agents);
+		expect(getObservableActions(state, ALICE)).toContainEqual(
+			landAction(exiled.id),
+		);
+
+		const completedTurns = state.completedTurns;
+		advanceUntil(
+			state,
+			passingAgents(),
+			(next) =>
+				next.completedTurns >= completedTurns + 2 &&
+				activePlayer(next) === ALICE &&
+				turnLocation(next)?.kind === "mainPhase",
+		);
+		expect(getObservableActions(state, ALICE)).not.toContainEqual(
+			landAction(exiled.id),
+		);
+		expectAtomicLandRejection(state, ALICE, landAction(exiled.id));
+	});
+});
+
+describe("authoritative land-play rejection", () => {
 	test("rejects a second land, a nonland, and a stale or alternate-zone object", () => {
 		const secondState = setupMain();
 		const second = spawnCard(secondState, "forest", ALICE, "hand");
 		secondState.players[ALICE].landsPlayed = 1;
-		expectAtomicRejection(secondState, ALICE, landAction(second.id));
+		expectAtomicLandRejection(secondState, ALICE, landAction(second.id));
 
 		const nonlandState = setupMain();
 		const nonland = spawnCard(nonlandState, "grizzly-bears", ALICE, "hand");
-		expectAtomicRejection(nonlandState, ALICE, landAction(nonland.id));
+		expectAtomicLandRejection(nonlandState, ALICE, landAction(nonland.id));
 
 		for (const zone of ["library", "graveyard", "exile"] as const) {
 			const state = setupMain();
 			const land = spawnCard(state, "forest", ALICE, zone);
-			expectAtomicRejection(state, ALICE, landAction(land.id));
+			expectAtomicLandRejection(state, ALICE, landAction(land.id));
 		}
 		const staleState = setupMain();
-		expectAtomicRejection(staleState, ALICE, landAction(999 as ObjectId));
+		expectAtomicLandRejection(staleState, ALICE, landAction(999 as ObjectId));
 	});
 
 	test("accepts the additional land but atomically rejects one beyond the derived allowance", () => {
@@ -365,25 +560,25 @@ describe("authoritative land-play rejection", () => {
 		expect(state.players[ALICE].landsPlayed).toBe(2);
 
 		const third = spawnCard(state, "forest", ALICE, "hand");
-		expectAtomicRejection(state, ALICE, landAction(third.id));
+		expectAtomicLandRejection(state, ALICE, landAction(third.id));
 	});
 
 	test("rejects the opponent's hand, the nonactive player, non-main timing, and a nonempty stack", () => {
 		const opponentHand = setupMain();
 		const theirs = spawnCard(opponentHand, "forest", BOB, "hand");
-		expectAtomicRejection(opponentHand, ALICE, landAction(theirs.id));
+		expectAtomicLandRejection(opponentHand, ALICE, landAction(theirs.id));
 
 		const nonactive = setupMain();
 		const own = spawnCard(nonactive, "forest", BOB, "hand");
-		expectAtomicRejection(nonactive, BOB, landAction(own.id));
+		expectAtomicLandRejection(nonactive, BOB, landAction(own.id));
 
 		const outsideMain = newGame();
 		const early = spawnCard(outsideMain, "forest", ALICE, "hand");
-		expectAtomicRejection(outsideMain, ALICE, landAction(early.id));
+		expectAtomicLandRejection(outsideMain, ALICE, landAction(early.id));
 
 		const stacked = setupMain();
 		const blocked = spawnCard(stacked, "forest", ALICE, "hand");
 		occupyStack(stacked);
-		expectAtomicRejection(stacked, ALICE, landAction(blocked.id));
+		expectAtomicLandRejection(stacked, ALICE, landAction(blocked.id));
 	});
 });

@@ -1923,7 +1923,7 @@ export interface BoundProhibition {
  * A resolving spell or ability can create a continuous effect that is not an
  * ability of an object (CR 611.2). Keep its rules data directly in game state.
  * The discriminant says which rules consumer interprets it: the layer walk
- * handles characteristic changes, the action rules handle cast permissions,
+ * handles characteristic changes, the action rules handle play permissions,
  * and the replacement pipeline handles replacement and prevention effects.
  * ------------------------------------------------------------------ */
 
@@ -1972,7 +1972,7 @@ export type BuiltinTemporaryEffect =
  *
  * Which rules consumer reads it follows from the definition, not from a field
  * here: a characteristic-changing `EffectDef` is applied by the layer walk, and
- * a `may-cast` definition is read while offering and executing cast actions.
+ * a `may-play` definition is read while offering and executing actions.
  */
 export type TemporaryEffect = TemporaryEffectCommon & {
 	source: TemporaryEffectSource;
@@ -2141,8 +2141,8 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			duration: "until-end-of-turn";
 	  }
 	| {
-			kind: "may-cast";
-			/** The card in exile that this effect's controller may cast. */
+			kind: "may-play";
+			/** The card in exile that this effect's controller may play. */
 			object: TargetSlotRef;
 			from: "exile";
 			duration: "until-end-of-turn";
@@ -6687,7 +6687,7 @@ function resolveEffects(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
-				effect.kind === "may-cast" ||
+				effect.kind === "may-play" ||
 				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
@@ -6837,10 +6837,10 @@ function resolveEffects(
 			});
 			continue;
 		}
-		if (effect.kind === "may-cast") {
+		if (effect.kind === "may-play") {
 			assert(
 				bound?.type === "card",
-				"temporary cast permission requires a bound card target",
+				"temporary play permission requires a bound card target",
 			);
 			const object = maybeObject(state, bound.id);
 			// A preceding instruction can move a target after the spell or ability's
@@ -7089,9 +7089,9 @@ function effectToEvent(
 			throw new Error(
 				"temporary keyword effects resolve without creating an event",
 			);
-		case "may-cast":
+		case "may-play":
 			throw new Error(
-				"temporary cast permissions resolve without creating an event",
+				"temporary play permissions resolve without creating an event",
 			);
 		case "add-mana":
 			return {
@@ -7286,7 +7286,7 @@ function requiredTargetDefinition(
 			effect.kind !== "change-zone" &&
 			effect.kind !== "modify-pt" &&
 			effect.kind !== "grant-keyword" &&
-			effect.kind !== "may-cast" &&
+			effect.kind !== "may-play" &&
 			effect.kind !== "add counters" &&
 			effect.kind !== "sacrifice" &&
 			effect.kind !== "gain-life" &&
@@ -7318,7 +7318,7 @@ function requiredTargetDefinition(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
-				effect.kind === "may-cast" ||
+				effect.kind === "may-play" ||
 				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
@@ -7375,10 +7375,10 @@ function requiredTargetDefinition(
 				"temporary keyword grant requires a permanent target",
 			);
 		}
-		if (effect.kind === "may-cast") {
+		if (effect.kind === "may-play") {
 			assert(
 				target.legal.kind === "card" && target.legal.zone === effect.from,
-				"temporary cast permission requires a card target in its origin",
+				"temporary play permission requires a card target in its origin",
 			);
 		}
 		if (effect.kind === "add counters") {
@@ -7537,11 +7537,12 @@ function legalSacrifices(
  * ------------------------------------------------------------------ */
 
 /**
- * Whether the rules currently permit `player` to cast this exact card object
- * from its current zone. A zone change creates a new object id, so a temporary
- * permission cannot follow a card that leaves exile and later returns.
+ * Whether the rules currently permit `player` to play this exact card object
+ * from its current zone. "Play" covers casting a spell or playing a land. A
+ * zone change creates a new object id, so a temporary permission cannot follow
+ * a card that leaves exile and later returns.
  */
-function hasCastPermission(
+function hasPlayPermission(
 	read: ReadContext,
 	player: PlayerId,
 	object: DeepReadOnly<CardObject>,
@@ -7556,12 +7557,12 @@ function hasCastPermission(
 	for (const temporary of read.state.temporaryEffects) {
 		if (temporary.controller !== player) continue;
 		const definition = temporaryEffectDefinition(temporary);
-		if (definition?.kind !== "may-cast") continue;
+		if (definition?.kind !== "may-play") continue;
 		assert(definition.from === "exile");
 		const subject = temporary.bindings[definition.object.targetSlot];
 		assert(
 			subject?.type === "card",
-			"temporary cast permission has no bound card",
+			"temporary play permission has no bound card",
 		);
 		if (subject.id === object.id) return true;
 	}
@@ -7582,7 +7583,7 @@ function canCast(
 ): boolean {
 	// TODO: this is simplified and does not account for alternative costs.
 	assert(object.kind === "card");
-	if (!hasCastPermission(read, player, object)) return false;
+	if (!hasPlayPermission(read, player, object)) return false;
 
 	const snapshot = getSnapshot(read, object.id);
 	assert(snapshot.kind === "card");
@@ -7794,9 +7795,15 @@ export function getObservableActions(
 	const actions: PriorityAction[] = [{ kind: "pass" }];
 	const read = createReadContext(state);
 	if (canPlayOrdinaryLand(state, read, player)) {
-		for (const id of state.players[player].hand) {
+		const candidates = [
+			...state.players[player].hand,
+			...state.players[0].exile,
+			...state.players[1].exile,
+		];
+		for (const id of candidates) {
 			const object = maybeObject(state, id);
-			if (object?.kind !== "card" || object.zone !== "hand") continue;
+			if (object?.kind !== "card" || !hasPlayPermission(read, player, object))
+				continue;
 			const snapshot = getSnapshot(read, id);
 			if (
 				snapshot.kind === "card" &&
@@ -8054,7 +8061,7 @@ function activateAbilityIn(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
-				effect.kind === "may-cast" ||
+				effect.kind === "may-play" ||
 				effect.kind === "add counters" ||
 				effect.kind === "sacrifice" ||
 				effect.kind === "create-token"
@@ -8314,7 +8321,7 @@ function castSpellIn(
 	}
 
 	const read = createReadContext(state);
-	if (!hasCastPermission(read, priorityPlayer, object)) {
+	if (!hasPlayPermission(read, priorityPlayer, object)) {
 		throw new IllegalCastError(
 			`P${priorityPlayer} has no permission to cast object ${action.card} from ${object.zone}`,
 		);
@@ -8595,15 +8602,17 @@ function playLandIn(
 	}
 
 	const object = maybeObject(state, action.card);
-	if (
-		object?.kind !== "card" ||
-		object.zone !== "hand" ||
-		!state.players[priorityPlayer].hand.includes(action.card)
-	) {
+	if (object?.kind !== "card") {
 		throw new IllegalLandPlayError(
-			`object ${action.card} is not in P${priorityPlayer}'s hand`,
+			`object ${action.card} is not a card P${priorityPlayer} can play`,
 		);
 	}
+	if (!hasPlayPermission(read, priorityPlayer, object)) {
+		throw new IllegalLandPlayError(
+			`P${priorityPlayer} has no permission to play object ${action.card} from ${object.zone}`,
+		);
+	}
+	const origin = object.zone;
 	const snapshot = getSnapshot(read, action.card);
 	if (
 		snapshot.kind !== "card" ||
@@ -8617,7 +8626,7 @@ function playLandIn(
 		{
 			kind: "change zone",
 			object: action.card,
-			from: "hand",
+			from: origin,
 			destination: { zone: "battlefield", controller: priorityPlayer },
 			cause: "play land",
 		},
