@@ -1902,6 +1902,14 @@ export interface ProhibitionDef {
 	applies(ev: GameEvent, ctx: ProhibitionCtx): boolean;
 }
 
+/** CR 702.12b: a permanent with indestructible can't be destroyed. */
+const INDESTRUCTIBLE_PROHIBITION: ProhibitionDef = {
+	label: "keyword:indestructible",
+	text: "This permanent can't be destroyed.",
+	applies: (event, ctx) =>
+		event.kind === "destroy" && event.object === ctx.self?.id,
+};
+
 /**
  * @see {ReplacementEffectDefinition}.
  */
@@ -4369,16 +4377,7 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 			snapshot.kind === "permanent" &&
 			snapshot.currentCharacteristics.keywords.includes("indestructible");
 		const definitions: ProhibitionDef[] = [
-			...(indestructible
-				? [
-						{
-							label: "keyword:indestructible",
-							text: "This permanent can't be destroyed.",
-							applies: (event: GameEvent, ctx: ProhibitionCtx) =>
-								event.kind === "destroy" && event.object === ctx.self?.id,
-						},
-					]
-				: []),
+			...(indestructible ? [INDESTRUCTIBLE_PROHIBITION] : []),
 			...abilityReferencesOf(read.view, object).prohibition.map((id) =>
 				getAbilityDefinition("prohibition", id),
 			),
