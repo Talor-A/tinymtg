@@ -167,6 +167,7 @@ Azure Drake
 Azure Mage
 Azusa, Lost but Seeking
 Badlands
+Bake into a Pie
 Balduvian Barbarians
 Balduvian Bears
 Baleful Strix
@@ -384,6 +385,7 @@ Chronomaton
 Cinder Barrens
 Cinder Hellion
 Cinder Storm
+Cirith Ungol Patrol
 Citanul Druid
 Citywatch Sphinx
 Civic Gardener
@@ -483,6 +485,7 @@ Crystal Ball
 Crystal Grotto
 Crystal Quarry
 Crystal Vein
+Cunning Maneuver
 Cunning Sparkmage
 Curate
 Curio Vendor
@@ -654,6 +657,7 @@ Dwarven Ruins
 Dwarven Trader
 Eager Cadet
 Eager Glyphmage
+Eager Trufflesnout
 Eagle of the Watch
 Earth Elemental
 Earth Surge
@@ -784,6 +788,7 @@ Festering Gulch
 Fetid Horror
 Field Creeper
 Fields of Strife
+Fierce Witchstalker
 Fiery Conclusion
 Fiery Finish
 Fighting Drake
@@ -839,6 +844,7 @@ Foot Headquarters
 Foot Soldiers
 Foratog
 Force of Savagery
+Forecasting Fortune Teller
 Foresee
 Forest
 Forest Bear
@@ -913,6 +919,7 @@ Gideon's Lawkeeper
 Gifted Aetherborn
 Gigantosaurus
 Gilacorn
+Gilded Goose
 Gilded Sentinel
 Gin'tak Charge
 Glacial Floodplain
@@ -1458,6 +1465,7 @@ Mind Stone
 Mindeye Drake
 Minotaur Abomination
 Minotaur Warrior
+Mintstrosity
 Mire Triton
 Mire in Misery
 Mirran Spy
@@ -1947,6 +1955,7 @@ Scorching Spear
 Scoria Elemental
 Scoured Barrens
 Scrap Compactor
+Scream Puff
 Screaming Phantom
 Screeching Buzzard
 Screeching Drake
@@ -2123,6 +2132,7 @@ Snow-Covered Swamp
 Snow-Covered Wastes
 Snowfield Sinkhole
 Soaring Drake
+Sokka's Sword Training
 Sokka, Wolf Cove's Protector
 Sol Ring
 Solemn Offering
@@ -2285,6 +2295,7 @@ Survey the Wreckage
 Svyelunite Temple
 Swab Goblin
 Swamp
+Sweettooth Witch
 Swift Spinner
 Swiftwater Cliffs
 Swooping Lookout
@@ -2344,6 +2355,7 @@ Temple of Plenty
 Temple of Silence
 Temple of Triumph
 Temporal Adept
+Tempting Witch
 Temur Banner
 Tenement Crasher
 Tenth District Veteran
@@ -2554,6 +2566,7 @@ Vigilante Justice
 Village Rites
 Vindicate
 Vine Trellis
+Vinereap Mentor
 Viridescent Bog
 Viridian Acolyte
 Viridian Shaman
@@ -2724,4 +2737,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2721`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2734`;

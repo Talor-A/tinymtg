@@ -1567,6 +1567,64 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Sweettooth Witch hosts its Food token's non-mana ability", () => {
+		const result = importFixture("s/sweettooth_witch");
+		if (!result.ok) throw new Error("expected Sweettooth Witch to import");
+
+		// Index 0 is the Food's hosted ability and index 1 the Witch's own, so
+		// only the latter is printed on the Witch itself.
+		expect(result.card.printedAbilities.activated.map(String)).toEqual([
+			"sweettooth-witch:1",
+		]);
+		expect(result.card.abilityDefinitions.activated[0]).toEqual({
+			kind: "activated",
+			id: "activated-1",
+			text: "You gain 3 life.",
+			cost: {
+				mana: { n: 2 },
+				tapSelf: true,
+				sacrifice: { selector: { kind: "self" }, amount: 1 },
+			},
+			targets: [],
+			effects: [{ kind: "gain-life", player: "you", amount: 3 }],
+		});
+		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+			{
+				kind: "create-token",
+				controller: "you",
+				amount: 1,
+				characteristics: expect.objectContaining({
+					name: "Food Token",
+					types: ["artifact"],
+					subtypes: ["Food"],
+					abilities: expect.objectContaining({
+						activated: ["sweettooth-witch:0"],
+					}),
+				}),
+			},
+		]);
+	});
+
+	test("a token script's triggered ability still has no host to lower onto", () => {
+		const result = importText(
+			[
+				"Name:Bad Token Maker",
+				"ManaCost:1 G",
+				"Types:Creature Human",
+				"PT:1/1",
+				"T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigToken | TriggerDescription$ x",
+				"SVar:TrigToken:DB$ Token | TokenScript$ bg_1_1_pest_lifegain | TokenOwner$ You",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.message).toBe(
+			"Forge token script bg_1_1_pest_lifegain has unsupported abilities",
+		);
+	});
+
 	test("Soulmender lowers to a targetless tap-for-life-gain activated ability", () => {
 		const result = importFixture("s/soulmender");
 		if (!result.ok) throw new Error("expected ok");

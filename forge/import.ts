@@ -644,15 +644,17 @@ function fixedTokenCharacteristics(
 				.join("; ")}`,
 			where,
 		);
+	// Activated abilities lower onto the creating card below, so a token
+	// script may carry any of them, mana or not: Treasure's mana ability and
+	// Food's "{2}, {T}, Sacrifice this token: You gain 3 life" host the same
+	// way. Every other ability kind still needs the token itself to own it,
+	// which the host has no way to express.
 	if (
 		imported.card.spell ||
 		imported.card.printedAbilities.static.length > 0 ||
 		imported.card.printedAbilities.triggered.length > 0 ||
 		imported.card.printedAbilities.replacement.length > 0 ||
-		imported.card.printedAbilities.prohibition.length > 0 ||
-		imported.card.abilityDefinitions.activated.some(
-			(ability) => ability.kind !== "mana",
-		)
+		imported.card.printedAbilities.prohibition.length > 0
 	)
 		return issue(
 			"UNSUPPORTED_EFFECT",

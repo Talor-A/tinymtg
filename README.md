@@ -91,9 +91,10 @@ are synthesized from subtype (Forge omits explicit `A:` lines for those); mana
 abilities producing fixed mana, including colorless (`Produced$ C`, e.g.
 Wastes), modal one-mana choices between two or more distinct fixed symbols
 (`Produced$ Combo U R`, e.g. Temple of Epiphany), and the five colored choices
-encoded by `Produced$ Any`; token scripts with supported mana abilities are
-rehosted on the importing card so created tokens retain executable abilities
-without mutating the registry during import; activated abilities whose
+encoded by `Produced$ Any`; token scripts with supported activated
+abilities, mana (Treasure) or not (Food), are rehosted on the importing card
+so created tokens retain executable abilities without mutating the registry
+during import; activated abilities whose
 costs contain fixed generic/WUBRG mana,
 optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional
 single-permanent sacrifice, including `Creature.Other` to exclude the source,
@@ -114,7 +115,7 @@ activated abilities, and triggered abilities with at most one required target
 supertype word that may carry Forge's `non` prefix; the exact target form
 `Creature.Other+YouCtrl` is also supported — so it and `Creature.nonBlack` lower, while
 `Creature.attacking` does not); simple self-entry,
-upkeep, and self-attack triggers, including one optional (`may`) wrapper around
+upkeep, self-attack, and card-drawn triggers, including one optional (`may`) wrapper around
 a trigger's whole (possibly multi-step) effect sequence; fixed temporary P/T
 changes; temporary `KW$ Indestructible` grants; and fixed controlled-creature
 P/T statics. See the acceptance matrix in `forge/import.test.ts` for the exact
