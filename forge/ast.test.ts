@@ -369,10 +369,10 @@ describe("condition references", () => {
 		const cond = result.card.graph.edges.find((e) => e.role === "condition");
 		expect(cond?.rawReference).toBe("X");
 		expect(cond?.status).toBe("resolved");
-		// The condition points at a *scalar* SVar, which is a legitimate target.
-		const target = result.card.graph.nodes.find((n) => n.id === cond?.to);
-		expect(target?.kind).toBe("svar");
-		expect(target?.name).toBe("X");
+		// The condition points at a *scalar* SVar, which is a legitimate destination.
+		const destination = result.card.graph.nodes.find((n) => n.id === cond?.to);
+		expect(destination?.kind).toBe("svar");
+		expect(destination?.name).toBe("X");
 	});
 
 	test("emit nothing at all for a literal amount", () => {
@@ -408,7 +408,7 @@ describe("condition references", () => {
 		expect(roles).toEqual(["condition:WasCast", "branch:DBYes", "branch:DBNo"]);
 	});
 
-	test("write-target params produce typed write edges, not reads", () => {
+	test("write-destination params produce typed write edges, not reads", () => {
 		const result = parseForgeCardScript(
 			[
 				"Name:Writer",
@@ -799,9 +799,9 @@ describe("reference graph", () => {
 		const edge = graph.edges.find((e) => e.role === "sub-ability");
 		expect(edge?.status).toBe("resolved");
 		expect(edge?.rawReference).toBe("DBDamage");
-		const target = graph.nodes.find((n) => n.id === edge?.to);
-		expect(target?.kind).toBe("svar");
-		expect(target?.name).toBe("DBDamage");
+		const destination = graph.nodes.find((n) => n.id === edge?.to);
+		expect(destination?.kind).toBe("svar");
+		expect(destination?.name).toBe("DBDamage");
 	});
 
 	test("shares one SVar definition between two referencing records", () => {
@@ -1836,7 +1836,7 @@ describe("unmodeled reference detection", () => {
 		expect(findUnmodeledReferenceCandidates(result.card)).toEqual([]);
 	});
 
-	test("cannot see Count$ expressions or runtime write targets", () => {
+	test("cannot see Count$ expressions or runtime write destinations", () => {
 		// Count$Compare embeds an SVar name inside a mini-expression grammar, and
 		// ResultSVar$ names an SVar that has no definition line at all. Neither is
 		// detectable by name matching, so neither is counted.

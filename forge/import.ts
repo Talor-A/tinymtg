@@ -2094,7 +2094,7 @@ function lowerTrigger(
 				condition: {
 					kind: "damage",
 					source: "self",
-					target: "player",
+					recipient: "player",
 					combat: true,
 				},
 				targets,

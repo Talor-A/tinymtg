@@ -287,18 +287,20 @@ describe("derived game views", () => {
 
 	test("the forced-copy fixture retains a layer-1 snapshot after the source effect leaves", () => {
 		const state = newGame();
-		const target = spawnPermanent(state, "grizzly-bears", P1);
+		const creatureToCopy = spawnPermanent(state, "grizzly-bears", P1);
 		const source = spawnPermanent(state, LAYER_ONE_SOURCE.id, P1);
 
 		const beforeCopy = createReadContext(state);
-		const modifiedTarget = getSnapshot(beforeCopy, target.id);
-		if (modifiedTarget.kind !== "permanent")
+		const modifiedCreature = getSnapshot(beforeCopy, creatureToCopy.id);
+		if (modifiedCreature.kind !== "permanent")
 			throw new Error("expected a permanent");
-		expect(modifiedTarget.copiableValues.name).toBe("Layer-One Grizzly Bears");
-		expect(modifiedTarget.currentCharacteristics.name).toBe(
+		expect(modifiedCreature.copiableValues.name).toBe(
 			"Layer-One Grizzly Bears",
 		);
-		const captured = structuredClone(modifiedTarget.copiableValues);
+		expect(modifiedCreature.currentCharacteristics.name).toBe(
+			"Layer-One Grizzly Bears",
+		);
+		const captured = structuredClone(modifiedCreature.copiableValues);
 
 		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
 		const entered = perform(
@@ -329,15 +331,15 @@ describe("derived game views", () => {
 		);
 
 		const afterSourceLeaves = createReadContext(state);
-		const revertedTarget = getSnapshot(afterSourceLeaves, target.id);
+		const revertedCreature = getSnapshot(afterSourceLeaves, creatureToCopy.id);
 		const retainedCopy = getSnapshot(afterSourceLeaves, entered);
 		if (
-			revertedTarget.kind !== "permanent" ||
+			revertedCreature.kind !== "permanent" ||
 			retainedCopy.kind !== "permanent"
 		)
 			throw new Error("expected permanents");
-		expect(revertedTarget.copiableValues.name).toBe("Grizzly Bears");
-		expect(revertedTarget.currentCharacteristics.name).toBe("Grizzly Bears");
+		expect(revertedCreature.copiableValues.name).toBe("Grizzly Bears");
+		expect(revertedCreature.currentCharacteristics.name).toBe("Grizzly Bears");
 		expect(retainedCopy.copiableValues).toEqual(captured);
 		expect(retainedCopy.currentCharacteristics.name).toBe(
 			"Layer-One Grizzly Bears",
@@ -362,7 +364,7 @@ describe("derived game views", () => {
 			state,
 			{
 				kind: "add counters",
-				target: { type: "permanent", id: bears.id },
+				permanent: { type: "permanent", id: bears.id },
 				counter: "+1/+1",
 				amount: 1,
 			},
@@ -629,8 +631,7 @@ registerCard({
 				ctx.self?.zone === "battlefield" &&
 				ev.kind === "add counters" &&
 				ev.counter === "+1/+1" &&
-				ev.target.type === "permanent" &&
-				ev.target.id === ctx.self.id,
+				ev.permanent.id === ctx.self.id,
 			replace: (ev) =>
 				ev.kind === "add counters" ? [{ ...ev, amount: ev.amount + 1 }] : [ev],
 		},
@@ -880,7 +881,7 @@ describe("granted replacements and prohibitions resolve through references", () 
 			state,
 			{
 				kind: "add counters",
-				target: { type: "permanent", id: bears.id },
+				permanent: { type: "permanent", id: bears.id },
 				counter: "+1/+1",
 				amount: 1,
 			},
@@ -905,7 +906,7 @@ describe("granted replacements and prohibitions resolve through references", () 
 			state,
 			{
 				kind: "add counters",
-				target: { type: "permanent", id: bears.id },
+				permanent: { type: "permanent", id: bears.id },
 				counter: "+1/+1",
 				amount: 1,
 			},

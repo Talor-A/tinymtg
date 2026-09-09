@@ -120,16 +120,16 @@ registerCard({
 				ev.destination.copiableOverride === undefined &&
 				firstCreature(ctx.read) !== null,
 			replace(ev, ctx) {
-				const target = firstCreature(ctx.read);
+				const creatureToCopy = firstCreature(ctx.read);
 				return ev.kind === "change zone" &&
 					ev.destination.zone === "battlefield" &&
-					target
+					creatureToCopy
 					? [
 							{
 								...ev,
 								destination: {
 									...ev.destination,
-									copiableOverride: cloneCharacteristics(target),
+									copiableOverride: cloneCharacteristics(creatureToCopy),
 								},
 							},
 						]
@@ -151,7 +151,7 @@ function firstCreature(read: ReadContext): CharacteristicsSnapshot | null {
 	return null;
 }
 
-/** A vanilla body used as a copy target that contributes no entry effects. */
+/** A vanilla body used as a copy source that contributes no entry effects. */
 registerCard({
 	id: "test-plain-bear",
 	name: "Plain Bear",
@@ -324,7 +324,7 @@ describe("copied enter-the-battlefield replacements", () => {
 			false,
 		);
 
-		// Without a copy target it keeps its own printed entry ability.
+		// Without a creature to copy it keeps its own printed entry ability.
 		const alone = newGame();
 		const solo = spawnCard(alone, MIMIC, P1, "hand");
 		expect(permanent(alone, enter(alone, solo.id)).tapped).toBe(true);

@@ -949,7 +949,7 @@ describe("dealing combat damage", () => {
 			state,
 			{
 				...damage,
-				target: { type: "player", player: BOB },
+				recipient: { type: "player", player: BOB },
 				combat: false,
 			},
 			agents,
@@ -958,7 +958,7 @@ describe("dealing combat damage", () => {
 			state,
 			{
 				...damage,
-				target: { type: "permanent", id: creature.id },
+				recipient: { type: "permanent", id: creature.id },
 				combat: true,
 			},
 			agents,

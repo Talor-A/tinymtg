@@ -361,7 +361,7 @@ function bagAfterRemoval<C extends PermanentCounter | PlayerCounter>(
 export type PlayerRef = { type: "player"; player: PlayerId };
 export type PermanentRef = { type: "permanent"; id: ObjectId };
 export type SpellRef = { type: "spell"; id: ObjectId };
-export type DamageTargetRef = PlayerRef | PermanentRef;
+export type DamageRecipientRef = PlayerRef | PermanentRef;
 export type EntityRef = PlayerRef | PermanentRef | SpellRef;
 
 interface EventCommon {
@@ -483,7 +483,7 @@ interface DamageEvent extends EventCommon {
 	source: ObjectId;
 	sourceController: PlayerId;
 	sourceColors: Color[];
-	target: DamageTargetRef;
+	recipient: DamageRecipientRef;
 	amount: number;
 	combat: boolean;
 	deathtouch: boolean;
@@ -646,7 +646,7 @@ type MoveCause =
 
 interface AddCountersEvent extends EventCommon {
 	kind: "add counters";
-	target: PermanentRef;
+	permanent: PermanentRef;
 	counter: PermanentCounter;
 	amount: number;
 	source?: ObjectId;
@@ -654,7 +654,7 @@ interface AddCountersEvent extends EventCommon {
 
 interface RemoveCountersEvent extends EventCommon {
 	kind: "remove counters";
-	target: PermanentRef;
+	permanent: PermanentRef;
 	counters: "all" | Partial<Record<PermanentCounter, number | "all">>;
 	source?: ObjectId;
 }
@@ -1939,16 +1939,16 @@ export type TemporaryEffectSource =
 	| { origin: "builtin"; builtin: BuiltinTemporaryEffect };
 
 export type BuiltinTemporaryEffect =
-	| { kind: "prevent-next-damage"; target: EntityRef; remaining: number }
+	| { kind: "prevent-next-damage"; recipient: EntityRef; remaining: number }
 	| { kind: "prevent-color-damage"; color: Color }
-	| { kind: "regeneration-shield"; target: ObjectId; used: boolean }
+	| { kind: "regeneration-shield"; permanent: ObjectId; used: boolean }
 	| { kind: "control-entering-creatures" };
 
 /**
  * One instantiation of a continuous effect that is not possessed by an object
  * (CR 611.2). The definition comes from {@link TemporaryEffectSource}; this
  * record carries only what is specific to this instance: who controls it, when
- * it ends, and the targets its creating effect bound.
+ * it ends, and the subjects its creating effect bound.
  *
  * Which rules consumer reads it follows from the definition, not from a field
  * here: a characteristic-changing `EffectDef` is applied by the layer walk, and
@@ -2142,7 +2142,7 @@ interface DrawTriggerCondition {
 interface DealsCombatDamageTriggerCondition {
 	kind: "damage";
 	source: "self";
-	target: "player";
+	recipient: "player";
 	combat: true;
 }
 
@@ -4021,22 +4021,25 @@ export function collectReplacements(
 				};
 				break;
 			case "prevent-next-damage": {
-				const target = builtin.target;
+				const recipient = builtin.recipient;
 				def = {
 					label: `prevent-next-damage:${builtin.remaining}`,
 					layer: "other",
 					isPreventionEffect: true,
 					functionsFrom: "any",
 					text: `Prevent the next ${builtin.remaining} damage that would be dealt to ${
-						target.type === "player" ? `P${target.player}` : `#${target.id}`
+						recipient.type === "player"
+							? `P${recipient.player}`
+							: `#${recipient.id}`
 					} this turn.`,
 					applies(ev) {
 						if (ev.kind !== "damage" || ev.amount <= 0) return false;
 						if (builtin.remaining <= 0) return false;
-						return target.type === "player"
-							? ev.target.type === "player" &&
-									ev.target.player === target.player
-							: ev.target.type === "permanent" && ev.target.id === target.id;
+						return recipient.type === "player"
+							? ev.recipient.type === "player" &&
+									ev.recipient.player === recipient.player
+							: ev.recipient.type === "permanent" &&
+									ev.recipient.id === recipient.id;
 					},
 					replace(ev) {
 						if (ev.kind !== "damage") return [ev];
@@ -4066,13 +4069,13 @@ export function collectReplacements(
 				break;
 			case "regeneration-shield":
 				def = {
-					label: `regeneration-shield:${builtin.target}`,
+					label: `regeneration-shield:${builtin.permanent}`,
 					layer: "other",
 					functionsFrom: "any",
-					text: `Regeneration shield on #${builtin.target}.`,
+					text: `Regeneration shield on #${builtin.permanent}.`,
 					applies: (ev) =>
 						ev.kind === "destroy" &&
-						ev.object === builtin.target &&
+						ev.object === builtin.permanent &&
 						!ev.noRegen &&
 						!builtin.used,
 					replace: (ev) =>
@@ -4150,9 +4153,9 @@ export function affectedPlayer(
 			return ev.player;
 
 		case "damage":
-			return ev.target.type === "player"
-				? ev.target.player
-				: affectedObjectPlayer(state, ev.target.id);
+			return ev.recipient.type === "player"
+				? ev.recipient.player
+				: affectedObjectPlayer(state, ev.recipient.id);
 
 		case "counter":
 			return affectedObjectPlayer(state, ev.spell);
@@ -4167,7 +4170,7 @@ export function affectedPlayer(
 
 		case "add counters":
 		case "remove counters":
-			return affectedObjectPlayer(state, ev.target.id);
+			return affectedObjectPlayer(state, ev.permanent.id);
 
 		case "add player counters":
 		case "remove player counters":
@@ -4585,11 +4588,11 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 			assert(ev.cards.kind === "any");
 			return `discard(P${ev.player})`;
 		case "damage": {
-			const tgt =
-				ev.target.type === "player"
-					? `P${ev.target.player}`
-					: name(state, ev.target.id);
-			return `damage(${ev.amount} from ${name(state, ev.source)} to ${tgt})`;
+			const recipient =
+				ev.recipient.type === "player"
+					? `P${ev.recipient.player}`
+					: name(state, ev.recipient.id);
+			return `damage(${ev.amount} from ${name(state, ev.source)} to ${recipient})`;
 		}
 		case "destroy":
 			return `destroy(${name(state, ev.object)})`;
@@ -4622,14 +4625,14 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 			return `move(${objectName}#${ev.object}: ${from}->${to.zone}${extras ? ` ${extras}` : ""})`;
 		}
 		case "add counters":
-			return `counters(${ev.amount}x ${ev.counter} on ${name(state, ev.target.id)})`;
+			return `counters(${ev.amount}x ${ev.counter} on ${name(state, ev.permanent.id)})`;
 		case "add player counters":
 			return `counters(${ev.amount}x ${ev.counter} on P${ev.player})`;
 		case "remove counters":
 		case "remove player counters": {
 			const tgt =
 				ev.kind === "remove counters"
-					? name(state, ev.target.id)
+					? name(state, ev.permanent.id)
 					: `P${ev.player}`;
 			if (ev.counters === "all") return `counters(rm all on ${tgt})`;
 			return `counters(rm ${Object.entries(ev.counters)
@@ -4938,7 +4941,7 @@ function checkStateBasedActionsIn(
 					state,
 					{
 						kind: "remove counters",
-						target: { type: "permanent", id: id },
+						permanent: { type: "permanent", id: id },
 						counters: { "+1/+1": n, "-1/-1": n },
 					},
 					choices,
@@ -5117,7 +5120,7 @@ function triggerMatches(
 		case "damage":
 			assert(ev.kind === "damage");
 			return (
-				ev.source === source.id && ev.combat && ev.target.type === "player"
+				ev.source === source.id && ev.combat && ev.recipient.type === "player"
 			);
 
 		case "begin step":
@@ -5700,14 +5703,14 @@ function executeIn(
 				happened = false;
 				break;
 			}
-			if (ev.target.type === "player") {
-				state.players[ev.target.player].life -= ev.amount;
+			if (ev.recipient.type === "player") {
+				state.players[ev.recipient.player].life -= ev.amount;
 				log(
 					state,
-					`${"  ".repeat(depth)}P${ev.target.player} -> ${state.players[ev.target.player].life} life`,
+					`${"  ".repeat(depth)}P${ev.recipient.player} -> ${state.players[ev.recipient.player].life} life`,
 				);
 			} else {
-				const o = maybePermanent(state, ev.target.id);
+				const o = maybePermanent(state, ev.recipient.id);
 				if (o?.zone !== "battlefield") {
 					happened = false;
 					break;
@@ -5918,7 +5921,7 @@ function executeIn(
 					"undefined behavior: tried to add non-natural quantity of counters.",
 				);
 			}
-			const o = maybePermanent(state, ev.target.id);
+			const o = maybePermanent(state, ev.permanent.id);
 			if (!o) {
 				throw new Error(
 					"undefined behavior: tried to add counters to a non-existent permanent.",
@@ -5946,7 +5949,7 @@ function executeIn(
 			break;
 		}
 		case "remove counters": {
-			const o = maybePermanent(state, ev.target.id);
+			const o = maybePermanent(state, ev.permanent.id);
 			if (!o) {
 				happened = false;
 				break;
@@ -6710,7 +6713,7 @@ function resolveEffects(
 				state,
 				{
 					kind: "add counters",
-					target: { type: "permanent", id: source.id },
+					permanent: { type: "permanent", id: source.id },
 					counter: effect.counter,
 					amount: effect.amount,
 					source: item.source,
@@ -6885,7 +6888,7 @@ function effectToEvent(
 			throw new Error("unexpected discard effect kind");
 		}
 		case "damage": {
-			const target =
+			const recipient =
 				"player" in effect.recipient
 					? {
 							type: "player" as const,
@@ -6893,8 +6896,8 @@ function effectToEvent(
 						}
 					: subject;
 			assert(
-				target?.type === "player" || target?.type === "permanent",
-				"damage target must be a player or permanent",
+				recipient?.type === "player" || recipient?.type === "permanent",
+				"damage recipient must be a player or permanent",
 			);
 			// CR 119.3: lifelink life goes to the controller of the damage source,
 			// which need not be the controller of the ability.
@@ -6904,7 +6907,7 @@ function effectToEvent(
 				source: item.source,
 				sourceController: source.controller,
 				sourceColors: source.colors,
-				target,
+				recipient,
 				amount: effect.amount,
 				combat: false,
 				deathtouch: source.deathtouch,
@@ -6950,7 +6953,7 @@ function effectToEvent(
 			);
 			return {
 				kind: "add counters",
-				target: subject,
+				permanent: subject,
 				counter: effect.counter,
 				amount: effect.amount,
 				source: item.source,
@@ -8562,14 +8565,14 @@ function performTurnBasedActions(
 			const damageEvent = (
 				source: PermanentObject,
 				characteristics: CreatureCharacteristicsSnapshot,
-				target: DamageTargetRef,
+				recipient: DamageRecipientRef,
 				amount: number,
 			): DamageEvent => ({
 				kind: "damage",
 				source: source.id,
 				sourceController: source.controller,
 				sourceColors: characteristics.colors,
-				target,
+				recipient,
 				amount,
 				combat: true,
 				deathtouch: characteristics.keywords.includes("deathtouch"),

@@ -981,7 +981,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				condition: {
 					kind: "damage",
 					source: "self",
-					target: "player",
+					recipient: "player",
 					combat: true,
 				},
 				targets: [],

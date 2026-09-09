@@ -103,7 +103,7 @@ function counterRecipientController(
 	ev: GameEvent,
 ): PlayerId | null {
 	if (ev.kind === "add counters") {
-		return maybePermanent(state, ev.target.id)?.controller ?? null;
+		return maybePermanent(state, ev.permanent.id)?.controller ?? null;
 	}
 	if (ev.kind === "change zone" && ev.destination.zone === "battlefield")
 		return ev.destination.controller;
@@ -112,7 +112,7 @@ function counterRecipientController(
 
 function isCreatureRecipient(ctx: EffectCtx, ev: GameEvent): boolean {
 	if (ev.kind === "add counters") {
-		const snapshot = getSnapshot(ctx.read, ev.target.id);
+		const snapshot = getSnapshot(ctx.read, ev.permanent.id);
 		return (
 			snapshot.kind === "permanent" &&
 			snapshot.currentCharacteristics.types.includes("creature")
@@ -501,17 +501,18 @@ export const PALISADE_GIANT = registerCard({
 			text: "All damage that would be dealt to you and other permanents you control is dealt to Palisade Giant instead.",
 			applies(ev, ctx) {
 				if (!onBattlefield(ctx) || ev.kind !== "damage") return false;
-				if (ev.target.type === "player")
-					return ev.target.player === ctx.controller;
+				if (ev.recipient.type === "player")
+					return ev.recipient.player === ctx.controller;
 				assert(ctx.self);
 				return (
-					maybePermanent(ctx.state, ev.target.id)?.controller === ctx.controller
+					maybePermanent(ctx.state, ev.recipient.id)?.controller ===
+					ctx.controller
 				);
 			},
 			replace(ev, ctx): GameEvent[] {
 				if (ev.kind !== "damage") return [ev];
 				assert(ctx.self);
-				return [{ ...ev, target: { type: "permanent", id: ctx.self.id } }];
+				return [{ ...ev, recipient: { type: "permanent", id: ctx.self.id } }];
 			},
 		},
 	],
@@ -682,9 +683,9 @@ export const PLATINUM_ANGEL = registerCard({
 		},
 	],
 });
-/** "Prevent the next N damage that would be dealt to <target> this turn." */
+/** "Prevent the next N damage that would be dealt to <recipient> this turn." */
 export function preventNextDamageShield(
-	target:
+	recipient:
 		| { type: "player"; player: PlayerId }
 		| { type: "permanent"; id: ObjectId },
 	n: number,
@@ -692,7 +693,7 @@ export function preventNextDamageShield(
 	return {
 		source: {
 			origin: "builtin",
-			builtin: { kind: "prevent-next-damage", target, remaining: n },
+			builtin: { kind: "prevent-next-damage", recipient, remaining: n },
 		},
 		bindings: {},
 	};
@@ -710,11 +711,11 @@ export function prismaticStrands(color: Color): NewTemporaryEffect {
 }
 
 /** "The next time this creature would be destroyed this turn, regenerate it instead." */
-export function regenerationShield(target: ObjectId): NewTemporaryEffect {
+export function regenerationShield(permanent: ObjectId): NewTemporaryEffect {
 	return {
 		source: {
 			origin: "builtin",
-			builtin: { kind: "regeneration-shield", target, used: false },
+			builtin: { kind: "regeneration-shield", permanent, used: false },
 		},
 		bindings: {},
 	};

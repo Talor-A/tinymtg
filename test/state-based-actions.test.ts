@@ -154,7 +154,7 @@ describe("regenerating a creature", () => {
 				source: pyro.id,
 				sourceController: BOB,
 				sourceColors: ["r"],
-				target: { type: "permanent", id: bears.id },
+				recipient: { type: "permanent", id: bears.id },
 				amount: 2,
 				combat: false,
 				deathtouch: false,
@@ -176,7 +176,7 @@ describe("regenerating a creature", () => {
 			state,
 			{
 				kind: "add counters",
-				target: { type: "permanent", id: bears.id },
+				permanent: { type: "permanent", id: bears.id },
 				counter: "-1/-1",
 				amount: 2,
 			},

@@ -1022,7 +1022,7 @@ export interface ForgeReferenceEdge {
 	to?: string;
 	status: ForgeReferenceStatus;
 	provenance: ForgeReferenceProvenance;
-	/** All candidate targets; length > 1 means `status === "ambiguous"`. */
+	/** All candidate destinations; length > 1 means `status === "ambiguous"`. */
 	candidates: string[];
 	/** Extra label for `ResultSubAbilities` entries such as `1:DBFoo`. */
 	label?: string;
@@ -1280,7 +1280,7 @@ export const FORGE_REFERENCE_PARAMS: readonly ForgeReferenceParamSpec[] = [
 		param: "AddSVar",
 		form: "amp-list",
 		role: "granted-svar",
-		note: 'StaticAbilityContinuous, split(" & "); target may be scalar or ability',
+		note: 'StaticAbilityContinuous, split(" & "); destination may be scalar or ability',
 	},
 	{
 		// Forge ships the "Excute" typo in AddPhaseEffect; card scripts spell it
@@ -2943,8 +2943,8 @@ function buildFaces(
 			}
 			// SPECIALIZE: the colour argument selects slots 2..6. Forge silently
 			// ignores an unrecognised colour and leaves the current face alone.
-			const target = SPECIALIZE_SLOTS[(node.argument ?? "").trim()];
-			if (target === undefined) {
+			const specializeSlot = SPECIALIZE_SLOTS[(node.argument ?? "").trim()];
+			if (specializeSlot === undefined) {
 				diagnostics.push({
 					severity: "warning",
 					stage: "index",
@@ -2956,8 +2956,8 @@ function buildFaces(
 				faceFor(slot).sourceNodeIds.push(node.id);
 				continue;
 			}
-			slot = target;
-			faceFor(target).sourceNodeIds.push(node.id);
+			slot = specializeSlot;
+			faceFor(specializeSlot).sourceNodeIds.push(node.id);
 			continue;
 		}
 
@@ -3158,7 +3158,7 @@ export function parseForgeCountExpression(
 	return out;
 }
 
-interface ReferenceTarget {
+interface ReferenceDestination {
 	raw: string;
 	label?: string;
 }
@@ -3166,7 +3166,7 @@ interface ReferenceTarget {
 function expandReference(
 	spec: ForgeReferenceParamSpec,
 	value: string,
-): ReferenceTarget[] {
+): ReferenceDestination[] {
 	switch (spec.form) {
 		case "single":
 			return value.trim() === "" ? [] : [{ raw: value.trim() }];
@@ -3323,12 +3323,12 @@ function buildGraph(
 		for (const write of runtimeWrites) {
 			const key = write.name.toLowerCase();
 			const declared = baseScope.lookup.get(key);
-			const target =
+			const destination =
 				declared !== undefined && declared.length > 0
 					? (declared[declared.length - 1] as string)
 					: write.nodeId;
 
-			if (target === write.nodeId) {
+			if (destination === write.nodeId) {
 				if (!nodes.some((n) => n.id === write.nodeId)) {
 					nodes.push({
 						id: write.nodeId,
@@ -3346,10 +3346,10 @@ function buildGraph(
 				paramId: write.paramId,
 				role: "writes",
 				rawReference: write.name,
-				to: target,
+				to: destination,
 				status: "resolved",
 				provenance: "runtime-write",
-				candidates: [target],
+				candidates: [destination],
 			});
 		}
 
@@ -3471,12 +3471,12 @@ function buildGraph(
 					continue;
 				}
 				if (!forgeReferenceParamApplies(spec, api)) continue;
-				for (const target of expandReference(spec, entry.value)) {
+				for (const destination of expandReference(spec, entry.value)) {
 					link(
 						holderId,
 						entry.id,
 						spec.role,
-						target.raw,
+						destination.raw,
 						scope,
 						line,
 						spec.optional === true,
@@ -3485,7 +3485,7 @@ function buildGraph(
 							: spec.form === "amp-list"
 								? "continuous-effect"
 								: "ability-factory",
-						target.label,
+						destination.label,
 					);
 				}
 			}
@@ -3920,7 +3920,7 @@ const SCALAR_SVAR_REFERENCE = /(?:^|[^A-Za-z0-9_])SVar\$([A-Za-z0-9_]+)/g;
  *
  * Not detectable here at all, and therefore not counted: SVar names embedded in
  * `Count$` mini-expressions (`Count$Compare Y GE1.2.1`), and runtime write
- * targets such as `ResultSVar$ Result`, whose SVar has no definition line to
+ * destinations such as `ResultSVar$ Result`, whose SVar has no definition line to
  * match against.
  */
 export function findUnmodeledReferenceCandidates(

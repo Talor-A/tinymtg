@@ -167,7 +167,7 @@ describe("choice transcripts", () => {
 			state,
 			{
 				kind: "add counters",
-				target: { type: "permanent", id: creature.id },
+				permanent: { type: "permanent", id: creature.id },
 				counter: "+1/+1",
 				amount: 1,
 			},
@@ -200,7 +200,7 @@ describe("choice transcripts", () => {
 				0,
 				{
 					kind: "add counters",
-					target: { type: "permanent", id: creature.id },
+					permanent: { type: "permanent", id: creature.id },
 					counter: "+1/+1",
 					amount: 1,
 				},
@@ -440,7 +440,7 @@ describe("choice transcripts", () => {
 		const creature = spawnPermanent(checkpoint, "grizzly-bears", 0);
 		const event = {
 			kind: "add counters" as const,
-			target: { type: "permanent" as const, id: creature.id },
+			permanent: { type: "permanent" as const, id: creature.id },
 			counter: "+1/+1" as const,
 			amount: 1,
 		};
@@ -507,7 +507,7 @@ describe("choice transcripts", () => {
 			structuredClone(checkpoint),
 			{
 				kind: "add counters",
-				target: { type: "permanent", id: creature.id },
+				permanent: { type: "permanent", id: creature.id },
 				counter: "+1/+1",
 				amount: 1,
 			},
@@ -520,7 +520,7 @@ describe("choice transcripts", () => {
 				structuredClone(checkpoint),
 				{
 					kind: "add counters",
-					target: { type: "permanent", id: creature.id },
+					permanent: { type: "permanent", id: creature.id },
 					counter: "+1/+1",
 					amount: 2,
 				},
