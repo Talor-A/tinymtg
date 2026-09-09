@@ -72,6 +72,8 @@ registerRuntimeFixture("a/aesthir_glider", "rt-aesthir-glider");
 registerRuntimeFixture("r/root_maze", "rt-root-maze");
 registerRuntimeFixture("f/faithful_watchdog", "rt-faithful-watchdog");
 registerRuntimeFixture("a/arashin_cleric", "rt-arashin-cleric");
+registerRuntimeFixture("s/soul_warden", "rt-soul-warden");
+registerRuntimeFixture("e/essence_warden", "rt-essence-warden");
 registerRuntimeFixture("w/wall_of_omens", "rt-wall-of-omens");
 registerRuntimeFixture("p/priest_of_ancient_lore", "rt-priest-of-ancient-lore");
 registerRuntimeFixture("a/arcanis_the_omnipotent", "rt-arcanis");
@@ -243,6 +245,36 @@ function enterFromHand(
 }
 
 describe("forge-import runtime: triggers", () => {
+	test("Soul Warden and Essence Warden trigger for other creatures and gain life for their controllers", () => {
+		const state = newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		beginFirstTurn(state, agents);
+
+		enterFromHand(state, "rt-soul-warden", ALICE, agents);
+		expect(
+			state.pendingTriggers,
+			"Soul Warden does not trigger for itself",
+		).toHaveLength(0);
+
+		enterFromHand(state, "rt-essence-warden", BOB, agents);
+		expect(
+			state.pendingTriggers,
+			"only the Soul Warden already on the battlefield triggers",
+		).toHaveLength(1);
+		settlePriority(state, agents);
+		expect(state.players[ALICE].life).toBe(21);
+		expect(state.players[BOB].life).toBe(20);
+
+		enterFromHand(state, "rt-grizzly-bears", BOB, agents);
+		expect(
+			state.pendingTriggers,
+			"both Wardens see either player's creature",
+		).toHaveLength(2);
+		settlePriority(state, agents);
+		expect(state.players[ALICE].life).toBe(22);
+		expect(state.players[BOB].life).toBe(21);
+	});
+
 	test("Arashin Cleric's imported ETB trigger queues and gains life on resolution", () => {
 		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];

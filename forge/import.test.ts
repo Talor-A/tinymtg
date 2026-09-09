@@ -38,6 +38,48 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.abilityDefinitions.triggered).toHaveLength(0);
 	});
 
+	test.each([
+		["s/soul_warden", "Soul Warden", "w", "Human", "Cleric"],
+		["e/essence_warden", "Essence Warden", "g", "Elf", "Shaman"],
+	] as const)(
+		"%s imports its printed another-creature trigger",
+		(path, cardName, color, firstSubtype, secondSubtype) => {
+			const result = importFixture(path);
+			if (!result.ok) throw new Error("expected ok");
+			expect(result.card).toMatchObject({
+				name: cardName,
+				types: ["creature"],
+				subtypes: [firstSubtype, secondSubtype],
+				manaCost: { [color]: 1 },
+				power: 1,
+				toughness: 1,
+			});
+			expect(result.card.abilityDefinitions.triggered).toEqual([
+				{
+					id: "TrigGainLife",
+					text: "Whenever another creature enters, you gain 1 life.",
+					condition: {
+						kind: "change zone",
+						from: "any",
+						to: "battlefield",
+						selector: {
+							kind: "all",
+							selectors: [
+								{ kind: "type", type: "creature" },
+								{
+									kind: "not",
+									selector: { kind: "self" },
+								},
+							],
+						},
+					},
+					targets: [],
+					effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+				},
+			]);
+		},
+	);
+
 	test("{C} in a mana cost is colorless, not generic", () => {
 		// Reality Smasher costs {4}{C}: four generic plus one true colorless.
 		const result = importForgeCard(

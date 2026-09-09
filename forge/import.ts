@@ -22,7 +22,7 @@
  * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
  * and dynamic amounts; `Investigate` with an explicit count or player;
  * more than one target slot,
- * or an optional one; selector modifiers outside `YouCtrl`/`OppCtrl`, the exact
+ * or an optional one; selector modifiers outside `Other`/`YouCtrl`/`OppCtrl`, the exact
  * target form `Creature.Other+YouCtrl`, and `non`-prefixable color, card type,
  * and supertype words (so hexproof, shroud,
  * protection, and combat- or zone-dependent restrictions all reject, while a
@@ -328,6 +328,7 @@ function parseValidPlayer(value: string): ValidPlayer | null {
 }
 
 function parseSelectorModifier(modifier: string): ObjectSelectorDef | null {
+	if (modifier === "Other") return { kind: "not", selector: { kind: "self" } };
 	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
 	const negated = modifier.startsWith("non");

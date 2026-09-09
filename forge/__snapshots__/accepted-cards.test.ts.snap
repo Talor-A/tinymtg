@@ -712,6 +712,7 @@ Esper Cormorants
 Essence Drain
 Essence Extraction
 Essence Feed
+Essence Warden
 Etched Familiar
 Etherium Astrolabe
 Eumidian Terrabotanist
@@ -1229,6 +1230,7 @@ Jwar Isle Refuge
 Jwari Scuttler
 Kabira Crossroads
 Kabuto Moth
+Kaervek, the Spiteful
 Kalakscion, Hunger Tyrant
 Kaleidostone
 Kalonian Tusker
@@ -1261,6 +1263,7 @@ Kingfisher
 Kingpin's Enforcers
 Kinjalli's Sunwing
 Kinsbaile Skirmisher
+Kiora's Follower
 Kismet
 Kiss of Death
 Kiss of the Amesha
@@ -1313,6 +1316,7 @@ Leaf Gilder
 Leatherback Baloth
 Leave in the Dust
 Legion Extruder
+Legion Guildmage
 Leonin Skyhunter
 Leopard-Spotted Jiao
 Letter of Acceptance
@@ -2107,6 +2111,7 @@ Sorcerer of the Fang
 Sorin's Thirst
 Soul Feast
 Soul Shred
+Soul Warden
 Soul of Magma
 Soulbound Guardians
 Soulknife Spy
@@ -2446,6 +2451,7 @@ Ukud Cobra
 Umara Entangler
 Umbral Collar Zealot
 Unauthorized Exit
+Unbender Tine
 Undead Minotaur
 Undercity Dire Rat
 Undercity Sewers
@@ -2686,9 +2692,10 @@ Zephyr Sprite
 Zhalfirin Void
 Zof Shade
 Zombie Goliath
+Zuberi, Golden Feather
 Zuko's Offense
 Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2688`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2695`;
