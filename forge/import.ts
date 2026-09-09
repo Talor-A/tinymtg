@@ -429,6 +429,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			playerTarget === null &&
 			effect.kind !== "destroy" &&
 			effect.kind !== "tap" &&
+			effect.kind !== "untap" &&
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt" &&
@@ -439,6 +440,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 		const objectTarget =
 			(effect.kind === "destroy" ||
 				effect.kind === "tap" ||
+				effect.kind === "untap" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
@@ -484,10 +486,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				where,
 			);
 		}
-		if (effect.kind === "tap" && target.legal.kind !== "permanent") {
+		if (
+			(effect.kind === "tap" || effect.kind === "untap") &&
+			target.legal.kind !== "permanent"
+		) {
 			return issue(
 				"UNSUPPORTED_TARGET",
-				"Tap requires a permanent target",
+				`${effect.kind === "tap" ? "Tap" : "Untap"} requires a permanent target`,
 				where,
 			);
 		}
@@ -935,7 +940,8 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				object: { targetSlot: TARGET_SLOT },
 			};
 		}
-		case "tap": {
+		case "tap":
+		case "untap": {
 			const badParams = checkParams(
 				params,
 				new Set([
@@ -948,7 +954,7 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 			);
 			if (badParams) return badParams;
 			return {
-				kind: "tap",
+				kind: api,
 				object: { targetSlot: TARGET_SLOT },
 			};
 		}

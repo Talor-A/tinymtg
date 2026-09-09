@@ -99,6 +99,7 @@ registerRuntimeFixture("b/bartolome_del_presidio", "rt-bartolome-del-presidio");
 registerRuntimeFixture("a/acolyte_of_aclazotz", "rt-acolyte-of-aclazotz");
 registerRuntimeFixture("r/rod_of_ruin", "rt-rod-of-ruin");
 registerRuntimeFixture("i/icy_manipulator", "rt-icy-manipulator");
+registerRuntimeFixture("w/wirewood_lodge", "rt-wirewood-lodge");
 registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
 registerRuntimeFixture("t/temple_of_epiphany", "rt-temple-of-epiphany");
@@ -1413,6 +1414,35 @@ describe("forge-import runtime: activated abilities", () => {
 		settlePriority(state, passingAgents());
 
 		expect(permanent(state, target.id).tapped).toBe(true);
+		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Wirewood Lodge's imported ability pays its costs and untaps its Elf target on resolution", () => {
+		const state = setupMain();
+		const lodge = spawnPermanent(state, "rt-wirewood-lodge", ALICE);
+		const target = spawnPermanent(state, "rt-llanowar-elves", ALICE, {
+			tapped: true,
+		});
+		const ability = abilityId("activated", "rt-wirewood-lodge", 1);
+		state.players[ALICE].manaPool.g = 1;
+		const alice = new ScriptedAgent();
+		alice.targetChoices.push({ type: "permanent", id: target.id });
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: lodge.id, ability },
+			[alice, new ScriptedAgent()],
+		);
+
+		expect(permanent(state, lodge.id).tapped).toBe(true);
+		expect(permanent(state, target.id).tapped).toBe(true);
+		expect(state.players[ALICE].manaPool.g).toBe(0);
+		expect(state.stack).toHaveLength(1);
+
+		settlePriority(state, passingAgents());
+
+		expect(permanent(state, target.id).tapped).toBe(false);
 		expect(state.stack).toHaveLength(0);
 	});
 

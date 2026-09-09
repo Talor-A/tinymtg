@@ -355,6 +355,29 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Wirewood Lodge lowers its targeted untap ability", () => {
+		const result = importFixture("w/wirewood_lodge");
+		if (!result.ok) throw new Error("expected Wirewood Lodge to import");
+		expect(result.card.abilityDefinitions.activated[1]).toEqual({
+			kind: "activated",
+			id: "activated-2",
+			text: "Untap target Elf.",
+			cost: { mana: { g: 1 }, tapSelf: true },
+			targets: [
+				{
+					id: "target-1",
+					min: 1,
+					max: 1,
+					legal: {
+						kind: "permanent",
+						selector: { kind: "subtype", subtype: "Elf" },
+					},
+				},
+			],
+			effects: [{ kind: "untap", object: { targetSlot: "target-1" } }],
+		});
+	});
+
 	test("Network Disruptor lowers its unrestricted permanent target", () => {
 		const result = importFixture("n/network_disruptor");
 		if (!result.ok) throw new Error("expected Network Disruptor to import");
@@ -2335,6 +2358,15 @@ describe("lowerForgeCard: required negative mutations", () => {
 	test("rejects Tap targeting a non-permanent slot", () => {
 		const result = importText(
 			`Name:Bad Tap\nManaCost:1 U\nTypes:Instant\nA:SP$ Tap | ValidTgts$ Player | SpellDescription$ x.\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_TARGET");
+	});
+
+	test("rejects Untap targeting a non-permanent slot", () => {
+		const result = importText(
+			`Name:Bad Untap\nManaCost:1 U\nTypes:Instant\nA:SP$ Untap | ValidTgts$ Player | SpellDescription$ x.\n`,
 		);
 		expect(result.ok).toBe(false);
 		if (result.ok) return;

@@ -2065,7 +2065,7 @@ export type EffectDef<
 			amount: number;
 	  }
 	| { kind: "destroy"; object: TargetSlotRef }
-	| { kind: "tap"; object: TargetSlotRef }
+	| { kind: "tap" | "untap"; object: TargetSlotRef }
 	| { kind: "counter"; spell: TargetSlotRef }
 	| {
 			kind: "add counters";
@@ -6638,6 +6638,7 @@ function resolveEffects(
 		const objectTarget =
 			(effect.kind === "destroy" ||
 				effect.kind === "tap" ||
+				effect.kind === "untap" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
@@ -6923,12 +6924,13 @@ function effectToEvent(
 				noRegen: false,
 			};
 		case "tap":
+		case "untap":
 			assert(
 				subject !== null && subject.type === "permanent",
-				"tap requires a bound permanent target",
+				`${effect.kind} requires a bound permanent target`,
 			);
 			return {
-				kind: "tap",
+				kind: effect.kind,
 				ref: { kind: "object", object: subject.id },
 			};
 		case "counter":
@@ -7159,6 +7161,7 @@ function requiredTargetDefinition(
 			damageTarget === null &&
 			effect.kind !== "destroy" &&
 			effect.kind !== "tap" &&
+			effect.kind !== "untap" &&
 			effect.kind !== "counter" &&
 			effect.kind !== "return to hand" &&
 			effect.kind !== "modify-pt" &&
@@ -7190,6 +7193,7 @@ function requiredTargetDefinition(
 		const objectTarget =
 			(effect.kind === "destroy" ||
 				effect.kind === "tap" ||
+				effect.kind === "untap" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
@@ -7215,10 +7219,10 @@ function requiredTargetDefinition(
 				"destroy requires a permanent target",
 			);
 		}
-		if (effect.kind === "tap") {
+		if (effect.kind === "tap" || effect.kind === "untap") {
 			assert(
 				target.legal.kind === "permanent",
-				"tap requires a permanent target",
+				`${effect.kind} requires a permanent target`,
 			);
 		}
 		if (effect.kind === "counter") {
@@ -7817,6 +7821,7 @@ function activateAbilityIn(
 				effect.kind === "damage" ||
 				effect.kind === "destroy" ||
 				effect.kind === "tap" ||
+				effect.kind === "untap" ||
 				effect.kind === "counter" ||
 				effect.kind === "return to hand" ||
 				effect.kind === "modify-pt" ||

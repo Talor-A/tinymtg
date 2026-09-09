@@ -311,6 +311,7 @@ Burglar Rat
 Burning Fields
 Burrog Banemaker
 Burrowing Razormaw
+Burst of Energy
 Buzz Bots
 Byway Courier
 Cabal Archon
@@ -381,6 +382,7 @@ Cinder Hellion
 Cinder Storm
 Citanul Druid
 Citywatch Sphinx
+Civic Gardener
 Clarion Cathars
 Cleansing Screech
 Cliffhaven Sell-Sword
@@ -436,6 +438,7 @@ Coral Commando
 Coral Eel
 Coral Merfolk
 Corpsehatch
+Corridor Monitor
 Corroding Dragonstorm
 Corrupt Eunuchs
 Corrupted Conviction
@@ -513,6 +516,7 @@ Darksteel Relic
 Darksteel Sentinel
 Darkwater Catacombs
 Darting Merfolk
+Dauntless Aven
 Dauntless Survivor
 Dawn Gryff
 Dawn's Light Archer
@@ -548,6 +552,7 @@ Deranged Outcast
 Desecration Plague
 Desert Drake
 Desert Twister
+Deserted Temple
 Desolate Lighthouse
 Desolate Mire
 Desperate Bloodseeker
@@ -773,6 +778,7 @@ Fiery Finish
 Fighting Drake
 Filigree Crawler
 Filigree Familiar
+Filigree Sages
 Finishing Blow
 Fire Ambush
 Fire Diamond
@@ -855,6 +861,7 @@ Funeral Rites
 Furtive Analyst
 Fusion Elemental
 Futurist Forge
+Fyndhorn Brownie
 Fyndhorn Elder
 Fyndhorn Elves
 Gaea's Anthem
@@ -862,6 +869,7 @@ Gaea's Skyfolk
 Galadhrim Guide
 Galewind Moose
 Gallant Cavalry
+Galvanic Key
 Gargoyle Castle
 Garruk's Companion
 Garruk's Gorehorn
@@ -1115,6 +1123,7 @@ Hunted Witness
 Hurloon Minotaur
 Hussar Patrol
 Hyena Pack
+Hyrax Tower Scout
 Icatian Priest
 Icatian Town
 Ice Storm
@@ -1149,6 +1158,7 @@ Infernal Idol
 Infestation Sage
 Infuriate
 Ingenious Skaab
+Initiate's Companion
 Inkrise Infiltrator
 Insatiable Harpy
 Insight
@@ -1184,6 +1194,7 @@ Jadecraft Artisan
 Jagged Barrens
 Jagwasp Swarm
 Jalum Tome
+Jandor's Saddlebags
 Jarvis, Earth's Mightiest Butler
 Jasmine Boreal
 Jaya's Firenado
@@ -1423,12 +1434,14 @@ Midnight Assassin
 Midnight Haunting
 Might of Oaks
 Millennial Gargoyle
+Minamo, School at Water's Edge
 Mind Sculpt
 Mind Stone
 Mindeye Drake
 Minotaur Abomination
 Minotaur Warrior
 Mire Triton
+Mirran Spy
 Misshapen Fiend
 Mist Raven
 Mistral Charger
@@ -1773,6 +1786,7 @@ Red Dragon
 Redcap Thief
 Redrock Sentinel
 Redwood Treefolk
+Refocus
 Refute
 Regal Unicorn
 Regathan Firecat
@@ -1935,6 +1949,7 @@ Seaside Haven
 Seat of the Synod
 Secret Passage
 Sedge Scorpion
+Seeker of Skybreak
 Seer's Lantern
 Segovian Angel
 Seizan, Perverter of Truth
@@ -2105,6 +2120,7 @@ Spark Jolt
 Spark Reaper
 Sparkmage Apprentice
 Sparring Construct
+Sparring Mummy
 Spawning Bed
 Spawning Breath
 Spectacle Summit
@@ -2302,6 +2318,7 @@ Temple of Triumph
 Temporal Adept
 Temur Banner
 Tenement Crasher
+Tenth District Veteran
 Teroh's Faithful
 Terrain Elemental
 Terrian, World Tyrant
@@ -2323,6 +2340,7 @@ The Surgical Bay
 Think Tank
 Third Path Iconoclast
 Third Path Savant
+Thistledown Players
 Thor Odinson
 Thornglint Bridge
 Thornhide Wolves
@@ -2525,6 +2543,8 @@ Volcanic Dragon
 Volcanic Hammer
 Volcanic Island
 Volcanic Upheaval
+Voltaic Construct
+Voltaic Key
 Volunteer Militia
 Voracious Varmint
 Vorstclaw
@@ -2615,6 +2635,7 @@ Winter Soldier, Bucky Barnes
 Winter's Grasp
 Winter's Intervention
 Wirewood Elf
+Wirewood Lodge
 Wishcoin Crab
 Witch's Familiar
 Witching Well
@@ -2670,4 +2691,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2667`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2688`;
