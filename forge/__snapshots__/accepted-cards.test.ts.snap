@@ -245,6 +245,7 @@ Birnin Zana Plaza
 Bishop's Soldier
 Bitterbloom Bearer
 Bitterbow Sharpshooters
+Black Lotus
 Black Waltz No. 3
 Black Widow, Natasha Romanoff
 Blade of the Sixth Pride
@@ -1000,6 +1001,7 @@ Gigantosaurus
 Gilacorn
 Gild
 Gilded Goose
+Gilded Lotus
 Gilded Sentinel
 Gin'tak Charge
 Glacial Floodplain
@@ -1263,6 +1265,7 @@ Imperial Outrider
 Imperious Inkmage
 Implement of Examination
 Implement of Improvement
+Implements of Sacrifice
 Implode
 Imposing Sovereign
 Improvised Weaponry
@@ -2671,6 +2674,7 @@ Trained Orgg
 Tramway Station
 Tranquil Cove
 Tranquil Expanse
+Transdimensional Bovine
 Traveling Philosopher
 Tree Monkey
 Tree of Tales
@@ -2987,4 +2991,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2984`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2988`;

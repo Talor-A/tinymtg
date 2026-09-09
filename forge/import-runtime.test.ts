@@ -130,6 +130,7 @@ registerRuntimeFixture("t/timberland_guide", "rt-timberland-guide");
 registerRuntimeFixture("l/lorescale_coatl", "rt-lorescale-coatl");
 registerRuntimeFixture("u/underworld_dreams", "rt-underworld-dreams");
 registerRuntimeFixture("r/rummaging_goblin", "rt-rummaging-goblin");
+registerRuntimeFixture("b/black_lotus", "rt-black-lotus");
 registerCardFixture("d/darksteel_relic");
 
 {
@@ -1671,6 +1672,52 @@ describe("forge-import runtime: activated abilities", () => {
 			expect(state.stack).toHaveLength(0);
 		});
 	}
+
+	test("Black Lotus offers three of each colour, sacrifices itself, and pays out only the chosen colour", () => {
+		const state = setupMain();
+		const lotus = spawnPermanent(state, "rt-black-lotus", ALICE);
+		const ability = abilityId("activated", "rt-black-lotus", 0);
+		const offeredLabels: string[][] = [];
+		const fallback = new ScriptedAgent();
+		const chooseBlack: SyncAgent = {
+			choose(view, request) {
+				if (request.kind === "mana") {
+					offeredLabels.push(request.options.map((option) => option.label));
+					const chosen = request.options.find(
+						(option) => option.label === "Add 3{B}.",
+					);
+					if (!chosen) throw new Error("no black option was offered");
+					return { optionId: chosen.id };
+				}
+				return fallback.choose(view, request);
+			},
+		};
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: lotus.id, ability },
+			[chooseBlack, new ScriptedAgent()],
+		);
+
+		expect(offeredLabels).toEqual([
+			["Add 3{W}.", "Add 3{U}.", "Add 3{B}.", "Add 3{R}.", "Add 3{G}."],
+		]);
+		// Three of the one chosen colour, not three spread over the choices.
+		expect(state.players[ALICE].manaPool).toEqual({
+			w: 0,
+			u: 0,
+			b: 3,
+			r: 0,
+			g: 0,
+			c: 0,
+		});
+		// The sacrifice cost put it in the graveyard, so it is no longer a
+		// permanent on the battlefield.
+		expect(state.objects.get(lotus.id)).toBeUndefined();
+		expect(state.players[ALICE].graveyard).toHaveLength(1);
+		expect(state.stack).toHaveLength(0);
+	});
 
 	test("Llanowar Elves' imported mana ability taps and adds green mana immediately", () => {
 		const state = setupMain();

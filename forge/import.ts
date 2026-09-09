@@ -3254,8 +3254,7 @@ export function lowerForgeCard(
 			if (modal) {
 				if (
 					producedTypes.length < 2 ||
-					new Set(producedTypes).size !== producedTypes.length ||
-					(amountText !== undefined && amountText !== "1")
+					new Set(producedTypes).size !== producedTypes.length
 				) {
 					return reject(
 						issue(
@@ -3265,8 +3264,34 @@ export function lowerForgeCard(
 						),
 					);
 				}
+				// `Produced$ Any | Amount$ N` is N mana of the one colour chosen —
+				// "Add three mana of any one color" (Black Lotus, Gilded Lotus) — so
+				// every option carries the full amount. Every corpus card pairing
+				// `Any` with an amount above one reads that way.
+				//
+				// `Produced$ Combo R G | Amount$ N` is a different instruction: "add
+				// three mana in any combination of {R} and/or {G}" (Orcish Lumberjack)
+				// lets the player mix the symbols, which is N independent choices
+				// rather than one, and no fixed `manaOptions` list can express it.
+				// Only N = 1, where mixing is vacuous, is a single modal choice.
+				let modalAmount: number | null;
+				if (anyColor) {
+					modalAmount = positiveInteger(amountText, 1);
+				} else {
+					modalAmount =
+						amountText === undefined || amountText === "1" ? 1 : null;
+				}
+				if (!modalAmount) {
+					return reject(
+						issue(
+							"UNSUPPORTED_EFFECT",
+							`unsupported mana amount ${amountText ?? ""}`,
+							where,
+						),
+					);
+				}
 				const [first, second, ...rest] = producedTypes.map((type) =>
-					fullMana(type),
+					fullMana(type, modalAmount),
 				);
 				assert(
 					first !== undefined && second !== undefined,
@@ -3278,7 +3303,9 @@ export function lowerForgeCard(
 					id: `activated-${activatedCount}`,
 					text:
 						getForgeParam(params, "SpellDescription") ??
-						`Add ${producedSymbols.map((symbol) => `{${symbol}}`).join(" or ")}.`,
+						`Add ${producedSymbols
+							.map((symbol) => `{${symbol}}`.repeat(modalAmount))
+							.join(" or ")}.`,
 					cost: activationCost,
 					manaOptions: [first, second, ...rest],
 				});

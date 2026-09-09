@@ -2992,6 +2992,74 @@ describe("lowerForgeCard: hardening regressions", () => {
 		]);
 	});
 
+	test("Amount$ on a modal Produced$ is per chosen symbol, not split across them", () => {
+		// Black Lotus: three mana of the one colour chosen, not three mana
+		// spread over the five choices.
+		const result = importText(
+			"Name:Black Lotus\nManaCost:0\nTypes:Artifact\nA:AB$ Mana | Cost$ T Sac<1/CARDNAME> | Produced$ Any | Amount$ 3 | SpellDescription$ Add three mana of any one color.\nOracle:\n",
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "mana",
+				id: "activated-1",
+				text: "Add three mana of any one color.",
+				cost: {
+					mana: "zero",
+					tapSelf: true,
+					sacrifice: { selector: { kind: "self" }, amount: 1 },
+				},
+				manaOptions: [
+					{ w: 3, u: 0, b: 0, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 3, b: 0, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 3, r: 0, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 0, r: 3, g: 0, c: 0 },
+					{ w: 0, u: 0, b: 0, r: 0, g: 3, c: 0 },
+				],
+			},
+		]);
+	});
+
+	test("describes a modal Amount$ without a SpellDescription by repeating the symbol", () => {
+		const result = importText(
+			"Name:Test Lotus\nManaCost:0\nTypes:Artifact\nA:AB$ Mana | Cost$ T | Produced$ Any | Amount$ 2\nOracle:\n",
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.activated[0]?.text).toBe(
+			"Add {W}{W} or {U}{U} or {B}{B} or {R}{R} or {G}{G}.",
+		);
+	});
+
+	test("rejects a Combo Amount$ above one, which mixes symbols rather than choosing one", () => {
+		// Orcish Lumberjack: "add three mana in any combination of {R} and/or
+		// {G}" is three independent choices, so {R}{R}{G} is legal and no fixed
+		// option list covers it. Accepting it as [{r: 3}, {g: 3}] would silently
+		// drop the mixed outcomes.
+		const result = importText(
+			"Name:Orcish Lumberjack\nManaCost:R\nTypes:Creature Orc\nPT:1/1\nA:AB$ Mana | Cost$ T Sac<1/Forest> | Produced$ Combo R G | Amount$ 3 | SpellDescription$ Add three mana in any combination of {R} and/or {G}.\nOracle:\n",
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message: "unsupported mana amount 3",
+		});
+	});
+
+	test("rejects a dynamic amount on a modal Produced$ on the amount, not the symbol", () => {
+		const result = importText(
+			"Name:Bad Lotus\nManaCost:0\nTypes:Artifact\nA:AB$ Mana | Cost$ T | Produced$ Any | Amount$ LotusAmount | SpellDescription$ x.\nSVar:LotusAmount:Count$UrzaLands.3.1\nOracle:\n",
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message: "unsupported mana amount LotusAmount",
+		});
+	});
+
 	test("rejects open-ended, variable, malformed, and unsupported Produced$ forms with diagnostics", () => {
 		for (const produced of [
 			"Combo Any", // open-ended modal choice

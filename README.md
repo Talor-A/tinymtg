@@ -96,7 +96,9 @@ are synthesized from subtype (Forge omits explicit `A:` lines for those); mana
 abilities producing fixed mana, including colorless (`Produced$ C`, e.g.
 Wastes), modal one-mana choices between two or more distinct fixed symbols
 (`Produced$ Combo U R`, e.g. Temple of Epiphany), and the five colored choices
-encoded by `Produced$ Any`; token scripts with supported activated
+encoded by `Produced$ Any`, which may carry a fixed `Amount$` of the one color
+chosen (`Produced$ Any | Amount$ 3`, e.g. Black Lotus — a `Combo` amount above
+one instead mixes its symbols, and rejects); token scripts with supported activated
 abilities, mana (Treasure) or not (Food, Blood), are rehosted on the importing card
 so created tokens retain executable abilities without mutating the registry
 during import; activated abilities whose
