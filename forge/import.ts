@@ -195,9 +195,23 @@ const ALLOWED_CARD_DIRECTIVES = new Set([
 /* ------------------------------------------------------------------------- */
 
 /**
+ * Parameter keys that carry no semantics for this bridge, so they are accepted
+ * on every record without appearing on any operation's allowlist.
+ *
+ * `AILogic` names a strategy class that Forge's automated player consults when
+ * deciding whether and when to use an ability. It never changes the ability's
+ * instructions, its costs, or its targets, so the engine's lowering of a record
+ * is identical with and without it. `ast.ts` already classifies it as a
+ * non-SVar-referencing display-ish key for the same reason.
+ */
+const IGNORED_PARAMS: ReadonlySet<string> = new Set(["ailogic"]);
+
+/**
  * Every semantic parameter on a record must be on its operation's allowlist,
  * and no semantic parameter may repeat: Forge's own last-write-wins projection
- * is not something this bridge relies on.
+ * is not something this bridge relies on. {@link IGNORED_PARAMS} keys are
+ * neither: they are dropped before both checks, since a repeated key the
+ * bridge never reads cannot make its projection ambiguous.
  */
 function checkParams(
 	params: ForgeParamList,
@@ -214,6 +228,7 @@ function checkParams(
 			);
 		}
 		const lower = entry.key.toLowerCase();
+		if (IGNORED_PARAMS.has(lower)) continue;
 		counts.set(lower, (counts.get(lower) ?? 0) + 1);
 		if (!allowedLower.has(lower)) {
 			return issue(
@@ -1035,9 +1050,6 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 					discriminatorLower,
 					"validtgts",
 					"tgtprompt",
-					// AILogic controls only Forge's automated-player timing. It does
-					// not change the destroy instruction the engine executes.
-					"ailogic",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
