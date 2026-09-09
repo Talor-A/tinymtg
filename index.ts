@@ -1930,8 +1930,19 @@ export interface BoundProhibition {
 interface TemporaryEffectCommon {
 	id: EffectId;
 	controller: PlayerId;
-	duration: "until-end-of-turn";
 }
+
+export type TemporaryEffectDuration =
+	| "until-end-of-turn"
+	| "until-end-of-your-next-turn";
+
+type ScheduledTemporaryEffectDuration =
+	| { duration: "until-end-of-turn" }
+	| {
+			duration: "until-end-of-your-next-turn";
+			/** The controller's next turn, once that turn has successfully begun. */
+			expiresAtEndOfTurn: TurnId | null;
+	  };
 
 /**
  * Where a temporary effect's definition lives, as serializable data.
@@ -1974,38 +1985,45 @@ export type BuiltinTemporaryEffect =
  * here: a characteristic-changing `EffectDef` is applied by the layer walk, and
  * a `may-play` definition is read while offering and executing actions.
  */
-export type TemporaryEffect = TemporaryEffectCommon & {
-	source: TemporaryEffectSource;
-	/**
-	 * What the creating effect resolved its subjects to, by target slot.
-	 *
-	 * An effect that names its own source ("it gets +1/+1") binds
-	 * {@link SELF_SLOT}: the object is resolved once, when the effect is
-	 * created, because the source may leave the battlefield before the layer
-	 * walk next runs and the bonus outlives it either way.
-	 */
-	bindings: Record<string, EntityRef>;
-};
+export type TemporaryEffect = TemporaryEffectCommon &
+	ScheduledTemporaryEffectDuration & {
+		source: TemporaryEffectSource;
+		/**
+		 * What the creating effect resolved its subjects to, by target slot.
+		 *
+		 * An effect that names its own source ("it gets +1/+1") binds
+		 * {@link SELF_SLOT}: the object is resolved once, when the effect is
+		 * created, because the source may leave the battlefield before the layer
+		 * walk next runs and the bonus outlives it either way.
+		 */
+		bindings: Record<string, EntityRef>;
+	};
 
 /** Binding key for an effect that affects the object that created it. */
 export const SELF_SLOT = "self";
 
-export type NewTemporaryEffect = Omit<
-	TemporaryEffect,
-	keyof TemporaryEffectCommon
->;
+export type NewTemporaryEffect = Pick<TemporaryEffect, "source" | "bindings">;
 
 export function addTemporaryEffect(
 	state: GameState,
 	controller: PlayerId,
 	effect: NewTemporaryEffect,
+	duration: TemporaryEffectDuration = "until-end-of-turn",
 ): void {
 	state.revision++;
-	state.temporaryEffects.push({
+	const common = {
 		id: eid(`temporary:${state.nextObjectId++}`),
 		controller,
-		duration: "until-end-of-turn",
 		...effect,
+	};
+	if (duration === "until-end-of-turn") {
+		state.temporaryEffects.push({ ...common, duration });
+		return;
+	}
+	state.temporaryEffects.push({
+		...common,
+		duration,
+		expiresAtEndOfTurn: null,
 	});
 }
 
@@ -2131,21 +2149,21 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			object: "source" | TargetSlotRef;
 			power: number;
 			toughness: number;
-			duration: "until-end-of-turn";
+			duration: TemporaryEffectDuration;
 	  }
 	| {
 			kind: "grant-keyword";
 			/** The first supported temporary keyword grant is indestructible. */
 			keyword: "indestructible";
 			object: "source" | TargetSlotRef;
-			duration: "until-end-of-turn";
+			duration: TemporaryEffectDuration;
 	  }
 	| {
 			kind: "may-play";
 			/** The card in exile that this effect's controller may play. */
 			object: TargetSlotRef;
 			from: "exile";
-			duration: "until-end-of-turn";
+			duration: TemporaryEffectDuration;
 	  }
 	| {
 			kind: "add-mana";
@@ -6831,10 +6849,15 @@ function resolveEffects(
 			}
 			// The effect keeps a reference to the definition that created it, so
 			// its characteristic change is never denormalized into game state.
-			addTemporaryEffect(state, item.controller, {
-				source: resolvingEffectSource(state, item, effectIndex),
-				bindings: { [slot]: subject },
-			});
+			addTemporaryEffect(
+				state,
+				item.controller,
+				{
+					source: resolvingEffectSource(state, item, effectIndex),
+					bindings: { [slot]: subject },
+				},
+				effect.duration,
+			);
 			continue;
 		}
 		if (effect.kind === "may-play") {
@@ -6847,10 +6870,15 @@ function resolveEffects(
 			// single CR 608.2b legality check. In that case this instruction does
 			// nothing; it never grants permission to the new object.
 			if (object?.kind !== "card" || object.zone !== effect.from) continue;
-			addTemporaryEffect(state, item.controller, {
-				source: resolvingEffectSource(state, item, effectIndex),
-				bindings: { [effect.object.targetSlot]: bound },
-			});
+			addTemporaryEffect(
+				state,
+				item.controller,
+				{
+					source: resolvingEffectSource(state, item, effectIndex),
+					bindings: { [effect.object.targetSlot]: bound },
+				},
+				effect.duration,
+			);
 			continue;
 		}
 		performIn(
@@ -8809,9 +8837,16 @@ function performTurnBasedActions(
 			// This is only the noninteractive part of CR 514. Repeated cleanup
 			// steps still need to be added when SBAs or triggers occur here.
 			for (const id of state.battlefield) permanent(state, id).damage = 0;
-			state.temporaryEffects = state.temporaryEffects.filter(
-				(effect) => effect.duration !== "until-end-of-turn",
-			);
+			state.temporaryEffects = state.temporaryEffects.filter((effect) => {
+				if (effect.duration === "until-end-of-turn") return false;
+				if (effect.expiresAtEndOfTurn === null) return true;
+				if (effect.expiresAtEndOfTurn !== step.turnId) return true;
+				assert(
+					effect.controller === active,
+					"a next-turn effect must expire during its controller's cleanup",
+				);
+				return false;
+			});
 
 			break;
 		case "declare attackers": {
@@ -9131,6 +9166,16 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				) {
 					scheduler.nextAction = { kind: "advanceTurn" };
 					continue;
+				}
+
+				for (const effect of state.temporaryEffects) {
+					if (
+						effect.duration === "until-end-of-your-next-turn" &&
+						effect.controller === turn.player &&
+						effect.expiresAtEndOfTurn === null
+					) {
+						effect.expiresAtEndOfTurn = turn.id;
+					}
 				}
 
 				// CR 302.6: permanents already controlled as this turn begins are no
