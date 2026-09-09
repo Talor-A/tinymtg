@@ -29,6 +29,7 @@ import {
 } from "../index.ts";
 import {
 	ALICE,
+	BOB,
 	created,
 	passingAgents,
 	type SyncAgents,
@@ -154,7 +155,7 @@ describe("Blood token", () => {
 		const agents = passingAgents();
 		const { blood } = enterServitor(state, ALICE, agents);
 		emptyHand(state, ALICE, agents);
-		spawnPermanent(state, "baby-rest-in-peace", ALICE);
+		spawnPermanent(state, "baby-leyline-of-the-void", BOB);
 		const pitched = spawnCard(state, "forest", ALICE, "hand");
 		state.players[ALICE].manaPool.g = 1;
 		const libraryBefore = state.players[ALICE].library.length;

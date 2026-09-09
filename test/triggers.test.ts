@@ -455,7 +455,7 @@ describe("triggered abilities", () => {
 	test("a graveyard redirect does not queue the self-death trigger", () => {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "baby-rest-in-peace", ALICE);
+		spawnPermanent(state, "samurai-of-the-pale-curtain", ALICE);
 		const source = spawnPermanent(state, "test-self-death-pinger", ALICE);
 
 		const result = perform(

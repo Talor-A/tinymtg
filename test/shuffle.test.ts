@@ -16,7 +16,7 @@ const DECK = [
 	"test-enters-with-counters",
 	"darksteel-relic",
 	"revitalize",
-	"baby-rest-in-peace",
+	"samurai-of-the-pale-curtain",
 	"root-maze",
 	"test-skip-draw-step",
 	"test-forced-copy",

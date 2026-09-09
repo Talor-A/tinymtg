@@ -79,12 +79,17 @@ accepted. A recognized keyword is never silently dropped: every root `A`, `T`,
 
 The current subset covers: literal characteristics (name, mana cost, types,
 colors, P/T); the keywords Deathtouch, Flying, Reach, Defender, Lifelink,
-Indestructible, Vigilance, and Trample;
+Indestructible, Vigilance, and Trample, plus `Bushido:N`, which the engine
+compiles into a blocks-or-becomes-blocked trigger the way it already does
+Prowess;
 literal entry-counter shorthand and both canonical enters-tapped `R:` forms —
 the self form (`ValidCard$ Card.Self`, e.g. Charcoal Diamond) lowers directly
 to `CardDefInput.entersTapped`, and the global form (a supported selector
 scoped by `ActiveZones$ Battlefield`, e.g. Root Maze) lowers to a registered
-replacement, honoring CR 614.12's own-entry guard; the exact optional Clone
+replacement, honoring CR 614.12's own-entry guard; the graveyard-to-exile `R:` form (`Origin$ Battlefield |
+Destination$ Graveyard` with a `ReplaceWith$` body that moves `ReplacedCard`
+to exile, e.g. Samurai of the Pale Curtain), which does apply to its own
+source; the exact optional Clone
 form (`K:ETBReplacement:Copy:DBCopy:Optional` with `DB$ Clone | Choices$
 Creature.Other`) lowers to a replay-safe, non-targeting choice; basic-land mana abilities
 are synthesized from subtype (Forge omits explicit `A:` lines for those); mana
@@ -118,7 +123,8 @@ activated abilities, and triggered abilities with at most one required target
 supertype word that may carry Forge's `non` prefix; the exact target form
 `Creature.Other+YouCtrl` is also supported — so it and `Creature.nonBlack` lower, while
 `Creature.attacking` does not); simple self-entry,
-upkeep, self-attack, and card-drawn triggers, including one optional (`may`) wrapper around
+upkeep, self-attack, card-drawn, and bushido's blocks-or-becomes-blocked
+triggers, including one optional (`may`) wrapper around
 a trigger's whole (possibly multi-step) effect sequence; fixed temporary P/T
 changes; temporary `KW$ Indestructible` grants; and fixed controlled-creature
 P/T statics. See the acceptance matrix in `forge/import.test.ts` for the exact

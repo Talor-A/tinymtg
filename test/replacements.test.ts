@@ -114,7 +114,7 @@ describe("destroy event success", () => {
 
 	test("exile-instead movement executes without reporting a destroy", () => {
 		const state = newGame();
-		spawnPermanent(state, "baby-rest-in-peace", BOB);
+		spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
 		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
 
 		const result = perform(
@@ -190,11 +190,11 @@ describe("replacement effects that add counters as a permanent enters", () => {
 });
 
 describe("when two effects change where a destroyed creature goes", () => {
-	function kalitasFixtureVsRip(p1Prefs: string[]): GameState {
+	function kalitasFixtureVsSamurai(p1Prefs: string[]): GameState {
 		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent(p1Prefs)];
 		spawnPermanent(state, "test-kalitas-replacement", ALICE);
-		spawnPermanent(state, "baby-rest-in-peace", BOB);
+		spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
 		const bears = spawnPermanent(state, "grizzly-bears", BOB);
 		perform(
 			state,
@@ -204,16 +204,16 @@ describe("when two effects change where a destroyed creature goes", () => {
 		return state;
 	}
 	test("the creature's controller chooses which effect applies first", () => {
-		const ripFirst = kalitasFixtureVsRip(["rest in peace"]);
+		const samuraiFirst = kalitasFixtureVsSamurai(["samurai"]);
 		expect(
-			ripFirst.battlefield.filter(
-				(id) => permanent(ripFirst, id).representation.kind === "token",
+			samuraiFirst.battlefield.filter(
+				(id) => permanent(samuraiFirst, id).representation.kind === "token",
 			).length,
-			"ALICE picks RiP: no Zombie for P0",
+			"ALICE picks the Samurai: no Zombie for P0",
 		).toBe(0);
-		expect(ripFirst.players[BOB].exile.length, "bears exiled").toBe(1);
+		expect(samuraiFirst.players[BOB].exile.length, "bears exiled").toBe(1);
 
-		const kalitasFixtureFirst = kalitasFixtureVsRip(["kalitas-style"]);
+		const kalitasFixtureFirst = kalitasFixtureVsSamurai(["kalitas-style"]);
 		kalitasFixtureFirst.log.length = 0;
 		const tokens = kalitasFixtureFirst.battlefield.filter(
 			(id) =>

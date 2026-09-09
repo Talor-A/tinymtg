@@ -68,6 +68,7 @@ registerCardFixture("j/jewel_thief");
 registerCardFixture("g/gilded_goose");
 registerCardFixture("s/sweettooth_witch");
 registerCardFixture("b/blood_servitor");
+registerCardFixture("s/samurai_of_the_pale_curtain");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family
@@ -311,35 +312,6 @@ export const AESTHIR_GLIDER = registerCard({
 /* ------------------------------------------------------------------ *
  * Zone-change replacement — the classic two-hate-cards conflict
  * ------------------------------------------------------------------ */
-
-function goingToGraveyard(ev: GameEvent): boolean {
-	return ev.kind === "change zone" && ev.destination.zone === "graveyard";
-}
-
-// This is the graveyard-replacement half of Rest in Peace. The real card's
-// ETB ability that exiles all graveyards is not implemented yet.
-export const BABY_REST_IN_PEACE = registerCard({
-	id: "baby-rest-in-peace",
-	name: "Baby Rest in Peace",
-	types: ["enchantment"],
-	colors: ["w"],
-	manaCost: {
-		w: 1,
-		n: 1,
-	},
-	replacements: [
-		{
-			label: "rip",
-			layer: "other",
-			text: "If a card or token would be put into a graveyard from anywhere, exile it instead.",
-			applies: (ev, ctx) => onBattlefield(ctx) && goingToGraveyard(ev),
-			replace: (ev) =>
-				ev.kind === "change zone" && ev.from !== null
-					? [{ ...ev, destination: { zone: "exile" } }]
-					: [ev],
-		},
-	],
-});
 
 // this only implements the graveyard-replacement half of leyline of the void
 // card text; it does not implement the opening-hand ability (the engine has

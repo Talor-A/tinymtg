@@ -189,9 +189,9 @@ describe("sacrifice action", () => {
 		});
 	});
 
-	test("is successful through Baby Rest in Peace, but does not produce a dies trigger", () => {
+	test("is successful through Samurai of the Pale Curtain, but does not produce a dies trigger", () => {
 		const state = newGame();
-		spawnPermanent(state, "baby-rest-in-peace", BOB);
+		spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
 		spawnPermanent(state, "test-death-watcher", ALICE);
 		const creature = spawnPermanent(state, "grizzly-bears", ALICE);
 
@@ -358,9 +358,9 @@ describe("sacrifice as an activated ability cost", () => {
 		expect(state.battlefield).not.toContain(creature.id);
 	});
 
-	test("Baby Rest in Peace changes the destination without making the cost unpaid", () => {
+	test("Samurai of the Pale Curtain changes the destination without making the cost unpaid", () => {
 		const state = setupMain();
-		spawnPermanent(state, "baby-rest-in-peace", BOB);
+		spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
 		spawnCard(state, "forest", ALICE, "library");
 		const outlet = spawnPermanent(state, "test-sacrifice-outlet", ALICE);
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [outlet.id]);

@@ -1459,6 +1459,97 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.abilityDefinitions.replacement[0]?.layer).toBe("other");
 	});
 
+	test("Samurai of the Pale Curtain lowers bushido and its exile replacement", () => {
+		const result = importFixture("s/samurai_of_the_pale_curtain");
+		if (!result.ok) throw new Error("expected the Samurai to import");
+		expect(result.card.keywords).toEqual(["bushido 1"]);
+		// The keyword is authoring shorthand: `defineCard` turns it into a real
+		// registered trigger, which is what the card actually prints.
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "bushido 1",
+				text: "Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.",
+				condition: {
+					kind: "declare blockers",
+					subject: "self blocks or becomes blocked",
+				},
+				targets: [],
+				effects: [
+					{
+						kind: "modify-pt",
+						object: "source",
+						power: 1,
+						toughness: 1,
+						duration: "until-end-of-turn",
+					},
+				],
+			},
+		]);
+		expect(result.card.abilityDefinitions.replacement).toHaveLength(1);
+		expect(result.card.abilityDefinitions.replacement[0]).toMatchObject({
+			layer: "other",
+			functionsFrom: "any",
+			text: "If a permanent would be put into a graveyard, exile it instead.",
+		});
+	});
+
+	test("Bushido without exactly one positive amount is rejected", () => {
+		for (const keyword of [
+			"Bushido",
+			"Bushido:0",
+			"Bushido:1:2",
+			"Bushido:x",
+		]) {
+			const result = importText(
+				`Name:Ronin\nManaCost:1 W\nTypes:Creature Human Samurai\nPT:2/2\nK:${keyword}\nOracle:\n`,
+			);
+			expect(result.ok, keyword).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]).toMatchObject({
+				code: "UNSUPPORTED_KEYWORD",
+				message: `unsupported keyword: ${keyword}`,
+			});
+		}
+	});
+
+	test("a graveyard replacement that does not exile from the battlefield is rejected", () => {
+		const CURTAIN = [
+			"Name:Pale Curtain",
+			"ManaCost:W W",
+			"Types:Creature Fox",
+			"PT:2/2",
+			"R:Event$ Moved | ActiveZones$ Battlefield | Origin$ Battlefield | Destination$ Graveyard | ValidCard$ Permanent | ReplaceWith$ Exile | Description$ x",
+			"SVar:Exile:DB$ ChangeZone | Origin$ Battlefield | Destination$ Exile | Defined$ ReplacedCard",
+			"Oracle:",
+			"",
+		].join("\n");
+		expect(importText(CURTAIN).ok, "the canonical form imports").toBe(true);
+
+		for (const [what, mutated] of [
+			[
+				"a non-battlefield origin",
+				CURTAIN.replace("Origin$ Battlefield |", "Origin$ Hand |"),
+			],
+			[
+				"a body sending it elsewhere",
+				CURTAIN.replace("Destination$ Exile", "Destination$ Hand"),
+			],
+			[
+				"a body moving something else",
+				CURTAIN.replace("Defined$ ReplacedCard", "Defined$ Self"),
+			],
+			[
+				"a replacement outside the battlefield",
+				CURTAIN.replace("ActiveZones$ Battlefield | ", ""),
+			],
+		] as const) {
+			const result = importText(mutated);
+			expect(result.ok, what).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.code, what).toBe("UNSUPPORTED_EFFECT");
+		}
+	});
+
 	test("Clone lowers its exact optional creature-copy entry replacement", () => {
 		const result = importFixture("c/clone");
 		if (!result.ok) throw new Error("expected Clone to lower");

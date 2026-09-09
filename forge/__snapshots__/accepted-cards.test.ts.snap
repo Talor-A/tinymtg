@@ -99,6 +99,7 @@ Antagonize
 Anthem of Champions
 Anticipate
 Appetite for the Unnatural
+Araba Mothrider
 Arachnoid
 Aragorn, the Uniter
 Arashin Cleric
@@ -499,6 +500,7 @@ Curate
 Curio Vendor
 Curious Killbot
 Cursebreak
+Cursed Ronin
 Custodian of the Trove
 Cyclopean Snare
 Cyclops of One-Eyed Pass
@@ -580,6 +582,7 @@ Destructor Dragon
 Devilthorn Fox
 Devkarin Dissident
 Devoted Hero
+Devoted Retainer
 Devotee of Strength
 Devout Monk
 Devout Witness
@@ -1195,6 +1198,7 @@ Infuriate
 Ingenious Skaab
 Initiate's Companion
 Inkrise Infiltrator
+Inner-Chamber Guard
 Insatiable Harpy
 Insight
 Insomnia, Crown City
@@ -1225,6 +1229,7 @@ Izzet Signet
 Jace's Erasure
 Jace's Ingenuity
 Jaddi Offshoot
+Jade Avenger
 Jade Mage
 Jadecraft Artisan
 Jagged Barrens
@@ -1317,6 +1322,7 @@ Koala-Sheep
 Kobolds of Kher Keep
 Kolinahr Priest
 Komodo Rhino
+Konda, Lord of Eiganjo
 Koskun Keep
 Kozilek's Channeler
 Kozilek's Predator
@@ -1527,6 +1533,7 @@ Mossbeard Ancient
 Mosscoat Goriak
 Mossfire Valley
 Mothrider Patrol
+Mothrider Samurai
 Mountain
 Mountain Bandit
 Mournful Zombie
@@ -1575,6 +1582,7 @@ Neurok Replica
 New Benalia
 Nexus Wardens
 Nezumi Informant
+Nezumi Ronin
 Nezumi Shadow-Watcher
 Niblis of Dusk
 Night of Souls' Betrayal
@@ -1898,6 +1906,8 @@ Rockslide Sorcerer
 Rod of Ruin
 Roiling Dragonstorm
 Romantic Rendezvous
+Ronin Cavekeeper
+Ronin Houndmaster
 Ronom Unicorn
 Root Maze
 Root Out
@@ -1944,6 +1954,8 @@ Sage's Row Savant
 Sailor of Means
 Salt Marsh
 Saltblast
+Samurai Enforcers
+Samurai of the Pale Curtain
 Sanctify
 Sanctuary Cat
 Sandsteppe Citadel
@@ -2089,6 +2101,7 @@ Silverbeak Griffin
 Silverbluff Bridge
 Silvercoat Lion
 Silverquill Campus
+Silverstorm Samurai
 Simic Cluestone
 Simic Guildgate
 Simic Signet
@@ -2774,4 +2787,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2771`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2784`;

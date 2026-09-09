@@ -32,7 +32,7 @@ const PERMANENTS = [
 	"hardened-scales",
 	"baby-leyline-of-the-void",
 	"test-skip-draw-step",
-	"baby-rest-in-peace",
+	"samurai-of-the-pale-curtain",
 	"root-maze",
 ] as const;
 

@@ -2159,6 +2159,20 @@ interface DeclareAttackersTriggerCondition {
 	selector?: ObjectSelectorDef;
 }
 
+/**
+ * Matches the source blocking, or being blocked, as blockers are declared.
+ *
+ * Only the source's own participation is supported, because that is exactly
+ * bushido's condition (CR 702.45a). Both halves are one condition and fire
+ * once: an attacker becomes blocked a single time however many creatures were
+ * assigned to it (CR 509.1h), and a creature that blocks is never also an
+ * attacker in the same combat.
+ */
+interface DeclareBlockersTriggerCondition {
+	kind: "declare blockers";
+	subject: "self blocks or becomes blocked";
+}
+
 interface BeginStepTriggerCondition {
 	kind: "begin step";
 	player: ValidPlayer;
@@ -2185,6 +2199,7 @@ type TriggerCondition =
 	| DealsCombatDamageTriggerCondition
 	| CastTriggerCondition
 	| DeclareAttackersTriggerCondition
+	| DeclareBlockersTriggerCondition
 	| BeginStepTriggerCondition
 	| ZoneChangeTriggerCondition
 	| TapTriggerCondition;
@@ -2220,7 +2235,14 @@ export type Keyword =
 	| "trample"
 	| "flash"
 	/** A triggered ability keyword; see {@link printedKeywordTriggers}. */
-	| "prowess";
+	| "prowess"
+	/**
+	 * Bushido N, also a triggered ability keyword. N is part of the keyword
+	 * rather than a separate field because "bushido 1" and "bushido 2" are
+	 * different keywords a card can be printed with, and the number is what
+	 * the ability they stand for grants.
+	 */
+	| `bushido ${number}`;
 
 /**
  * Object restrictions shared by targeting, triggers, costs, and imported
@@ -2582,9 +2604,10 @@ function printedEntryReplacements(
 }
 
 /**
- * CR 702.108a: prowess is a triggered ability keyword, so `keywords:
- * ["prowess"]` is authoring shorthand for one ordinary cast trigger, and that
- * is what it compiles to here.
+ * CR 702.108a and CR 702.45a: prowess and bushido are triggered ability
+ * keywords, so `keywords: ["prowess"]` and `keywords: ["bushido 1"]` are
+ * authoring shorthand for one ordinary trigger each, and that is what they
+ * compile to here.
  *
  * The keyword itself stays on the characteristics — "has prowess" is what an
  * ability-changing effect or a text reference would read — and the trigger it
@@ -2604,27 +2627,66 @@ function printedKeywordTriggers(
 	// creature have prowess more than once, and each instance triggers
 	// separately. Thor Odinson prints `K:Prowess` twice and gets +2/+2.
 	const keywords = def.keywords ?? [];
-	return keywords
+	const prowess = keywords
 		.filter((keyword) => keyword === "prowess")
-		.map(() => ({
-			id: "prowess",
-			text: "Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.",
-			condition: {
-				kind: "cast",
-				player: "you",
-				selector: { kind: "not", selector: { kind: "type", type: "creature" } },
-			},
-			targets: [],
-			effects: [
-				{
-					kind: "modify-pt",
-					object: "source",
-					power: 1,
-					toughness: 1,
-					duration: "until-end-of-turn",
+		.map(
+			(): TriggeredAbilityDefinition => ({
+				id: "prowess",
+				text: "Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.",
+				condition: {
+					kind: "cast",
+					player: "you",
+					selector: {
+						kind: "not",
+						selector: { kind: "type", type: "creature" },
+					},
 				},
-			],
-		}));
+				targets: [],
+				effects: [
+					{
+						kind: "modify-pt",
+						object: "source",
+						power: 1,
+						toughness: 1,
+						duration: "until-end-of-turn",
+					},
+				],
+			}),
+		);
+
+	// Bushido N is likewise one ability per printed instance, and N comes from
+	// the keyword itself. Samurai of the Pale Curtain prints `K:Bushido:1`.
+	const bushido = keywords.flatMap((keyword): TriggeredAbilityDefinition[] => {
+		const match = keyword.match(/^bushido (\d+)$/);
+		if (!match) return [];
+		const amount = Number(match[1]);
+		assert(
+			Number.isSafeInteger(amount) && amount > 0,
+			`bushido must grant a positive whole amount, got ${keyword}`,
+		);
+		return [
+			{
+				id: keyword,
+				text: `Whenever this creature blocks or becomes blocked, it gets +${amount}/+${amount} until end of turn.`,
+				condition: {
+					kind: "declare blockers",
+					subject: "self blocks or becomes blocked",
+				},
+				targets: [],
+				effects: [
+					{
+						kind: "modify-pt",
+						object: "source",
+						power: amount,
+						toughness: amount,
+						duration: "until-end-of-turn",
+					},
+				],
+			},
+		];
+	});
+
+	return [...prowess, ...bushido];
 }
 
 /**
@@ -5154,6 +5216,16 @@ function triggerMatches(
 				return attacker ? [attacker] : [];
 			});
 			return triggerSubjectsMatch(read, source, attackers, condition.selector);
+		}
+
+		case "declare blockers": {
+			assert(ev.kind === "declare blockers");
+			// Either side of the assignment: the source blocking something, or
+			// something blocking the source.
+			return ev.blockers.some(
+				({ blocker, attacker }) =>
+					blocker === source.id || attacker === source.id,
+			);
 		}
 
 		case "change zone": {

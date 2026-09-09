@@ -1696,6 +1696,121 @@ function lowerCopyEtbKeyword(
 }
 
 /**
+ * The graveyard-to-exile family: `Origin$ Battlefield | Destination$ Graveyard`
+ * with a `ReplaceWith$` body that moves the replaced card to exile instead
+ * (Samurai of the Pale Curtain, Rest in Peace's second ability).
+ *
+ * Unlike the entry family below, a replacement here does apply to its own
+ * source: CR 614.12 is about an object entering the battlefield, and a Samurai
+ * that dies while another one is out is exiled by it, as is the Samurai itself
+ * by its own ability. So no self-exclusion is imposed on the selector.
+ */
+function lowerGraveyardExileReplacement(
+	face: ForgeFaceAst,
+	params: ForgeParamList,
+	where: { nodeId: string; line: number },
+): ReplacementLowering | ImportIssue {
+	if (
+		getForgeParam(params, "Origin") !== "Battlefield" ||
+		getForgeParam(params, "ActiveZones") !== "Battlefield" ||
+		getForgeParam(params, "ReplacementResult") !== undefined
+	)
+		return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
+
+	const validCard = getForgeParam(params, "ValidCard");
+	if (validCard === undefined)
+		return issue("UNSUPPORTED_PARAMETER", "ValidCard$ is required", where);
+	// Only a permanent can leave the battlefield, so Forge's bare `Permanent`
+	// restricts nothing beyond the movement matched below and lowers to no
+	// selector at all. Anything narrower has to parse.
+	const selector = validCard === "Permanent" ? null : parseSelector(validCard);
+	if (selector === null && validCard !== "Permanent")
+		return issue("UNSUPPORTED_TARGET", "unsupported ValidCard selector", where);
+
+	const replaceWith = getForgeParam(params, "ReplaceWith");
+	if (replaceWith === undefined)
+		return issue("UNSUPPORTED_REFERENCE", "missing ReplaceWith$", where);
+	const bucket = face.svarIndex[replaceWith.trim().toLowerCase()];
+	if (!bucket || bucket.length === 0)
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`unresolved ReplaceWith ${replaceWith}`,
+			where,
+		);
+	if (bucket.length > 1)
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`ambiguous duplicate SVar ${replaceWith}`,
+			where,
+		);
+	const effectSVar = bucket[0] as ForgeSVarRecord;
+	if (effectSVar.parsed.kind !== "params")
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`${replaceWith} is not an ability body`,
+			where,
+		);
+	const effectParams = effectSVar.parsed.params;
+	const effectWhere = {
+		nodeId: effectSVar.source.nodeId,
+		line: effectSVar.source.line,
+	};
+	const effectBad = checkParams(
+		effectParams,
+		new Set(["db", "origin", "destination", "defined"]),
+		effectWhere,
+	);
+	if (effectBad) return effectBad;
+	if (
+		getForgeParam(effectParams, "DB") !== "ChangeZone" ||
+		getForgeParam(effectParams, "Origin") !== "Battlefield" ||
+		getForgeParam(effectParams, "Destination") !== "Exile" ||
+		getForgeParam(effectParams, "Defined") !== "ReplacedCard"
+	)
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"unsupported ReplaceWith effect body",
+			effectWhere,
+		);
+
+	const description =
+		getForgeParam(params, "Description") ??
+		"If a permanent would be put into a graveyard, exile it instead.";
+	const def: ReplacementEffectDefinition = {
+		label: `import:${where.nodeId}`,
+		text: description,
+		layer: "other",
+		functionsFrom: "any",
+		applies(ev, ctx) {
+			if (
+				ctx.self?.zone !== "battlefield" ||
+				ev.kind !== "change zone" ||
+				ev.from !== "battlefield" ||
+				ev.destination.zone !== "graveyard"
+			)
+				return false;
+			if (selector === null) return true;
+			// The permanent is still on the battlefield while the replacement is
+			// evaluated, so its current characteristics are what the selector
+			// reads (CR 608.2h's last known information is not needed yet).
+			return selectorMatches(selector, getSnapshot(ctx.read, ev.object), {
+				controller: ctx.controller,
+				id: ctx.self.id,
+			});
+		},
+		// `from !== null` excludes a token's creation event, which shares the
+		// change-zone kind but must keep its battlefield destination.
+		replace: (ev: GameEvent) =>
+			ev.kind === "change zone" &&
+			ev.from !== null &&
+			ev.destination.zone === "graveyard"
+				? [{ ...ev, destination: { zone: "exile" } }]
+				: [ev],
+	};
+	return { kind: "global", def };
+}
+
+/**
  * Two canonical enters-tapped shapes share `Event$ Moved | ... | ReplaceWith$`:
  *
  * - The self form (Charcoal Diamond, Diregraf Ghoul) has no `ActiveZones$`,
@@ -1725,6 +1840,7 @@ function lowerReplacement(
 		new Set([
 			"event",
 			"validcard",
+			"origin",
 			"destination",
 			"replacewith",
 			"replacementresult",
@@ -1734,9 +1850,15 @@ function lowerReplacement(
 		where,
 	);
 	if (badParams) return badParams;
+	if (getForgeParam(params, "Event") !== "Moved")
+		return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
+	// The two families split on where the replaced movement was headed: into
+	// play (enters tapped, below) or into a graveyard (exiled instead).
+	if (getForgeParam(params, "Destination") === "Graveyard")
+		return lowerGraveyardExileReplacement(face, params, where);
 	if (
-		getForgeParam(params, "Event") !== "Moved" ||
 		getForgeParam(params, "Destination") !== "Battlefield" ||
+		getForgeParam(params, "Origin") !== undefined ||
 		getForgeParam(params, "ReplacementResult") !== "Updated"
 	)
 		return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
@@ -2795,6 +2917,23 @@ export function lowerForgeCard(
 				);
 			}
 			entersWith[counterName] = summed;
+			continue;
+		}
+		// Bushido carries its amount in a second segment (`K:Bushido:1`), which
+		// the engine keeps inside the keyword itself.
+		if (record.keyword === "Bushido") {
+			const [, amountText] = record.segments;
+			const amount = amountText ? positiveInteger(amountText) : null;
+			if (record.segments.length !== 2 || !amount) {
+				return reject(
+					issue(
+						"UNSUPPORTED_KEYWORD",
+						`unsupported keyword: ${record.raw}`,
+						where,
+					),
+				);
+			}
+			keywords.push(`bushido ${amount}`);
 			continue;
 		}
 		const bare = BARE_KEYWORDS.get(record.keyword);

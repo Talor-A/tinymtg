@@ -291,7 +291,7 @@ describe("spell additional sacrifice cost", () => {
 
 	test("a graveyard destination replacement still pays the sacrifice", () => {
 		const { state, spell, target, sacrifice } = setupCast();
-		spawnPermanent(state, "baby-rest-in-peace", BOB);
+		spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
 		const alice = new ScriptedAgent(
 			[],
 			[],
