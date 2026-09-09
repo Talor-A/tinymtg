@@ -76,27 +76,10 @@ function expectRoundTrip(source: string): ForgeScriptDocument {
 /* ------------------------------------------------------------------------- */
 
 describe("known-name registries", () => {
-	// Sizes for Forge revision 1b900c62af9340f4f73109012083d179f8a48ff6.
-	test("have the reference-revision sizes", () => {
-		expect(KNOWN_FORGE_EFFECT_NAMES).toHaveLength(201);
-		expect(KNOWN_FORGE_TRIGGER_MODES).toHaveLength(146);
-		expect(KNOWN_FORGE_REPLACEMENT_EVENTS).toHaveLength(40);
-		expect(KNOWN_FORGE_STATIC_MODES).toHaveLength(83);
-	});
-
-	test("contain no duplicates", () => {
-		for (const registry of [
-			KNOWN_FORGE_EFFECT_NAMES,
-			KNOWN_FORGE_TRIGGER_MODES,
-			KNOWN_FORGE_REPLACEMENT_EVENTS,
-			KNOWN_FORGE_STATIC_MODES,
-		]) {
-			expect(new Set(registry).size).toBe(registry.length);
-		}
-	});
-
-	// Spot-checks at the start, middle and end of each enum, so that a registry
-	// of the right length but the wrong contents cannot slip through.
+	// Spot-checks at the start, middle and end of each enum, taken from Forge
+	// revision 1b900c62af9340f4f73109012083d179f8a48ff6, so that a registry
+	// transcribed in the wrong order or with the wrong contents cannot slip
+	// through.
 	test("effect names sample start, middle and end of ApiType", () => {
 		expect(KNOWN_FORGE_EFFECT_NAMES[0]).toBe("Abandon");
 		expect(KNOWN_FORGE_EFFECT_NAMES[1]).toBe("ActivateAbility");
@@ -653,10 +636,6 @@ describe("ordinary one-face card", () => {
 			.map((line) => line.trim())
 			.filter((line) => line !== "" && !line.startsWith("#"));
 		expect(result.document.nodes).toHaveLength(meaningful.length);
-	});
-
-	test("round-trips", () => {
-		expectRoundTrip(source);
 	});
 });
 

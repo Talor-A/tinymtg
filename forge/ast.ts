@@ -570,7 +570,13 @@ export type ForgeReplacementEvent = KnownForgeReplacementEvent | (string & {});
 export type ForgeStaticMode = KnownForgeStaticMode | (string & {});
 
 function lowerSet(values: readonly string[]): ReadonlySet<string> {
-	return new Set(values.map((value) => value.toLowerCase()));
+	const lookup = new Set(values.map((value) => value.toLowerCase()));
+	// A duplicate would shrink the lookup silently rather than fail, leaving a
+	// registry that lists more names than it recognises. Thrown rather than
+	// asserted through lib/assert.ts: this module keeps zero imports.
+	if (lookup.size !== values.length)
+		throw new Error("a known-name registry contains a duplicate");
+	return lookup;
 }
 
 const EFFECT_NAME_LOOKUP = lowerSet(KNOWN_FORGE_EFFECT_NAMES);
