@@ -61,25 +61,26 @@ const ALL_ZONES = [
 
 export type Zone = (typeof ALL_ZONES)[number];
 
-export type Color = "w" | "u" | "b" | "r" | "g";
+/* ------------------------------------------------------------------ *
+ * Colors
+ * ------------------------------------------------------------------ */
 
-const COLORS: readonly Color[] = ["w", "u", "b", "r", "g"];
+const COLORS = ["w", "u", "b", "r", "g"] as const;
+export type Color = (typeof COLORS)[number];
 
 /**
  * A kind of mana that can exist in a player's pool: the five colors plus
  * colorless.
  */
-export type ManaType = Color | "c";
-
-const MANA_TYPES: readonly ManaType[] = [...COLORS, "c"];
+const MANA_TYPES = [...COLORS, "c"] as const;
+export type ManaType = (typeof MANA_TYPES)[number];
 
 /**
  * A kind of requirement a mana cost can contain: every {@link ManaType}, plus
  * generic.
  */
-export type ManaCostType = ManaType | "n";
-
-export const MANA_COST_TYPES: readonly ManaCostType[] = [...MANA_TYPES, "n"];
+export const MANA_COST_TYPES = [...MANA_TYPES, "n"] as const;
+export type ManaCostType = (typeof MANA_COST_TYPES)[number];
 
 /** Mana currently available to a player, including colorless mana. */
 export type ManaPool = Record<ManaType, number>;
@@ -104,8 +105,9 @@ export type CardType =
 	| (typeof SPELL_CARD_TYPES)[number];
 
 /* ------------------------------------------------------------------ *
- * Turns
+ * Turns, Phases, and Steps
  * ------------------------------------------------------------------ */
+
 export type TurnId = Brand<number, "TurnId">;
 export type PhaseId = Brand<number, "PhaseId">;
 export type StepId = Brand<number, "StepId">;
