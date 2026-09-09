@@ -2293,6 +2293,7 @@ function parseActivationCost(
 	const mana: Exclude<ActivationCost["mana"], "zero"> = {};
 	let tapSelf = false;
 	let sacrifice: ActivationCost["sacrifice"];
+	let discard: ActivationCost["discard"];
 	let sawZero = false;
 	let sawMana = false;
 	for (const term of terms) {
@@ -2376,6 +2377,27 @@ function parseActivationCost(
 			};
 			continue;
 		}
+		// Forge writes the printed "Discard a card" as one card of any kind,
+		// with an optional trailing description as in Sac<1/CARDNAME/this token>.
+		// Nothing narrower (a type, a named card, more than one) is supported.
+		if (term.startsWith("Discard<")) {
+			if (!/^Discard<1\/Card(?:\/[^>]*)?>$/.test(term)) {
+				return issue(
+					"UNSUPPORTED_COST",
+					`unsupported discard activation cost term ${term}`,
+					where,
+				);
+			}
+			if (discard) {
+				return issue(
+					"UNSUPPORTED_COST",
+					"multiple discard activation costs are unsupported",
+					where,
+				);
+			}
+			discard = { amount: 1 };
+			continue;
+		}
 		if (/^\d+$/.test(term)) {
 			if (term !== "0" && term.startsWith("0")) {
 				return issue(
@@ -2433,6 +2455,7 @@ function parseActivationCost(
 		mana: sawMana ? mana : "zero",
 		tapSelf,
 		...(sacrifice ? { sacrifice } : {}),
+		...(discard ? { discard } : {}),
 	};
 }
 

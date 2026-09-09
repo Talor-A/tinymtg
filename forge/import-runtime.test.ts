@@ -124,6 +124,7 @@ registerRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter");
 registerRuntimeFixture("t/timberland_guide", "rt-timberland-guide");
 registerRuntimeFixture("l/lorescale_coatl", "rt-lorescale-coatl");
 registerRuntimeFixture("u/underworld_dreams", "rt-underworld-dreams");
+registerRuntimeFixture("r/rummaging_goblin", "rt-rummaging-goblin");
 registerCardFixture("d/darksteel_relic");
 
 {
@@ -1351,6 +1352,43 @@ describe("forge-import runtime: spell effects", () => {
 });
 
 describe("forge-import runtime: activated abilities", () => {
+	test("Rummaging Goblin's imported discard cost is paid before it draws", () => {
+		const state = setupMain();
+		const agents = passingAgents();
+		const goblin = spawnPermanent(state, "rt-rummaging-goblin", ALICE, {
+			summoningSick: false,
+		});
+		spawnCard(state, "forest", ALICE, "hand");
+		const handBefore = state.players[ALICE].hand.length;
+		const libraryBefore = state.players[ALICE].library.length;
+		const graveyardBefore = state.players[ALICE].graveyard.length;
+
+		executeAbilityAction(
+			state,
+			ALICE,
+			{
+				kind: "activate ability",
+				source: goblin.id,
+				ability: abilityId("activated", "rt-rummaging-goblin", 0),
+			},
+			agents,
+		);
+		settlePriority(state, agents);
+
+		expect(permanent(state, goblin.id).tapped, "the tap cost was paid").toBe(
+			true,
+		);
+		expect(
+			state.players[ALICE].graveyard,
+			"the discard cost was paid",
+		).toHaveLength(graveyardBefore + 1);
+		expect(
+			state.players[ALICE].hand,
+			"one card discarded, one drawn",
+		).toHaveLength(handBefore);
+		expect(state.players[ALICE].library).toHaveLength(libraryBefore - 1);
+	});
+
 	test("Arcanis's imported nontargeted ability returns its source to its owner's hand", () => {
 		const state = setupMain();
 		const arcanis = spawnPermanent(state, "rt-arcanis", ALICE);

@@ -92,11 +92,14 @@ abilities producing fixed mana, including colorless (`Produced$ C`, e.g.
 Wastes), modal one-mana choices between two or more distinct fixed symbols
 (`Produced$ Combo U R`, e.g. Temple of Epiphany), and the five colored choices
 encoded by `Produced$ Any`; token scripts with supported activated
-abilities, mana (Treasure) or not (Food), are rehosted on the importing card
+abilities, mana (Treasure) or not (Food, Blood), are rehosted on the importing card
 so created tokens retain executable abilities without mutating the registry
 during import; activated abilities whose
 costs contain fixed generic/WUBRG mana,
-optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), and an optional
+optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), an optional discard of one
+card of any kind (`Discard<1/Card>`, e.g. Rummaging Goblin and the Blood
+token), whose card is chosen while the ability is announced and which cannot
+be paid from an empty hand, and an optional
 single-permanent sacrifice, including `Creature.Other` to exclude the source,
 semicolon-separated alternatives, and `CARDNAME` for the source itself (e.g.
 Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with

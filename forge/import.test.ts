@@ -1567,6 +1567,58 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Blood Servitor hosts its Blood token's discard-cost ability", () => {
+		const result = importFixture("b/blood_servitor");
+		if (!result.ok) throw new Error("expected Blood Servitor to import");
+
+		expect(result.card.printedAbilities.activated.map(String)).toEqual([]);
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "activated",
+				id: "activated-1",
+				text: "Draw a card.",
+				cost: {
+					mana: { n: 1 },
+					tapSelf: true,
+					sacrifice: { selector: { kind: "self" }, amount: 1 },
+					discard: { amount: 1 },
+				},
+				targets: [],
+				effects: [{ kind: "draw", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
+	test("a discard cost's optional trailing description is ignored", () => {
+		const result = importText(
+			"Name:Pitcher\nManaCost:1 U\nTypes:Artifact\nA:AB$ Draw | Cost$ 1 Discard<1/Card/card> | NumCards$ 1 | SpellDescription$ x\nOracle:\n",
+		);
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated[0]?.cost).toEqual({
+			mana: { n: 1 },
+			tapSelf: false,
+			discard: { amount: 1 },
+		});
+	});
+
+	test("only Forge's one-card-of-any-kind discard cost is supported", () => {
+		for (const cost of [
+			"Discard<2/Card>",
+			"Discard<1/Creature>",
+			"Discard<1/CARDNAME>",
+			"Discard<1/Random>",
+			"Discard<1>",
+			"Discard<1/Card> Discard<1/Card>",
+		]) {
+			const result = importText(
+				`Name:Pitcher\nManaCost:1 U\nTypes:Artifact\nA:AB$ Draw | Cost$ 1 ${cost} | NumCards$ 1 | SpellDescription$ x\nOracle:\n`,
+			);
+			expect(result.ok, cost).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_COST");
+		}
+	});
+
 	test("Sweettooth Witch hosts its Food token's non-mana ability", () => {
 		const result = importFixture("s/sweettooth_witch");
 		if (!result.ok) throw new Error("expected Sweettooth Witch to import");
@@ -2411,7 +2463,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 	});
 
 	test("rejects unsupported activation cost terms without dropping them", () => {
-		for (const term of ["C", "X", "W/U", "W/P", "PayLife<2>", "Discard<1>"]) {
+		for (const term of ["C", "X", "W/U", "W/P", "PayLife<2>"]) {
 			const result = importText(
 				`${BEARS}A:AB$ GainLife | Cost$ ${term} | Defined$ You | LifeAmount$ 1 | SpellDescription$ You gain 1 life.\n`,
 			);

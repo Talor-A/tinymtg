@@ -67,6 +67,7 @@ registerCardFixture("t/thor_odinson");
 registerCardFixture("j/jewel_thief");
 registerCardFixture("g/gilded_goose");
 registerCardFixture("s/sweettooth_witch");
+registerCardFixture("b/blood_servitor");
 
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family

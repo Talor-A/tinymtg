@@ -2319,6 +2319,16 @@ export interface SacrificeActivationCost {
 	amount: 1;
 }
 
+/**
+ * Discarding as a cost. The card is chosen from hand while the ability is
+ * announced, so it is any card its controller holds, not a selected one: no
+ * printed cost narrows the choice in the supported set (e.g. the Blood token's
+ * "{1}, {T}, Discard a card, Sacrifice this token: Draw a card").
+ */
+export interface DiscardActivationCost {
+	amount: 1;
+}
+
 interface ActivatedAbilityDefBase {
 	id: string;
 	text: string;
@@ -2397,6 +2407,7 @@ export interface ActivationCost {
 	mana: PayableActivationManaCost;
 	tapSelf: boolean;
 	sacrifice?: SacrificeActivationCost;
+	discard?: DiscardActivationCost;
 }
 
 export type CardDefManaCost =
@@ -7566,6 +7577,8 @@ function activatedAbilityActions(
 				}).length === 0
 			)
 				continue;
+			if (definition.cost.discard && state.players[player].hand.length === 0)
+				continue;
 			if (definition.kind === "activated") {
 				// CR 601.2c via CR 602.2b: an ability with a required target cannot
 				// be activated at all unless a legal target exists for it.
@@ -7905,6 +7918,21 @@ function activateAbilityIn(
 			objects: candidates,
 		});
 	}
+	let discardPayment: ObjectId | null = null;
+	const discardCost = ability.cost.discard;
+	if (discardCost) {
+		assert(discardCost.amount === 1, "only discarding one card is implemented");
+		const hand = state.players[priorityPlayer].hand;
+		if (hand.length === 0) {
+			throw new IllegalAbilityActivationError(
+				`ability ${action.ability} has no card that can pay its discard cost`,
+			);
+		}
+		discardPayment = choices.chooseObject(state, priorityPlayer, {
+			reason: { kind: "discard" },
+			objects: [...hand],
+		});
+	}
 
 	// CR 602.2b puts the ability on the stack before its cost is paid, so the
 	// announcement mutates before the activation is known to be legal. CR 733.1
@@ -7992,6 +8020,38 @@ function activateAbilityIn(
 			) {
 				throw new IllegalAbilityActivationError(
 					`the sacrifice cost for ability ${action.ability} was not paid`,
+				);
+			}
+		}
+
+		if (discardCost) {
+			assertDefined(discardPayment);
+			const discard = performIn(
+				state,
+				{
+					kind: "discard",
+					player: priorityPlayer,
+					cards: { kind: "specific", card: discardPayment },
+				},
+				choices,
+				scope,
+				0,
+			);
+			// The discard event itself only instructs; the card leaving hand is
+			// the child that actually pays the cost. Its destination is not part
+			// of that check: CR 701.8a still calls the card discarded when a
+			// replacement (Rest in Peace) exiles it instead of putting it in the
+			// graveyard, so the cost is paid either way.
+			if (
+				!discard.executed.some(
+					(event) =>
+						event.kind === "change zone" &&
+						event.object === discardPayment &&
+						event.cause === "discard",
+				)
+			) {
+				throw new IllegalAbilityActivationError(
+					`the discard cost for ability ${action.ability} was not paid`,
 				);
 			}
 		}
