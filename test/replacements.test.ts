@@ -28,12 +28,12 @@ import {
 	created,
 } from "./utils/engine-helpers.ts";
 
-function chooseCopyAs(choice: ObjectId | null): SyncAgent {
+function chooseCopiedObject(choice: ObjectId | null): SyncAgent {
 	const fallback = new ScriptedAgent();
 	return {
 		choose(view, request) {
-			if (request.kind === "copyAs") {
-				return { optionId: choice === null ? "no-copy" : String(choice) };
+			if (request.kind === "object" && request.context.reason.kind === "copy") {
+				return { optionId: choice === null ? "decline" : String(choice) };
 			}
 			return fallback.choose(view, request);
 		},
@@ -533,7 +533,7 @@ describe("Clone's optional copy replacement", () => {
 		const selected = spawnPermanent(state, "eager-cadet", BOB);
 		const clone = spawnCard(state, "clone", ALICE, "hand");
 		const recorder = ChoiceController.record([
-			chooseCopyAs(selected.id),
+			chooseCopiedObject(selected.id),
 			new ScriptedAgent(),
 		]);
 
@@ -549,11 +549,11 @@ describe("Clone's optional copy replacement", () => {
 		});
 
 		const request = recorder.transcript().choices[0]?.request;
-		expect(request?.kind).toBe("copyAs");
+		expect(request?.kind).toBe("object");
 		expect(request?.options.map((option) => option.id)).toEqual([
 			String(first.id),
 			String(selected.id),
-			"no-copy",
+			"decline",
 		]);
 	});
 
@@ -564,7 +564,10 @@ describe("Clone's optional copy replacement", () => {
 		const aliceFallback = new ScriptedAgent();
 		const alice: SyncAgent = {
 			choose(view, request) {
-				if (request.kind === "copyAs") {
+				if (
+					request.kind === "object" &&
+					request.context.reason.kind === "copy"
+				) {
 					throw new Error("Clone's owner was incorrectly asked");
 				}
 				return aliceFallback.choose(view, request);
@@ -572,7 +575,7 @@ describe("Clone's optional copy replacement", () => {
 		};
 		const recorder = ChoiceController.record([
 			alice,
-			chooseCopyAs(selected.id),
+			chooseCopiedObject(selected.id),
 		]);
 		const event = cloneEvent(clone.id);
 		const result = perform(
@@ -600,7 +603,7 @@ describe("Clone's optional copy replacement", () => {
 
 		const entered = created(
 			perform(state, cloneEvent(clone.id), [
-				chooseCopyAs(null),
+				chooseCopiedObject(null),
 				new ScriptedAgent(),
 			]),
 		);
@@ -621,7 +624,7 @@ describe("Clone's optional copy replacement", () => {
 
 		const entered = created(
 			perform(state, cloneEvent(clone.id), [
-				chooseCopyAs(relic.id),
+				chooseCopiedObject(relic.id),
 				new ScriptedAgent(),
 			]),
 		);
@@ -641,7 +644,7 @@ describe("Clone's optional copy replacement", () => {
 
 		const entered = created(
 			perform(state, cloneEvent(clone.id), [
-				chooseCopyAs(watchdog.id),
+				chooseCopiedObject(watchdog.id),
 				new ScriptedAgent(),
 			]),
 		);
@@ -674,7 +677,7 @@ describe("Clone's optional copy replacement", () => {
 
 		const recordedState = structuredClone(checkpoint);
 		const recorder = ChoiceController.record([
-			chooseCopyAs(selected.id),
+			chooseCopiedObject(selected.id),
 			new ScriptedAgent(),
 		]);
 		perform(recordedState, cloneEvent(clone.id), recorder);
@@ -695,7 +698,10 @@ describe("Clone's optional copy replacement", () => {
 		const fallback = new ScriptedAgent();
 		const asyncAgent: Agent = {
 			choose(view, request) {
-				if (request.kind === "copyAs") {
+				if (
+					request.kind === "object" &&
+					request.context.reason.kind === "copy"
+				) {
 					return Promise.resolve({ optionId: String(selected.id) });
 				}
 				return fallback.choose(view, request);
@@ -707,22 +713,26 @@ describe("Clone's optional copy replacement", () => {
 		]);
 		let pending: ChoicePendingError | undefined;
 		try {
-			choices.chooseCopyAs(checkpoint, ALICE, cloneEvent(clone.id), clone.id, [
-				selected.id,
-			]);
+			choices.chooseObject(checkpoint, ALICE, {
+				reason: { kind: "copy", event: cloneEvent(clone.id), source: clone.id },
+				objects: [selected.id],
+				optional: { label: "Don't copy" },
+			});
 		} catch (error) {
 			if (!(error instanceof ChoicePendingError)) throw error;
 			pending = error;
 		}
 		if (!pending) throw new Error("expected copy-as choice to suspend");
-		expect(pending.request.kind).toBe("copyAs");
+		expect(pending.request.kind).toBe("object");
 		choices.recordAnswer(pending.request, await pending.answer);
 
 		choices.rewind();
 		expect(
-			choices.chooseCopyAs(checkpoint, ALICE, cloneEvent(clone.id), clone.id, [
-				selected.id,
-			]),
+			choices.chooseObject(checkpoint, ALICE, {
+				reason: { kind: "copy", event: cloneEvent(clone.id), source: clone.id },
+				objects: [selected.id],
+				optional: { label: "Don't copy" },
+			}),
 		).toBe(selected.id);
 		choices.assertComplete();
 		expect(checkpoint).toEqual(checkpointSnapshot);

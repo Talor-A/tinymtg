@@ -69,9 +69,6 @@ export class ScriptedAgent implements SyncAgent {
 				}
 				return firstOption(request);
 
-			case "copyAs":
-				return firstOption(request);
-
 			case "target": {
 				const target = this.targetChoices.shift();
 				return target
@@ -79,14 +76,15 @@ export class ScriptedAgent implements SyncAgent {
 					: firstOption(request);
 			}
 
-			case "sacrifice": {
+			case "object": {
+				if (request.context.reason.kind !== "sacrifice")
+					return firstOption(request);
 				const permanent = this.sacrificeChoices.shift();
 				return permanent
 					? { optionId: String(permanent) }
 					: firstOption(request);
 			}
 
-			case "ownHand":
 			case "mana":
 				return firstOption(request);
 
@@ -202,10 +200,8 @@ export class RandomAgent implements SyncAgent {
 				};
 			}
 			case "replacement":
-			case "copyAs":
+			case "object":
 			case "target":
-			case "sacrifice":
-			case "ownHand":
 			case "optional":
 			case "priorityAction":
 			case "mana":
@@ -222,22 +218,35 @@ export class KeyboardAgent implements SyncAgent {
 			case "replacement":
 				console.log(`\n[Replacement choice for ${request.context.event.kind}]`);
 				break;
-			case "copyAs":
-				console.log(
-					`\n[Player ${request.player}: choose what #${request.context.source} enters as]`,
-				);
+			case "object":
+				switch (request.context.reason.kind) {
+					case "copy":
+						console.log(
+							`\n[Player ${request.player}: choose what #${request.context.reason.source} enters as]`,
+						);
+						break;
+					case "discard":
+						console.log(
+							`\n[Player ${request.player}: choose a card to discard]`,
+						);
+						break;
+					case "sacrifice":
+						console.log(
+							`\n[Player ${request.player}: choose a permanent to sacrifice]`,
+						);
+						break;
+					case "select":
+						console.log(
+							`\n[Player ${request.player}: ${request.context.reason.prompt}]`,
+						);
+						break;
+					default:
+						return assertNever(request.context.reason);
+				}
 				break;
 			case "target":
 				console.log(
 					`\n[Player ${request.player}: choose target for ${request.context.announcing} from #${request.context.source}]`,
-				);
-				break;
-			case "ownHand":
-				console.log(`\n[Player ${request.player}: choose a card to discard]`);
-				break;
-			case "sacrifice":
-				console.log(
-					`\n[Player ${request.player}: choose a permanent to sacrifice]`,
 				);
 				break;
 			case "mana":

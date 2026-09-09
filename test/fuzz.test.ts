@@ -130,7 +130,7 @@ describe("choice transcript fuzz", () => {
 		expect(choiceKinds).toEqual(
 			new Set([
 				"replacement",
-				"ownHand",
+				"object",
 				"optional",
 				"priorityAction",
 				"triggerOrder",

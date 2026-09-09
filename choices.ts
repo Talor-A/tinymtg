@@ -9,11 +9,13 @@ import type {
 	GameState,
 	ManaAmount,
 	ObjectId,
+	ObjectSelectorDef,
 	PendingTrigger,
 	PlayerId,
 	PlayerView,
 	PriorityAction,
 	ReadonlyGameState,
+	SelectorContext,
 	TargetDef,
 	TriggeredAbilityStackItem,
 	TurnLocation,
@@ -21,8 +23,11 @@ import type {
 import {
 	activePlayer,
 	buildPlayerView,
+	createReadContext,
 	eligibleBlockers as eligibleBlockersFor,
+	getSnapshot,
 	name,
+	selectorMatches,
 	turnLocation,
 } from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
@@ -56,24 +61,41 @@ export interface ReplacementChoiceRequest extends ChoiceRequestBase {
  * The no-copy option is part of the same decision because the replacement may
  * be optional.
  */
-export interface CopyAsChoiceRequest extends ChoiceRequestBase {
-	kind: "copyAs";
+export type ObjectChoiceReason =
+	| { kind: "copy"; event: GameEvent; source: ObjectId }
+	| { kind: "sacrifice" }
+	| { kind: "discard" }
+	| { kind: "select"; prompt: string; source?: ObjectId };
+
+/** Choosing an object is not targeting. The engine supplies every legal option. */
+export interface ObjectChoiceRequest extends ChoiceRequestBase {
+	kind: "object";
 	context: {
-		event: GameEvent;
-		source: ObjectId;
-		creatures: ObjectId[];
+		reason: ObjectChoiceReason;
+		objects: ObjectId[];
+		selector?: {
+			definition: ObjectSelectorDef;
+			context: SelectorContext;
+		};
+		optional: boolean;
 	};
 }
 
-export interface OwnHandChoiceRequest extends ChoiceRequestBase {
-	kind: "ownHand";
-	context: { hand: ObjectId[] };
+export interface ObjectChoiceInput {
+	reason: ObjectChoiceReason;
+	objects: readonly ObjectId[];
+	selector?: {
+		definition: ObjectSelectorDef;
+		context: SelectorContext;
+	};
 }
 
-/** Choosing a permanent to sacrifice is not targeting. */
-export interface SacrificeChoiceRequest extends ChoiceRequestBase {
-	kind: "sacrifice";
-	context: { permanents: ObjectId[] };
+export interface RequiredObjectChoiceInput extends ObjectChoiceInput {
+	optional?: undefined;
+}
+
+export interface OptionalObjectChoiceInput extends ObjectChoiceInput {
+	optional: { label: string };
 }
 
 export interface OptionalChoiceRequest extends ChoiceRequestBase {
@@ -184,9 +206,7 @@ export interface ChooseFromTopChoiceRequest extends ChoiceRequestBase {
 export type ChoiceRequest =
 	| TargetChoiceRequest
 	| ReplacementChoiceRequest
-	| CopyAsChoiceRequest
-	| OwnHandChoiceRequest
-	| SacrificeChoiceRequest
+	| ObjectChoiceRequest
 	| OptionalChoiceRequest
 	| PriorityActionChoiceRequest
 	| ManaChoiceRequest
@@ -301,9 +321,7 @@ export class ChoicePendingError extends Error {
 type RequestInput =
 	| Omit<TargetChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<ReplacementChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
-	| Omit<CopyAsChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
-	| Omit<OwnHandChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
-	| Omit<SacrificeChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
+	| Omit<ObjectChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<OptionalChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<ManaChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<
@@ -898,69 +916,60 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		return this.choose(state, request, candidates);
 	}
 
-	chooseCopyAs(
+	chooseObject(
 		state: ReadonlyGameState,
 		player: PlayerId,
-		event: GameEvent,
-		source: ObjectId,
-		creatures: ObjectId[],
+		input: RequiredObjectChoiceInput,
+	): ObjectId;
+	chooseObject(
+		state: ReadonlyGameState,
+		player: PlayerId,
+		input: OptionalObjectChoiceInput,
+	): ObjectId | null;
+	chooseObject(
+		state: ReadonlyGameState,
+		player: PlayerId,
+		input: RequiredObjectChoiceInput | OptionalObjectChoiceInput,
 	): ObjectId | null {
-		assert(creatures.length > 0, "copy-as choice requires a legal creature");
 		assert(
-			new Set(creatures).size === creatures.length,
-			"copy-as choice received duplicate creatures",
+			new Set(input.objects).size === input.objects.length,
+			"object choice received duplicate objects",
 		);
-		const candidates: { id: string; value: ObjectId | null }[] = [
-			...creatures.map((id) => ({ id: String(id), value: id })),
-			{ id: "no-copy", value: null },
-		];
+		const read = input.selector ? createReadContext(state) : null;
+		const objects = input.objects.filter((id) => {
+			if (!input.selector) return true;
+			assertDefined(read);
+			return selectorMatches(input.selector.definition, getSnapshot(read, id), {
+				controller: input.selector.context.controller,
+				id: input.selector.context.source,
+			});
+		});
+		if (objects.length === 0) {
+			assert(input.optional, "required object choice has no legal objects");
+			return null;
+		}
+		const candidates: { id: string; value: ObjectId | null }[] = objects.map(
+			(id) => ({ id: String(id), value: id }),
+		);
+		if (input.optional) candidates.push({ id: "decline", value: null });
 		const request = this.request({
-			kind: "copyAs",
+			kind: "object",
 			player,
-			context: { event, source, creatures: [...creatures] },
+			context: {
+				reason: input.reason,
+				objects: [...objects],
+				...(input.selector ? { selector: input.selector } : {}),
+				optional: input.optional !== undefined,
+			},
 			options: [
-				...creatures.map((id) => ({
+				...objects.map((id) => ({
 					id: String(id),
 					label: `${objectLabel(state, id)}#${id}`,
 				})),
-				{ id: "no-copy", label: "Don't copy" },
+				...(input.optional
+					? [{ id: "decline", label: input.optional.label }]
+					: []),
 			],
-		});
-		return this.choose(state, request, candidates);
-	}
-
-	chooseSacrifice(
-		state: GameState,
-		player: PlayerId,
-		permanents: ObjectId[],
-	): ObjectId {
-		const candidates = permanents.map((id) => ({ id: String(id), value: id }));
-		const request = this.request({
-			kind: "sacrifice",
-			player,
-			context: { permanents: [...permanents] },
-			options: permanents.map((id) => ({
-				id: String(id),
-				label: `${objectLabel(state, id)}#${id}`,
-			})),
-		});
-		return this.choose(state, request, candidates);
-	}
-
-	chooseFromOwnHand(
-		state: GameState,
-		player: PlayerId,
-		hand: ObjectId[],
-	): ObjectId {
-		const candidates = hand.map((id) => ({ id: String(id), value: id }));
-		const request = this.request({
-			kind: "ownHand",
-			player,
-			context: { hand: [...hand] },
-			options: hand.map((id) => ({
-				id: String(id),
-				label: `${objectLabel(state, id)}#${id}`,
-			})),
 		});
 		return this.choose(state, request, candidates);
 	}

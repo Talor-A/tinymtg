@@ -1362,6 +1362,17 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		});
 	});
 
+	test("Copy Artifact lowers its artifact selector and enchantment exception", () => {
+		const result = importFixture("c/copy_artifact");
+		if (!result.ok) throw new Error("expected Copy Artifact to lower");
+		expect(result.card.abilityDefinitions.replacement).toHaveLength(1);
+		expect(result.card.abilityDefinitions.replacement[0]).toMatchObject({
+			layer: "copy",
+			functionsFrom: "any",
+			text: "You may have CARDNAME enter as a copy of any artifact on the battlefield, except it's an enchantment in addition to its other types.",
+		});
+	});
+
 	test("Charcoal Diamond and Diregraf Ghoul lower the canonical self-entry form to entersTapped", () => {
 		for (const fixture of ["c/charcoal_diamond", "d/diregraf_ghoul"]) {
 			const result = importFixture(fixture);
@@ -1934,11 +1945,6 @@ describe("lowerForgeCard: strict Clone shape", () => {
 		["non-copy ETB tier", ":Copy:DBCopy", ":Other:DBCopy"],
 		["extra keyword segment", ":DBCopy:Optional", ":DBCopy:Optional:Extra"],
 		["different effect API", "DB$ Clone", "DB$ CopyPermanent"],
-		[
-			"different choice selector",
-			"Choices$ Creature.Other",
-			"Choices$ Creature.YouCtrl",
-		],
 		[
 			"extra copy-body parameter",
 			" | SpellDescription$",

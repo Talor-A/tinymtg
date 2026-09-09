@@ -741,7 +741,10 @@ describe("instant and sorcery resolution", () => {
 				view: Parameters<ScriptedAgent["choose"]>[0],
 				request: Parameters<ScriptedAgent["choose"]>[1],
 			) {
-				if (request.kind === "ownHand")
+				if (
+					request.kind === "object" &&
+					request.context.reason.kind === "discard"
+				)
 					stackDuringOwnEffects.push(view.stack.length);
 				return super.choose(view, request);
 			}

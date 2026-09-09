@@ -576,20 +576,20 @@ export const TEST_FORCED_COPY = registerCard({
 				ev.destination.zone === "battlefield" &&
 				ev.object === ctx.self?.id &&
 				ev.destination.copiableOverride === undefined &&
-				pickForcedCopyTarget(ctx.read) !== null,
+				pickForcedCopySource(ctx.read) !== null,
 			replace(ev, ctx) {
 				if (ev.kind !== "change zone") return [ev];
-				const target = pickForcedCopyTarget(ctx.read);
+				const source = pickForcedCopySource(ctx.read);
 				// The copiable values carry the copied object's ability references,
 				// which is the whole of what this fixture acquires. No card identity
 				// comes along: it stays physically this test card.
-				return target && ev.destination.zone === "battlefield"
+				return source && ev.destination.zone === "battlefield"
 					? [
 							{
 								...ev,
 								destination: {
 									...ev.destination,
-									copiableOverride: cloneCharacteristics(target),
+									copiableOverride: cloneCharacteristics(source),
 								},
 							},
 						]
@@ -600,7 +600,7 @@ export const TEST_FORCED_COPY = registerCard({
 });
 
 /** Stand-in for a real choice — a policy would pick here. */
-function pickForcedCopyTarget(
+function pickForcedCopySource(
 	read: ReadContext,
 ): CharacteristicsSnapshot | null {
 	for (const id of read.state.battlefield) {

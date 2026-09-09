@@ -429,6 +429,9 @@ Contract Killing
 Contradict
 Copper Myr
 Copper Tablet
+Copy Artifact
+Copy Enchantment
+Copy Land
 Coral Commando
 Coral Eel
 Coral Merfolk
@@ -1386,6 +1389,7 @@ Mass Production
 Mass of Ghouls
 Master Decoy
 Master's Call
+Masterwork of Ingenuity
 Mausoleum Guard
 Maw of the Mire
 Mawcor
@@ -2666,4 +2670,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2663`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2667`;

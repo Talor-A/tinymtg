@@ -201,7 +201,10 @@ describe("spell additional sacrifice cost", () => {
 				if (request.kind === "target") {
 					return { optionId: `permanent:${target}` };
 				}
-				if (request.kind === "sacrifice") {
+				if (
+					request.kind === "object" &&
+					request.context.reason.kind === "sacrifice"
+				) {
 					expect(view.stack[0]).toMatchObject({
 						kind: "spell",
 						targets: [
@@ -222,7 +225,7 @@ describe("spell additional sacrifice cost", () => {
 			new ScriptedAgent(),
 		]);
 
-		expect(requests).toEqual(["target", "sacrifice"]);
+		expect(requests).toEqual(["target", "object"]);
 		expect(state.players[ALICE].manaPool.b).toBe(0);
 		expect(state.battlefield).not.toContain(sacrifice);
 		expect(state.players[ALICE].graveyard).toHaveLength(1);
@@ -268,7 +271,11 @@ describe("spell additional sacrifice cost", () => {
 			choose(_view, request) {
 				if (request.kind === "target")
 					return { optionId: `permanent:${target}` };
-				if (request.kind === "sacrifice") return { optionId: "999999" };
+				if (
+					request.kind === "object" &&
+					request.context.reason.kind === "sacrifice"
+				)
+					return { optionId: "999999" };
 				throw new Error(`unexpected ${request.kind} choice`);
 			},
 		};
@@ -345,7 +352,10 @@ describe("spell additional sacrifice cost", () => {
 		);
 		const alice: Agent = {
 			choose(view: PlayerView, request: ChoiceRequest) {
-				if (request.kind === "sacrifice") {
+				if (
+					request.kind === "object" &&
+					request.context.reason.kind === "sacrifice"
+				) {
 					sacrificeChoices++;
 					return Promise.resolve({ optionId: String(sacrifice) });
 				}
@@ -383,7 +393,7 @@ describe("spell additional sacrifice cost", () => {
 			"priorityAction",
 			"priorityAction",
 			"target",
-			"sacrifice",
+			"object",
 		]);
 		expect(state.players[ALICE].manaPool.b).toBe(0);
 		expect(state.battlefield).not.toContain(sacrifice);

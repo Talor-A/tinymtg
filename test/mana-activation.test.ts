@@ -895,7 +895,10 @@ describe("targetless activated abilities", () => {
 			choose(_view, request) {
 				const first = request.options[0];
 				if (!first) throw new Error("expected a choice option");
-				if (request.kind === "ownHand") {
+				if (
+					request.kind === "object" &&
+					request.context.reason.kind === "discard"
+				) {
 					discardOptions = request.options.length;
 					const oldCard = request.options.find(
 						(option) => option.id === String(oldHandCard.id),
@@ -938,7 +941,11 @@ describe("targetless activated abilities", () => {
 				const first = request.options[0];
 				if (!first) throw new Error("expected a choice option");
 				const answer = { optionId: first.id };
-				if (request.kind === "ownHand" && !suspended) {
+				if (
+					request.kind === "object" &&
+					request.context.reason.kind === "discard" &&
+					!suspended
+				) {
 					suspended = true;
 					return Promise.resolve(answer);
 				}

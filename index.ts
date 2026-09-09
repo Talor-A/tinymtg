@@ -22,7 +22,11 @@ export {
 	type ChooseFromTopChoiceAnswer,
 	type ChooseFromTopResult,
 	InvalidChoiceAnswerError,
+	type ObjectChoiceReason,
+	type ObjectChoiceRequest,
+	type OptionalObjectChoiceInput,
 	type RecordedChoice,
+	type RequiredObjectChoiceInput,
 	type ScryChoiceAnswer,
 	type ScryResult,
 	type SurveilChoiceAnswer,
@@ -2250,14 +2254,10 @@ export interface TargetDef {
 		| { kind: "any-target" };
 }
 
-/**
- * What a target restriction is read relative to. `controller` is the spell or
- * ability's controller, which is what "you" means in a restriction; it is not
- * the source's current controller.
- */
-export interface TargetContext {
+/** What an object selector reads `self`, `you`, and `opponent` relative to. */
+export interface SelectorContext {
 	controller: PlayerId;
-	source: ObjectId;
+	source: ObjectId | null;
 }
 
 /**
@@ -5641,11 +5641,10 @@ function executeIn(
 
 				for (let i = 0; i < countToDiscard; i++) {
 					const remaining = p.hand.filter((id) => !toDiscard.includes(id));
-					const selected = choices.chooseFromOwnHand(
-						state,
-						ev.player,
-						remaining,
-					);
+					const selected: ObjectId = choices.chooseObject(state, ev.player, {
+						reason: { kind: "discard" },
+						objects: remaining,
+					});
 
 					assertDefined(selected);
 					toDiscard.push(selected);
@@ -5673,7 +5672,10 @@ function executeIn(
 			const chosen =
 				ev.cards.kind === "specific"
 					? ev.cards.card
-					: choices.chooseFromOwnHand(state, ev.player, p.hand);
+					: choices.chooseObject(state, ev.player, {
+							reason: { kind: "discard" },
+							objects: p.hand,
+						});
 			assertDefined(chosen);
 			childResults.push(
 				performIn(
@@ -6686,11 +6688,10 @@ function resolveEffects(
 			// CR 701.21: an impossible sacrifice does nothing; it does not make
 			// the resolving spell or ability illegal.
 			if (candidates.length === 0) continue;
-			const chosen = choices.chooseSacrifice(
-				state,
-				sacrificingPlayer,
-				candidates,
-			);
+			const chosen = choices.chooseObject(state, sacrificingPlayer, {
+				reason: { kind: "sacrifice" },
+				objects: candidates,
+			});
 			performIn(
 				state,
 				{ kind: "sacrifice", object: chosen },
@@ -7284,7 +7285,7 @@ function isLegalTarget(
 	read: ReadContext,
 	definition: TargetDef,
 	target: EntityRef,
-	ctx: TargetContext,
+	ctx: SelectorContext,
 ): boolean {
 	if (target.type === "player") {
 		if (
@@ -7334,7 +7335,7 @@ function isLegalTarget(
 function legalTargets(
 	read: ReadContext,
 	definition: TargetDef,
-	ctx: TargetContext,
+	ctx: SelectorContext,
 ): EntityRef[] {
 	const candidates: EntityRef[] = [
 		{ type: "player", player: 0 },
@@ -7355,7 +7356,7 @@ function legalSacrifices(
 	read: ReadContext,
 	player: PlayerId,
 	selector: ObjectSelectorDef,
-	context: TargetContext,
+	context: SelectorContext,
 ): ObjectId[] {
 	return read.state.battlefield.filter((id) => {
 		const snapshot = read.view.objects.get(id);
@@ -7888,11 +7889,10 @@ function activateAbilityIn(
 				`ability ${action.ability} has no permanent that can pay its sacrifice cost`,
 			);
 		}
-		sacrificePayment = choices.chooseSacrifice(
-			state,
-			priorityPlayer,
-			candidates,
-		);
+		sacrificePayment = choices.chooseObject(state, priorityPlayer, {
+			reason: { kind: "sacrifice" },
+			objects: candidates,
+		});
 	}
 
 	// CR 602.2b puts the ability on the stack before its cost is paid, so the
@@ -8190,11 +8190,10 @@ function castSpellIn(
 					`${characteristics.name} has no creature that can pay its additional cost`,
 				);
 			}
-			sacrificePayment = choices.chooseSacrifice(
-				state,
-				priorityPlayer,
-				candidates,
-			);
+			sacrificePayment = choices.chooseObject(state, priorityPlayer, {
+				reason: { kind: "sacrifice" },
+				objects: candidates,
+			});
 		}
 
 		// Spending mana is a cost, not an event, so nothing may replace or trigger

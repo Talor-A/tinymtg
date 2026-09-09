@@ -77,6 +77,36 @@ describe("ScriptedAgent priority actions", () => {
 });
 
 describe("choice transcripts", () => {
+	test("object choices filter a mixed object set with a selector", () => {
+		const state = newGame();
+		const land = spawnCard(state, "forest", 0, "hand");
+		const card = spawnCard(state, "flying-men", 0, "hand");
+		const permanent = spawnPermanent(state, "grizzly-bears", 0);
+		const choosing: SyncAgent = {
+			choose(_view, request) {
+				if (request.kind !== "object")
+					throw new Error(`unexpected ${request.kind} choice`);
+				return { optionId: String(permanent.id) };
+			},
+		};
+		const recorder = ChoiceController.record([choosing, new ScriptedAgent()]);
+
+		expect(
+			recorder.chooseObject(state, 0, {
+				reason: { kind: "select", prompt: "Choose a creature" },
+				objects: [land.id, card.id, permanent.id],
+				selector: {
+					definition: { kind: "type", type: "creature" },
+					context: { controller: 0, source: null },
+				},
+			}),
+		).toBe(permanent.id);
+		expect(recorder.transcript().choices[0]?.request.options).toEqual([
+			{ id: String(card.id), label: `Flying Men#${card.id}` },
+			{ id: String(permanent.id), label: `Grizzly Bears#${permanent.id}` },
+		]);
+	});
+
 	test("token display names label replay choices without becoming card IDs", () => {
 		let seen: ChoiceRequest | undefined;
 		const agent: SyncAgent = {
@@ -316,8 +346,11 @@ describe("choice transcripts", () => {
 			choose(_state, request) {
 				const option = request.options.at(-1);
 				if (!option) throw new Error("expected an option");
-				if (request.kind === "ownHand") calls++;
-				return request.kind === "ownHand"
+				const discarding =
+					request.kind === "object" &&
+					request.context.reason.kind === "discard";
+				if (discarding) calls++;
+				return discarding
 					? Promise.resolve({ optionId: option.id })
 					: { optionId: request.options[0]?.id ?? "" };
 			},
@@ -329,7 +362,9 @@ describe("choice transcripts", () => {
 		expect(calls).toBe(4);
 		expect(
 			result.transcript.choices.filter(
-				(choice) => choice.request.kind === "ownHand",
+				(choice) =>
+					choice.request.kind === "object" &&
+					choice.request.context.reason.kind === "discard",
 			),
 		).toHaveLength(4);
 		expect(result.state.players[0].hand).toHaveLength(7);

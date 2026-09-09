@@ -49,10 +49,8 @@ import type {
 	ManaCostType,
 	ManaPool,
 	ManaType,
-	ObjectId,
 	ObjectSelectorDef,
 	PayableActivationManaCost,
-	ReadContext,
 	RelativeEffectPlayer,
 	ReplacementEffectDefinition,
 	SpellAbilityDef,
@@ -369,6 +367,26 @@ function parseSelector(value: string): ObjectSelectorDef | null {
 	const choices = value
 		.split(",")
 		.map((part) => parseSelectorPart(part.trim()));
+	return choices.every((choice): choice is ObjectSelectorDef => choice !== null)
+		? combineSelectors("any", choices)
+		: null;
+}
+
+function parseCopySelector(value: string): ObjectSelectorDef | null {
+	const choices = value.split(",").map((part) => {
+		const trimmed = part.trim();
+		const other = trimmed.endsWith(".Other");
+		const selector = parseSelectorPart(
+			other ? trimmed.slice(0, -".Other".length) : trimmed,
+		);
+		if (!selector) return null;
+		return other
+			? combineSelectors("all", [
+					selector,
+					{ kind: "not", selector: { kind: "self" } },
+				])
+			: selector;
+	});
 	return choices.every((choice): choice is ObjectSelectorDef => choice !== null)
 		? combineSelectors("any", choices)
 		: null;
@@ -1517,14 +1535,18 @@ function lowerCopyEtbKeyword(
 	const bodyWhere = { nodeId: body.source.nodeId, line: body.source.line };
 	const badParams = checkParams(
 		body.parsed.params,
-		new Set(["db", "choices", "spelldescription"]),
+		new Set(["addtypes", "db", "choices", "spelldescription"]),
 		bodyWhere,
 	);
 	if (badParams) return badParams;
 	const text = getForgeParam(body.parsed.params, "SpellDescription");
+	const choices = getForgeParam(body.parsed.params, "Choices");
+	const selector = choices ? parseCopySelector(choices) : null;
+	const addTypes = getForgeParam(body.parsed.params, "AddTypes");
 	if (
 		getForgeParam(body.parsed.params, "DB") !== "Clone" ||
-		getForgeParam(body.parsed.params, "Choices") !== "Creature.Other" ||
+		selector === null ||
+		(addTypes !== undefined && addTypes !== "Enchantment") ||
 		text === undefined
 	) {
 		return issue(
@@ -1545,51 +1567,55 @@ function lowerCopyEtbKeyword(
 				ev.destination.zone === "battlefield" &&
 				ev.object === ctx.self?.id &&
 				ev.destination.copiableOverride === undefined &&
-				copyableCreatureCandidates(ctx.read).length > 0
+				ctx.read.state.battlefield.some((id) => {
+					const object = getSnapshot(ctx.read, id);
+					return (
+						object.kind === "permanent" &&
+						selectorMatches(selector, object, {
+							controller: ctx.controller,
+							id: ctx.self?.id ?? null,
+						})
+					);
+				})
 			);
 		},
 		replace(ev, ctx) {
 			assert(ev.kind === "change zone");
-			assert(ctx.self, "copy ETB replacement must have a source");
-			const targetId = ctx.choices.chooseCopyAs(
-				ctx.state,
-				ctx.controller,
-				ev,
-				ctx.self.id,
-				copyableCreatureCandidates(ctx.read),
-			);
-			if (targetId === null) return [ev];
-			const target = getSnapshot(ctx.read, targetId);
+			const source = ctx.self;
+			assert(source, "copy ETB replacement must have a source");
+			const chosenId = ctx.choices.chooseObject(ctx.state, ctx.controller, {
+				reason: { kind: "copy", event: ev, source: source.id },
+				objects: ctx.read.state.battlefield,
+				selector: {
+					definition: selector,
+					context: { controller: ctx.controller, source: source.id },
+				},
+				optional: { label: "Don't copy" },
+			});
+			if (chosenId === null) return [ev];
+			const chosen = getSnapshot(ctx.read, chosenId);
 			assert(
-				target.kind === "permanent",
+				chosen.kind === "permanent",
 				"copy-as candidate must be a permanent",
 			);
-			assert(ev.destination.zone === "battlefield");
+			assert(
+				ev.kind === "change zone" && ev.destination.zone === "battlefield",
+			);
+			const copied = cloneCharacteristics(chosen.copiableValues);
+			if (addTypes === "Enchantment" && !copied.types.includes("enchantment"))
+				copied.types.push("enchantment");
 			return [
 				{
 					...ev,
 					destination: {
 						...ev.destination,
-						copiableOverride: cloneCharacteristics(target.copiableValues),
+						copiableOverride: copied,
 					},
 				},
 			];
 		},
 	};
 	return { def, usedSVar: svarName.toLowerCase() };
-}
-
-function copyableCreatureCandidates(read: ReadContext): ObjectId[] {
-	const candidates: ObjectId[] = [];
-	for (const id of read.state.battlefield) {
-		const snapshot = getSnapshot(read, id);
-		if (
-			snapshot.kind === "permanent" &&
-			snapshot.currentCharacteristics.types.includes("creature")
-		)
-			candidates.push(id);
-	}
-	return candidates;
 }
 
 /**

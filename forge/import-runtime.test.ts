@@ -3,10 +3,17 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ScriptedAgent } from "../agents.ts";
 import "../cards.ts"; // side effect: registers the baseline lands (forest) libraries rely on
-import type { GameState, ObjectId, PlayerId, SyncAgent } from "../index.ts";
+import type {
+	ChoiceSource,
+	GameState,
+	ObjectId,
+	PlayerId,
+	SyncAgent,
+} from "../index.ts";
 import {
 	abilityId,
 	activePlayer,
+	ChoiceController,
 	createReadContext,
 	eligibleBlockers,
 	executeAbilityAction,
@@ -96,6 +103,7 @@ registerRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond");
 registerRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus");
 registerRuntimeFixture("t/temple_of_epiphany", "rt-temple-of-epiphany");
 registerRuntimeFixture("c/clone", "rt-clone");
+registerRuntimeFixture("c/copy_artifact", "rt-copy-artifact");
 registerRuntimeFixture("b/blood_pact", "rt-blood-pact");
 registerRuntimeFixture("t/tome_scour", "rt-tome-scour");
 registerRuntimeFixture("f/firebrand_archer", "rt-firebrand-archer");
@@ -125,12 +133,12 @@ Oracle:
 	registerCard(result.card);
 }
 
-function chooseCopyAs(choice: ObjectId | null): SyncAgent {
+function chooseCopiedObject(choice: ObjectId | null): SyncAgent {
 	const fallback = new ScriptedAgent();
 	return {
 		choose(view, request) {
-			if (request.kind === "copyAs") {
-				return { optionId: choice === null ? "no-copy" : String(choice) };
+			if (request.kind === "object" && request.context.reason.kind === "copy") {
+				return { optionId: choice === null ? "decline" : String(choice) };
 			}
 			return fallback.choose(view, request);
 		},
@@ -216,7 +224,7 @@ function enterFromHand(
 	state: GameState,
 	cardId: string,
 	controller: PlayerId,
-	agents: SyncAgents,
+	agents: ChoiceSource,
 ): ObjectId {
 	const card = spawnCard(state, cardId, controller, "hand");
 	const result = perform(
@@ -759,7 +767,7 @@ describe("forge-import runtime: statics and replacements", () => {
 		spawnPermanent(copying, "rt-grizzly-bears", BOB);
 		const selected = spawnPermanent(copying, "eager-cadet", BOB);
 		const copied = enterFromHand(copying, "rt-clone", ALICE, [
-			chooseCopyAs(selected.id),
+			chooseCopiedObject(selected.id),
 			new ScriptedAgent(),
 		]);
 		expect(
@@ -770,13 +778,32 @@ describe("forge-import runtime: statics and replacements", () => {
 		const declining = newGame();
 		spawnPermanent(declining, "rt-grizzly-bears", BOB);
 		const unchanged = enterFromHand(declining, "rt-clone", ALICE, [
-			chooseCopyAs(null),
+			chooseCopiedObject(null),
 			new ScriptedAgent(),
 		]);
 		expect(
 			getSnapshot(createReadContext(declining), unchanged)
 				.currentCharacteristics.name,
 		).toBe("Clone");
+	});
+
+	test("Copy Artifact offers artifacts and keeps its enchantment exception", () => {
+		const state = newGame();
+		spawnPermanent(state, "rt-grizzly-bears", BOB);
+		const relic = spawnPermanent(state, "darksteel-relic", BOB);
+		const recorder = ChoiceController.record([
+			chooseCopiedObject(relic.id),
+			new ScriptedAgent(),
+		]);
+		const copied = enterFromHand(state, "rt-copy-artifact", ALICE, recorder);
+		const snapshot = getSnapshot(createReadContext(state), copied);
+
+		expect(snapshot.currentCharacteristics.name).toBe("Darksteel Relic");
+		expect(snapshot.copiableValues.types).toEqual(["artifact", "enchantment"]);
+		expect(recorder.transcript().choices[0]?.request.options).toEqual([
+			{ id: String(relic.id), label: `Darksteel Relic#${relic.id}` },
+			{ id: "decline", label: "Don't copy" },
+		]);
 	});
 
 	test("Aesthir Glider's imported static removes only itself from blocker candidates", () => {
