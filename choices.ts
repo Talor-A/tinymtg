@@ -5,6 +5,7 @@ import type {
 	BlockAssignment,
 	BoundReplacement,
 	EntityRef,
+	Engine,
 	GameEvent,
 	GameState,
 	ManaAmount,
@@ -22,19 +23,19 @@ import type {
 } from "./index.ts";
 import {
 	activePlayer,
-	buildPlayerView,
-	createReadContext,
-	eligibleBlockers as eligibleBlockersFor,
 	getSnapshot,
-	name,
 	objectMatchesPredicate,
 	turnLocation,
 } from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
 
-function objectLabel(state: ReadonlyGameState, id: ObjectId): string {
+function objectLabel(
+	engine: Engine,
+	state: ReadonlyGameState,
+	id: ObjectId,
+): string {
 	const object = state.objects.get(id);
-	return object ? name(state, id) : "unknown";
+	return object ? engine.name(state, id) : "unknown";
 }
 
 export interface ChoiceOption {
@@ -602,14 +603,18 @@ export function priorityOptionId(action: PriorityAction): string {
 		.digest("hex")}`;
 }
 
-function priorityOptionLabel(state: GameState, action: PriorityAction): string {
+function priorityOptionLabel(
+	engine: Engine,
+	state: GameState,
+	action: PriorityAction,
+): string {
 	switch (action.kind) {
 		case "play land":
-			return `play land ${objectLabel(state, action.card)}#${action.card}`;
+			return `play land ${objectLabel(engine, state, action.card)}#${action.card}`;
 		case "activate ability":
-			return `activate ${objectLabel(state, action.source)}#${action.source} — ${action.ability}`;
+			return `activate ${objectLabel(engine, state, action.source)}#${action.source} — ${action.ability}`;
 		case "cast":
-			return `cast ${objectLabel(state, action.card)}#${action.card}`;
+			return `cast ${objectLabel(engine, state, action.card)}#${action.card}`;
 		default:
 			return action.kind;
 	}
@@ -628,6 +633,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 	private pendingRequest: ChoiceRequest | null = null;
 
 	private constructor(
+		private readonly engine: Engine,
 		agents: AgentPair | null,
 		private readonly allowSuspension: CanSuspend,
 		transcript?: ChoiceTranscript,
@@ -641,19 +647,23 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		this.decisions = clone(transcript?.choices ?? []);
 	}
 
-	static record(agents: SyncAgentPair): ChoiceController<false> {
-		return new ChoiceController(agents, false);
+	static record(engine: Engine, agents: SyncAgentPair): ChoiceController<false> {
+		return new ChoiceController(engine, agents, false);
 	}
 
-	static replay(transcript: ChoiceTranscript): ChoiceController<false> {
-		return new ChoiceController(null, false, transcript);
+	static replay(
+		engine: Engine,
+		transcript: ChoiceTranscript,
+	): ChoiceController<false> {
+		return new ChoiceController(engine, null, false, transcript);
 	}
 
 	static suspending(
+		engine: Engine,
 		agents: AgentPair,
 		transcript?: ChoiceTranscript,
 	): ChoiceController<true> {
-		return new ChoiceController(agents, true, transcript);
+		return new ChoiceController(engine, agents, true, transcript);
 	}
 
 	rewind(): void {
@@ -757,7 +767,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			);
 		}
 		const answer = agent.choose(
-			buildPlayerView(state, request.player),
+			this.engine.buildPlayerView(state, request.player),
 			request,
 		);
 		if (isPromiseLike(answer)) {
@@ -831,7 +841,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			);
 		}
 		const answer = agent.choose(
-			buildPlayerView(state, request.player),
+			this.engine.buildPlayerView(state, request.player),
 			request,
 		);
 		if (isPromiseLike(answer)) {
@@ -888,7 +898,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				label:
 					target.type === "player"
 						? `Player ${target.player}`
-						: `${objectLabel(state, target.id)}#${target.id}`,
+						: `${objectLabel(this.engine, state, target.id)}#${target.id}`,
 			})),
 		});
 		return this.choose(state, request, candidates);
@@ -935,7 +945,9 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			new Set(input.objects).size === input.objects.length,
 			"object choice received duplicate objects",
 		);
-		const read = input.predicate ? createReadContext(state) : null;
+		const read = input.predicate
+			? this.engine.createReadContext(state)
+			: null;
 		const objects = input.objects.filter((id) => {
 			if (!input.predicate) return true;
 			assertDefined(read);
@@ -968,7 +980,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			options: [
 				...objects.map((id) => ({
 					id: String(id),
-					label: `${objectLabel(state, id)}#${id}`,
+					label: `${objectLabel(this.engine, state, id)}#${id}`,
 				})),
 				...(input.optional
 					? [{ id: "decline", label: input.optional.label }]
@@ -1053,7 +1065,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			},
 			options: actions.map((action) => ({
 				id: priorityOptionId(action),
-				label: priorityOptionLabel(state, action),
+				label: priorityOptionLabel(this.engine, state, action),
 			})),
 		});
 		return this.choose(state, request, candidates);
@@ -1082,7 +1094,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			},
 			options: candidates.map((candidate) => ({
 				id: candidate.id,
-				label: `${objectLabel(state, candidate.value.source)}#${candidate.value.source} — ${candidate.value.text}`,
+				label: `${objectLabel(this.engine, state, candidate.value.source)}#${candidate.value.source} — ${candidate.value.text}`,
 			})),
 		});
 		return this.chooseMulti(state, request, candidates);
@@ -1109,7 +1121,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			context: { eligibleAttackers: [...eligibleAttackers] },
 			options: eligibleAttackers.map((id) => ({
 				id: String(id),
-				label: `${objectLabel(state, id)}#${id}`,
+				label: `${objectLabel(this.engine, state, id)}#${id}`,
 			})),
 		});
 		return this.chooseMulti(state, request, candidates);
@@ -1129,7 +1141,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		const candidates: { id: string; value: BlockAssignment }[] = [];
 		for (const blocker of eligibleBlockers) {
 			for (const attacker of attackers) {
-				if (!eligibleBlockersFor(state, player, attacker).includes(blocker))
+				if (!this.engine.eligibleBlockers(state, player, attacker).includes(blocker))
 					continue;
 				candidates.push({
 					id: blockAssignmentOptionId(blocker, attacker),
@@ -1150,7 +1162,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			},
 			options: candidates.map((candidate) => ({
 				id: candidate.id,
-				label: `${objectLabel(state, candidate.value.blocker)}#${candidate.value.blocker} blocks ${objectLabel(state, candidate.value.attacker)}#${candidate.value.attacker}`,
+				label: `${objectLabel(this.engine, state, candidate.value.blocker)}#${candidate.value.blocker} blocks ${objectLabel(this.engine, state, candidate.value.attacker)}#${candidate.value.attacker}`,
 			})),
 		});
 		return this.chooseMulti(state, request, candidates);
@@ -1177,7 +1189,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			context: { cards: [...cards] },
 			options: cards.map((id) => ({
 				id: String(id),
-				label: `${objectLabel(state, id)}#${id}`,
+				label: `${objectLabel(this.engine, state, id)}#${id}`,
 			})),
 		});
 
@@ -1201,7 +1213,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				);
 			}
 			const answer = agent.choose(
-				buildPlayerView(state, request.player),
+				this.engine.buildPlayerView(state, request.player),
 				request,
 			);
 			if (isPromiseLike(answer)) {
@@ -1266,7 +1278,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			context: { cards: [...cards], keep: actualKeep },
 			options: cards.map((id) => ({
 				id: String(id),
-				label: `${objectLabel(state, id)}#${id}`,
+				label: `${objectLabel(this.engine, state, id)}#${id}`,
 			})),
 		});
 
@@ -1290,7 +1302,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				);
 			}
 			const answer = agent.choose(
-				buildPlayerView(state, request.player),
+				this.engine.buildPlayerView(state, request.player),
 				request,
 			);
 			if (isPromiseLike(answer)) {
@@ -1347,7 +1359,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			context: { cards: [...cards] },
 			options: cards.map((id) => ({
 				id: String(id),
-				label: `${objectLabel(state, id)}#${id}`,
+				label: `${objectLabel(this.engine, state, id)}#${id}`,
 			})),
 		});
 
@@ -1371,7 +1383,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				);
 			}
 			const answer = agent.choose(
-				buildPlayerView(state, request.player),
+				this.engine.buildPlayerView(state, request.player),
 				request,
 			);
 			if (isPromiseLike(answer)) {
@@ -1421,11 +1433,12 @@ export type AnyChoiceController = ChoiceController<boolean>;
 export type ChoiceSource = SyncAgentPair | ChoiceController<false>;
 
 export function asChoiceController(
+	engine: Engine,
 	source: ChoiceSource,
 ): ChoiceController<false> {
 	return source instanceof ChoiceController
 		? source
-		: ChoiceController.record(source);
+		: ChoiceController.record(engine, source);
 }
 
 export function targetOptionId(target: EntityRef): string {

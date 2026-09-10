@@ -946,7 +946,8 @@ export function abilityId<C extends AbilityCategory>(
 	return `${cardId}:${index}` as AbilityId<C>;
 }
 
-export function getAbilityDefinition<C extends AbilityCategory>(
+function abilityDefinition<C extends AbilityCategory>(
+	engine: Engine,
 	category: C,
 	id: AbilityId<C>,
 ): AbilityDef<C> {
@@ -962,7 +963,7 @@ export function getAbilityDefinition<C extends AbilityCategory>(
 	const index = Number(indexText);
 
 	const definitions: AbilityDef<C>[] =
-		card(cardId).abilityDefinitions[category];
+		engine.cardDefinition(cardId).abilityDefinitions[category];
 	const definition = definitions[index];
 	assertDefined(definition, `unknown ${category} ability: ${id}`);
 	return definition;
@@ -1185,22 +1186,27 @@ export function characteristicsFromCardDef(
  * The result is shared: never mutate it.
  */
 function baseCharacteristics(
+	engine: Engine,
 	object: DeepReadOnly<GameObject>,
 ): DeepReadOnly<CharacteristicsSnapshot> {
 	switch (object.kind) {
 		case "card":
-			return printedCharacteristics(card(object.cardId));
+			return printedCharacteristics(engine.cardDefinition(object.cardId));
 
 		case "spell":
 			return object.representation.kind === "copy"
 				? object.representation.copyEffect
-				: printedCharacteristics(card(object.representation.cardId));
+				: printedCharacteristics(
+						engine.cardDefinition(object.representation.cardId),
+					);
 
 		case "permanent":
 			if (object.copiableOverride) return object.copiableOverride;
 			return object.representation.kind === "token"
 				? object.representation.createdValues
-				: printedCharacteristics(card(object.representation.cardId));
+				: printedCharacteristics(
+						engine.cardDefinition(object.representation.cardId),
+					);
 
 		case "nonbattlefield-token":
 			return object.createdValues;
@@ -1211,9 +1217,10 @@ function baseCharacteristics(
 }
 
 function initialCharacteristics(
+	engine: Engine,
 	object: DeepReadOnly<GameObject>,
 ): CharacteristicsSnapshot {
-	return cloneCharacteristics(baseCharacteristics(object));
+	return cloneCharacteristics(baseCharacteristics(engine, object));
 }
 
 export function cloneCharacteristics(
@@ -1286,6 +1293,7 @@ export interface PlayerView {
 }
 
 export interface ReadContext {
+	readonly engine: Engine;
 	readonly state: ReadonlyGameState;
 	readonly revision: number;
 	readonly view: GameView;
@@ -1295,8 +1303,8 @@ export interface ReadContext {
  * Build all derived object information for one mutation-free rules window.
  * Callers must discard this view as soon as they mutate `state`.
  */
-export function buildGameView(state: ReadonlyGameState): GameView {
-	return buildFilteredGameView(state);
+function buildGameView(engine: Engine, state: ReadonlyGameState): GameView {
+	return buildFilteredGameView(engine, state);
 }
 
 /**
@@ -1320,6 +1328,7 @@ function applyCounters(
 }
 
 function buildFilteredGameView(
+	engine: Engine,
 	state: ReadonlyGameState,
 	included?: ReadonlySet<ObjectId>,
 ): GameView {
@@ -1336,7 +1345,7 @@ function buildFilteredGameView(
 	> = {};
 
 	for (const object of state.objects.values()) {
-		const initial = initialCharacteristics(object);
+		const initial = initialCharacteristics(engine, object);
 		if (!included || included.has(object.id)) {
 			// `initial` is already a fresh clone, and layer 1a replaces rather than
 			// mutates its map entry, so it can serve as the copiable values directly.
@@ -1345,7 +1354,7 @@ function buildFilteredGameView(
 		}
 
 		for (const id of initial.abilities.static) {
-			const ability = getAbilityDefinition("static", id);
+			const ability = abilityDefinition(engine, "static", id);
 			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
 			if (!isCharacteristicStaticAbility(ability)) continue;
 			let layerAbilities = abilities[ability.layer];
@@ -1406,7 +1415,7 @@ function buildFilteredGameView(
 
 		if (layer === "6-ability-changing") {
 			for (const effect of state.temporaryEffects) {
-				const definition = temporaryEffectDefinition(effect);
+				const definition = temporaryEffectDefinition(engine, effect);
 				if (definition?.kind !== "grant-keyword") continue;
 				const slot =
 					definition.object === "source"
@@ -1427,7 +1436,7 @@ function buildFilteredGameView(
 
 		if (layer === "7c-modify-power-toughness") {
 			for (const effect of state.temporaryEffects) {
-				const definition = temporaryEffectDefinition(effect);
+				const definition = temporaryEffectDefinition(engine, effect);
 				if (definition?.kind !== "modify-pt") continue;
 				const slot =
 					definition.object === "source"
@@ -2047,21 +2056,23 @@ export function addTemporaryEffect(
  *
  * Returns null for builtin effects, which have no card definition behind them.
  */
-export function temporaryEffectDefinition(
+function temporaryEffectDefinition(
+	engine: Engine,
 	effect: TemporaryEffect,
 ): EffectDef<TriggerEffectPlayer> | null {
 	const source = effect.source;
 	if (source.origin === "builtin") return null;
 	const effects: EffectDef<TriggerEffectPlayer>[] = (() => {
 		if (source.origin === "spell-effect") {
-			const spell = card(source.cardId).spell;
+			const spell = engine.cardDefinition(source.cardId).spell;
 			assertDefined(
 				spell,
 				`temporary effect source ${source.cardId} has no spell definition`,
 			);
 			return spell.effects;
 		}
-		const ability = getAbilityDefinition(
+		const ability = abilityDefinition(
+			engine,
 			source.category,
 			source.abilityId as AbilityId<"triggered" | "activated">,
 		);
@@ -2794,23 +2805,204 @@ export function defineCard(input: CardDefInput | CardDef): CardDef {
 /** Name used at the source/compiler boundary; identical to the engine CardDef. */
 export type OracleCardDef = CardDef;
 
-/**
- * Registry indirection so engine code can read card definitions without
- * importing `cards.ts`, which itself imports engine types and helpers. Card data
- * is populated when `cards.ts` is imported.
- */
-const DB: Record<string, CardDef> = {};
+/** Rules operations bound to one immutable set of card definitions. */
+export class Engine {
+	readonly #cards: ReadonlyMap<string, CardDef>;
 
-export function registerCard(input: CardDefInput | CardDef): CardDef {
-	const def = defineCard(input);
-	DB[def.id] = def;
-	return def;
+	constructor(inputs: readonly (CardDefInput | CardDef)[]) {
+		const cards = new Map<string, CardDef>();
+		for (const input of inputs) {
+			const definition = defineCard(input);
+			assert(!cards.has(definition.id), `duplicate card: ${definition.id}`);
+			cards.set(definition.id, definition);
+		}
+		this.#cards = cards;
+	}
+
+	cardDefinition(id: string): CardDef {
+		const definition = this.#cards.get(id);
+		assertDefined(definition, `unknown card: ${id}`);
+		return definition;
+	}
+
+	getAbilityDefinition<C extends AbilityCategory>(
+		category: C,
+		id: AbilityId<C>,
+	): AbilityDef<C> {
+		return abilityDefinition(this, category, id);
+	}
+
+	newGame(seed = 0): GameState {
+		return newGame(seed);
+	}
+
+	spawnCard(
+		state: GameState,
+		cardId: string,
+		owner: PlayerId,
+		zone: "library" | "hand" | "graveyard" | "exile",
+	): CardObject {
+		return spawnCard(state, cardId, owner, zone);
+	}
+
+	spawnPermanent(
+		state: GameState,
+		cardId: string,
+		owner: PlayerId,
+		opts: {
+			tapped?: boolean;
+			summoningSick?: boolean;
+			counters?: PermanentCounterBag;
+			token?: boolean;
+		} = {},
+	): PermanentObject {
+		return spawnPermanent(this, state, cardId, owner, opts);
+	}
+
+	spawnToken(
+		state: GameState,
+		owner: PlayerId,
+		characteristics: CharacteristicsSnapshot,
+	): PermanentObject {
+		return spawnToken(state, owner, characteristics);
+	}
+
+	name(state: ReadonlyGameState, id: ObjectId): string {
+		return name(this, state, id);
+	}
+
+	buildGameView(state: ReadonlyGameState): GameView {
+		return buildGameView(this, state);
+	}
+
+	createReadContext(state: ReadonlyGameState): ReadContext {
+		return createReadContext(this, state);
+	}
+
+	buildPlayerView(state: ReadonlyGameState, viewer: PlayerId): PlayerView {
+		return buildPlayerView(this, state, viewer);
+	}
+
+	eligibleAttackers(state: ReadonlyGameState, player: PlayerId): ObjectId[] {
+		return eligibleAttackers(this, state, player);
+	}
+
+	eligibleBlockers(
+		state: ReadonlyGameState,
+		player: PlayerId,
+		attacker?: ObjectId,
+	): ObjectId[] {
+		return eligibleBlockers(this, state, player, attacker);
+	}
+
+	etbPreview(state: ReadonlyGameState, ev: ZoneChangeEvent): PermanentSnapshot {
+		return etbPreview(this, state, ev);
+	}
+
+	temporaryEffectDefinition(
+		effect: TemporaryEffect,
+	): EffectDef<TriggerEffectPlayer> | null {
+		return temporaryEffectDefinition(this, effect);
+	}
+
+	lethalDamage(
+		stateOrRead: ReadonlyGameState | ReadContext,
+		id: ObjectId,
+	): boolean {
+		return lethalDamage(this, stateOrRead, id);
+	}
+
+	prepareEffectData(state: GameState): void {
+		prepareEffectData(this, state);
+	}
+
+	collectReplacements(
+		state: ReadonlyGameState,
+		ev?: GameEvent,
+	): BoundReplacement[] {
+		return collectReplacements(this, state, ev);
+	}
+
+	describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
+		return describeEvent(this, state, ev);
+	}
+
+	checkStateBasedActions(state: GameState, source: ChoiceSource): void {
+		checkStateBasedActions(this, state, source);
+	}
+
+	perform(
+		state: GameState,
+		event: GameEvent,
+		source: ChoiceSource,
+	): PerformResult {
+		return perform(this, state, event, source);
+	}
+
+	getObservableActions(state: GameState, player: PlayerId): PriorityAction[] {
+		return getObservableActions(this, state, player);
+	}
+
+	executeAbilityAction(
+		state: GameState,
+		priorityPlayer: PlayerId,
+		action: ActivateAbilityAction,
+		source: ChoiceSource,
+	): void {
+		executeAbilityAction(this, state, priorityPlayer, action, source);
+	}
+
+	executeCastAction(
+		state: GameState,
+		priorityPlayer: PlayerId,
+		action: CastAction,
+		source: ChoiceSource,
+	): void {
+		executeCastAction(this, state, priorityPlayer, action, source);
+	}
+
+	executeLandAction(
+		state: GameState,
+		priorityPlayer: PlayerId,
+		action: PlayLandAction,
+		source: ChoiceSource,
+	): void {
+		executeLandAction(this, state, priorityPlayer, action, source);
+	}
+
+	settlePriority(state: GameState, source: ChoiceSource): void {
+		settlePriority(this, state, source);
+	}
+
+	advanceWithReplay(
+		checkpoint: GameState,
+		agents: AgentPair,
+		transcript: ChoiceTranscript = { version: 1, choices: [] },
+	): Promise<AdvanceWithReplayResult> {
+		return advanceWithReplay(this, checkpoint, agents, transcript);
+	}
+
+	startGame(state: GameState, source: ChoiceSource): void {
+		startGame(this, state, source);
+	}
+
+	advance(state: GameState, source: ChoiceSource): void {
+		advance(this, state, source);
+	}
+
+	gameOver(state: GameState): boolean {
+		return gameOver(state);
+	}
+
+	winner(state: GameState): PlayerId | "draw" | null {
+		return winner(state);
+	}
 }
 
-function card(id: string): CardDef {
-	const def = DB[id];
-	if (!def) throw new Error(`unknown card: ${id}`);
-	return def;
+export function createEngine(
+	inputs: readonly (CardDefInput | CardDef)[],
+): Engine {
+	return new Engine(inputs);
 }
 
 /* ------------------------------------------------------------------ *
@@ -3059,7 +3251,8 @@ function spawnOnBattlefield(
 	return obj;
 }
 
-export function spawnPermanent(
+function spawnPermanent(
+	engine: Engine,
 	state: GameState,
 	cardId: string,
 	owner: PlayerId,
@@ -3071,7 +3264,12 @@ export function spawnPermanent(
 	} = {},
 ): PermanentObject {
 	const representation: PermanentObject["representation"] = opts.token
-		? { kind: "token", createdValues: characteristicsFromCardDef(card(cardId)) }
+		? {
+				kind: "token",
+				createdValues: characteristicsFromCardDef(
+					engine.cardDefinition(cardId),
+				),
+			}
 		: { kind: "card", cardId };
 	return spawnOnBattlefield(state, owner, representation, opts);
 }
@@ -3257,9 +3455,9 @@ function mutableZoneList(
 	}
 }
 
-export function name(state: ReadonlyGameState, id: ObjectId): string {
+function name(engine: Engine, state: ReadonlyGameState, id: ObjectId): string {
 	const object = maybeObject(state, id);
-	return object ? initialCharacteristics(object).name : `<gone#${id}>`;
+	return object ? initialCharacteristics(engine, object).name : `<gone#${id}>`;
 }
 
 export function permanentsInPlay(state: GameState): PermanentObject[];
@@ -3282,11 +3480,12 @@ export function permanentsInPlay(
  * battlefield, without defender, and not affected by summoning sickness.
  * Battlefield order is preserved.
  */
-export function eligibleAttackers(
+function eligibleAttackers(
+	engine: Engine,
 	state: ReadonlyGameState,
 	player: PlayerId,
 ): ObjectId[] {
-	const read = createReadContext(state);
+	const read = createReadContext(engine, state);
 	return state.battlefield.filter((id) => {
 		const object = state.objects.get(id);
 		const snapshot = read.view.objects.get(id);
@@ -3310,12 +3509,13 @@ export function eligibleAttackers(
  * can be blocked only by a creature with flying or reach (CR 702.9b). Blocking
  * does not tap the blocker. Battlefield order is preserved.
  */
-export function eligibleBlockers(
+function eligibleBlockers(
+	engine: Engine,
 	state: ReadonlyGameState,
 	player: PlayerId,
 	attacker?: ObjectId,
 ): ObjectId[] {
-	const read = createReadContext(state);
+	const read = createReadContext(engine, state);
 	const attackerSnapshot =
 		attacker === undefined ? undefined : getSnapshot(read, attacker);
 	if (attackerSnapshot !== undefined) {
@@ -3341,7 +3541,7 @@ export function eligibleBlockers(
 			return false;
 		return !snapshot.currentCharacteristics.abilities.static.some(
 			(abilityId) => {
-				const ability = getAbilityDefinition("static", abilityId);
+				const ability = abilityDefinition(engine, "static", abilityId);
 				return "kind" in ability && ability.kind === "cant-block-self";
 			},
 		);
@@ -3553,7 +3753,8 @@ export type ContinuousEffectLayer = (typeof CONTINUOUS_EFFECT_LAYERS)[number];
  * already applied. So Root Maze ("artifacts and lands enter tapped") has to see
  * a card that Mycosynth Lattice has turned into an artifact.
  */
-export function etbPreview(
+function etbPreview(
+	engine: Engine,
 	state: ReadonlyGameState,
 	ev: ZoneChangeEvent,
 ): PermanentSnapshot {
@@ -3625,36 +3826,44 @@ export function etbPreview(
 		preview.battlefield.push(id);
 	} else {
 		assertDefined(maybeObject(state, ev.object));
-		id = moveObject(preview, ev.object, ev.from, ev.destination);
+		id = moveObject(engine, preview, ev.object, ev.from, ev.destination);
 	}
-	const snapshot = getSnapshot(createReadContext(preview), id);
+	const snapshot = getSnapshot(createReadContext(engine, preview), id);
 	assert(snapshot.kind === "permanent");
 	return snapshot;
 }
 
 const GAME_VIEW_CACHE = new WeakMap<
 	object,
-	{ revision: number; view: GameView }
+	{ engine: Engine; revision: number; view: GameView }
 >();
 
-function cachedGameView(state: ReadonlyGameState, revision: number): GameView {
+function cachedGameView(
+	engine: Engine,
+	state: ReadonlyGameState,
+	revision: number,
+): GameView {
 	const cached = GAME_VIEW_CACHE.get(state);
-	if (cached?.revision === revision) return cached.view;
-	const view = buildGameView(state);
-	GAME_VIEW_CACHE.set(state, { revision, view });
+	if (cached?.engine === engine && cached.revision === revision) return cached.view;
+	const view = buildGameView(engine, state);
+	GAME_VIEW_CACHE.set(state, { engine, revision, view });
 	return view;
 }
 
-export function createReadContext(state: ReadonlyGameState): ReadContext {
+function createReadContext(
+	engine: Engine,
+	state: ReadonlyGameState,
+): ReadContext {
 	let derived: GameView | undefined;
 	const revision = state.revision;
 	return {
+		engine,
 		state,
 		revision,
 		get view() {
 			if (state.revision !== revision)
 				throw new Error("attempted to use a stale ReadContext");
-			if (!derived) derived = cachedGameView(state, revision);
+			if (!derived) derived = cachedGameView(engine, state, revision);
 			return derived;
 		},
 	};
@@ -3674,14 +3883,20 @@ export function getSnapshot(
 const PLAYER_VIEW_CACHE = new WeakMap<
 	object,
 	{
+		engine: Engine;
 		revision: number;
 		views: [PlayerView | undefined, PlayerView | undefined];
 	}
 >();
 
-function playerGameView(state: ReadonlyGameState, revision: number): GameView {
+function playerGameView(
+	engine: Engine,
+	state: ReadonlyGameState,
+	revision: number,
+): GameView {
 	const complete = GAME_VIEW_CACHE.get(state);
-	if (complete?.revision === revision) return complete.view;
+	if (complete?.engine === engine && complete.revision === revision)
+		return complete.view;
 
 	// Libraries expose counts only, so deriving snapshots for every card there
 	// would add substantial work to each agent decision without adding data.
@@ -3689,7 +3904,7 @@ function playerGameView(state: ReadonlyGameState, revision: number): GameView {
 	for (const object of state.objects.values()) {
 		if (object.zone !== "library") visibleObjects.add(object.id);
 	}
-	return buildFilteredGameView(state, visibleObjects);
+	return buildFilteredGameView(engine, state, visibleObjects);
 }
 
 function deepFreeze<T>(value: T): DeepReadOnly<T> {
@@ -3701,23 +3916,29 @@ function deepFreeze<T>(value: T): DeepReadOnly<T> {
 }
 
 /** Build a detached player-specific projection from one stable read window. */
-export function buildPlayerView(
+function buildPlayerView(
+	engine: Engine,
 	state: ReadonlyGameState,
 	viewer: PlayerId,
 ): PlayerView {
 	let cached = PLAYER_VIEW_CACHE.get(state);
-	if (cached?.revision === state.revision) {
+	if (cached?.engine === engine && cached.revision === state.revision) {
 		const existing = cached.views[viewer];
 		if (existing) return existing;
 	} else {
-		cached = { revision: state.revision, views: [undefined, undefined] };
+		cached = {
+			engine,
+			revision: state.revision,
+			views: [undefined, undefined],
+		};
 		PLAYER_VIEW_CACHE.set(state, cached);
 	}
 	const revision = state.revision;
 	const read: ReadContext = {
+		engine,
 		state,
 		revision,
-		view: playerGameView(state, revision),
+		view: playerGameView(engine, state, revision),
 	};
 	const objectSnapshot = (id: ObjectId): PlayerObjectView => {
 		const snapshot = read.view.objects.get(id);
@@ -3840,14 +4061,13 @@ function continuousEffectEvaluation(
 	};
 }
 
-export function lethalDamage(read: ReadContext, id: ObjectId): boolean;
-export function lethalDamage(state: ReadonlyGameState, id: ObjectId): boolean;
-export function lethalDamage(
+function lethalDamage(
+	engine: Engine,
 	stateOrRead: ReadonlyGameState | ReadContext,
 	id: ObjectId,
 ): boolean {
 	const read =
-		"view" in stateOrRead ? stateOrRead : createReadContext(stateOrRead);
+		"view" in stateOrRead ? stateOrRead : createReadContext(engine, stateOrRead);
 	const o = read.state.objects.get(id);
 	assertDefined(o);
 	assert(o.kind === "permanent");
@@ -3899,12 +4119,13 @@ const CHARACTERISTIC_CHANGING_LAYERS = [
  * implementation it never prints must not count.
  */
 function anyPossessedCharacteristicStatic(
+	engine: Engine,
 	state: ReadonlyGameState,
 	predicate: (effect: CharacteristicStaticAbilityDefinition) => boolean,
 ): boolean {
 	for (const object of state.objects.values()) {
-		for (const id of baseCharacteristics(object).abilities.static) {
-			const ability = getAbilityDefinition("static", id);
+		for (const id of baseCharacteristics(engine, object).abilities.static) {
+			const ability = abilityDefinition(engine, "static", id);
 			if (!isCharacteristicStaticAbility(ability)) continue;
 			if (predicate(ability)) return true;
 		}
@@ -3929,12 +4150,13 @@ function viewName(view: GameView, id: ObjectId): string {
  * identity across a copy.
  */
 function replacementsOf(
+	engine: Engine,
 	view: GameView,
 	object: DeepReadOnly<GameObject>,
 ): { id: ReplacementAbilityId; def: ReplacementEffectDefinition }[] {
 	return abilityReferencesOf(view, object).replacement.map((id) => ({
 		id,
-		def: getAbilityDefinition("replacement", id),
+		def: abilityDefinition(engine, "replacement", id),
 	}));
 }
 
@@ -3956,13 +4178,13 @@ function effectDataFor(
 	return fresh;
 }
 
-export function prepareEffectData(state: GameState): void {
+function prepareEffectData(engine: Engine, state: GameState): void {
 	// Which replacements an object has is a derived fact, so the view has to be
 	// built before anything is written back.
-	const view = cachedGameView(state, state.revision);
+	const view = cachedGameView(engine, state, state.revision);
 	const pending: [object: GameObject, key: string][] = [];
 	for (const object of state.objects.values()) {
-		for (const { id } of replacementsOf(view, object)) {
+		for (const { id } of replacementsOf(engine, view, object)) {
 			if (object.effectData[id] === undefined) pending.push([object, id]);
 		}
 	}
@@ -3972,7 +4194,7 @@ export function prepareEffectData(state: GameState): void {
 	// `effectData` is per-effect mutable scratch and is not an input to any
 	// derived characteristic, so the view stays accurate across this bump. Any
 	// ReadContext taken before the bump still goes stale, as it must.
-	GAME_VIEW_CACHE.set(state, { revision: state.revision, view });
+	GAME_VIEW_CACHE.set(state, { engine, revision: state.revision, view });
 }
 
 /** The object this event is about to put onto the battlefield, if any. */
@@ -4017,12 +4239,13 @@ function incomingReplacementRefs(
  * possession instead of its canonical possession; without it this is the plain
  * event-independent sweep.
  */
-export function collectReplacements(
+function collectReplacements(
+	engine: Engine,
 	state: ReadonlyGameState,
 	ev?: GameEvent,
 ): BoundReplacement[] {
 	const out: BoundReplacement[] = [];
-	const view = cachedGameView(state, state.revision);
+	const view = cachedGameView(engine, state, state.revision);
 	const entering = enteringObject(ev);
 
 	for (const zone of ALL_ZONES) {
@@ -4039,7 +4262,7 @@ export function collectReplacements(
 			if (id === entering) continue;
 			const o = maybeObject(state, id);
 			if (!o) continue;
-			for (const { id: abilityId, def } of replacementsOf(view, o)) {
+			for (const { id: abilityId, def } of replacementsOf(engine, view, o)) {
 				if (!functionsHere(def.functionsFrom, zone)) continue;
 				const data: Record<string, number> | undefined =
 					o.effectData[abilityId];
@@ -4100,7 +4323,7 @@ export function collectReplacements(
 				ev.destination.copiableOverride?.name ??
 				(ev.from === null ? ev.createdToken.values.name : viewName(view, o.id));
 			for (const id of incomingReplacementRefs(view, o, ev)) {
-				const def = getAbilityDefinition("replacement", id);
+				const def = abilityDefinition(engine, "replacement", id);
 				if (!functionsHere(def.functionsFrom, "battlefield")) continue;
 				out.push({
 					id: `${o.id}:${id}` as EffectId,
@@ -4141,6 +4364,7 @@ export function collectReplacements(
 							return false;
 						if (ev.destination.controller === effect.controller) return false;
 						return etbPreview(
+							engine,
 							ctx.state,
 							ev,
 						).currentCharacteristics.types.includes("creature");
@@ -4372,7 +4596,7 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 		const definitions: ProhibitionDef[] = [
 			...prohibitionsFromKeywords(snapshot.currentCharacteristics.keywords),
 			...abilityReferencesOf(read.view, object).prohibition.map((id) =>
-				getAbilityDefinition("prohibition", id),
+				abilityDefinition(read.engine, "prohibition", id),
 			),
 		];
 		for (const def of definitions) {
@@ -4399,7 +4623,7 @@ function applicable(
 	ev: GameEvent,
 	run: ReplacementRun,
 ): BoundReplacement[] {
-	return collectReplacements(read.state, ev).filter((r) => {
+	return collectReplacements(read.engine, read.state, ev).filter((r) => {
 		// CR 614.5 — a replacement effect applies at most once to a given event.
 		if (run.applied.has(r.id)) return false;
 		/**
@@ -4552,6 +4776,7 @@ function resolveReplacements(
  * library position for a battlefield arrival.
  */
 function moveObject(
+	engine: Engine,
 	state: GameState,
 	id: ObjectId,
 	from: Zone,
@@ -4670,16 +4895,20 @@ function moveObject(
 	}
 	log(
 		state,
-		`  ${initialCharacteristics(fresh).name}#${fresh.id} is now in ${to}`,
+		`  ${initialCharacteristics(engine, fresh).name}#${fresh.id} is now in ${to}`,
 	);
 	return fresh.id;
 }
 
 /** Convenience for logs/tests. */
-export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
+function describeEvent(
+	engine: Engine,
+	state: ReadonlyGameState,
+	ev: GameEvent,
+): string {
 	switch (ev.kind) {
 		case "cast":
-			return `cast(P${ev.player}, ${name(state, ev.spell)}#${ev.spell})`;
+			return `cast(P${ev.player}, ${name(engine, state, ev.spell)}#${ev.spell})`;
 		case "draw cards":
 			return `draw cards(P${ev.player}, ${ev.amount})`;
 		case "draw":
@@ -4698,24 +4927,24 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 			if (ev.cards.kind === "hand-size")
 				return `discard(P${ev.player}, to hand size)`;
 			if (ev.cards.kind === "specific")
-				return `discard(P${ev.player}, ${name(state, ev.cards.card)})`;
+				return `discard(P${ev.player}, ${name(engine, state, ev.cards.card)})`;
 			assert(ev.cards.kind === "any");
 			return `discard(P${ev.player})`;
 		case "damage": {
 			const recipient =
 				ev.recipient.type === "player"
 					? `P${ev.recipient.player}`
-					: name(state, ev.recipient.id);
-			return `damage(${ev.amount} from ${name(state, ev.source)} to ${recipient})`;
+					: name(engine, state, ev.recipient.id);
+			return `damage(${ev.amount} from ${name(engine, state, ev.source)} to ${recipient})`;
 		}
 		case "destroy":
-			return `destroy(${name(state, ev.object)})`;
+			return `destroy(${name(engine, state, ev.object)})`;
 		case "counter":
-			return `counter(${name(state, ev.spell)})`;
+			return `counter(${name(engine, state, ev.spell)})`;
 		case "sacrifice":
-			return `sacrifice(${name(state, ev.object)})`;
+			return `sacrifice(${name(engine, state, ev.object)})`;
 		case "regenerate":
-			return `regenerate(${name(state, ev.object)})`;
+			return `regenerate(${name(engine, state, ev.object)})`;
 		case "change zone": {
 			const to = ev.destination;
 			const extras = (
@@ -4734,19 +4963,19 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 				.filter(Boolean)
 				.join(" ");
 			const objectName =
-				ev.from === null ? ev.createdToken.values.name : name(state, ev.object);
+				ev.from === null ? ev.createdToken.values.name : name(engine, state, ev.object);
 			const from = ev.from ?? "creation";
 			return `move(${objectName}#${ev.object}: ${from}->${to.zone}${extras ? ` ${extras}` : ""})`;
 		}
 		case "add counters":
-			return `counters(${ev.amount}x ${ev.counter} on ${name(state, ev.permanent.id)})`;
+			return `counters(${ev.amount}x ${ev.counter} on ${name(engine, state, ev.permanent.id)})`;
 		case "add player counters":
 			return `counters(${ev.amount}x ${ev.counter} on P${ev.player})`;
 		case "remove counters":
 		case "remove player counters": {
 			const tgt =
 				ev.kind === "remove counters"
-					? name(state, ev.permanent.id)
+					? name(engine, state, ev.permanent.id)
 					: `P${ev.player}`;
 			if (ev.counters === "all") return `counters(rm all on ${tgt})`;
 			return `counters(rm ${Object.entries(ev.counters)
@@ -4764,10 +4993,10 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 				.join(" ")})`;
 		case "tap":
 			if (ev.ref.kind === "all") return `tap(all P${ev.ref.player})`;
-			return `tap(${name(state, ev.ref.object)})`;
+			return `tap(${name(engine, state, ev.ref.object)})`;
 		case "untap":
 			if (ev.ref.kind === "all") return `untap(all P${ev.ref.player})`;
-			return `untap(${name(state, ev.ref.object)})`;
+			return `untap(${name(engine, state, ev.ref.object)})`;
 		case "begin turn":
 			return `beginTurn(P${ev.player}, #${ev.turnId}${ev.isExtra ? ", extra" : ""})`;
 		case "begin step":
@@ -4781,14 +5010,14 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
 		case "declare attackers":
 			return ev.attackers.length === 0
 				? `declareAttackers(P${ev.player}, none)`
-				: `declareAttackers(P${ev.player}, ${ev.attackers.map((id) => name(state, id)).join(", ")})`;
+				: `declareAttackers(P${ev.player}, ${ev.attackers.map((id) => name(engine, state, id)).join(", ")})`;
 		case "declare blockers":
 			return ev.blockers.length === 0
 				? `declareBlockers(P${ev.player}, none)`
 				: `declareBlockers(P${ev.player}, ${ev.blockers
 						.map(
 							({ blocker, attacker }) =>
-								`${name(state, blocker)} -> ${name(state, attacker)}`,
+								`${name(engine, state, blocker)} -> ${name(engine, state, attacker)}`,
 						)
 						.join(", ")})`;
 		case "win game":
@@ -4800,14 +5029,16 @@ export function describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
  * State-based actions
  * ------------------------------------------------------------------ */
 
-export function checkStateBasedActions(
+function checkStateBasedActions(
+	engine: Engine,
 	state: GameState,
 	source: ChoiceSource,
 ): void {
-	checkStateBasedActionsIn(state, asChoiceController(source));
+	checkStateBasedActionsIn(engine, state, asChoiceController(engine, source));
 }
 
 function checkStateBasedActionsIn(
+	engine: Engine,
 	state: GameState,
 	choices: AnyChoiceController,
 ): void {
@@ -4822,7 +5053,7 @@ function checkStateBasedActionsIn(
 		for (const p of state.players) {
 			//   704.5a. If a player has 0 or less life, that player loses the game.
 			if (!p.lost && !p.won && p.life <= 0) {
-				performIn(
+				performIn(engine, 
 					state,
 					{ kind: "lose game", player: p.id, reason: "life" },
 					choices,
@@ -4837,7 +5068,7 @@ function checkStateBasedActionsIn(
 			// cards in it since the last time state-based actions were checked, that
 			// player loses the game.
 			if (!p.lost && !p.won && p.drewFromEmptyLibrary) {
-				performIn(
+				performIn(engine, 
 					state,
 					{
 						kind: "lose game",
@@ -4859,7 +5090,7 @@ function checkStateBasedActionsIn(
 				p.counters.poison !== undefined &&
 				p.counters.poison >= 10
 			) {
-				performIn(
+				performIn(engine, 
 					state,
 					{
 						kind: "lose game",
@@ -4889,7 +5120,7 @@ function checkStateBasedActionsIn(
 				state.revision++;
 				log(
 					state,
-					`  SBA: ${initialCharacteristics(o).name}#${o.id} (token) ceases to exist`,
+					`  SBA: ${initialCharacteristics(engine, o).name}#${o.id} (token) ceases to exist`,
 				);
 				acted = true;
 			} else if (o.kind === "spell") {
@@ -4962,12 +5193,12 @@ function checkStateBasedActionsIn(
 		// because every continuous effect in the engine comes from a *static
 		// ability* possessed by some object, or from a temporary P/T effect created
 		// by a resolving spell or ability.
-		const hasCharacteristicChangingStatic = anyPossessedCharacteristicStatic(
+		const hasCharacteristicChangingStatic = anyPossessedCharacteristicStatic(engine, 
 			state,
 			(effect) => includes(CHARACTERISTIC_CHANGING_LAYERS, effect.layer),
 		);
 		const hasTemporaryPtChange = state.temporaryEffects.some(
-			(effect) => temporaryEffectDefinition(effect)?.kind === "modify-pt",
+			(effect) => temporaryEffectDefinition(engine, effect)?.kind === "modify-pt",
 		);
 
 		const needsPermanentSbas =
@@ -4979,7 +5210,7 @@ function checkStateBasedActionsIn(
 				if (object.damage > 0 || deathtouchedSinceLastCheck.has(id))
 					return true;
 				if (object.counters["+1/+1"] || object.counters["-1/-1"]) return true;
-				const initial = initialCharacteristics(object);
+				const initial = initialCharacteristics(engine, object);
 				return "toughness" in initial && initial.toughness <= 0;
 			});
 		if (!needsPermanentSbas) {
@@ -4987,7 +5218,7 @@ function checkStateBasedActionsIn(
 			continue;
 		}
 
-		let sbaRead = createReadContext(state);
+		let sbaRead = createReadContext(engine, state);
 		for (const id of [...state.battlefield]) {
 			const o = maybePermanent(state, id);
 			if (!o) continue;
@@ -5000,9 +5231,9 @@ function checkStateBasedActionsIn(
 			if (characteristics.toughness <= 0) {
 				log(
 					state,
-					`  SBA: ${name(state, id)} has toughness ${characteristics.toughness}`,
+					`  SBA: ${name(engine, state, id)} has toughness ${characteristics.toughness}`,
 				);
-				performIn(
+				performIn(engine, 
 					state,
 					{
 						kind: "change zone",
@@ -5016,14 +5247,14 @@ function checkStateBasedActionsIn(
 					0,
 				);
 				acted = true;
-				sbaRead = createReadContext(state);
+				sbaRead = createReadContext(engine, state);
 				continue;
 			}
 			// 704.5g. If a creature has toughness greater than 0, it has damage marked
 			// on it, and the total damage marked on it is greater than or equal to its
 			// toughness, that creature has been dealt lethal damage and is destroyed.
 			// Regeneration can replace this event.
-			if (lethalDamage(sbaRead, id) || deathtouchedSinceLastCheck.has(id)) {
+			if (lethalDamage(engine, sbaRead, id) || deathtouchedSinceLastCheck.has(id)) {
 				const destroy: DestroyEvent = {
 					kind: "destroy",
 					object: id,
@@ -5034,11 +5265,11 @@ function checkStateBasedActionsIn(
 				// self-replacement effect. Only count the SBA as acting if something
 				// actually happened, so an indestructible creature doesn't keep the SBA
 				// loop running forever.
-				const objectName = name(state, id);
-				const result = performIn(state, destroy, choices, newScope(), 0);
+				const objectName = name(engine, state, id);
+				const result = performIn(engine, state, destroy, choices, newScope(), 0);
 				// Effect scratch preparation may mutate canonical state even when a
 				// prohibition prevents the event.
-				sbaRead = createReadContext(state);
+				sbaRead = createReadContext(engine, state);
 				if (result.executed.length > 0) {
 					log(state, `  SBA: ${objectName} has lethal damage`);
 					acted = true;
@@ -5051,7 +5282,7 @@ function checkStateBasedActionsIn(
 			// smaller of the number of +1/+1 and -1/-1 counters on it.
 			if (o.counters["+1/+1"] && o.counters["-1/-1"]) {
 				const n = Math.min(o.counters["+1/+1"], o.counters["-1/-1"]);
-				performIn(
+				performIn(engine, 
 					state,
 					{
 						kind: "remove counters",
@@ -5063,7 +5294,7 @@ function checkStateBasedActionsIn(
 					0,
 				);
 				acted = true;
-				sbaRead = createReadContext(state);
+				sbaRead = createReadContext(engine, state);
 			}
 		}
 
@@ -5107,34 +5338,36 @@ export interface PerformResult {
 }
 
 /** Public entry point. Replace, then execute. Callers must run SBAs separately. */
-export function perform(
+function perform(
+	engine: Engine,
 	state: GameState,
 	event: GameEvent,
 	source: ChoiceSource,
 ): PerformResult {
-	return performIn(state, event, asChoiceController(source), newScope(), 0);
+	return performIn(engine, state, event, asChoiceController(engine, source), newScope(), 0);
 }
 
 /** Applies event replacements and delegates to `executeIn` to apply changes. */
 function performIn(
+	engine: Engine,
 	state: GameState,
 	event: GameEvent,
 	choices: AnyChoiceController,
 	scope: Scope,
 	depth: number,
 ): PerformResult {
-	log(state, `${"  ".repeat(depth)}> ${describeEvent(state, event)}`);
+	log(state, `${"  ".repeat(depth)}> ${describeEvent(engine, state, event)}`);
 	// Mutable replacement scratch is installed before the mutation-free read window.
-	prepareEffectData(state);
-	const read = createReadContext(state);
+	prepareEffectData(engine, state);
+	const read = createReadContext(engine, state);
 	const finals = resolveReplacements(read, event, choices);
 	if (finals.length === 0)
 		log(state, `${"  ".repeat(depth + 1)}(replaced by nothing)`);
 	const executed: GameEvent[] = [];
 	const created: ObjectId[] = [];
 	for (const ev of finals) {
-		const before = createReadContext(state);
-		const result = executeIn(state, before, ev, choices, scope, depth + 1);
+		const before = createReadContext(engine, state);
+	const result = executeIn(engine, state, before, ev, choices, scope, depth + 1);
 		executed.push(...result.executed);
 		created.push(...result.created);
 	}
@@ -5146,6 +5379,7 @@ function performIn(
  * `performIn` so they receive their own replacement pass.
  */
 function executeIn(
+	engine: Engine,
 	state: GameState,
 	before: ReadContext,
 	ev: GameEvent,
@@ -5156,14 +5390,14 @@ function executeIn(
 	if (ev.guard && !scope.facts.has(ev.guard)) {
 		log(
 			state,
-			`${"  ".repeat(depth)}(skipped ${describeEvent(state, ev)} — guard "${ev.guard}" unmet)`,
+			`${"  ".repeat(depth)}(skipped ${describeEvent(engine, state, ev)} — guard "${ev.guard}" unmet)`,
 		);
 		return { executed: [], created: [] };
 	}
 	if (ev.unless && scope.facts.has(ev.unless)) {
 		log(
 			state,
-			`${"  ".repeat(depth)}(skipped ${describeEvent(state, ev)} — fact "${ev.unless}" present)`,
+			`${"  ".repeat(depth)}(skipped ${describeEvent(engine, state, ev)} — fact "${ev.unless}" present)`,
 		);
 		return { executed: [], created: [] };
 	}
@@ -5194,7 +5428,7 @@ function executeIn(
 			);
 			for (let i = 0; i < ev.amount; i++) {
 				childResults.push(
-					performIn(
+					performIn(engine, 
 						state,
 						{
 							kind: "draw",
@@ -5230,7 +5464,7 @@ function executeIn(
 				p.drawnInDrawStep++;
 			// Drawing *is* a zone change, so zone-change replacements get a look too.
 			childResults.push(
-				performIn(
+				performIn(engine, 
 					state,
 					{
 						kind: "change zone",
@@ -5257,7 +5491,7 @@ function executeIn(
 				const top = p.library[p.library.length - 1];
 				if (top === undefined) break;
 				childResults.push(
-					performIn(
+					performIn(engine, 
 						state,
 						{
 							kind: "change zone",
@@ -5285,7 +5519,7 @@ function executeIn(
 				const top = p.library[p.library.length - 1];
 				if (top === undefined) break;
 				childResults.push(
-					performIn(
+					performIn(engine, 
 						state,
 						{
 							kind: "change zone",
@@ -5362,7 +5596,7 @@ function executeIn(
 			// Reverse the chosen order so its first card is on top of the graveyard.
 			for (const id of [...arrangement.bottom].reverse()) {
 				childResults.push(
-					performIn(
+					performIn(engine, 
 						state,
 						{
 							kind: "change zone",
@@ -5434,7 +5668,7 @@ function executeIn(
 					`choose-from-top kept card ${id} left the library`,
 				);
 				childResults.push(
-					performIn(
+					performIn(engine, 
 						state,
 						{
 							kind: "change zone",
@@ -5489,7 +5723,7 @@ function executeIn(
 				}
 				toDiscard.forEach((id) => {
 					childResults.push(
-						performIn(
+						performIn(engine, 
 							state,
 							{
 								kind: "change zone",
@@ -5516,7 +5750,7 @@ function executeIn(
 						});
 			assertDefined(chosen);
 			childResults.push(
-				performIn(
+				performIn(engine, 
 					state,
 					{
 						kind: "change zone",
@@ -5562,12 +5796,12 @@ function executeIn(
 				if (ev.deathtouch) o.attributes.deathtouched = true;
 				log(
 					state,
-					`${"  ".repeat(depth)}${name(state, o.id)} has ${o.damage} damage marked`,
+					`${"  ".repeat(depth)}${name(engine, state, o.id)} has ${o.damage} damage marked`,
 				);
 			}
 			if (ev.lifelink) {
 				childResults.push(
-					performIn(
+					performIn(engine, 
 						state,
 						{
 							kind: "gain life",
@@ -5590,7 +5824,7 @@ function executeIn(
 				happened = false;
 				break;
 			}
-			const movement = performIn(
+			const movement = performIn(engine, 
 				state,
 				{
 					kind: "change zone",
@@ -5624,7 +5858,7 @@ function executeIn(
 			}
 			const snapshot = getSnapshot(before, o.id);
 			assert(snapshot.kind === "permanent");
-			const movement = performIn(
+			const movement = performIn(engine, 
 				state,
 				{
 					kind: "change zone",
@@ -5658,7 +5892,7 @@ function executeIn(
 			}
 			const snapshot = getSnapshot(before, o.id);
 			assert(snapshot.kind === "permanent");
-			const movement = performIn(
+			const movement = performIn(engine, 
 				state,
 				{
 					kind: "change zone",
@@ -5696,7 +5930,7 @@ function executeIn(
 			delete o.attributes.deathtouched;
 			log(
 				state,
-				`${"  ".repeat(depth)}${name(state, o.id)} regenerates (tapped, damage removed, out of combat)`,
+				`${"  ".repeat(depth)}${name(engine, state, o.id)} regenerates (tapped, damage removed, out of combat)`,
 			);
 			break;
 		}
@@ -5740,11 +5974,11 @@ function executeIn(
 				state.battlefield.push(newId);
 				log(
 					state,
-					`  ${initialCharacteristics(permanent(state, newId)).name}#${newId} is now in battlefield`,
+					`  ${initialCharacteristics(engine, permanent(state, newId)).name}#${newId} is now in battlefield`,
 				);
 			} else {
 				recordSourceDeparture(state, before, ev.object, ev.from);
-				newId = moveObject(state, ev.object, ev.from, ev.destination);
+				newId = moveObject(engine, state, ev.object, ev.from, ev.destination);
 			}
 			created.push(newId);
 			break;
@@ -5765,7 +5999,7 @@ function executeIn(
 			o.counters[ev.counter] = (o.counters[ev.counter] ?? 0) + ev.amount;
 			log(
 				state,
-				`${"  ".repeat(depth)}${name(state, o.id)} now has ${o.counters[ev.counter]} ${ev.counter}`,
+				`${"  ".repeat(depth)}${name(engine, state, o.id)} now has ${o.counters[ev.counter]} ${ev.counter}`,
 			);
 			break;
 		}
@@ -5883,7 +6117,7 @@ function executeIn(
 			for (let i = 0; i < ev.amount; i++) {
 				const tokenId = state.nextObjectId++ as ObjectId;
 				childResults.push(
-					performIn(
+					performIn(engine, 
 						state,
 						{
 							kind: "change zone",
@@ -5932,11 +6166,11 @@ function executeIn(
 					"declared attackers must be unique",
 				);
 			}
-			const eligible = new Set(eligibleAttackers(state, ev.player));
+			const eligible = new Set(eligibleAttackers(engine, state, ev.player));
 			for (const id of ev.attackers) {
 				if (!eligible.has(id)) {
 					throw new IllegalAttackDeclarationError(
-						`${name(state, id)} is not an eligible attacker for P${ev.player}`,
+						`${name(engine, state, id)} is not an eligible attacker for P${ev.player}`,
 					);
 				}
 			}
@@ -5992,31 +6226,31 @@ function executeIn(
 			// and are represented by multiple distinct pairs.
 			const usedBlockers = new Set<ObjectId>();
 			const attackingIds = new Set(
-				creaturesControlledBy(createReadContext(state), currentTurn.player)
+				creaturesControlledBy(createReadContext(engine, state), currentTurn.player)
 					.filter((o) => o.attacking)
 					.map((o) => o.id),
 			);
-			const eligible = new Set(eligibleBlockers(state, ev.player));
+			const eligible = new Set(eligibleBlockers(engine, state, ev.player));
 			for (const { blocker, attacker } of ev.blockers) {
 				if (usedBlockers.has(blocker)) {
 					throw new IllegalBlockDeclarationError(
-						`${name(state, blocker)} cannot block multiple attackers`,
+						`${name(engine, state, blocker)} cannot block multiple attackers`,
 					);
 				}
 				usedBlockers.add(blocker);
 				if (!eligible.has(blocker)) {
 					throw new IllegalBlockDeclarationError(
-						`${name(state, blocker)} is not an eligible blocker for P${ev.player}`,
+						`${name(engine, state, blocker)} is not an eligible blocker for P${ev.player}`,
 					);
 				}
 				if (!attackingIds.has(attacker)) {
 					throw new IllegalBlockDeclarationError(
-						`${name(state, attacker)} is not a legal attacker to be blocked`,
+						`${name(engine, state, attacker)} is not a legal attacker to be blocked`,
 					);
 				}
-				if (!eligibleBlockers(state, ev.player, attacker).includes(blocker)) {
+				if (!eligibleBlockers(engine, state, ev.player, attacker).includes(blocker)) {
 					throw new IllegalBlockDeclarationError(
-						`${name(state, blocker)} cannot block ${name(state, attacker)}`,
+						`${name(engine, state, blocker)} cannot block ${name(engine, state, attacker)}`,
 					);
 				}
 			}
@@ -6073,7 +6307,7 @@ function executeIn(
 		state.revision++;
 		if (ev.kind === "change zone")
 			enqueueSelfDeathTriggers(state, selfDeathTriggers, ev);
-		detectTriggers(state, createReadContext(state), ev, created, changed);
+		detectTriggers(state, createReadContext(engine, state), ev, created, changed);
 		if (ev.fact) scope.facts.add(ev.fact);
 	}
 
@@ -6086,6 +6320,7 @@ function executeIn(
 
 /** Adds a trigger to `state.pendingTriggers`. */
 function enqueueTrigger(
+	engine: Engine,
 	state: GameState,
 	source: GameObject,
 	triggerId: TriggeredAbilityId,
@@ -6110,7 +6345,7 @@ function enqueueTrigger(
 	});
 	log(
 		state,
-		`  [trigger] ${name(state, source.id)}#${source.id} — ${trigger.text}`,
+		`  [trigger] ${name(engine, state, source.id)}#${source.id} — ${trigger.text}`,
 	);
 }
 
@@ -6283,7 +6518,7 @@ function detectTriggers(
 		assertDefined(snapshot, `no derived view for object ${abilitySource.id}`);
 		for (const triggerId of snapshot.currentCharacteristics.abilities
 			.triggered) {
-			const trigger = getAbilityDefinition("triggered", triggerId);
+			const trigger = abilityDefinition(read.engine, "triggered", triggerId);
 			const functionsFrom = trigger.functionsFrom ?? ["battlefield"];
 			if (!functionsFrom.includes(abilitySource.zone)) continue;
 			if (
@@ -6296,7 +6531,14 @@ function detectTriggers(
 					changed,
 				)
 			) {
-				enqueueTrigger(state, abilitySource, triggerId, trigger, ev);
+				enqueueTrigger(
+					read.engine,
+					state,
+					abilitySource,
+					triggerId,
+					trigger,
+					ev,
+				);
 			}
 		}
 	}
@@ -6333,7 +6575,7 @@ function selfDeathTriggerCandidates(
 
 	const candidates: SelfDeathTriggerCandidate[] = [];
 	for (const triggerId of snapshot.currentCharacteristics.abilities.triggered) {
-		const trigger = getAbilityDefinition("triggered", triggerId);
+		const trigger = abilityDefinition(before.engine, "triggered", triggerId);
 		if (!functionsHere(trigger.functionsFrom, "battlefield")) continue;
 		const condition = trigger.condition;
 		if (condition.kind !== "change zone" || condition.from !== "battlefield")
@@ -6424,6 +6666,7 @@ function recordSourceDeparture(
  * ------------------------------------------------------------------ */
 
 function putPendingTriggersOnStack(
+	engine: Engine,
 	state: GameState,
 	choices: AnyChoiceController,
 	active: PlayerId,
@@ -6462,7 +6705,7 @@ function putPendingTriggersOnStack(
 			let targets: TargetBindings = [];
 			if (target) {
 				const ctx = { controller: pending.controller, source: pending.source };
-				const candidates = legalTargets(createReadContext(state), target, ctx);
+				const candidates = legalTargets(createReadContext(engine, state), target, ctx);
 				if (candidates.length === 0) {
 					// CR 603.3d: with no legal choice the ability is removed rather
 					// than waiting on the stack for one to appear.
@@ -6477,7 +6720,7 @@ function putPendingTriggersOnStack(
 					candidates,
 				);
 				assert(
-					isLegalTarget(createReadContext(state), target, chosen, ctx),
+					isLegalTarget(createReadContext(engine, state), target, chosen, ctx),
 					"chooseTarget returned a target outside its own candidate list",
 				);
 				targets = [{ slot: target.id, target: chosen }];
@@ -6504,15 +6747,16 @@ function putPendingTriggersOnStack(
  * resolves on its own terms below.
  */
 function resolveTopOfStack(
+	engine: Engine,
 	state: GameState,
 	choices: AnyChoiceController,
 ): void {
 	const entry = state.stack[state.stack.length - 1];
 	assertDefined(entry, "nothing on the stack to resolve");
 	if (entry.kind === "spell") {
-		resolveSpell(state, choices, entry);
+		resolveSpell(engine, state, choices, entry);
 	} else {
-		resolveStackAbility(state, choices, entry);
+		resolveStackAbility(engine, state, choices, entry);
 	}
 }
 
@@ -6524,6 +6768,7 @@ function resolveTopOfStack(
  * an instant or sorcery visible to its own effects while they resolve.
  */
 function resolveSpell(
+	engine: Engine,
 	state: GameState,
 	choices: AnyChoiceController,
 	entry: SpellStackEntry,
@@ -6543,7 +6788,7 @@ function resolveSpell(
 		"resolving a copied spell is not supported",
 	);
 
-	const read = createReadContext(state);
+	const read = createReadContext(engine, state);
 	const snapshot = getSnapshot(read, object.id);
 	assert(snapshot.kind === "spell", "a spell object read back as another kind");
 	const characteristics = snapshot.currentCharacteristics;
@@ -6555,7 +6800,7 @@ function resolveSpell(
 	if (
 		characteristics.types.some((type) => includes(PERMANENT_CARD_TYPES, type))
 	) {
-		performIn(
+		performIn(engine, 
 			state,
 			{
 				kind: "change zone",
@@ -6574,7 +6819,7 @@ function resolveSpell(
 	// CR 608.2m: an instant or sorcery follows its own instructions and is then
 	// put into its owner's graveyard as the last step of resolution.
 	// TODO: "instants and sorceries you control have lifelink", which needs characteristics.
-	const definition = card(object.representation.cardId).spell;
+	const definition = read.engine.cardDefinition(object.representation.cardId).spell;
 	assertDefined(
 		definition,
 		`${characteristics.name} has no spell ability to resolve`,
@@ -6600,7 +6845,7 @@ function resolveSpell(
 			}));
 	if (legal) {
 		/** Share a scope so facts can pass through the complete effect sequence. */
-		resolveEffects(
+		resolveEffects(engine, 
 			state,
 			choices,
 			{
@@ -6615,7 +6860,7 @@ function resolveSpell(
 	} else {
 		log(state, "  [illegal target] spell does not resolve");
 	}
-	performIn(
+	performIn(engine, 
 		state,
 		{
 			kind: "change zone",
@@ -6637,6 +6882,7 @@ function resolveSpell(
  * departure's last known information.
  */
 function resolveStackAbility(
+	engine: Engine,
 	state: GameState,
 	choices: AnyChoiceController,
 	entry: TriggeredAbilityStackItem | ActivatedAbilityStackItem,
@@ -6660,13 +6906,13 @@ function resolveStackAbility(
 	const legal =
 		!target ||
 		(binding !== undefined &&
-			isLegalTarget(createReadContext(state), target, binding.target, {
+			isLegalTarget(createReadContext(engine, state), target, binding.target, {
 				controller: entry.controller,
 				source: entry.source,
 			}));
 	if (legal) {
 		/** Share a scope so facts can pass through the complete effect sequence. */
-		resolveEffects(
+		resolveEffects(engine, 
 			state,
 			choices,
 			{
@@ -6705,12 +6951,13 @@ interface ResolutionSource {
  * departure. The ability's controller is captured separately.
  */
 function sourceInformation(
+	engine: Engine,
 	state: GameState,
 	item: ResolutionSource,
 ): SourceLastKnown {
 	const object = maybeObject(state, item.source);
 	if (object && (object.kind === "permanent" || object.kind === "spell")) {
-		const snapshot = getSnapshot(createReadContext(state), item.source);
+		const snapshot = getSnapshot(createReadContext(engine, state), item.source);
 		assert(
 			snapshot.kind === "permanent" || snapshot.kind === "spell",
 			"source object read back as another kind",
@@ -6769,6 +7016,7 @@ function resolvingEffectSource(
 }
 
 function resolveEffects(
+	engine: Engine,
 	state: GameState,
 	choices: AnyChoiceController,
 	item: ResolutionSource,
@@ -6790,7 +7038,7 @@ function resolveEffects(
 				"optional effects on a resolving spell are not implemented",
 			);
 			if (choices.chooseOptional(state, item.ability, decider))
-				resolveEffects(state, choices, item, effect.effects, scope);
+				resolveEffects(engine, state, choices, item, effect.effects, scope);
 			continue;
 		}
 		let bound: EntityRef | null = null;
@@ -6870,7 +7118,7 @@ function resolveEffects(
 							return bound.player;
 						})();
 			const candidates = legalSacrifices(
-				createReadContext(state),
+				createReadContext(engine, state),
 				sacrificingPlayer,
 				effect.predicate,
 				{ controller: item.controller, source: item.source },
@@ -6882,7 +7130,7 @@ function resolveEffects(
 				reason: { kind: "sacrifice" },
 				objects: candidates,
 			});
-			performIn(
+			performIn(engine, 
 				state,
 				{ kind: "sacrifice", object: chosen },
 				choices,
@@ -6895,7 +7143,7 @@ function resolveEffects(
 			// A source that has left the battlefield cannot receive counters.
 			const source = maybePermanent(state, item.source);
 			if (!source) continue;
-			performIn(
+			performIn(engine, 
 				state,
 				{
 					kind: "add counters",
@@ -6953,9 +7201,9 @@ function resolveEffects(
 					"a nonbattlefield change-zone subject must be a card",
 				);
 			}
-			const result = performIn(
+			const result = performIn(engine, 
 				state,
-				effectToEvent(
+				effectToEvent(engine, 
 					state,
 					item,
 					effect,
@@ -7029,9 +7277,9 @@ function resolveEffects(
 				!scope.bindings.has(effect.resultSlot),
 				`effect result slot ${effect.resultSlot} is already bound`,
 			);
-			const result = performIn(
+			const result = performIn(engine, 
 				state,
-				effectToEvent(state, item, effect, bound),
+				effectToEvent(engine, state, item, effect, bound),
 				choices,
 				scope,
 				0,
@@ -7078,9 +7326,9 @@ function resolveEffects(
 			}
 			continue;
 		}
-		performIn(
+		performIn(engine, 
 			state,
-			effectToEvent(state, item, effect, bound),
+			effectToEvent(engine, state, item, effect, bound),
 			choices,
 			scope,
 			0,
@@ -7111,6 +7359,7 @@ function relativeEffectPlayer(
 }
 
 function effectToEvent(
+	engine: Engine,
 	state: GameState,
 	item: ResolutionSource,
 	effect: Exclude<EffectDef<TriggerEffectPlayer>, { kind: "may" }>,
@@ -7220,7 +7469,7 @@ function effectToEvent(
 			);
 			// CR 119.3: lifelink life goes to the controller of the damage source,
 			// which need not be the controller of the ability.
-			const source = sourceInformation(state, item);
+			const source = sourceInformation(engine, state, item);
 			return {
 				kind: "damage",
 				source: item.source,
@@ -7845,7 +8094,7 @@ function hasPlayPermission(
 
 	for (const temporary of read.state.temporaryEffects) {
 		if (temporary.controller !== player) continue;
-		const definition = temporaryEffectDefinition(temporary);
+		const definition = temporaryEffectDefinition(read.engine, temporary);
 		if (definition?.kind !== "may-play") continue;
 		assert(definition.from === "exile");
 		const subject = temporary.bindings[definition.object.slot];
@@ -7895,7 +8144,7 @@ function canCast(
 		) === null
 	)
 		return false;
-	const definition = card(object.cardId).spell;
+	const definition = read.engine.cardDefinition(object.cardId).spell;
 	const additionalCost = definition?.additionalCost;
 	if (characteristics.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
 		assertDefined(
@@ -7962,7 +8211,7 @@ function landPlayAllowance(read: ReadContext, player: PlayerId): number {
 		// changes whether this object generates the rule effect. The allowance is
 		// not an input to characteristic derivation, so this does not recurse.
 		for (const id of abilityReferencesOf(read.view, object).static) {
-			const ability = getAbilityDefinition("static", id);
+			const ability = abilityDefinition(read.engine, "static", id);
 			if (!("kind" in ability) || ability.kind !== "adjust-land-plays")
 				continue;
 			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
@@ -8023,7 +8272,7 @@ function activatedAbilityActions(
 		const snapshot = getSnapshot(read, object.id);
 		const actions: ActivateAbilityAction[] = [];
 		for (const ability of snapshot.currentCharacteristics.abilities.activated) {
-			const definition = getAbilityDefinition("activated", ability);
+			const definition = abilityDefinition(read.engine, "activated", ability);
 			const functionsFrom =
 				definition.kind === "activated" ? definition.functionsFrom : undefined;
 			if (!functionsHere(functionsFrom, object.zone)) continue;
@@ -8077,12 +8326,13 @@ function activatedAbilityActions(
 }
 
 /** Actions currently offered to a player receiving priority. */
-export function getObservableActions(
+function getObservableActions(
+	engine: Engine,
 	state: GameState,
 	player: PlayerId,
 ): PriorityAction[] {
 	const actions: PriorityAction[] = [{ kind: "pass" }];
-	const read = createReadContext(state);
+	const read = createReadContext(engine, state);
 	if (canPlayOrdinaryLand(state, read, player)) {
 		const candidates = [
 			...state.players[player].hand,
@@ -8116,13 +8366,14 @@ export function getObservableActions(
  * Activating an ability
  * ------------------------------------------------------------------ */
 
-export function executeAbilityAction(
+function executeAbilityAction(
+	engine: Engine,
 	state: GameState,
 	priorityPlayer: PlayerId,
 	action: ActivateAbilityAction,
 	source: ChoiceSource,
 ): void {
-	activateAbilityIn(state, priorityPlayer, action, asChoiceController(source));
+	activateAbilityIn(engine, state, priorityPlayer, action, asChoiceController(engine, source));
 }
 
 /**
@@ -8142,6 +8393,7 @@ function restoreCheckpoint(state: GameState, checkpoint: GameState): void {
 }
 
 function activateAbilityIn(
+	engine: Engine,
 	state: GameState,
 	priorityPlayer: PlayerId,
 	action: ActivateAbilityAction,
@@ -8181,7 +8433,7 @@ function activateAbilityIn(
 			`P${priorityPlayer} does not control or own object ${action.source} in its current zone`,
 		);
 	}
-	const snapshot = getSnapshot(createReadContext(state), object.id);
+	const snapshot = getSnapshot(createReadContext(engine, state), object.id);
 	if (
 		!snapshot.currentCharacteristics.abilities.activated.includes(
 			action.ability,
@@ -8191,7 +8443,7 @@ function activateAbilityIn(
 			`object ${action.source} does not have ability ${action.ability}`,
 		);
 	}
-	const ability = getAbilityDefinition("activated", action.ability);
+	const ability = abilityDefinition(engine, "activated", action.ability);
 	const functionsFrom =
 		ability.kind === "activated" ? ability.functionsFrom : undefined;
 	if (!functionsHere(functionsFrom, object.zone)) {
@@ -8297,7 +8549,7 @@ function activateAbilityIn(
 				"chooseManaAmount returned an option outside its own candidate list",
 			);
 			events = [
-				effectToEvent(
+				effectToEvent(engine, 
 					state,
 					context,
 					{ kind: "add-mana", player: "you", mana: { ...chosen } },
@@ -8326,7 +8578,7 @@ function activateAbilityIn(
 						`mana ability ${action.ability} produces no mana`,
 					);
 				}
-				return effectToEvent(state, context, effect, null);
+				return effectToEvent(engine, state, context, effect, null);
 			});
 		}
 	}
@@ -8380,7 +8632,7 @@ function activateAbilityIn(
 		const target = requiredTargetDefinition(targetDefinitions, ability.effects);
 		if (target) {
 			const ctx = { controller: priorityPlayer, source: object.id };
-			const candidates = legalTargets(createReadContext(state), target, ctx);
+			const candidates = legalTargets(createReadContext(engine, state), target, ctx);
 			if (candidates.length === 0) {
 				throw new IllegalAbilityActivationError(
 					`ability ${action.ability} has no legal target`,
@@ -8393,7 +8645,7 @@ function activateAbilityIn(
 				target,
 				candidates,
 			);
-			if (!isLegalTarget(createReadContext(state), target, chosen, ctx)) {
+			if (!isLegalTarget(createReadContext(engine, state), target, chosen, ctx)) {
 				throw new IllegalAbilityActivationError(
 					`ability ${action.ability}'s chosen target is no longer legal`,
 				);
@@ -8410,7 +8662,7 @@ function activateAbilityIn(
 			"only sacrificing one permanent is implemented",
 		);
 		const candidates = legalSacrifices(
-			createReadContext(state),
+			createReadContext(engine, state),
 			priorityPlayer,
 			sacrificeCost.predicate,
 			{ controller: priorityPlayer, source: object.id },
@@ -8489,7 +8741,7 @@ function activateAbilityIn(
 		if (spentMana) state.revision++;
 
 		if (ability.cost.tapSelf) {
-			const tapPayment = performIn(
+			const tapPayment = performIn(engine, 
 				state,
 				{ kind: "tap", ref: { kind: "object", object: object.id } },
 				choices,
@@ -8512,7 +8764,7 @@ function activateAbilityIn(
 
 		if (sacrificeCost) {
 			assertDefined(sacrificePayment);
-			const sacrifice = performIn(
+			const sacrifice = performIn(engine, 
 				state,
 				{ kind: "sacrifice", object: sacrificePayment },
 				choices,
@@ -8533,7 +8785,7 @@ function activateAbilityIn(
 
 		if (discardCost) {
 			assertDefined(discardPayment);
-			const discard = performIn(
+			const discard = performIn(engine, 
 				state,
 				{
 					kind: "discard",
@@ -8570,7 +8822,7 @@ function activateAbilityIn(
 	}
 	if (ability.kind === "mana") {
 		log(state, `  [mana ability] ${ability.text}`);
-		for (const event of events) performIn(state, event, choices, scope, 0);
+		for (const event of events) performIn(engine, state, event, choices, scope, 0);
 	}
 }
 
@@ -8584,16 +8836,18 @@ function activateAbilityIn(
  * Casting a spell
  * ------------------------------------------------------------------ */
 
-export function executeCastAction(
+function executeCastAction(
+	engine: Engine,
 	state: GameState,
 	priorityPlayer: PlayerId,
 	action: CastAction,
 	source: ChoiceSource,
 ): void {
-	castSpellIn(state, priorityPlayer, action, asChoiceController(source));
+	castSpellIn(engine, state, priorityPlayer, action, asChoiceController(engine, source));
 }
 
 function castSpellIn(
+	engine: Engine,
 	state: GameState,
 	priorityPlayer: PlayerId,
 	action: CastAction,
@@ -8610,7 +8864,7 @@ function castSpellIn(
 		);
 	}
 
-	const read = createReadContext(state);
+	const read = createReadContext(engine, state);
 	if (!hasPlayPermission(read, priorityPlayer, object)) {
 		throw new IllegalCastError(
 			`P${priorityPlayer} has no permission to cast object ${action.card} from ${object.zone}`,
@@ -8647,7 +8901,7 @@ function castSpellIn(
 		);
 	}
 
-	const definition = card(object.cardId).spell;
+	const definition = read.engine.cardDefinition(object.cardId).spell;
 	let target: TargetDef | null = null;
 	const additionalCost = definition?.additionalCost ?? null;
 	if (characteristics.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
@@ -8684,7 +8938,7 @@ function castSpellIn(
 	const checkpoint = structuredClone(state);
 	let castSpell: ObjectId;
 	try {
-		const movement = performIn(
+		const movement = performIn(engine, 
 			state,
 			{
 				kind: "change zone",
@@ -8738,7 +8992,7 @@ function castSpellIn(
 
 		if (target) {
 			const ctx = { controller: priorityPlayer, source: spellId };
-			const candidates = legalTargets(createReadContext(state), target, ctx);
+			const candidates = legalTargets(createReadContext(engine, state), target, ctx);
 			if (candidates.length === 0) {
 				throw new IllegalCastError(
 					`${characteristics.name} has no legal target`,
@@ -8751,7 +9005,7 @@ function castSpellIn(
 				target,
 				candidates,
 			);
-			if (!isLegalTarget(createReadContext(state), target, chosen, ctx)) {
+			if (!isLegalTarget(createReadContext(engine, state), target, chosen, ctx)) {
 				throw new IllegalCastError(
 					`${characteristics.name}'s chosen target is no longer legal`,
 				);
@@ -8763,7 +9017,7 @@ function castSpellIn(
 		let sacrificePayment: ObjectId | null = null;
 		if (additionalCost) {
 			const candidates = legalSacrifices(
-				createReadContext(state),
+				createReadContext(engine, state),
 				priorityPlayer,
 				additionalCost.predicate,
 				{ controller: priorityPlayer, source: spellId },
@@ -8805,7 +9059,7 @@ function castSpellIn(
 
 		if (additionalCost) {
 			assertDefined(sacrificePayment);
-			const sacrifice = performIn(
+			const sacrifice = performIn(engine, 
 				state,
 				{ kind: "sacrifice", object: sacrificePayment },
 				choices,
@@ -8832,7 +9086,7 @@ function castSpellIn(
 
 	// CR 601.2i: the spell has been cast. Cast triggers fire only now, once the
 	// announcement transaction has committed and can no longer be rewound.
-	performIn(
+	performIn(engine, 
 		state,
 		{ kind: "cast", player: priorityPlayer, spell: castSpell },
 		choices,
@@ -8849,16 +9103,18 @@ function castSpellIn(
  * Playing a land
  * ------------------------------------------------------------------ */
 
-export function executeLandAction(
+function executeLandAction(
+	engine: Engine,
 	state: GameState,
 	priorityPlayer: PlayerId,
 	action: PlayLandAction,
 	source: ChoiceSource,
 ): void {
-	playLandIn(state, priorityPlayer, action, asChoiceController(source));
+	playLandIn(engine, state, priorityPlayer, action, asChoiceController(engine, source));
 }
 
 function playLandIn(
+	engine: Engine,
 	state: GameState,
 	priorityPlayer: PlayerId,
 	action: PlayLandAction,
@@ -8883,7 +9139,7 @@ function playLandIn(
 			"a land cannot be played while the stack is nonempty",
 		);
 	}
-	const read = createReadContext(state);
+	const read = createReadContext(engine, state);
 	const allowance = landPlayAllowance(read, priorityPlayer);
 	if (state.players[priorityPlayer].landsPlayed >= allowance) {
 		throw new IllegalLandPlayError(
@@ -8911,7 +9167,7 @@ function playLandIn(
 		throw new IllegalLandPlayError(`object ${action.card} is not a land`);
 	}
 
-	performIn(
+	performIn(engine, 
 		state,
 		{
 			kind: "change zone",
@@ -8943,11 +9199,16 @@ function playLandIn(
  * Passing priority
  * ------------------------------------------------------------------ */
 
-export function settlePriority(state: GameState, source: ChoiceSource): void {
-	settlePriorityIn(state, asChoiceController(source));
+function settlePriority(
+	engine: Engine,
+	state: GameState,
+	source: ChoiceSource,
+): void {
+	settlePriorityIn(engine, state, asChoiceController(engine, source));
 }
 
 function settlePriorityIn(
+	engine: Engine,
 	state: GameState,
 	choices: AnyChoiceController,
 ): void {
@@ -8962,10 +9223,10 @@ function settlePriorityIn(
 	// round (both players pass again per CR 117.3b), so this must be at least
 	// twice the deepest stack the engine can build.
 	for (let pass = 0; pass < 256; pass++) {
-		checkStateBasedActionsIn(state, choices);
+		checkStateBasedActionsIn(engine, state, choices);
 		if (gameOver(state)) return;
 
-		putPendingTriggersOnStack(state, choices, active);
+		putPendingTriggersOnStack(engine, state, choices, active);
 		// players only get priority in the untap & cleanup steps
 		// if something goes on the stack.
 		const step = currentStepKind(state);
@@ -8989,24 +9250,24 @@ function settlePriorityIn(
 		const action = choices.choosePriorityAction(
 			state,
 			priority,
-			getObservableActions(state, priority),
+			getObservableActions(engine, state, priority),
 		);
 
 		if (action.kind === "play land") {
-			playLandIn(state, priority, action, choices);
+			playLandIn(engine, state, priority, action, choices);
 			// A special action neither passes nor changes who has priority.
 			lastWasPass = false;
 			continue;
 		}
 		if (action.kind === "activate ability") {
-			activateAbilityIn(state, priority, action, choices);
+			activateAbilityIn(engine, state, priority, action, choices);
 			// CR 117.3c: the activating player receives priority again. Mana
 			// abilities resolve immediately; other activated abilities are stacked.
 			lastWasPass = false;
 			continue;
 		}
 		if (action.kind === "cast") {
-			castSpellIn(state, priority, action, choices);
+			castSpellIn(engine, state, priority, action, choices);
 			// CR 117.3c: the caster receives priority again after casting, and the
 			// round re-opens, so a pass already made no longer stands.
 			lastWasPass = false;
@@ -9017,7 +9278,7 @@ function settlePriorityIn(
 		}
 		if (lastWasPass) {
 			if (state.stack.length === 0) return;
-			resolveTopOfStack(state, choices);
+			resolveTopOfStack(engine, state, choices);
 			// CR 117.3b. The active player receives priority after a resolution,
 			// which re-opens the round: step 4's "goto 1" above.
 			lastWasPass = false;
@@ -9030,8 +9291,12 @@ function settlePriorityIn(
 	throw new Error("priority loop did not settle");
 }
 
-function priority(state: GameState, choices: AnyChoiceController) {
-	settlePriorityIn(state, choices);
+function priority(
+	engine: Engine,
+	state: GameState,
+	choices: AnyChoiceController,
+) {
+	settlePriorityIn(engine, state, choices);
 }
 
 /* ------------------------------------------------------------------ *
@@ -9056,6 +9321,7 @@ function performPreGameActions(
 }
 
 function performTurnBasedActions(
+	engine: Engine,
 	state: GameState,
 	choices: AnyChoiceController,
 	step: StepOccurrence,
@@ -9063,7 +9329,7 @@ function performTurnBasedActions(
 ): void {
 	switch (step.kind) {
 		case "untap":
-			performIn(
+			performIn(engine, 
 				state,
 				{
 					kind: "untap",
@@ -9076,7 +9342,7 @@ function performTurnBasedActions(
 			break;
 		case "draw":
 			state.players[active].drawnInDrawStep = 0;
-			performIn(
+			performIn(engine, 
 				state,
 				{ kind: "draw", player: active },
 				choices,
@@ -9085,7 +9351,7 @@ function performTurnBasedActions(
 			);
 			break;
 		case "cleanup":
-			performIn(
+			performIn(engine, 
 				state,
 				{
 					kind: "discard",
@@ -9114,9 +9380,9 @@ function performTurnBasedActions(
 		case "declare attackers": {
 			// Ask once for a replayable subset, then commit it as one event. Battlefield
 			// order is preserved so the offered options are stable and deterministic.
-			const eligible = eligibleAttackers(state, active);
+			const eligible = eligibleAttackers(engine, state, active);
 			const attackers = choices.chooseAttackers(state, active, eligible);
-			performIn(
+			performIn(engine, 
 				state,
 				{
 					kind: "declare attackers",
@@ -9143,7 +9409,7 @@ function performTurnBasedActions(
 			// CR 510.2: all combat damage is assigned, then dealt, simultaneously.
 			const defender = (1 - active) as PlayerId;
 			const events: DamageEvent[] = [];
-			const read = createReadContext(state);
+			const read = createReadContext(engine, state);
 			const blockedAttackers = new Set(
 				state.blockAssignments.map(({ attacker }) => attacker),
 			);
@@ -9269,7 +9535,7 @@ function performTurnBasedActions(
 					),
 				);
 			}
-			for (const ev of events) performIn(state, ev, choices, newScope(), 0);
+			for (const ev of events) performIn(engine, state, ev, choices, newScope(), 0);
 			break;
 		}
 		case "upkeep":
@@ -9282,17 +9548,17 @@ function performTurnBasedActions(
 			// attackers. This deviates from the attacker model: blockers are
 			// (blocker, attacker) pairs, not a plain list of IDs.
 			const defender = (1 - active) as PlayerId;
-			const attackers = creaturesControlledBy(createReadContext(state), active)
+			const attackers = creaturesControlledBy(createReadContext(engine, state), active)
 				.filter((o) => o.attacking)
 				.map((o) => o.id);
-			const eligible = eligibleBlockers(state, defender);
+			const eligible = eligibleBlockers(engine, state, defender);
 			const blockers = choices.chooseBlockers(
 				state,
 				defender,
 				attackers,
 				eligible,
 			);
-			performIn(
+			performIn(engine, 
 				state,
 				{
 					kind: "declare blockers",
@@ -9326,20 +9592,21 @@ export interface AdvanceWithReplayResult {
  * async choices unwind the synchronous engine; their answers are recorded and
  * the same advancement is replayed from the untouched checkpoint.
  */
-export async function advanceWithReplay(
+async function advanceWithReplay(
+	engine: Engine,
 	checkpoint: GameState,
 	agents: AgentPair,
 	transcript: ChoiceTranscript = { version: 1, choices: [] },
 ): Promise<AdvanceWithReplayResult> {
 	const baseline = structuredClone(checkpoint);
-	const choices = ChoiceController.suspending(agents, transcript);
+	const choices = ChoiceController.suspending(engine, agents, transcript);
 
 	for (let attempts = 1; ; attempts++) {
 		const attempt = structuredClone(baseline);
 		choices.rewind();
 
 		try {
-			advanceIn(attempt, choices);
+			advanceIn(engine, attempt, choices);
 			choices.assertComplete();
 			return { state: attempt, transcript: choices.transcript(), attempts };
 		} catch (error) {
@@ -9358,21 +9625,33 @@ export async function advanceWithReplay(
  * first turn begins, so nothing is decided by stopping in between: this
  * consumes every pre-game transition in one call.
  */
-export function startGame(state: GameState, source: ChoiceSource): void {
-	const choices = asChoiceController(source);
+function startGame(
+	engine: Engine,
+	state: GameState,
+	source: ChoiceSource,
+): void {
+	const choices = asChoiceController(engine, source);
 	// One transition per pre-game step, plus the one that installs the turn.
 	for (let call = 0; call <= PRE_GAME_STEPS.length + 1; call++) {
 		if (state.turnScheduler.progress.kind === "inTurn") return;
-		advanceIn(state, choices);
+		advanceIn(engine, state, choices);
 	}
 	throw new Error("the pre-game did not reach the first turn");
 }
 
-export function advance(state: GameState, source: ChoiceSource): void {
-	advanceIn(state, asChoiceController(source));
+function advance(
+	engine: Engine,
+	state: GameState,
+	source: ChoiceSource,
+): void {
+	advanceIn(engine, state, asChoiceController(engine, source));
 }
 
-function advanceIn(state: GameState, choices: AnyChoiceController): void {
+function advanceIn(
+	engine: Engine,
+	state: GameState,
+	choices: AnyChoiceController,
+): void {
 	if (gameOver(state)) return;
 
 	// Scheduler transitions and turn-based actions mutate canonical state outside
@@ -9406,7 +9685,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 
 			case "advanceTurn": {
 				const turn = takeNextTurn(state);
-				const result = performIn(
+				const result = performIn(engine, 
 					state,
 					{
 						kind: "begin turn",
@@ -9476,7 +9755,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 							? "precombat"
 							: "postcombat"
 						: undefined;
-				const result = performIn(
+				const result = performIn(engine, 
 					state,
 					{
 						kind: "begin phase",
@@ -9509,7 +9788,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 						location: { kind: "mainPhase", phase, role },
 					};
 					scheduler.nextAction = { kind: "finishPhase" };
-					priority(state, choices);
+					priority(engine, state, choices);
 					return;
 				}
 
@@ -9526,7 +9805,7 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 					continue;
 				}
 
-				const result = performIn(
+				const result = performIn(engine, 
 					state,
 					{
 						kind: "begin step",
@@ -9555,10 +9834,10 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 					location: { kind: "step", phase, step },
 				};
 				scheduler.nextAction = { kind: "finishStep" };
-				performTurnBasedActions(state, choices, step, turn.player);
+				performTurnBasedActions(engine, state, choices, step, turn.player);
 				// Untap has no priority window. Cleanup normally has none, but the
 				// priority helper opens one if something triggered.
-				priority(state, choices);
+				priority(engine, state, choices);
 				return;
 			}
 
