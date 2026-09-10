@@ -2230,12 +2230,16 @@ interface DrawTriggerCondition {
 	kind: "draw";
 	player: ValidPlayer;
 	/**
-	 * Fire only on the Nth card that player has drawn this turn, e.g. Sneaky
-	 * Snacker's "when you draw your third card in a turn". The counter is
-	 * incremented before triggers are detected, so the event itself is already
-	 * counted when this is checked.
+	 * At most one draw-count qualifier; the union makes combining two
+	 * impossible. `{ nth: N }` fires only on the draw that brings the turn's
+	 * count to exactly N, e.g. Sneaky Snacker's "when you draw your third card
+	 * in a turn". "except-first-in-draw-step" matches every draw that is not
+	 * the first card of that player's own draw step, e.g. Xyris's "whenever an
+	 * opponent draws a card except the first one they draw in each of their
+	 * draw steps". Both counters are incremented before triggers are detected,
+	 * so the event itself is already counted when either is checked.
 	 */
-	nth?: number;
+	qualifier?: "except-first-in-draw-step" | { nth: number };
 }
 
 /** Matches this source dealing combat damage to a player. */
@@ -6150,12 +6154,22 @@ function triggerMatches(
 			assert(ev.kind === "draw");
 			if (!relativePlayerMatches(ev.player, condition.player, source))
 				return false;
+			const qualifier = condition.qualifier;
+			if (qualifier === undefined) return true;
 			// An `nth` condition fires once: only on the draw that brings
 			// the turn's count to exactly `nth`.
-			return (
-				condition.nth === undefined ||
-				read.state.players[ev.player].drawnThisTurn === condition.nth
-			);
+			if (qualifier !== "except-first-in-draw-step")
+				return read.state.players[ev.player].drawnThisTurn === qualifier.nth;
+			// `drawnInDrawStep` only counts a player's own draws during their
+			// own draw step — the same guard the increment uses — and it is stale
+			// outside that step, so a draw elsewhere on the turn (an opponent's
+			// extra draw on your turn, say) must match without consulting it.
+			if (
+				currentStepKind(read.state) !== "draw" ||
+				activePlayer(read.state) !== ev.player
+			)
+				return true;
+			return read.state.players[ev.player].drawnInDrawStep > 1;
 		}
 
 		case "damage":

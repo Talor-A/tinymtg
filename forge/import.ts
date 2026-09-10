@@ -2465,6 +2465,7 @@ function lowerTrigger(
 					"mode",
 					"validcard",
 					"number",
+					"firstcardindrawstep",
 					"triggerzones",
 					"execute",
 					"optionaldecider",
@@ -2510,6 +2511,31 @@ function lowerTrigger(
 					"Drawn Number$ must be a positive integer",
 					where,
 				);
+			// FirstCardInDrawStep$ False is Xyris's "except the first one they
+			// draw in each of their draw steps". The True form (Notion Thief and
+			// friends) matches only the first draw-step card; nothing in the
+			// corpus needs it yet, so it is rejected rather than half-supported.
+			const firstCardInDrawStep = getForgeParam(params, "FirstCardInDrawStep");
+			if (firstCardInDrawStep !== undefined && firstCardInDrawStep !== "False")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"only FirstCardInDrawStep$ False is supported",
+					where,
+				);
+			// The engine's condition holds one qualifier, so a script naming
+			// both count forms cannot lower. No corpus card combines them.
+			if (nth !== undefined && firstCardInDrawStep !== undefined)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"a Drawn trigger cannot combine Number$ and FirstCardInDrawStep$",
+					where,
+				);
+			const qualifier =
+				nth !== undefined
+					? { nth }
+					: firstCardInDrawStep !== undefined
+						? "except-first-in-draw-step"
+						: undefined;
 			// A graveyard Drawn trigger functions with a card as its source, so
 			// the only effect the engine can resolve from there is the source
 			// reanimating itself: ChangeZone Graveyard -> Battlefield. Everything
@@ -2536,7 +2562,7 @@ function lowerTrigger(
 				condition: {
 					kind: "draw",
 					player: drawPlayer,
-					...(nth !== undefined ? { nth } : {}),
+					...(qualifier !== undefined ? { qualifier } : {}),
 				},
 				targets,
 				effects,

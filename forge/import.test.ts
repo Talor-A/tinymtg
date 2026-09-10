@@ -1232,7 +1232,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			{
 				id: "TrigChange",
 				text: expect.any(String),
-				condition: { kind: "draw", player: "you", nth: 3 },
+				condition: { kind: "draw", player: "you", qualifier: { nth: 3 } },
 				functionsFrom: ["graveyard"],
 				targets: [],
 				effects: [
@@ -1249,6 +1249,49 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				],
 			},
 		]);
+	});
+
+	test("a Drawn FirstCardInDrawStep$ False trigger lowers to the draw-step qualifier", () => {
+		const result = importText(
+			`Name:Fang Coatl\nManaCost:1 G U\nTypes:Creature Snake\nPT:2/2\nT:Mode$ Drawn | ValidCard$ Card.OppOwn | FirstCardInDrawStep$ False | TriggerZones$ Battlefield | Execute$ TrigDraw | TriggerDescription$ x\nSVar:TrigDraw:DB$ Draw | Defined$ You | NumCards$ 1\nOracle:\n`,
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigDraw",
+				text: expect.any(String),
+				condition: {
+					kind: "draw",
+					player: "opponent",
+					qualifier: "except-first-in-draw-step",
+				},
+				targets: [],
+				effects: [{ kind: "draw", player: "you", amount: 1 }],
+			},
+		]);
+	});
+
+	test("a Drawn FirstCardInDrawStep$ True trigger is rejected", () => {
+		const result = importText(
+			`Name:First Coatl\nManaCost:1 G U\nTypes:Creature Snake\nPT:2/2\nT:Mode$ Drawn | ValidCard$ Card.OppOwn | FirstCardInDrawStep$ True | TriggerZones$ Battlefield | Execute$ TrigDraw | TriggerDescription$ x\nSVar:TrigDraw:DB$ Draw | Defined$ You | NumCards$ 1\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.message).toBe(
+			"only FirstCardInDrawStep$ False is supported",
+		);
+	});
+
+	test("a Drawn trigger cannot combine Number$ and FirstCardInDrawStep$", () => {
+		const result = importText(
+			`Name:Greedy Coatl\nManaCost:1 G U\nTypes:Creature Snake\nPT:2/2\nT:Mode$ Drawn | ValidCard$ Card.OppOwn | Number$ 2 | FirstCardInDrawStep$ False | TriggerZones$ Battlefield | Execute$ TrigDraw | TriggerDescription$ x\nSVar:TrigDraw:DB$ Draw | Defined$ You | NumCards$ 1\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.message).toBe(
+			"a Drawn trigger cannot combine Number$ and FirstCardInDrawStep$",
+		);
 	});
 
 	test("a Drawn trigger's unsupported ValidCard$ is rejected", () => {
