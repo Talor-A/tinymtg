@@ -12,6 +12,7 @@ import "../cards.ts";
 import {
 	executeCastAction,
 	type GameState,
+	getObservableActions,
 	name,
 	newGame,
 	type ObjectId,
@@ -52,6 +53,33 @@ registerCard({
 		text: "Exile the top two cards of an opponent's library.",
 		targets: [],
 		effects: [{ kind: "exile-top", player: "opponent", amount: 2 }],
+	},
+});
+
+registerCard({
+	id: "test-exile-top-two-and-play",
+	name: "Test Exile Top Two And Play",
+	types: ["instant"],
+	colors: [],
+	manaCost: "zero",
+	spell: {
+		id: "test-exile-top-two-and-play-spell",
+		text: "Exile the top two cards of your library. Until end of turn, you may play those cards.",
+		targets: [],
+		effects: [
+			{
+				kind: "exile-top",
+				player: "you",
+				amount: 2,
+				resultSlot: "exiled-cards",
+			},
+			{
+				kind: "may-play",
+				object: { binding: "effect-result", slot: "exiled-cards" },
+				from: "exile",
+				duration: "until-end-of-turn",
+			},
+		],
 	},
 });
 
@@ -219,5 +247,38 @@ describe("exile top as a spell effect", () => {
 			"Eager Cadet",
 			"Grizzly Bears",
 		]);
+	});
+
+	test("passes every created exile card to a following play permission", () => {
+		const state = setupMain();
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "darksteel-relic", ALICE, "library");
+		const spell = spawnCard(
+			state,
+			"test-exile-top-two-and-play",
+			ALICE,
+			"hand",
+		);
+
+		executeCastAction(
+			state,
+			ALICE,
+			{ kind: "cast", card: spell.id },
+			passingAgents(),
+		);
+		settlePriority(state, passingAgents());
+
+		const [relic, forest] = state.players[ALICE].exile;
+		if (relic === undefined || forest === undefined)
+			throw new Error("expected two exiled cards");
+		expect(name(state, relic)).toBe("Darksteel Relic");
+		expect(name(state, forest)).toBe("Forest");
+		expect(getObservableActions(state, ALICE)).toEqual(
+			expect.arrayContaining([
+				{ kind: "cast", card: relic },
+				{ kind: "play land", card: forest },
+			]),
+		);
+		expect(state.temporaryEffects).toHaveLength(2);
 	});
 });

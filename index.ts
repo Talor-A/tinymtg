@@ -2089,6 +2089,10 @@ export interface TargetSlotRef {
 	targetSlot: string;
 }
 
+export type MayPlayObjectRef =
+	| { binding: "target"; slot: string }
+	| { binding: "effect-result"; slot: string };
+
 /** A destination resolved only when a one-object zone change executes. */
 export type ZoneChangeEffectDestination<Player extends TriggerEffectPlayer> =
 	| { zone: "hand" }
@@ -2110,20 +2114,23 @@ export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
 	};
 }[PublicObjectZone];
 
+type ExileTopEffectDef<Player extends TriggerEffectPlayer> = {
+	kind: "exile-top";
+	/** A relative player, or the player bound to a target slot. */
+	player: Player | TargetSlotRef;
+	amount: number;
+	/** Optionally bind the cards that actually reached exile, in order. */
+	resultSlot?: string;
+};
+
 export type EffectDef<Player extends TriggerEffectPlayer> =
 	| {
-			kind:
-				| "gain-life"
-				| "lose-life"
-				| "draw"
-				| "scry"
-				| "surveil"
-				| "mill"
-				| "exile-top";
+			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
 			/** A relative player, or the player bound to a target slot. */
 			player: Player | TargetSlotRef;
 			amount: number;
 	  }
+	| ExileTopEffectDef<Player>
 	| {
 			kind: "choose-from-top";
 			player: Player;
@@ -2181,7 +2188,7 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 	| {
 			kind: "may-play";
 			/** The card in exile that this effect's controller may play. */
-			object: TargetSlotRef;
+			object: MayPlayObjectRef;
 			from: "exile";
 			duration: TemporaryEffectDuration;
 	  }
@@ -5051,10 +5058,12 @@ function checkStateBasedActionsIn(
  */
 export interface Scope {
 	facts: Set<string>;
+	/** Objects produced by earlier instructions in this resolution. */
+	bindings: Map<string, EntityRef[]>;
 }
 
 export function newScope(): Scope {
-	return { facts: new Set() };
+	return { facts: new Set(), bindings: new Map() };
 }
 
 /** Result of running one event through replacements and execution. */
@@ -6750,6 +6759,10 @@ function resolveEffects(
 			typeof effect.player !== "string"
 				? effect.player
 				: null;
+		const mayPlayTargetSlot =
+			effect.kind === "may-play" && effect.object.binding === "target"
+				? effect.object.slot
+				: null;
 		const objectTarget =
 			(effect.kind === "destroy" ||
 				effect.kind === "tap" ||
@@ -6757,7 +6770,6 @@ function resolveEffects(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
-				effect.kind === "may-play" ||
 				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
@@ -6766,6 +6778,7 @@ function resolveEffects(
 		if (
 			damageTarget !== null ||
 			objectTarget !== null ||
+			mayPlayTargetSlot !== null ||
 			counterTarget !== null ||
 			sacrificeTarget !== null ||
 			playerTarget !== null
@@ -6773,6 +6786,7 @@ function resolveEffects(
 			const targetSlot =
 				damageTarget?.targetSlot ??
 				objectTarget?.targetSlot ??
+				mayPlayTargetSlot ??
 				counterTarget?.targetSlot ??
 				sacrificeTarget?.targetSlot ??
 				playerTarget?.targetSlot;
@@ -6912,25 +6926,58 @@ function resolveEffects(
 			);
 			continue;
 		}
-		if (effect.kind === "may-play") {
+		if (effect.kind === "exile-top" && effect.resultSlot !== undefined) {
 			assert(
-				bound?.type === "card",
-				"temporary play permission requires a bound card target",
+				!scope.bindings.has(effect.resultSlot),
+				`effect result slot ${effect.resultSlot} is already bound`,
 			);
-			const object = maybeObject(state, bound.id);
-			// A preceding instruction can move a target after the spell or ability's
-			// single CR 608.2b legality check. In that case this instruction does
-			// nothing; it never grants permission to the new object.
-			if (object?.kind !== "card" || object.zone !== effect.from) continue;
-			addTemporaryEffect(
+			const result = performIn(
 				state,
-				item.controller,
-				{
-					source: resolvingEffectSource(state, item, effectIndex),
-					bindings: { [effect.object.targetSlot]: bound },
-				},
-				effect.duration,
+				effectToEvent(state, item, effect, bound),
+				choices,
+				scope,
+				0,
 			);
+			const exiledCards = result.created.flatMap((id): EntityRef[] => {
+				const created = maybeObject(state, id);
+				return created?.kind === "card" && created.zone === "exile"
+					? [{ type: "card", id }]
+					: [];
+			});
+			scope.bindings.set(effect.resultSlot, exiledCards);
+			continue;
+		}
+		if (effect.kind === "may-play") {
+			const slot = effect.object.slot;
+			let subjects: EntityRef[];
+			if (effect.object.binding === "effect-result") {
+				subjects = scope.bindings.get(slot) ?? [];
+			} else {
+				assert(
+					bound?.type === "card",
+					"temporary play permission requires a bound card target",
+				);
+				subjects = [bound];
+			}
+			for (const subject of subjects) {
+				assert(
+					subject.type === "card",
+					"temporary play permission requires a bound card",
+				);
+				const object = maybeObject(state, subject.id);
+				// A preceding instruction can move a subject before permission is
+				// created. In that case this instruction does nothing for that object.
+				if (object?.kind !== "card" || object.zone !== effect.from) continue;
+				addTemporaryEffect(
+					state,
+					item.controller,
+					{
+						source: resolvingEffectSource(state, item, effectIndex),
+						bindings: { [slot]: subject },
+					},
+					effect.duration,
+				);
+			}
 			continue;
 		}
 		performIn(
@@ -7326,6 +7373,7 @@ function requiredTargetDefinition(
 			"only one required target is implemented",
 		);
 	}
+	const availableResultSlots = new Set<string>();
 	const check = (effect: EffectDef<TriggerEffectPlayer>): void => {
 		if (effect.kind === "may") {
 			for (const inner of effect.effects) check(inner);
@@ -7339,6 +7387,27 @@ function requiredTargetDefinition(
 			return;
 		}
 		if (effect.kind === "choose-from-top") return;
+		if (effect.kind === "exile-top" && effect.resultSlot !== undefined) {
+			assert(
+				effect.resultSlot.length > 0,
+				"effect result slot must have a name",
+			);
+			assert(
+				!availableResultSlots.has(effect.resultSlot),
+				`duplicate effect result slot ${effect.resultSlot}`,
+			);
+			availableResultSlots.add(effect.resultSlot);
+		}
+		if (
+			effect.kind === "may-play" &&
+			effect.object.binding === "effect-result"
+		) {
+			assert(
+				availableResultSlots.has(effect.object.slot),
+				`may-play refers to unavailable effect result ${effect.object.slot}`,
+			);
+			return;
+		}
 		if (
 			(effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||
@@ -7400,6 +7469,10 @@ function requiredTargetDefinition(
 			typeof effect.player !== "string"
 				? effect.player
 				: null;
+		const mayPlayTargetSlot =
+			effect.kind === "may-play" && effect.object.binding === "target"
+				? effect.object.slot
+				: null;
 		const objectTarget =
 			(effect.kind === "destroy" ||
 				effect.kind === "tap" ||
@@ -7407,7 +7480,6 @@ function requiredTargetDefinition(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
-				effect.kind === "may-play" ||
 				effect.kind === "add counters") &&
 			effect.object !== "source"
 				? effect.object
@@ -7416,6 +7488,7 @@ function requiredTargetDefinition(
 		const targetSlot =
 			damageTarget?.targetSlot ??
 			objectTarget?.targetSlot ??
+			mayPlayTargetSlot ??
 			counterTarget?.targetSlot ??
 			sacrificeTarget?.targetSlot ??
 			playerTarget?.targetSlot;
@@ -7465,6 +7538,7 @@ function requiredTargetDefinition(
 			);
 		}
 		if (effect.kind === "may-play") {
+			assert(effect.object.binding === "target");
 			assert(
 				target.legal.kind === "card" && target.legal.zone === effect.from,
 				"temporary play permission requires a card target in its origin",
@@ -7648,7 +7722,7 @@ function hasPlayPermission(
 		const definition = temporaryEffectDefinition(temporary);
 		if (definition?.kind !== "may-play") continue;
 		assert(definition.from === "exile");
-		const subject = temporary.bindings[definition.object.targetSlot];
+		const subject = temporary.bindings[definition.object.slot];
 		assert(
 			subject?.type === "card",
 			"temporary play permission has no bound card",

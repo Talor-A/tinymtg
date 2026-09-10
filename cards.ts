@@ -70,6 +70,49 @@ registerCardFixture("s/sweettooth_witch");
 registerCardFixture("b/blood_servitor");
 registerCardFixture("s/samurai_of_the_pale_curtain");
 
+/**
+ * Gatherer 2X2 #100. The Forge corpus has no local entry for this card, so its
+ * current Oracle characteristics and abilities are hand-authored here.
+ */
+export const ABBOT_OF_KERAL_KEEP = registerCard({
+	id: "abbot-of-keral-keep",
+	name: "Abbot of Keral Keep",
+	types: ["creature"],
+	subtypes: ["Human", "Monk"],
+	colors: ["r"],
+	manaCost: { n: 1, r: 1 },
+	power: 2,
+	toughness: 1,
+	keywords: ["prowess"],
+	triggers: [
+		{
+			id: "exile-top-card",
+			text: "When this creature enters, exile the top card of your library. Until end of turn, you may play that card.",
+			condition: {
+				kind: "change zone",
+				from: "any",
+				to: "battlefield",
+				selector: { kind: "self" },
+			},
+			targets: [],
+			effects: [
+				{
+					kind: "exile-top",
+					player: "you",
+					amount: 1,
+					resultSlot: "exiled-card",
+				},
+				{
+					kind: "may-play",
+					object: { binding: "effect-result", slot: "exiled-card" },
+					from: "exile",
+					duration: "until-end-of-turn",
+				},
+			],
+		},
+	],
+});
+
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family
  *

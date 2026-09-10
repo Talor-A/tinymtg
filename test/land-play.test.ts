@@ -109,7 +109,7 @@ registerCard({
 		effects: [
 			{
 				kind: "may-play",
-				object: { targetSlot: "target-1" },
+				object: { binding: "target", slot: "target-1" },
 				from: "exile",
 				duration: "until-end-of-turn",
 			},
