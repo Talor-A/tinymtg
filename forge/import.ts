@@ -1591,7 +1591,7 @@ function discriminator(
 	| { token: (typeof ABILITY_DISCRIMINATOR_TOKENS)[number]; api: string }
 	| ImportIssue {
 	const present = ABILITY_DISCRIMINATOR_TOKENS.filter(
-		(token) => params.effectiveLower[token.toLowerCase()] !== undefined,
+		(token) => params.effectiveLower.has(token.toLowerCase()),
 	);
 	if (present.length !== 1) {
 		return issue(
@@ -1605,7 +1605,7 @@ function discriminator(
 	const token = present[0] as (typeof ABILITY_DISCRIMINATOR_TOKENS)[number];
 	return {
 		token,
-		api: (params.effectiveLower[token.toLowerCase()] ?? "").toLowerCase(),
+		api: (params.effectiveLower.get(token.toLowerCase()) ?? "").toLowerCase(),
 	};
 }
 
@@ -1640,7 +1640,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 	const seen = new Set<string>();
 	let depth = 0;
 	for (;;) {
-		if (depth > 0 && current.effectiveLower.validtgts !== undefined) {
+		if (depth > 0 && current.effectiveLower.has("validtgts")) {
 			return issue(
 				"UNSUPPORTED_EFFECT",
 				"validtgts is not supported on a sub-ability continuation",
@@ -1649,7 +1649,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 		}
 		if (depth > 0 || rejectAtRoot) {
 			for (const key of CHAIN_FORBIDDEN) {
-				if (current.effectiveLower[key] !== undefined) {
+				if (current.effectiveLower.has(key)) {
 					return issue(
 						"UNSUPPORTED_EFFECT",
 						`${key} is not supported on a sub-ability continuation`,
@@ -1725,7 +1725,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				);
 			}
 
-			const cleanupBucket = face.svarIndex[cleanupName.toLowerCase()];
+			const cleanupBucket = face.svarIndex.get(cleanupName.toLowerCase());
 			if (!cleanupBucket || cleanupBucket.length === 0)
 				return issue(
 					"UNSUPPORTED_REFERENCE",
@@ -1828,7 +1828,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				);
 			}
 
-			const staticBucket = face.svarIndex[staticName.toLowerCase()];
+			const staticBucket = face.svarIndex.get(staticName.toLowerCase());
 			if (!staticBucket || staticBucket.length === 0)
 				return issue(
 					"UNSUPPORTED_REFERENCE",
@@ -1872,7 +1872,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				);
 			}
 
-			const cleanupBucket = face.svarIndex[cleanupName.toLowerCase()];
+			const cleanupBucket = face.svarIndex.get(cleanupName.toLowerCase());
 			if (!cleanupBucket || cleanupBucket.length === 0)
 				return issue(
 					"UNSUPPORTED_REFERENCE",
@@ -1981,7 +1981,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				where,
 			);
 		seen.add(nextLower);
-		const bucket = face.svarIndex[nextLower];
+		const bucket = face.svarIndex.get(nextLower);
 		if (!bucket || bucket.length === 0)
 			return issue(
 				"UNSUPPORTED_REFERENCE",
@@ -2158,7 +2158,7 @@ function lowerCopyEtbKeyword(
 	}
 	const svarName = record.segments[2];
 	assert(svarName !== undefined);
-	const bucket = face.svarIndex[svarName.toLowerCase()];
+	const bucket = face.svarIndex.get(svarName.toLowerCase());
 	if (!bucket || bucket.length === 0) {
 		return issue(
 			"UNSUPPORTED_REFERENCE",
@@ -2302,7 +2302,7 @@ function lowerGraveyardExileReplacement(
 	const replaceWith = getForgeParam(params, "ReplaceWith");
 	if (replaceWith === undefined)
 		return issue("UNSUPPORTED_REFERENCE", "missing ReplaceWith$", where);
-	const bucket = face.svarIndex[replaceWith.trim().toLowerCase()];
+	const bucket = face.svarIndex.get(replaceWith.trim().toLowerCase());
 	if (!bucket || bucket.length === 0)
 		return issue(
 			"UNSUPPORTED_REFERENCE",
@@ -2440,7 +2440,7 @@ function lowerReplacement(
 	const replaceWith = getForgeParam(params, "ReplaceWith");
 	if (replaceWith === undefined)
 		return issue("UNSUPPORTED_REFERENCE", "missing ReplaceWith$", where);
-	const bucket = face.svarIndex[replaceWith.trim().toLowerCase()];
+	const bucket = face.svarIndex.get(replaceWith.trim().toLowerCase());
 	if (!bucket || bucket.length === 0)
 		return issue(
 			"UNSUPPORTED_REFERENCE",
@@ -2563,7 +2563,7 @@ function lowerTrigger(
 			where,
 		);
 
-	const bucket = face.svarIndex[execute.trim().toLowerCase()];
+	const bucket = face.svarIndex.get(execute.trim().toLowerCase());
 	if (!bucket || bucket.length === 0)
 		return issue(
 			"UNSUPPORTED_REFERENCE",
@@ -3613,7 +3613,7 @@ export function lowerForgeCard(
 		keywords.push(bare);
 	}
 
-	for (const bucket of Object.values(face.svarIndex)) {
+	for (const bucket of face.svarIndex.values()) {
 		if (bucket.length > 1) {
 			const first = bucket[0] as ForgeSVarRecord;
 			return reject(

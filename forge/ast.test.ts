@@ -1117,14 +1117,14 @@ describe("duplicates survive", () => {
 		]);
 		// FileSection.parseToMap uses a case-insensitive, last-write-wins TreeMap.
 		expect(getForgeParam(params as never, "NumCards")).toBe("3");
-		expect(params?.effective.NumCards).toBe("3");
-		expect(Object.keys(params?.effective ?? {})).toEqual(["SP", "NumCards"]);
+		expect(params?.effective.get("NumCards")).toBe("3");
+		expect([...(params?.effective.keys() ?? [])]).toEqual(["SP", "NumCards"]);
 	});
 
 	test("keeps duplicate and case-variant SVar definitions", () => {
 		const original = face(result, "original");
 		expect(original.svars).toHaveLength(2);
-		expect(original.svarIndex.dup).toHaveLength(2);
+		expect(original.svarIndex.get("dup")).toHaveLength(2);
 		// CardFace.addSVar is case-insensitive; Forge would keep only the last.
 		expect(lookupForgeSVar(original, "DUP")?.value).toBe(
 			"DB$ Draw | NumCards$ 2",
@@ -1372,7 +1372,7 @@ describe("parseForgeParams", () => {
 
 	test("an empty body yields no entries", () => {
 		expect(parseForgeParams("").entries).toEqual([]);
-		expect(parseForgeParams("").effective).toEqual({});
+		expect(parseForgeParams("").effective).toEqual(new Map());
 	});
 
 	test("generates deterministic, prefix-scoped parameter ids", () => {
@@ -1382,6 +1382,29 @@ describe("parseForgeParams", () => {
 			"line:7/param:1",
 		]);
 	});
+
+	test("treats object-prototype names as ordinary parameter names", () => {
+		const params = parseForgeParams(
+			"constructor$ first | __proto__$ second | prototype$ third",
+		);
+		expect(getForgeParam(params, "constructor")).toBe("first");
+		expect(getForgeParam(params, "__proto__")).toBe("second");
+		expect(getForgeParam(params, "prototype")).toBe("third");
+		expect(getForgeParam(params, "toString")).toBeUndefined();
+	});
+});
+
+describe("adversarial open-vocabulary names", () => {
+	for (const name of ["constructor", "prototype", "__proto__", "toString"]) {
+		test(`parses SVar name ${name} without throwing`, () => {
+			const result = parseForgeCardScript(
+				`Name:Test\nManaCost:0\nTypes:Artifact\nSVar:${name}:1\n`,
+			);
+			const original = face(result, "original");
+			expect(original.svars.map((svar) => svar.name)).toEqual([name]);
+			expect(lookupForgeSVar(original, name)?.value).toBe("1");
+		});
+	}
 });
 
 /* ------------------------------------------------------------------------- */

@@ -752,9 +752,9 @@ export interface ForgeParamList {
 	 * Prefer {@link getForgeParam} or {@link ForgeParamList.effectiveLower} for
 	 * case-insensitive reads; `entries` remains authoritative.
 	 */
-	effective: Record<string, string>;
+	effective: ReadonlyMap<string, string>;
 	/** The same last-write-wins projection, keyed by lowercased parameter name. */
-	effectiveLower: Record<string, string>;
+	effectiveLower: ReadonlyMap<string, string>;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -954,7 +954,7 @@ export interface ForgeFaceAst {
 	 * Case-insensitive SVar lookup. Values are *all* definitions in source order,
 	 * so duplicates and case variants survive; Forge itself keeps only the last.
 	 */
-	svarIndex: Record<string, ForgeSVarRecord[]>;
+	svarIndex: Map<string, ForgeSVarRecord[]>;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -2332,8 +2332,8 @@ export function parseForgeParams(
 	line?: number,
 ): ForgeParamList {
 	const entries: ForgeParamEntry[] = [];
-	const effective: Record<string, string> = {};
-	const effectiveLower: Record<string, string> = {};
+	const effective = new Map<string, string>();
+	const effectiveLower = new Map<string, string>();
 	const canonicalCase = new Map<string, string>();
 
 	if (body !== "") {
@@ -2373,8 +2373,8 @@ export function parseForgeParams(
 			const lower = key.toLowerCase();
 			const canonical = canonicalCase.get(lower) ?? key;
 			canonicalCase.set(lower, canonical);
-			effective[canonical] = value;
-			effectiveLower[lower] = value;
+			effective.set(canonical, value);
+			effectiveLower.set(lower, value);
 		}
 	}
 
@@ -2386,7 +2386,7 @@ export function getForgeParam(
 	params: ForgeParamList,
 	key: string,
 ): string | undefined {
-	return params.effectiveLower[key.trim().toLowerCase()];
+	return params.effectiveLower.get(key.trim().toLowerCase());
 }
 
 /* ------------------------------------------------------------------------- */
@@ -2422,7 +2422,7 @@ function classifyAbility(
 	diagnostics: ForgeDiagnostic[],
 ): ForgeAbilityRecord {
 	const present = ABILITY_DISCRIMINATORS.filter(
-		([token]) => params.effectiveLower[token.toLowerCase()] !== undefined,
+		([token]) => params.effectiveLower.has(token.toLowerCase()),
 	);
 
 	if (present.length === 0) {
@@ -2463,7 +2463,7 @@ function classifyAbility(
 	// present is already in Forge's AB > SP > ST > DB precedence order.
 	const winner = present[0] as (typeof ABILITY_DISCRIMINATORS)[number];
 	const [token, abilityKind] = winner;
-	const effectName = params.effectiveLower[token.toLowerCase()] ?? "";
+	const effectName = params.effectiveLower.get(token.toLowerCase()) ?? "";
 	const effectKnown = isKnownForgeEffectName(effectName);
 
 	if (effectName !== "" && !effectKnown) {
@@ -2497,7 +2497,7 @@ function classifyTrigger(
 	params: ForgeParamList,
 	diagnostics: ForgeDiagnostic[],
 ): ForgeTriggerRecord {
-	const mode = params.effectiveLower.mode;
+	const mode = params.effectiveLower.get("mode");
 	if (mode === undefined) {
 		diagnostics.push({
 			severity: "warning",
@@ -2531,7 +2531,7 @@ function classifyReplacement(
 	params: ForgeParamList,
 	diagnostics: ForgeDiagnostic[],
 ): ForgeReplacementRecord {
-	const event = params.effectiveLower.event;
+	const event = params.effectiveLower.get("event");
 	if (event === undefined) {
 		diagnostics.push({
 			severity: "warning",
@@ -2572,7 +2572,7 @@ function classifyStatic(
 	params: ForgeParamList,
 	diagnostics: ForgeDiagnostic[],
 ): ForgeStaticRecord {
-	const mode = params.effectiveLower.mode;
+	const mode = params.effectiveLower.get("mode");
 	if (mode === undefined) {
 		diagnostics.push({
 			severity: "warning",
@@ -2650,15 +2650,15 @@ function classifySVarRecord(
 	// an ordinary `Mode$` *effect parameter* (`DB$ Discard | Mode$ TgtChoose`,
 	// `DB$ SetState | Mode$ Transform`) whose value is not a static mode at all.
 	const hasDiscriminator = ABILITY_DISCRIMINATORS.some(
-		([token]) => params.effectiveLower[token.toLowerCase()] !== undefined,
+		([token]) => params.effectiveLower.has(token.toLowerCase()),
 	);
 	if (hasDiscriminator) {
 		return classifyAbility(id, "svar", source, params, diagnostics);
 	}
-	if (params.effectiveLower.event !== undefined) {
+	if (params.effectiveLower.has("event")) {
 		return classifyReplacement(id, "svar", source, params, diagnostics);
 	}
-	const mode = params.effectiveLower.mode;
+	const mode = params.effectiveLower.get("mode");
 	if (mode !== undefined) {
 		// TriggerType and StaticAbilityMode share no names in the reference
 		// revision, so a Mode$ value picks exactly one of the two categories.
@@ -2755,16 +2755,16 @@ function emptyFace(slot: number): ForgeFaceAst {
 		draftActions: [],
 		variants: [],
 		otherDirectives: [],
-		svarIndex: {},
+		svarIndex: new Map(),
 	};
 }
 
 function indexSVar(face: ForgeFaceAst, record: ForgeSVarRecord): void {
 	face.svars.push(record);
 	const key = record.name.toLowerCase();
-	const bucket = face.svarIndex[key];
+	const bucket = face.svarIndex.get(key);
 	if (bucket === undefined) {
-		face.svarIndex[key] = [record];
+		face.svarIndex.set(key, [record]);
 	} else {
 		bucket.push(record);
 	}
@@ -3047,7 +3047,7 @@ function buildFaces(
 	}
 
 	for (const face of slots.values()) {
-		for (const [name, bucket] of Object.entries(face.svarIndex)) {
+		for (const [name, bucket] of face.svarIndex) {
 			if (bucket.length > 1) {
 				const last = bucket[bucket.length - 1];
 				diagnostics.push({
@@ -3833,7 +3833,7 @@ export function lookupForgeSVar(
 	face: ForgeFaceAst,
 	name: string,
 ): ForgeSVarRecord | undefined {
-	const bucket = face.svarIndex[name.trim().toLowerCase()];
+	const bucket = face.svarIndex.get(name.trim().toLowerCase());
 	return bucket === undefined ? undefined : bucket[bucket.length - 1];
 }
 
