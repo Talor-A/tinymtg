@@ -102,7 +102,7 @@ export interface ImportIssue {
 }
 
 export type ImportResult =
-	| { ok: true; card: CardDef; diagnostics: ImportIssue[] }
+	| { ok: true; card: CardDef; diagnostics: [] }
 	| { ok: false; diagnostics: [ImportIssue, ...ImportIssue[]] };
 
 function issue(
@@ -212,13 +212,12 @@ const ALLOWED_CARD_DIRECTIVES = new Set([
 const IGNORED_PARAMS: ReadonlySet<string> = new Set(["ailogic"]);
 
 /**
- * Every semantic parameter on a record must be on its operation's allowlist,
- * and no semantic parameter may repeat: Forge's own last-write-wins projection
- * is not something this bridge relies on. {@link IGNORED_PARAMS} keys are
- * neither: they are dropped before both checks, since a repeated key the
- * bridge never reads cannot make its projection ambiguous.
+ * Claims the complete parameter list for one lowering branch. Every semantic
+ * parameter present must be consumed by that branch's explicit vocabulary,
+ * and no semantic parameter may repeat. {@link IGNORED_PARAMS} keys are
+ * metadata and are discarded before both checks.
  */
-function checkParams(
+function consumeParams(
 	params: ForgeParamList,
 	allowedLower: ReadonlySet<string>,
 	where: { nodeId?: string; line?: number },
@@ -866,7 +865,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 	switch (api) {
 		case "gainlife":
 		case "loselife": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -894,7 +893,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			};
 		}
 		case "scry": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -918,7 +917,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return { kind: "scry", player: who, amount };
 		}
 		case "surveil": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -942,7 +941,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return { kind: "surveil", player: who, amount };
 		}
 		case "dig": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1002,7 +1001,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return { kind: "choose-from-top", player: who, amount, keep };
 		}
 		case "investigate": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([discriminatorLower, ...COMMON_EFFECT_PARAMS]),
 				where,
@@ -1020,7 +1019,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			};
 		}
 		case "draw": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1050,7 +1049,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return { kind: "draw", player: who, amount };
 		}
 		case "mill": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1074,7 +1073,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return { kind: "mill", player: who, amount };
 		}
 		case "discard": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1103,7 +1102,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return { kind: "discard", selector: "any", amount: 1, player: who };
 		}
 		case "sacrifice": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1142,7 +1141,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return { kind: "sacrifice", player: who, selector, amount: 1 };
 		}
 		case "dealdamage": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1175,7 +1174,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return { kind: "damage", recipient: { player }, amount };
 		}
 		case "destroy": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1193,7 +1192,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 		}
 		case "tap":
 		case "untap": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1210,7 +1209,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			};
 		}
 		case "counter": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1228,7 +1227,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			};
 		}
 		case "changezone": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1425,7 +1424,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			throw new Error("unreachable ChangeZone origin");
 		}
 		case "putcounter": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1477,7 +1476,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return { kind: "add counters", object: "source", counter, amount };
 		}
 		case "token": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1531,7 +1530,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			};
 		}
 		case "pump": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					discriminatorLower,
@@ -1670,6 +1669,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 	resolver: SVarResolver,
 	rootParams: ForgeParamList,
 	rootWhere: { nodeId?: string; line?: number },
+	targets: TargetDef[],
 	rejectAtRoot: boolean,
 	rootTokens: readonly (typeof ABILITY_DISCRIMINATOR_TOKENS)[number][],
 	parsePlayer: (value: string | undefined) => Player | null,
@@ -1738,7 +1738,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			pendingRememberedChange?.kind === "change-zone" &&
 			pendingRememberedChange.resultSlot === REMEMBERED_ZONE_CHANGE_SLOT
 		) {
-			const badReturnParams = checkParams(
+			const badReturnParams = consumeParams(
 				current,
 				new Set([
 					"db",
@@ -1783,7 +1783,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				cleanupWhere,
 			);
 			if ("code" in cleanupDisc) return cleanupDisc;
-			const badCleanupParams = checkParams(
+			const badCleanupParams = consumeParams(
 				cleanupSVar.parsed.params,
 				new Set(["db", "clearremembered"]),
 				cleanupWhere,
@@ -1827,7 +1827,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				);
 			}
 
-			const badEffectParams = checkParams(
+			const badEffectParams = consumeParams(
 				current,
 				new Set([
 					"db",
@@ -1882,7 +1882,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				nodeId: staticSVar.source.nodeId,
 				line: staticSVar.source.line,
 			};
-			const badStaticParams = checkParams(
+			const badStaticParams = consumeParams(
 				staticSVar.parsed.params,
 				new Set(["mode", "mayplay", "affected", "affectedzone", "description"]),
 				staticWhere,
@@ -1933,7 +1933,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				cleanupWhere,
 			);
 			if ("code" in cleanupDisc) return cleanupDisc;
-			const badCleanupParams = checkParams(
+			const badCleanupParams = consumeParams(
 				cleanupSVar.parsed.params,
 				new Set(["db", "clearremembered"]),
 				cleanupWhere,
@@ -1979,6 +1979,8 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			tokenAbilityHost,
 		);
 		if ("code" in lowered) return lowered;
+		const targetIssue = checkEffectTargetSlots(lowered, targets, where);
+		if (targetIssue) return targetIssue;
 		effects.push(...lowered);
 		const next = getForgeParam(current, "SubAbility");
 		if (next === undefined) {
@@ -2039,7 +2041,7 @@ function lowerStatic(
 ): StaticAbilityDefinition | ImportIssue {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
-	const badParams = checkParams(
+	const badParams = consumeParams(
 		params,
 		new Set([
 			"mode",
@@ -2175,7 +2177,7 @@ function lowerCopyEtbKeyword(
 	const body = consumeAbilitySVar(resolver, svarName, "ETBReplacement", where);
 	if ("code" in body) return body;
 	const bodyWhere = { nodeId: body.source.nodeId, line: body.source.line };
-	const badParams = checkParams(
+	const badParams = consumeParams(
 		body.parsed.params,
 		new Set(["addtypes", "db", "choices", "spelldescription"]),
 		bodyWhere,
@@ -2307,7 +2309,7 @@ function lowerGraveyardExileReplacement(
 		nodeId: effectSVar.source.nodeId,
 		line: effectSVar.source.line,
 	};
-	const effectBad = checkParams(
+	const effectBad = consumeParams(
 		effectParams,
 		new Set(["db", "origin", "destination", "defined"]),
 		effectWhere,
@@ -2387,7 +2389,7 @@ function lowerReplacement(
 ): ReplacementLowering | ImportIssue {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
-	const badParams = checkParams(
+	const badParams = consumeParams(
 		params,
 		new Set([
 			"event",
@@ -2432,7 +2434,7 @@ function lowerReplacement(
 		nodeId: effectSVar.source.nodeId,
 		line: effectSVar.source.line,
 	};
-	const effectBad = checkParams(
+	const effectBad = consumeParams(
 		effectParams,
 		new Set(["db", "etb", "defined"]),
 		effectWhere,
@@ -2545,10 +2547,26 @@ function lowerTrigger(
 		getForgeParam(params, "Origin") === "Battlefield" &&
 		getForgeParam(params, "Destination") === "Graveyard" &&
 		getForgeParam(params, "ValidCard") === "Card.Self";
+	// The trigger declares targets on its executed ability. Parse them before
+	// effects so every effect is checked as it is constructed.
+	const targets = parseTarget(
+		getForgeParam(executeSVar.parsed.params, "ValidTgts"),
+		undefined,
+		getForgeParam(executeSVar.parsed.params, "DB") === "ChangeZone" &&
+			getForgeParam(executeSVar.parsed.params, "Origin") === "Graveyard"
+			? "graveyard"
+			: getForgeParam(executeSVar.parsed.params, "DB") === "ChangeZone" &&
+					getForgeParam(executeSVar.parsed.params, "Origin") === "Exile"
+				? "exile"
+				: undefined,
+	);
+	if (!targets)
+		return issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where);
 	const chain = lowerEffectChain(
 		resolver,
 		executeSVar.parsed.params,
 		{ nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
+		targets,
 		true,
 		["DB"],
 		mode === "SpellCast"
@@ -2570,27 +2588,9 @@ function lowerTrigger(
 			]
 		: chain;
 
-	// The trigger declares its targets on the executed ability, not on the T:
-	// line, and the engine chooses them when the ability goes on the stack.
-	const targets = parseTarget(
-		getForgeParam(executeSVar.parsed.params, "ValidTgts"),
-		undefined,
-		getForgeParam(executeSVar.parsed.params, "DB") === "ChangeZone" &&
-			getForgeParam(executeSVar.parsed.params, "Origin") === "Graveyard"
-			? "graveyard"
-			: getForgeParam(executeSVar.parsed.params, "DB") === "ChangeZone" &&
-					getForgeParam(executeSVar.parsed.params, "Origin") === "Exile"
-				? "exile"
-				: undefined,
-	);
-	if (!targets)
-		return issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where);
-	const slotIssue = checkEffectTargetSlots(effects, targets, where);
-	if (slotIssue) return slotIssue;
-
 	switch (mode) {
 		case "SpellCast": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					"mode",
@@ -2649,7 +2649,7 @@ function lowerTrigger(
 			};
 		}
 		case "ChangesZone": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					"mode",
@@ -2724,7 +2724,7 @@ function lowerTrigger(
 			};
 		}
 		case "Phase": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					"mode",
@@ -2770,7 +2770,7 @@ function lowerTrigger(
 			};
 		}
 		case "Drawn": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					"mode",
@@ -2883,7 +2883,7 @@ function lowerTrigger(
 			};
 		}
 		case "Attacks": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set(["mode", "validcard", "execute", "triggerdescription"]),
 				where,
@@ -2904,7 +2904,7 @@ function lowerTrigger(
 			};
 		}
 		case "DamageDone": {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set([
 					"mode",
@@ -3638,7 +3638,7 @@ export function lowerForgeCard(
 		}
 
 		if (disc.token === "AB" && disc.api === "mana") {
-			const badParams = checkParams(
+			const badParams = consumeParams(
 				params,
 				new Set(["ab", "cost", "produced", "amount", "spelldescription"]),
 				where,
@@ -3855,17 +3855,6 @@ export function lowerForgeCard(
 			);
 		}
 
-		const chain = lowerEffectChain(
-			resolver,
-			params,
-			where,
-			false,
-			disc.token === "SP" ? ["SP"] : ["AB"],
-			player,
-			disc.token === "AB",
-			tokenAbilityHost,
-		);
-		if ("code" in chain) return reject(chain);
 		const targets = parseTarget(
 			getForgeParam(params, "ValidTgts"),
 			getForgeParam(params, "TargetType"),
@@ -3881,8 +3870,18 @@ export function lowerForgeCard(
 			return reject(
 				issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where),
 			);
-		const slotIssue = checkEffectTargetSlots(chain, targets, where);
-		if (slotIssue) return reject(slotIssue);
+		const chain = lowerEffectChain(
+			resolver,
+			params,
+			where,
+			targets,
+			false,
+			disc.token === "SP" ? ["SP"] : ["AB"],
+			player,
+			disc.token === "AB",
+			tokenAbilityHost,
+		);
+		if ("code" in chain) return reject(chain);
 		const description = getForgeParam(params, "SpellDescription");
 		if (!description)
 			return reject(
