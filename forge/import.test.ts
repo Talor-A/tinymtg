@@ -3266,6 +3266,23 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_REFERENCE");
 	});
 
+	test.each([
+		"AIPreference",
+		"AIPriorityModifier",
+		"AmbushAI",
+		"AntiBuffedBy",
+		"BuffedBy",
+		"DonateMe",
+		"NeedsToPlay",
+		"NeedsToPlayVar",
+		"NonCombatPriority",
+		"NonStackingEffect",
+		"PlayMain1",
+	])("ignores the %s AI/deck-building SVar", (name) => {
+		const result = importText(`${BEARS}SVar:${name}:TRUE\n`);
+		expect(result.ok).toBe(true);
+	});
+
 	test("rejects a planeswalker (Loyalty is unsupported)", () => {
 		const result = importText(
 			`Name:Test Walker\nManaCost:2 W\nTypes:Planeswalker\nLoyalty:3\nOracle:\n`,

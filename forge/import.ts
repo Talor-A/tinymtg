@@ -212,6 +212,28 @@ const ALLOWED_CARD_DIRECTIVES = new Set([
 const IGNORED_PARAMS: ReadonlySet<string> = new Set(["ailogic"]);
 
 /**
+ * Scalar SVars Forge's AI and deck builder consult, but which do not affect a
+ * card's rules. Keep this vocabulary explicit: an unknown unused SVar still
+ * rejects, because it may be a rules value the importer has failed to consume.
+ *
+ * The names are stored lower-case because Forge SVar references are
+ * case-insensitive.
+ */
+const IGNORED_UNUSED_SVARS: ReadonlySet<string> = new Set([
+	"aipreference",
+	"aiprioritymodifier",
+	"ambushai",
+	"antibuffedby",
+	"buffedby",
+	"donateme",
+	"needstoplay",
+	"needstoplayvar",
+	"noncombatpriority",
+	"nonstackingeffect",
+	"playmain1",
+]);
+
+/**
  * Claims the complete parameter list for one lowering branch. Every semantic
  * parameter present must be consumed by that branch's explicit vocabulary,
  * and no semantic parameter may repeat. {@link IGNORED_PARAMS} keys are
@@ -4106,24 +4128,12 @@ export function lowerForgeCard(
 		}
 	}
 
-	// These are Forge AI/deck-building metadata, not rules instructions. Keep the
-	// established contextual checks so this refactor does not broaden acceptance.
+	// These Forge AI hints remain contextual: their names also occur in card
+	// scripts where accepting them unconditionally would hide a missed rule.
 	const scalarMetadata = (name: string): string | undefined => {
 		const parsed = lookupForgeSVar(face, name)?.parsed;
 		return parsed?.kind === "scalar" ? parsed.value : undefined;
 	};
-	if (
-		triggers.some(
-			(trigger) =>
-				trigger.condition.kind === "cast" &&
-				trigger.effects.some(
-					(effect) =>
-						effect.kind === "add counters" || effect.kind === "damage",
-				),
-		) &&
-		scalarMetadata("BuffedBy") !== undefined
-	)
-		usedSVarNames.add("buffedby");
 	if (
 		triggers.some(
 			(trigger) => trigger.condition.kind === "declare attackers",
@@ -4131,11 +4141,6 @@ export function lowerForgeCard(
 		scalarMetadata("HasAttackEffect") === "TRUE"
 	)
 		usedSVarNames.add("hasattackeffect");
-	if (
-		(statics.length > 0 || triggers.length > 0) &&
-		scalarMetadata("PlayMain1") === "TRUE"
-	)
-		usedSVarNames.add("playmain1");
 	const hasGraveyardBehavior =
 		activatedAbilities.some(
 			(ability) =>
@@ -4154,15 +4159,12 @@ export function lowerForgeCard(
 		usedSVarNames.add("sacme");
 	if (hasGraveyardBehavior && /^\d+$/.test(scalarMetadata("DiscardMe") ?? ""))
 		usedSVarNames.add("discardme");
-	if (
-		activatedAbilities.length > 0 &&
-		scalarMetadata("NonCombatPriority") === "1"
-	)
-		usedSVarNames.add("noncombatpriority");
-	usedSVarNames.add("aipreference");
 
 	for (const record of face.svars) {
-		if (!usedSVarNames.has(record.name.toLowerCase())) {
+		if (
+			!usedSVarNames.has(record.name.toLowerCase()) &&
+			!IGNORED_UNUSED_SVARS.has(record.name.toLowerCase())
+		) {
 			return reject(
 				issue("UNSUPPORTED_REFERENCE", `unused SVar ${record.name}`, {
 					nodeId: record.source.nodeId,
