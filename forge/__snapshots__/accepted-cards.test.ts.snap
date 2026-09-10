@@ -2,6 +2,7 @@
 
 exports[`the accepted-card list matches its snapshot: accepted card names 1`] = `
 "A-Canopy Tactician
+A-Cauldron Familiar
 A-Dragonborn Looter
 A-Elderleaf Mentor
 A-Glittermonger
@@ -48,6 +49,7 @@ Air Elemental
 Airship Engine Room
 Ajani's Mantra
 Ajani's Sunstriker
+Akki Scrapchomper
 Akoum Boulderfoot
 Akoum Refuge
 Alabaster Host Sanctifier
@@ -71,6 +73,7 @@ Alpine Meadow
 Alpine Watchdog
 Altar of the Brood
 Altar's Light
+Altar's Reap
 Amaranthine Wall
 Amateur Auteur
 Amateur Hero
@@ -163,6 +166,7 @@ Aspiring Aeronaut
 Assault Griffin
 Assault Zeppelid
 Atlantean Cavalry
+Atog
 Atrocious Experiment
 Atzocan Seer
 Augmenting Automaton
@@ -222,6 +226,7 @@ Bargain
 Barktooth Warbeard
 Baron, Airship Kingdom
 Barony Vampire
+Barrage Ogre
 Barrage of Expendables
 Barrier of Bones
 Bartizan Bats
@@ -283,6 +288,7 @@ Blinkmoth Well
 Blistering Barrier
 Blisterstick Shaman
 Blood Bairn
+Blood Divination
 Blood Glutton
 Blood Host
 Blood Pact
@@ -299,6 +305,7 @@ Bloodhunter Bat
 Bloodrage Brawler
 Bloodrite Invoker
 Bloodstone Cameo
+Bloodthrone Vampire
 Blossom Dryad
 Blossoming Sands
 Boa Constrictor
@@ -316,6 +323,7 @@ Boltwave
 Bombard
 Bond Beetle
 Bonded Fetch
+Bone Splinters
 Bonebreaker Giant
 Boomerang
 Boomerang, Blade Flinger
@@ -401,11 +409,13 @@ Carnivorous Plant
 Carrier Thrall
 Carrion Ants
 Carrion Crow
+Carrion Feeder
 Carrion Screecher
 Cartographer
 Carven Caryatid
 Cast Down
 Castle Sengir
+Cat Oven
 Catacomb Crocodile
 Catacomb Slug
 Catalog
@@ -413,6 +423,7 @@ Catalyst Elemental
 Cathar Commando
 Cathartic Adept
 Cathedral Sanctifier
+Cauldron Familiar
 Caustic Caterpillar
 Caustic Rain
 Celestial Prism
@@ -478,6 +489,7 @@ Coeurl
 Cogwork Archivist
 Cogworker's Puzzleknot
 Cold Case Cracker
+Collateral Damage
 Collective Blessing
 Collector's Vault
 Colorful Feiyi Sparrow
@@ -646,12 +658,14 @@ Desolate Lighthouse
 Desolate Mire
 Desperate Bloodseeker
 Despondent Killbot
+Destructive Digger
 Destructor Dragon
 Devilthorn Fox
 Devkarin Dissident
 Devoted Hero
 Devoted Retainer
 Devotee of Strength
+Devouring Swarm
 Devout Decree
 Devout Monk
 Devout Witness
@@ -872,6 +886,7 @@ Faithful Watchdog
 Falkenrath Marauders
 Falkenrath Reaver
 Fall of the Gavel
+Fallen Angel
 Fallow Earth
 False Defeat
 False Mourning
@@ -960,6 +975,7 @@ Flowstone Wyvern
 Flurry of Horns
 Flying Dolphin-Fish
 Flying Men
+Fodder Cannon
 Foggy Bottom Swamp
 Fomori Nomad
 Font of Fortunes
@@ -1263,6 +1279,7 @@ Hithlain Knots
 Hive Stirrings
 Hoar Shade
 Hoard Robber
+Hobblefiend
 Hollowhenge Beast
 Holy Cow
 Homarid Explorer
@@ -1299,11 +1316,13 @@ Hungry Megasloth
 Hungry Spriggan
 Hunted Witness
 Hunting Drake
+Hurler Cyclops
 Hurloon Minotaur
 Hussar Patrol
 Hyena Pack
 Hymn of Rebirth
 Hyrax Tower Scout
+Icatian Crier
 Icatian Priest
 Icatian Town
 Ice Storm
@@ -1392,6 +1411,7 @@ Jadecraft Artisan
 Jagged Barrens
 Jagwasp Swarm
 Jalum Tome
+Jan Jansen, Chaos Crafter
 Jandor's Saddlebags
 Jarvis, Earth's Mightiest Butler
 Jasmine Boreal
@@ -1608,10 +1628,12 @@ Magmaw
 Magnifying Glass
 Magnigoth Sentry
 Mahamoti Djinn
+Makeshift Munitions
 Makindi Aeronaut
 Makindi Griffin
 Malcator's Watcher
 Malevolent Awakening
+Malevolent Noble
 Mammoth Spider
 Man-o'-War
 Mana Cylix
@@ -1759,6 +1781,7 @@ Naga Eternal
 Naga Oracle
 Nantuko Disciple
 Nantuko Elder
+Nantuko Husk
 Nantuko Shade
 Nantuko Tracer
 Narcissism
@@ -1884,6 +1907,7 @@ Orazca Frillback
 Orazca Raptor
 Orcish Bloodpainter
 Orcish Mechanics
+Orcish Vandal
 Order of the Sacred Bell
 Ordinary Bear
 Ore Gorger
@@ -1924,6 +1948,7 @@ Peace Strider
 Pearled Unicorn
 Pelakka Wurm
 Pendulum of Patterns
+Penregon Strongbull
 Pensive Minotaur
 Perilous Myr
 Persistent Specimen
@@ -1942,6 +1967,7 @@ Phyrexian Gargantua
 Phyrexian Hulk
 Phyrexian Rager
 Phyrexian Tower
+Phyrexian Vault
 Phyrexian Walker
 Phytoburst
 Pia and Kiran Nalaar
@@ -2377,6 +2403,7 @@ Shu Soldier-Farmers
 Sickbay Orderly
 Siege Mastodon
 Siege Rhino
+Siege-Gang Commander
 Sift
 Sigardian Priest
 Sigil of the Empty Throne
@@ -2420,6 +2447,7 @@ Skirk Prospector
 Skirmish Rhino
 Skirsdag Cultist
 Skirsdag Flayer
+Skull Catapult
 Skull Prophet
 Skull of Orm
 Skull of Ramos
@@ -2449,6 +2477,7 @@ Slash, Reptile Rampager
 Sledding Otter-Penguin
 Sleight of Hand
 Slice in Twain
+Sling-Gang Lieutenant
 Slingshot Goblin
 Slinking Skirge
 Sliptide Serpent
@@ -2457,6 +2486,7 @@ Slith Firewalker
 Slith Predator
 Sliver Construct
 Sliver Queen
+Sliversmith
 Slobad, Goblin Tinkerer
 Slumbering Waterways
 Smash
@@ -2492,6 +2522,7 @@ Soul's Attendant
 Soulbound Guardians
 Soulknife Spy
 Soulmender
+Soulreaper of Mogis
 Soured Springs
 Southern Elephant
 Southern Paladin
@@ -2688,6 +2719,7 @@ Tanglebloom
 Tangled Islet
 Tanglepool Bridge
 Tanglespan Lookout
+Tar Pitcher
 Target Minotaur
 Tarpan
 Tasseled Dromedary
@@ -2869,6 +2901,7 @@ Umara Entangler
 Umbral Collar Zealot
 Unauthorized Exit
 Unbender Tine
+Unburied Earthcarver
 Undead Minotaur
 Undercity Dire Rat
 Undercity Sewers
@@ -3060,6 +3093,7 @@ Wetland Sambar
 Whiptail Wurm
 Whirlermaker
 Whitesun's Passage
+Wicked Reward
 Wicker Witch
 Wielding the Green Dragon
 Wild Celebrants
@@ -3092,6 +3126,7 @@ Wirewood Elf
 Wirewood Lodge
 Wirewood Savage
 Wishcoin Crab
+Witch's Cauldron
 Witch's Familiar
 Witching Well
 Witherbloom Campus
@@ -3154,4 +3189,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3151`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3186`;

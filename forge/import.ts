@@ -4159,6 +4159,7 @@ export function lowerForgeCard(
 		scalarMetadata("NonCombatPriority") === "1"
 	)
 		usedSVarNames.add("noncombatpriority");
+	usedSVarNames.add("aipreference");
 
 	for (const record of face.svars) {
 		if (!usedSVarNames.has(record.name.toLowerCase())) {
