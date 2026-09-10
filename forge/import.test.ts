@@ -652,8 +652,104 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		});
 	});
 
-	test("remembering support does not accept Cloudshift's target-return chain", () => {
-		expect(importFixture("c/cloudshift").ok).toBe(false);
+	test("Cloudshift lowers its remembered target through the new exile object", () => {
+		const result = importFixture("c/cloudshift");
+		if (!result.ok) throw new Error("expected Cloudshift to import");
+		expect(result.card).toMatchObject({
+			id: "cloudshift",
+			name: "Cloudshift",
+			types: ["instant"],
+			colors: ["w"],
+			manaCost: { w: 1 },
+		});
+		expect(result.card.spell).toEqual({
+			id: "spell-1",
+			text: "Exile target creature you control, then return that card to the battlefield under your control.",
+			targets: [
+				{
+					id: "target-1",
+					min: 1,
+					max: 1,
+					legal: {
+						kind: "permanent",
+						selector: {
+							kind: "all",
+							selectors: [
+								{ kind: "type", type: "creature" },
+								{ kind: "controller", player: "you" },
+							],
+						},
+					},
+				},
+			],
+			effects: [
+				{
+					kind: "change-zone",
+					object: { targetSlot: "target-1" },
+					from: "battlefield",
+					destination: { zone: "exile" },
+					resultSlot: "remembered-zone-change-object",
+				},
+				{
+					kind: "change-zone",
+					object: {
+						binding: "effect-result",
+						slot: "remembered-zone-change-object",
+					},
+					from: "exile",
+					destination: { zone: "battlefield", controller: "you" },
+				},
+			],
+		});
+	});
+
+	test("Cloudshift's remembered target-return chain rejects semantic mutations", () => {
+		const definition = cardText("c/cloudshift");
+		const mutations = [
+			["RememberTargets$ True", "RememberTargets$ False"],
+			["RememberTargets$ True", "RememberChanged$ True"],
+			["Defined$ Remembered", "Defined$ Targeted"],
+			["Origin$ All", "Origin$ Exile"],
+			["Destination$ Battlefield", "Destination$ Graveyard"],
+			["GainControl$ True", "GainControl$ False"],
+			["ClearRemembered$ True", "ClearRemembered$ False"],
+		] as const;
+		for (const [from, to] of mutations) {
+			const mutated = definition.replace(from, to);
+			expect(mutated, `mutation source ${from}`).not.toBe(definition);
+			const result = importForgeCard(mutated, { id: "mutated-cloudshift" });
+			expect(result.ok, `${from} -> ${to}`).toBe(false);
+		}
+	});
+
+	test("a remembered targeted ChangeZone without its return consumer rejects", () => {
+		const result = importText(
+			[
+				"Name:Orphaned Remembered Change",
+				"ManaCost:W",
+				"Types:Instant",
+				"A:SP$ ChangeZone | ValidTgts$ Creature.YouCtrl | Origin$ Battlefield | Destination$ Exile | RememberTargets$ True | SpellDescription$ x.",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message:
+				"remembered ChangeZone must be followed immediately by its DB$ ChangeZone return",
+		});
+	});
+
+	test("Ghostly Flicker stays rejected while multiple targets are unsupported", () => {
+		const result = importFixture("g/ghostly_flicker");
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_PARAMETER",
+			message: "unsupported parameter TargetMin",
+		});
 	});
 
 	test("Dig rejects dynamic, public, random-order, and impossible forms", () => {

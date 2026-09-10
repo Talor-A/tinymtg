@@ -2091,9 +2091,14 @@ export interface TargetSlotRef {
 	targetSlot: string;
 }
 
+export interface EffectResultObjectRef {
+	binding: "effect-result";
+	slot: string;
+}
+
 export type MayPlayObjectRef =
 	| { binding: "target"; slot: string }
-	| { binding: "effect-result"; slot: string };
+	| EffectResultObjectRef;
 
 /** A destination resolved only when a one-object zone change executes. */
 export type ZoneChangeEffectDestination<Player extends TriggerEffectPlayer> =
@@ -2110,9 +2115,11 @@ export type ZoneChangeEffectDestination<Player extends TriggerEffectPlayer> =
 export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
 	[Origin in PublicObjectZone]: {
 		kind: "change-zone";
-		object: "source" | TargetSlotRef;
+		object: "source" | TargetSlotRef | EffectResultObjectRef;
 		from: Origin;
 		destination: Exclude<ZoneChangeEffectDestination<Player>, { zone: Origin }>;
+		/** Optionally bind the new object that reaches the declared destination. */
+		resultSlot?: string;
 	};
 }[PublicObjectZone];
 
@@ -6806,7 +6813,8 @@ function resolveEffects(
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
-			effect.object !== "source"
+			effect.object !== "source" &&
+			"targetSlot" in effect.object
 				? effect.object
 				: null;
 		const counterTarget = effect.kind === "counter" ? effect.spell : null;
@@ -6891,7 +6899,27 @@ function resolveEffects(
 			continue;
 		}
 		if (effect.kind === "change-zone") {
-			const ref = effect.object === "source" ? null : bound;
+			if (effect.resultSlot !== undefined) {
+				assert(
+					!scope.bindings.has(effect.resultSlot),
+					`effect result slot ${effect.resultSlot} is already bound`,
+				);
+				// Bind an empty result before any early exit. A later consumer then
+				// sees that this instruction produced no usable new object.
+				scope.bindings.set(effect.resultSlot, []);
+			}
+			let ref: EntityRef | null;
+			if (effect.object === "source") ref = null;
+			else if ("targetSlot" in effect.object) ref = bound;
+			else {
+				const results = scope.bindings.get(effect.object.slot) ?? [];
+				assert(
+					results.length <= 1,
+					`one-object change-zone result ${effect.object.slot} contains multiple objects`,
+				);
+				ref = results[0] ?? null;
+				if (ref === null) continue;
+			}
 			if (ref !== null)
 				assert(
 					ref.type === "permanent" || ref.type === "card",
@@ -6913,7 +6941,7 @@ function resolveEffects(
 					"a nonbattlefield change-zone subject must be a card",
 				);
 			}
-			performIn(
+			const result = performIn(
 				state,
 				effectToEvent(
 					state,
@@ -6928,6 +6956,29 @@ function resolveEffects(
 				scope,
 				0,
 			);
+			if (effect.resultSlot !== undefined) {
+				const produced = result.created.flatMap((id): EntityRef[] => {
+					const created = maybeObject(state, id);
+					if (
+						effect.destination.zone === "battlefield" &&
+						created?.kind === "permanent" &&
+						created.zone === "battlefield"
+					)
+						return [{ type: "permanent", id }];
+					if (
+						effect.destination.zone !== "battlefield" &&
+						created?.kind === "card" &&
+						created.zone === effect.destination.zone
+					)
+						return [{ type: "card", id }];
+					return [];
+				});
+				assert(
+					produced.length <= 1,
+					`one-object change-zone effect produced multiple objects in ${effect.destination.zone}`,
+				);
+				scope.bindings.set(effect.resultSlot, produced);
+			}
 			continue;
 		}
 		if (effect.kind === "modify-pt" || effect.kind === "grant-keyword") {
@@ -7408,7 +7459,7 @@ function requiredTargetDefinition(
 			"only one required target is implemented",
 		);
 	}
-	const availableResultSlots = new Set<string>();
+	const availableResultSlots = new Map<string, Zone>();
 	const check = (effect: EffectDef<TriggerEffectPlayer>): void => {
 		if (effect.kind === "may") {
 			for (const inner of effect.effects) check(inner);
@@ -7422,7 +7473,21 @@ function requiredTargetDefinition(
 			return;
 		}
 		if (effect.kind === "choose-from-top") return;
-		if (effect.kind === "exile-top" && effect.resultSlot !== undefined) {
+		if (
+			effect.kind === "change-zone" &&
+			effect.object !== "source" &&
+			"binding" in effect.object &&
+			effect.object.binding === "effect-result"
+		) {
+			assert(
+				availableResultSlots.get(effect.object.slot) === effect.from,
+				`change-zone refers to unavailable ${effect.from} effect result ${effect.object.slot}`,
+			);
+		}
+		if (
+			(effect.kind === "exile-top" || effect.kind === "change-zone") &&
+			effect.resultSlot !== undefined
+		) {
 			assert(
 				effect.resultSlot.length > 0,
 				"effect result slot must have a name",
@@ -7431,18 +7496,27 @@ function requiredTargetDefinition(
 				!availableResultSlots.has(effect.resultSlot),
 				`duplicate effect result slot ${effect.resultSlot}`,
 			);
-			availableResultSlots.add(effect.resultSlot);
+			availableResultSlots.set(
+				effect.resultSlot,
+				effect.kind === "exile-top" ? "exile" : effect.destination.zone,
+			);
 		}
 		if (
 			effect.kind === "may-play" &&
 			effect.object.binding === "effect-result"
 		) {
 			assert(
-				availableResultSlots.has(effect.object.slot),
+				availableResultSlots.get(effect.object.slot) === effect.from,
 				`may-play refers to unavailable effect result ${effect.object.slot}`,
 			);
 			return;
 		}
+		if (
+			effect.kind === "change-zone" &&
+			effect.object !== "source" &&
+			"binding" in effect.object
+		)
+			return;
 		if (
 			(effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||
@@ -7516,7 +7590,8 @@ function requiredTargetDefinition(
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
-			effect.object !== "source"
+			effect.object !== "source" &&
+			"targetSlot" in effect.object
 				? effect.object
 				: null;
 		const counterTarget = effect.kind === "counter" ? effect.spell : null;
@@ -7547,7 +7622,11 @@ function requiredTargetDefinition(
 		if (effect.kind === "counter") {
 			assert(target.legal.kind === "spell", "counter requires a spell target");
 		}
-		if (effect.kind === "change-zone") {
+		if (
+			effect.kind === "change-zone" &&
+			effect.object !== "source" &&
+			"targetSlot" in effect.object
+		) {
 			if (effect.from === "battlefield") {
 				assert(
 					target.legal.kind === "permanent",

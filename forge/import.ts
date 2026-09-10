@@ -439,6 +439,12 @@ const TARGET_SLOT = "target-1";
 const REMEMBERED_EXILE_SLOT = "remembered-exile-cards";
 
 /**
+ * Forge's remembered object for the supported targeted exile-then-return chain.
+ * The binding is the new card object created in exile, not the old permanent.
+ */
+const REMEMBERED_ZONE_CHANGE_SLOT = "remembered-zone-change-object";
+
+/**
  * A targeting effect and its ability's `ValidTgts$` have to agree, or the
  * engine would resolve an effect against a target nobody checked.
  */
@@ -493,7 +499,8 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
-			effect.object !== "source"
+			effect.object !== "source" &&
+			"targetSlot" in effect.object
 				? effect.object
 				: null;
 		// An effect on its own source declares no target to check.
@@ -503,6 +510,12 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
 			effect.object === "source"
+		)
+			continue;
+		if (
+			effect.kind === "change-zone" &&
+			effect.object !== "source" &&
+			"binding" in effect.object
 		)
 			continue;
 		const counterTarget = effect.kind === "counter" ? effect.spell : null;
@@ -1184,6 +1197,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"tapped",
 					"libraryposition",
 					"activationzone",
+					"remembertargets",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
@@ -1290,6 +1304,13 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			}
 			const validTargets = getForgeParam(params, "ValidTgts");
 			const defined = getForgeParam(params, "Defined");
+			const rememberTargets = getForgeParam(params, "RememberTargets");
+			if (rememberTargets !== undefined && rememberTargets !== "True")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"RememberTargets$ must be True",
+					where,
+				);
 			let object: "source" | TargetSlotRef;
 			if (validTargets !== undefined || defined === "Targeted") {
 				if (defined !== undefined && defined !== "Targeted")
@@ -1310,6 +1331,17 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					);
 				object = "source";
 			}
+			if (
+				rememberTargets === "True" &&
+				(object === "source" ||
+					origin !== "battlefield" ||
+					destination.zone !== "exile")
+			)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"remembered ChangeZone requires one targeted battlefield object moving to exile",
+					where,
+				);
 			switch (origin) {
 				case "battlefield":
 					if (destination.zone === "battlefield")
@@ -1318,7 +1350,15 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 							"ChangeZone origin and destination must differ",
 							where,
 						);
-					return { kind: "change-zone", object, from: origin, destination };
+					return {
+						kind: "change-zone",
+						object,
+						from: origin,
+						destination,
+						...(rememberTargets === "True"
+							? { resultSlot: REMEMBERED_ZONE_CHANGE_SLOT }
+							: {}),
+					};
 				case "graveyard":
 					if (destination.zone === "graveyard")
 						return issue(
@@ -1640,6 +1680,112 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				where,
 			);
 		}
+		const pendingRememberedChange = effects.at(-1);
+		if (
+			pendingRememberedChange?.kind === "change-zone" &&
+			pendingRememberedChange.resultSlot === REMEMBERED_ZONE_CHANGE_SLOT &&
+			disc.api !== "changezone"
+		) {
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				"remembered ChangeZone must be followed immediately by its DB$ ChangeZone return",
+				where,
+			);
+		}
+		if (
+			pendingRememberedChange?.kind === "change-zone" &&
+			pendingRememberedChange.resultSlot === REMEMBERED_ZONE_CHANGE_SLOT
+		) {
+			const badReturnParams = checkParams(
+				current,
+				new Set([
+					"db",
+					"defined",
+					"origin",
+					"destination",
+					"gaincontrol",
+					"subability",
+				]),
+				where,
+			);
+			if (badReturnParams) return badReturnParams;
+			const cleanupName = getForgeParam(current, "SubAbility");
+			if (
+				disc.token !== "DB" ||
+				getForgeParam(current, "Defined") !== "Remembered" ||
+				getForgeParam(current, "Origin") !== "All" ||
+				getForgeParam(current, "Destination") !== "Battlefield" ||
+				getForgeParam(current, "GainControl") !== "True" ||
+				!cleanupName
+			) {
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"remembered ChangeZone return requires DB$ ChangeZone, Defined$ Remembered, Origin$ All, Destination$ Battlefield, GainControl$ True, and a cleanup SubAbility$",
+					where,
+				);
+			}
+
+			const cleanupBucket = face.svarIndex[cleanupName.toLowerCase()];
+			if (!cleanupBucket || cleanupBucket.length === 0)
+				return issue(
+					"UNSUPPORTED_REFERENCE",
+					`unresolved SubAbility ${cleanupName}`,
+					where,
+				);
+			if (cleanupBucket.length > 1)
+				return issue(
+					"UNSUPPORTED_REFERENCE",
+					`ambiguous duplicate SVar ${cleanupName}`,
+					where,
+				);
+			const cleanupSVar = cleanupBucket[0] as ForgeSVarRecord;
+			if (cleanupSVar.parsed.kind !== "params")
+				return issue(
+					"UNSUPPORTED_REFERENCE",
+					`SubAbility ${cleanupName} is not an ability body`,
+					where,
+				);
+			const cleanupWhere = {
+				nodeId: cleanupSVar.source.nodeId,
+				line: cleanupSVar.source.line,
+			};
+			const cleanupDisc = discriminator(
+				cleanupSVar.parsed.params,
+				cleanupWhere,
+			);
+			if ("code" in cleanupDisc) return cleanupDisc;
+			const badCleanupParams = checkParams(
+				cleanupSVar.parsed.params,
+				new Set(["db", "clearremembered"]),
+				cleanupWhere,
+			);
+			if (badCleanupParams) return badCleanupParams;
+			if (
+				cleanupDisc.token !== "DB" ||
+				cleanupDisc.api !== "cleanup" ||
+				getForgeParam(cleanupSVar.parsed.params, "ClearRemembered") !== "True"
+			) {
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"remembered ChangeZone cleanup requires DB$ Cleanup and ClearRemembered$ True",
+					cleanupWhere,
+				);
+			}
+
+			const controller = parsePlayer("You");
+			assert(controller !== null, "controller must be supported");
+			effects.push({
+				kind: "change-zone",
+				object: {
+					binding: "effect-result",
+					slot: pendingRememberedChange.resultSlot,
+				},
+				from: "exile",
+				destination: { zone: "battlefield", controller },
+			});
+			usedSVarNames.push(cleanupName.toLowerCase());
+			return { effects, usedSVarNames };
+		}
 		if (disc.api === "effect") {
 			const rememberedDig = effects.at(-1);
 			if (
@@ -1811,6 +1957,17 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				return issue(
 					"UNSUPPORTED_EFFECT",
 					"remembered exile Dig must be followed immediately by DB$ Effect",
+					where,
+				);
+			}
+			if (
+				lowered.length === 1 &&
+				lowered[0]?.kind === "change-zone" &&
+				lowered[0].resultSlot === REMEMBERED_ZONE_CHANGE_SLOT
+			) {
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"remembered ChangeZone must be followed immediately by its DB$ ChangeZone return",
 					where,
 				);
 			}

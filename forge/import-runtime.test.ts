@@ -132,6 +132,7 @@ registerRuntimeFixture("u/underworld_dreams", "rt-underworld-dreams");
 registerRuntimeFixture("r/rummaging_goblin", "rt-rummaging-goblin");
 registerRuntimeFixture("b/black_lotus", "rt-black-lotus");
 registerRuntimeFixture("w/wrenns_resolve", "rt-wrenns-resolve");
+registerRuntimeFixture("c/cloudshift", "rt-cloudshift");
 registerCardFixture("d/darksteel_relic");
 
 {
@@ -1064,6 +1065,50 @@ describe("forge-import runtime: spell effects", () => {
 				expiresAtEndOfTurn: null,
 			});
 		}
+	});
+
+	test("Cloudshift returns the new exile object and retriggers the imported ETB", () => {
+		const state = setupMain();
+		const target = spawnPermanent(state, "rt-wall-of-omens", ALICE);
+		target.tapped = true;
+		target.damage = 1;
+		target.counters["+1/+1"] = 1;
+		const originalId = target.id;
+		const librarySize = state.players[ALICE].library.length;
+		const spell = spawnCard(state, "rt-cloudshift", ALICE, "hand");
+		state.players[ALICE].manaPool.w = 1;
+
+		executeCastAction(
+			state,
+			ALICE,
+			{ kind: "cast", card: spell.id },
+			passingAgents(),
+		);
+		settlePriority(state, passingAgents());
+
+		expect(state.objects.has(originalId)).toBe(false);
+		expect(state.players[ALICE].exile).toEqual([]);
+		const returnedId = state.battlefield[0];
+		if (returnedId === undefined)
+			throw new Error("Cloudshift returned nothing");
+		expect(returnedId).not.toBe(originalId);
+		expect(permanent(state, returnedId)).toMatchObject({
+			kind: "permanent",
+			controller: ALICE,
+			owner: ALICE,
+			zone: "battlefield",
+			representation: { kind: "card", cardId: "rt-wall-of-omens" },
+			tapped: false,
+			summoningSick: true,
+			counters: {},
+			damage: 0,
+		});
+		expect(
+			state.players[ALICE].library,
+			"the returned Wall of Omens triggered and drew",
+		).toHaveLength(librarySize - 1);
+		expect(state.pendingTriggers).toEqual([]);
+		expect(state.stack).toEqual([]);
 	});
 
 	test("Preordain's imported scry arrangement is applied before its draw", () => {
