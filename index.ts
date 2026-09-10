@@ -3844,7 +3844,8 @@ function cachedGameView(
 	revision: number,
 ): GameView {
 	const cached = GAME_VIEW_CACHE.get(state);
-	if (cached?.engine === engine && cached.revision === revision) return cached.view;
+	if (cached?.engine === engine && cached.revision === revision)
+		return cached.view;
 	const view = buildGameView(engine, state);
 	GAME_VIEW_CACHE.set(state, { engine, revision, view });
 	return view;
@@ -4067,7 +4068,9 @@ function lethalDamage(
 	id: ObjectId,
 ): boolean {
 	const read =
-		"view" in stateOrRead ? stateOrRead : createReadContext(engine, stateOrRead);
+		"view" in stateOrRead
+			? stateOrRead
+			: createReadContext(engine, stateOrRead);
 	const o = read.state.objects.get(id);
 	assertDefined(o);
 	assert(o.kind === "permanent");
@@ -4963,7 +4966,9 @@ function describeEvent(
 				.filter(Boolean)
 				.join(" ");
 			const objectName =
-				ev.from === null ? ev.createdToken.values.name : name(engine, state, ev.object);
+				ev.from === null
+					? ev.createdToken.values.name
+					: name(engine, state, ev.object);
 			const from = ev.from ?? "creation";
 			return `move(${objectName}#${ev.object}: ${from}->${to.zone}${extras ? ` ${extras}` : ""})`;
 		}
@@ -5053,7 +5058,8 @@ function checkStateBasedActionsIn(
 		for (const p of state.players) {
 			//   704.5a. If a player has 0 or less life, that player loses the game.
 			if (!p.lost && !p.won && p.life <= 0) {
-				performIn(engine, 
+				performIn(
+					engine,
 					state,
 					{ kind: "lose game", player: p.id, reason: "life" },
 					choices,
@@ -5068,7 +5074,8 @@ function checkStateBasedActionsIn(
 			// cards in it since the last time state-based actions were checked, that
 			// player loses the game.
 			if (!p.lost && !p.won && p.drewFromEmptyLibrary) {
-				performIn(engine, 
+				performIn(
+					engine,
 					state,
 					{
 						kind: "lose game",
@@ -5090,7 +5097,8 @@ function checkStateBasedActionsIn(
 				p.counters.poison !== undefined &&
 				p.counters.poison >= 10
 			) {
-				performIn(engine, 
+				performIn(
+					engine,
 					state,
 					{
 						kind: "lose game",
@@ -5193,12 +5201,14 @@ function checkStateBasedActionsIn(
 		// because every continuous effect in the engine comes from a *static
 		// ability* possessed by some object, or from a temporary P/T effect created
 		// by a resolving spell or ability.
-		const hasCharacteristicChangingStatic = anyPossessedCharacteristicStatic(engine, 
+		const hasCharacteristicChangingStatic = anyPossessedCharacteristicStatic(
+			engine,
 			state,
 			(effect) => includes(CHARACTERISTIC_CHANGING_LAYERS, effect.layer),
 		);
 		const hasTemporaryPtChange = state.temporaryEffects.some(
-			(effect) => temporaryEffectDefinition(engine, effect)?.kind === "modify-pt",
+			(effect) =>
+				temporaryEffectDefinition(engine, effect)?.kind === "modify-pt",
 		);
 
 		const needsPermanentSbas =
@@ -5233,7 +5243,8 @@ function checkStateBasedActionsIn(
 					state,
 					`  SBA: ${name(engine, state, id)} has toughness ${characteristics.toughness}`,
 				);
-				performIn(engine, 
+				performIn(
+					engine,
 					state,
 					{
 						kind: "change zone",
@@ -5254,7 +5265,10 @@ function checkStateBasedActionsIn(
 			// on it, and the total damage marked on it is greater than or equal to its
 			// toughness, that creature has been dealt lethal damage and is destroyed.
 			// Regeneration can replace this event.
-			if (lethalDamage(engine, sbaRead, id) || deathtouchedSinceLastCheck.has(id)) {
+			if (
+				lethalDamage(engine, sbaRead, id) ||
+				deathtouchedSinceLastCheck.has(id)
+			) {
 				const destroy: DestroyEvent = {
 					kind: "destroy",
 					object: id,
@@ -5266,7 +5280,14 @@ function checkStateBasedActionsIn(
 				// actually happened, so an indestructible creature doesn't keep the SBA
 				// loop running forever.
 				const objectName = name(engine, state, id);
-				const result = performIn(engine, state, destroy, choices, newScope(), 0);
+				const result = performIn(
+					engine,
+					state,
+					destroy,
+					choices,
+					newScope(),
+					0,
+				);
 				// Effect scratch preparation may mutate canonical state even when a
 				// prohibition prevents the event.
 				sbaRead = createReadContext(engine, state);
@@ -5282,7 +5303,8 @@ function checkStateBasedActionsIn(
 			// smaller of the number of +1/+1 and -1/-1 counters on it.
 			if (o.counters["+1/+1"] && o.counters["-1/-1"]) {
 				const n = Math.min(o.counters["+1/+1"], o.counters["-1/-1"]);
-				performIn(engine, 
+				performIn(
+					engine,
 					state,
 					{
 						kind: "remove counters",
@@ -5344,7 +5366,14 @@ function perform(
 	event: GameEvent,
 	source: ChoiceSource,
 ): PerformResult {
-	return performIn(engine, state, event, asChoiceController(engine, source), newScope(), 0);
+	return performIn(
+		engine,
+		state,
+		event,
+		asChoiceController(engine, source),
+		newScope(),
+		0,
+	);
 }
 
 /** Applies event replacements and delegates to `executeIn` to apply changes. */
@@ -5367,7 +5396,15 @@ function performIn(
 	const created: ObjectId[] = [];
 	for (const ev of finals) {
 		const before = createReadContext(engine, state);
-	const result = executeIn(engine, state, before, ev, choices, scope, depth + 1);
+		const result = executeIn(
+			engine,
+			state,
+			before,
+			ev,
+			choices,
+			scope,
+			depth + 1,
+		);
 		executed.push(...result.executed);
 		created.push(...result.created);
 	}
@@ -5428,7 +5465,8 @@ function executeIn(
 			);
 			for (let i = 0; i < ev.amount; i++) {
 				childResults.push(
-					performIn(engine, 
+					performIn(
+						engine,
 						state,
 						{
 							kind: "draw",
@@ -5464,7 +5502,8 @@ function executeIn(
 				p.drawnInDrawStep++;
 			// Drawing *is* a zone change, so zone-change replacements get a look too.
 			childResults.push(
-				performIn(engine, 
+				performIn(
+					engine,
 					state,
 					{
 						kind: "change zone",
@@ -5491,7 +5530,8 @@ function executeIn(
 				const top = p.library[p.library.length - 1];
 				if (top === undefined) break;
 				childResults.push(
-					performIn(engine, 
+					performIn(
+						engine,
 						state,
 						{
 							kind: "change zone",
@@ -5519,7 +5559,8 @@ function executeIn(
 				const top = p.library[p.library.length - 1];
 				if (top === undefined) break;
 				childResults.push(
-					performIn(engine, 
+					performIn(
+						engine,
 						state,
 						{
 							kind: "change zone",
@@ -5596,7 +5637,8 @@ function executeIn(
 			// Reverse the chosen order so its first card is on top of the graveyard.
 			for (const id of [...arrangement.bottom].reverse()) {
 				childResults.push(
-					performIn(engine, 
+					performIn(
+						engine,
 						state,
 						{
 							kind: "change zone",
@@ -5668,7 +5710,8 @@ function executeIn(
 					`choose-from-top kept card ${id} left the library`,
 				);
 				childResults.push(
-					performIn(engine, 
+					performIn(
+						engine,
 						state,
 						{
 							kind: "change zone",
@@ -5723,7 +5766,8 @@ function executeIn(
 				}
 				toDiscard.forEach((id) => {
 					childResults.push(
-						performIn(engine, 
+						performIn(
+							engine,
 							state,
 							{
 								kind: "change zone",
@@ -5750,7 +5794,8 @@ function executeIn(
 						});
 			assertDefined(chosen);
 			childResults.push(
-				performIn(engine, 
+				performIn(
+					engine,
 					state,
 					{
 						kind: "change zone",
@@ -5801,7 +5846,8 @@ function executeIn(
 			}
 			if (ev.lifelink) {
 				childResults.push(
-					performIn(engine, 
+					performIn(
+						engine,
 						state,
 						{
 							kind: "gain life",
@@ -5824,7 +5870,8 @@ function executeIn(
 				happened = false;
 				break;
 			}
-			const movement = performIn(engine, 
+			const movement = performIn(
+				engine,
 				state,
 				{
 					kind: "change zone",
@@ -5858,7 +5905,8 @@ function executeIn(
 			}
 			const snapshot = getSnapshot(before, o.id);
 			assert(snapshot.kind === "permanent");
-			const movement = performIn(engine, 
+			const movement = performIn(
+				engine,
 				state,
 				{
 					kind: "change zone",
@@ -5892,7 +5940,8 @@ function executeIn(
 			}
 			const snapshot = getSnapshot(before, o.id);
 			assert(snapshot.kind === "permanent");
-			const movement = performIn(engine, 
+			const movement = performIn(
+				engine,
 				state,
 				{
 					kind: "change zone",
@@ -6117,7 +6166,8 @@ function executeIn(
 			for (let i = 0; i < ev.amount; i++) {
 				const tokenId = state.nextObjectId++ as ObjectId;
 				childResults.push(
-					performIn(engine, 
+					performIn(
+						engine,
 						state,
 						{
 							kind: "change zone",
@@ -6226,7 +6276,10 @@ function executeIn(
 			// and are represented by multiple distinct pairs.
 			const usedBlockers = new Set<ObjectId>();
 			const attackingIds = new Set(
-				creaturesControlledBy(createReadContext(engine, state), currentTurn.player)
+				creaturesControlledBy(
+					createReadContext(engine, state),
+					currentTurn.player,
+				)
 					.filter((o) => o.attacking)
 					.map((o) => o.id),
 			);
@@ -6248,7 +6301,11 @@ function executeIn(
 						`${name(engine, state, attacker)} is not a legal attacker to be blocked`,
 					);
 				}
-				if (!eligibleBlockers(engine, state, ev.player, attacker).includes(blocker)) {
+				if (
+					!eligibleBlockers(engine, state, ev.player, attacker).includes(
+						blocker,
+					)
+				) {
 					throw new IllegalBlockDeclarationError(
 						`${name(engine, state, blocker)} cannot block ${name(engine, state, attacker)}`,
 					);
@@ -6307,7 +6364,13 @@ function executeIn(
 		state.revision++;
 		if (ev.kind === "change zone")
 			enqueueSelfDeathTriggers(state, selfDeathTriggers, ev);
-		detectTriggers(state, createReadContext(engine, state), ev, created, changed);
+		detectTriggers(
+			state,
+			createReadContext(engine, state),
+			ev,
+			created,
+			changed,
+		);
 		if (ev.fact) scope.facts.add(ev.fact);
 	}
 
@@ -6705,7 +6768,11 @@ function putPendingTriggersOnStack(
 			let targets: TargetBindings = [];
 			if (target) {
 				const ctx = { controller: pending.controller, source: pending.source };
-				const candidates = legalTargets(createReadContext(engine, state), target, ctx);
+				const candidates = legalTargets(
+					createReadContext(engine, state),
+					target,
+					ctx,
+				);
 				if (candidates.length === 0) {
 					// CR 603.3d: with no legal choice the ability is removed rather
 					// than waiting on the stack for one to appear.
@@ -6800,7 +6867,8 @@ function resolveSpell(
 	if (
 		characteristics.types.some((type) => includes(PERMANENT_CARD_TYPES, type))
 	) {
-		performIn(engine, 
+		performIn(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -6819,7 +6887,9 @@ function resolveSpell(
 	// CR 608.2m: an instant or sorcery follows its own instructions and is then
 	// put into its owner's graveyard as the last step of resolution.
 	// TODO: "instants and sorceries you control have lifelink", which needs characteristics.
-	const definition = read.engine.cardDefinition(object.representation.cardId).spell;
+	const definition = read.engine.cardDefinition(
+		object.representation.cardId,
+	).spell;
 	assertDefined(
 		definition,
 		`${characteristics.name} has no spell ability to resolve`,
@@ -6845,7 +6915,8 @@ function resolveSpell(
 			}));
 	if (legal) {
 		/** Share a scope so facts can pass through the complete effect sequence. */
-		resolveEffects(engine, 
+		resolveEffects(
+			engine,
 			state,
 			choices,
 			{
@@ -6860,7 +6931,8 @@ function resolveSpell(
 	} else {
 		log(state, "  [illegal target] spell does not resolve");
 	}
-	performIn(engine, 
+	performIn(
+		engine,
 		state,
 		{
 			kind: "change zone",
@@ -6912,7 +6984,8 @@ function resolveStackAbility(
 			}));
 	if (legal) {
 		/** Share a scope so facts can pass through the complete effect sequence. */
-		resolveEffects(engine, 
+		resolveEffects(
+			engine,
 			state,
 			choices,
 			{
@@ -7130,7 +7203,8 @@ function resolveEffects(
 				reason: { kind: "sacrifice" },
 				objects: candidates,
 			});
-			performIn(engine, 
+			performIn(
+				engine,
 				state,
 				{ kind: "sacrifice", object: chosen },
 				choices,
@@ -7143,7 +7217,8 @@ function resolveEffects(
 			// A source that has left the battlefield cannot receive counters.
 			const source = maybePermanent(state, item.source);
 			if (!source) continue;
-			performIn(engine, 
+			performIn(
+				engine,
 				state,
 				{
 					kind: "add counters",
@@ -7201,9 +7276,11 @@ function resolveEffects(
 					"a nonbattlefield change-zone subject must be a card",
 				);
 			}
-			const result = performIn(engine, 
+			const result = performIn(
+				engine,
 				state,
-				effectToEvent(engine, 
+				effectToEvent(
+					engine,
 					state,
 					item,
 					effect,
@@ -7277,7 +7354,8 @@ function resolveEffects(
 				!scope.bindings.has(effect.resultSlot),
 				`effect result slot ${effect.resultSlot} is already bound`,
 			);
-			const result = performIn(engine, 
+			const result = performIn(
+				engine,
 				state,
 				effectToEvent(engine, state, item, effect, bound),
 				choices,
@@ -7326,7 +7404,8 @@ function resolveEffects(
 			}
 			continue;
 		}
-		performIn(engine, 
+		performIn(
+			engine,
 			state,
 			effectToEvent(engine, state, item, effect, bound),
 			choices,
@@ -8373,7 +8452,13 @@ function executeAbilityAction(
 	action: ActivateAbilityAction,
 	source: ChoiceSource,
 ): void {
-	activateAbilityIn(engine, state, priorityPlayer, action, asChoiceController(engine, source));
+	activateAbilityIn(
+		engine,
+		state,
+		priorityPlayer,
+		action,
+		asChoiceController(engine, source),
+	);
 }
 
 /**
@@ -8549,7 +8634,8 @@ function activateAbilityIn(
 				"chooseManaAmount returned an option outside its own candidate list",
 			);
 			events = [
-				effectToEvent(engine, 
+				effectToEvent(
+					engine,
 					state,
 					context,
 					{ kind: "add-mana", player: "you", mana: { ...chosen } },
@@ -8632,7 +8718,11 @@ function activateAbilityIn(
 		const target = requiredTargetDefinition(targetDefinitions, ability.effects);
 		if (target) {
 			const ctx = { controller: priorityPlayer, source: object.id };
-			const candidates = legalTargets(createReadContext(engine, state), target, ctx);
+			const candidates = legalTargets(
+				createReadContext(engine, state),
+				target,
+				ctx,
+			);
 			if (candidates.length === 0) {
 				throw new IllegalAbilityActivationError(
 					`ability ${action.ability} has no legal target`,
@@ -8645,7 +8735,9 @@ function activateAbilityIn(
 				target,
 				candidates,
 			);
-			if (!isLegalTarget(createReadContext(engine, state), target, chosen, ctx)) {
+			if (
+				!isLegalTarget(createReadContext(engine, state), target, chosen, ctx)
+			) {
 				throw new IllegalAbilityActivationError(
 					`ability ${action.ability}'s chosen target is no longer legal`,
 				);
@@ -8741,7 +8833,8 @@ function activateAbilityIn(
 		if (spentMana) state.revision++;
 
 		if (ability.cost.tapSelf) {
-			const tapPayment = performIn(engine, 
+			const tapPayment = performIn(
+				engine,
 				state,
 				{ kind: "tap", ref: { kind: "object", object: object.id } },
 				choices,
@@ -8764,7 +8857,8 @@ function activateAbilityIn(
 
 		if (sacrificeCost) {
 			assertDefined(sacrificePayment);
-			const sacrifice = performIn(engine, 
+			const sacrifice = performIn(
+				engine,
 				state,
 				{ kind: "sacrifice", object: sacrificePayment },
 				choices,
@@ -8785,7 +8879,8 @@ function activateAbilityIn(
 
 		if (discardCost) {
 			assertDefined(discardPayment);
-			const discard = performIn(engine, 
+			const discard = performIn(
+				engine,
 				state,
 				{
 					kind: "discard",
@@ -8822,7 +8917,8 @@ function activateAbilityIn(
 	}
 	if (ability.kind === "mana") {
 		log(state, `  [mana ability] ${ability.text}`);
-		for (const event of events) performIn(engine, state, event, choices, scope, 0);
+		for (const event of events)
+			performIn(engine, state, event, choices, scope, 0);
 	}
 }
 
@@ -8843,7 +8939,13 @@ function executeCastAction(
 	action: CastAction,
 	source: ChoiceSource,
 ): void {
-	castSpellIn(engine, state, priorityPlayer, action, asChoiceController(engine, source));
+	castSpellIn(
+		engine,
+		state,
+		priorityPlayer,
+		action,
+		asChoiceController(engine, source),
+	);
 }
 
 function castSpellIn(
@@ -8938,7 +9040,8 @@ function castSpellIn(
 	const checkpoint = structuredClone(state);
 	let castSpell: ObjectId;
 	try {
-		const movement = performIn(engine, 
+		const movement = performIn(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -8992,7 +9095,11 @@ function castSpellIn(
 
 		if (target) {
 			const ctx = { controller: priorityPlayer, source: spellId };
-			const candidates = legalTargets(createReadContext(engine, state), target, ctx);
+			const candidates = legalTargets(
+				createReadContext(engine, state),
+				target,
+				ctx,
+			);
 			if (candidates.length === 0) {
 				throw new IllegalCastError(
 					`${characteristics.name} has no legal target`,
@@ -9005,7 +9112,9 @@ function castSpellIn(
 				target,
 				candidates,
 			);
-			if (!isLegalTarget(createReadContext(engine, state), target, chosen, ctx)) {
+			if (
+				!isLegalTarget(createReadContext(engine, state), target, chosen, ctx)
+			) {
 				throw new IllegalCastError(
 					`${characteristics.name}'s chosen target is no longer legal`,
 				);
@@ -9059,7 +9168,8 @@ function castSpellIn(
 
 		if (additionalCost) {
 			assertDefined(sacrificePayment);
-			const sacrifice = performIn(engine, 
+			const sacrifice = performIn(
+				engine,
 				state,
 				{ kind: "sacrifice", object: sacrificePayment },
 				choices,
@@ -9086,7 +9196,8 @@ function castSpellIn(
 
 	// CR 601.2i: the spell has been cast. Cast triggers fire only now, once the
 	// announcement transaction has committed and can no longer be rewound.
-	performIn(engine, 
+	performIn(
+		engine,
 		state,
 		{ kind: "cast", player: priorityPlayer, spell: castSpell },
 		choices,
@@ -9110,7 +9221,13 @@ function executeLandAction(
 	action: PlayLandAction,
 	source: ChoiceSource,
 ): void {
-	playLandIn(engine, state, priorityPlayer, action, asChoiceController(engine, source));
+	playLandIn(
+		engine,
+		state,
+		priorityPlayer,
+		action,
+		asChoiceController(engine, source),
+	);
 }
 
 function playLandIn(
@@ -9167,7 +9284,8 @@ function playLandIn(
 		throw new IllegalLandPlayError(`object ${action.card} is not a land`);
 	}
 
-	performIn(engine, 
+	performIn(
+		engine,
 		state,
 		{
 			kind: "change zone",
@@ -9329,7 +9447,8 @@ function performTurnBasedActions(
 ): void {
 	switch (step.kind) {
 		case "untap":
-			performIn(engine, 
+			performIn(
+				engine,
 				state,
 				{
 					kind: "untap",
@@ -9342,7 +9461,8 @@ function performTurnBasedActions(
 			break;
 		case "draw":
 			state.players[active].drawnInDrawStep = 0;
-			performIn(engine, 
+			performIn(
+				engine,
 				state,
 				{ kind: "draw", player: active },
 				choices,
@@ -9351,7 +9471,8 @@ function performTurnBasedActions(
 			);
 			break;
 		case "cleanup":
-			performIn(engine, 
+			performIn(
+				engine,
 				state,
 				{
 					kind: "discard",
@@ -9382,7 +9503,8 @@ function performTurnBasedActions(
 			// order is preserved so the offered options are stable and deterministic.
 			const eligible = eligibleAttackers(engine, state, active);
 			const attackers = choices.chooseAttackers(state, active, eligible);
-			performIn(engine, 
+			performIn(
+				engine,
 				state,
 				{
 					kind: "declare attackers",
@@ -9535,7 +9657,8 @@ function performTurnBasedActions(
 					),
 				);
 			}
-			for (const ev of events) performIn(engine, state, ev, choices, newScope(), 0);
+			for (const ev of events)
+				performIn(engine, state, ev, choices, newScope(), 0);
 			break;
 		}
 		case "upkeep":
@@ -9548,7 +9671,10 @@ function performTurnBasedActions(
 			// attackers. This deviates from the attacker model: blockers are
 			// (blocker, attacker) pairs, not a plain list of IDs.
 			const defender = (1 - active) as PlayerId;
-			const attackers = creaturesControlledBy(createReadContext(engine, state), active)
+			const attackers = creaturesControlledBy(
+				createReadContext(engine, state),
+				active,
+			)
 				.filter((o) => o.attacking)
 				.map((o) => o.id);
 			const eligible = eligibleBlockers(engine, state, defender);
@@ -9558,7 +9684,8 @@ function performTurnBasedActions(
 				attackers,
 				eligible,
 			);
-			performIn(engine, 
+			performIn(
+				engine,
 				state,
 				{
 					kind: "declare blockers",
@@ -9639,11 +9766,7 @@ function startGame(
 	throw new Error("the pre-game did not reach the first turn");
 }
 
-function advance(
-	engine: Engine,
-	state: GameState,
-	source: ChoiceSource,
-): void {
+function advance(engine: Engine, state: GameState, source: ChoiceSource): void {
 	advanceIn(engine, state, asChoiceController(engine, source));
 }
 
@@ -9685,7 +9808,8 @@ function advanceIn(
 
 			case "advanceTurn": {
 				const turn = takeNextTurn(state);
-				const result = performIn(engine, 
+				const result = performIn(
+					engine,
 					state,
 					{
 						kind: "begin turn",
@@ -9755,7 +9879,8 @@ function advanceIn(
 							? "precombat"
 							: "postcombat"
 						: undefined;
-				const result = performIn(engine, 
+				const result = performIn(
+					engine,
 					state,
 					{
 						kind: "begin phase",
@@ -9805,7 +9930,8 @@ function advanceIn(
 					continue;
 				}
 
-				const result = performIn(engine, 
+				const result = performIn(
+					engine,
 					state,
 					{
 						kind: "begin step",

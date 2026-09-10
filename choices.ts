@@ -4,8 +4,8 @@ import type {
 	ActivatedAbilityStackItem,
 	BlockAssignment,
 	BoundReplacement,
-	EntityRef,
 	Engine,
+	EntityRef,
 	GameEvent,
 	GameState,
 	ManaAmount,
@@ -14,9 +14,9 @@ import type {
 	PendingTrigger,
 	PlayerId,
 	PlayerView,
+	PredicateContext,
 	PriorityAction,
 	ReadonlyGameState,
-	PredicateContext,
 	TargetDef,
 	TriggeredAbilityStackItem,
 	TurnLocation,
@@ -647,7 +647,10 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		this.decisions = clone(transcript?.choices ?? []);
 	}
 
-	static record(engine: Engine, agents: SyncAgentPair): ChoiceController<false> {
+	static record(
+		engine: Engine,
+		agents: SyncAgentPair,
+	): ChoiceController<false> {
 		return new ChoiceController(engine, agents, false);
 	}
 
@@ -945,9 +948,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			new Set(input.objects).size === input.objects.length,
 			"object choice received duplicate objects",
 		);
-		const read = input.predicate
-			? this.engine.createReadContext(state)
-			: null;
+		const read = input.predicate ? this.engine.createReadContext(state) : null;
 		const objects = input.objects.filter((id) => {
 			if (!input.predicate) return true;
 			assertDefined(read);
@@ -1141,7 +1142,11 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		const candidates: { id: string; value: BlockAssignment }[] = [];
 		for (const blocker of eligibleBlockers) {
 			for (const attacker of attackers) {
-				if (!this.engine.eligibleBlockers(state, player, attacker).includes(blocker))
+				if (
+					!this.engine
+						.eligibleBlockers(state, player, attacker)
+						.includes(blocker)
+				)
 					continue;
 				candidates.push({
 					id: blockAssignmentOptionId(blocker, attacker),

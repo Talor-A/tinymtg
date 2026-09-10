@@ -1,4 +1,4 @@
-import { registerCardFixture } from "./corpus.ts";
+import { loadCardFixture } from "./corpus.ts";
 import type {
 	CharacteristicsSnapshot,
 	Color,
@@ -15,14 +15,14 @@ import type {
 import {
 	activePlayer,
 	cloneCharacteristics,
-	etbPreview,
+	defineCard,
 	getSnapshot,
 	maybeObject,
 	maybePermanent,
-	registerCard,
 	turnLocation,
 } from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
+import { CLUE_CARD } from "./tokens.ts";
 
 /* ------------------------------------------------------------------ *
  * Cards sourced from the Forge corpus
@@ -33,54 +33,56 @@ import { assert, assertDefined } from "./lib/assert.ts";
  * as its gap closes, and this file goes away once the list is empty.
  * ------------------------------------------------------------------ */
 
-registerCardFixture("f/forest");
-registerCardFixture("g/grizzly_bears");
-registerCardFixture("e/eager_cadet");
-registerCardFixture("d/darksteel_myr");
-registerCardFixture("d/darksteel_relic");
-registerCardFixture("f/faithful_watchdog");
-registerCardFixture("a/ajanis_mantra");
-registerCardFixture("a/arashin_cleric");
-registerCardFixture("r/rhox_war_monk");
-registerCardFixture("r/root_maze");
-registerCardFixture("r/revitalize");
-registerCardFixture("v/viscera_seer");
-registerCardFixture("b/blazing_hellhound");
-registerCardFixture("b/bartolome_del_presidio");
-registerCardFixture("a/acolyte_of_aclazotz");
-registerCardFixture("c/counterspell");
-registerCardFixture("b/beast_whisperer");
-registerCardFixture("s/staff_of_the_death_magus");
-registerCardFixture("s/student_of_ojutai");
-registerCardFixture("s/sneaky_snacker");
-registerCardFixture("t/third_path_iconoclast");
-registerCardFixture("c/clone");
-registerCardFixture("b/benalish_veteran");
-registerCardFixture("z/zof_shade");
-registerCardFixture("u/unsummon");
-registerCardFixture("i/impulse");
-registerCardFixture("s/stock_up");
-registerCardFixture("t/thrashing_brontodon");
-registerCardFixture("c/cathar_commando");
-registerCardFixture("r/resolute_reinforcements");
-registerCardFixture("m/monastery_swiftspear");
-registerCardFixture("t/thor_odinson");
-registerCardFixture("j/jewel_thief");
-registerCardFixture("g/gilded_goose");
-registerCardFixture("s/sweettooth_witch");
-registerCardFixture("b/blood_servitor");
-registerCardFixture("s/samurai_of_the_pale_curtain");
-registerCardFixture("v/vision_skeins");
-registerCardFixture("f/forced_fruition");
-registerCardFixture("w/wrenns_resolve");
-registerCardFixture("c/cloudshift");
-registerCardFixture("r/restoration_angel");
+const CORPUS_CARDS = [
+	loadCardFixture("f/forest"),
+	loadCardFixture("g/grizzly_bears"),
+	loadCardFixture("e/eager_cadet"),
+	loadCardFixture("d/darksteel_myr"),
+	loadCardFixture("d/darksteel_relic"),
+	loadCardFixture("f/faithful_watchdog"),
+	loadCardFixture("a/ajanis_mantra"),
+	loadCardFixture("a/arashin_cleric"),
+	loadCardFixture("r/rhox_war_monk"),
+	loadCardFixture("r/root_maze"),
+	loadCardFixture("r/revitalize"),
+	loadCardFixture("v/viscera_seer"),
+	loadCardFixture("b/blazing_hellhound"),
+	loadCardFixture("b/bartolome_del_presidio"),
+	loadCardFixture("a/acolyte_of_aclazotz"),
+	loadCardFixture("c/counterspell"),
+	loadCardFixture("b/beast_whisperer"),
+	loadCardFixture("s/staff_of_the_death_magus"),
+	loadCardFixture("s/student_of_ojutai"),
+	loadCardFixture("s/sneaky_snacker"),
+	loadCardFixture("t/third_path_iconoclast"),
+	loadCardFixture("c/clone"),
+	loadCardFixture("b/benalish_veteran"),
+	loadCardFixture("z/zof_shade"),
+	loadCardFixture("u/unsummon"),
+	loadCardFixture("i/impulse"),
+	loadCardFixture("s/stock_up"),
+	loadCardFixture("t/thrashing_brontodon"),
+	loadCardFixture("c/cathar_commando"),
+	loadCardFixture("r/resolute_reinforcements"),
+	loadCardFixture("m/monastery_swiftspear"),
+	loadCardFixture("t/thor_odinson"),
+	loadCardFixture("j/jewel_thief"),
+	loadCardFixture("g/gilded_goose"),
+	loadCardFixture("s/sweettooth_witch"),
+	loadCardFixture("b/blood_servitor"),
+	loadCardFixture("s/samurai_of_the_pale_curtain"),
+	loadCardFixture("v/vision_skeins"),
+	loadCardFixture("f/forced_fruition"),
+	loadCardFixture("w/wrenns_resolve"),
+	loadCardFixture("c/cloudshift"),
+	loadCardFixture("r/restoration_angel"),
+] as const;
 
 /**
  * Gatherer 2X2 #100. The Forge corpus has no local entry for this card, so its
  * current Oracle characteristics and abilities are hand-authored here.
  */
-export const ABBOT_OF_KERAL_KEEP = registerCard({
+export const ABBOT_OF_KERAL_KEEP = defineCard({
 	id: "abbot-of-keral-keep",
 	name: "Abbot of Keral Keep",
 	types: ["creature"],
@@ -172,9 +174,9 @@ function isCreatureRecipient(ctx: EffectCtx, ev: GameEvent): boolean {
 		);
 	}
 	if (ev.kind === "change zone" && ev.destination.zone === "battlefield")
-		return etbPreview(ctx.state, ev).currentCharacteristics.types.includes(
-			"creature",
-		);
+		return ctx.read.engine
+			.etbPreview(ctx.state, ev)
+			.currentCharacteristics.types.includes("creature");
 	return false;
 }
 
@@ -186,7 +188,7 @@ function onBattlefield(ctx: EffectCtx): boolean {
  * Counter modifiers
  * ------------------------------------------------------------------ */
 
-export const HARDENED_SCALES = registerCard({
+export const HARDENED_SCALES = defineCard({
 	id: "hardened-scales",
 	name: "Hardened Scales",
 	types: ["enchantment"],
@@ -243,7 +245,7 @@ export const HARDENED_SCALES = registerCard({
 	],
 });
 
-export const DOUBLING_SEASON = registerCard({
+export const DOUBLING_SEASON = defineCard({
 	id: "doubling-season",
 	name: "Doubling Season",
 	types: ["enchantment"],
@@ -293,7 +295,7 @@ export const DOUBLING_SEASON = registerCard({
 // activated abilities (pay 4 to add a counter; remove a counter to ping).
 // Neither is implemented here — this fixture only exercises "enters with a
 // fixed number of +1/+1 counters" for CR 614.1c self-replacement tests.
-export const TEST_ENTERS_WITH_COUNTERS = registerCard({
+export const TEST_ENTERS_WITH_COUNTERS = defineCard({
 	id: "test-enters-with-counters",
 	name: "TEST ONLY — Enters With Counters",
 	types: ["artifact", "creature"],
@@ -305,7 +307,7 @@ export const TEST_ENTERS_WITH_COUNTERS = registerCard({
 	entersWith: { "+1/+1": 2 },
 });
 
-export const EXPLORATION = registerCard({
+export const EXPLORATION = defineCard({
 	id: "exploration",
 	name: "Exploration",
 	types: ["enchantment"],
@@ -321,7 +323,7 @@ export const EXPLORATION = registerCard({
 	],
 });
 
-export const AZUSA_LOST_BUT_SEEKING = registerCard({
+export const AZUSA_LOST_BUT_SEEKING = defineCard({
 	id: "azusa-lost-but-seeking",
 	name: "Azusa, Lost but Seeking",
 	supertypes: ["legendary"],
@@ -341,7 +343,7 @@ export const AZUSA_LOST_BUT_SEEKING = registerCard({
 	],
 });
 
-export const AESTHIR_GLIDER = registerCard({
+export const AESTHIR_GLIDER = defineCard({
 	id: "aesthir-glider",
 	name: "Aesthir Glider",
 	types: ["artifact", "creature"],
@@ -370,7 +372,7 @@ export const AESTHIR_GLIDER = registerCard({
 // this only implements the graveyard-replacement half of leyline of the void
 // card text; it does not implement the opening-hand ability (the engine has
 // no pre-game phase yet).
-export const BABY_LEYLINE_OF_THE_VOID = registerCard({
+export const BABY_LEYLINE_OF_THE_VOID = defineCard({
 	id: "baby-leyline-of-the-void",
 	name: "Baby Leyline of the Void",
 	types: ["enchantment"],
@@ -406,7 +408,7 @@ export const BABY_LEYLINE_OF_THE_VOID = registerCard({
  * Draw replacement, and the chain that must terminate
  * ------------------------------------------------------------------ */
 
-export const CHAINS_OF_MEPHISTOPHELES = registerCard({
+export const CHAINS_OF_MEPHISTOPHELES = defineCard({
 	id: "chains-of-mephistopheles",
 	name: "Chains of Mephistopheles",
 	types: ["enchantment"],
@@ -461,7 +463,7 @@ export const CHAINS_OF_MEPHISTOPHELES = registerCard({
 // "skip your draw step" clause is implemented, which is the card's drawback,
 // not its function. This fixture exists to test the "skip" replacement
 // pattern (CR 614.10), not to stand in for Necropotence.
-export const TEST_SKIP_DRAW_STEP = registerCard({
+export const TEST_SKIP_DRAW_STEP = defineCard({
 	id: "test-skip-draw-step",
 	name: "TEST ONLY — Skip Draw Step",
 	types: ["enchantment"],
@@ -489,7 +491,7 @@ export const TEST_SKIP_DRAW_STEP = registerCard({
  * Damage: doubling, redirection, prevention
  * ------------------------------------------------------------------ */
 
-export const FURNACE_OF_RATH = registerCard({
+export const FURNACE_OF_RATH = defineCard({
 	id: "furnace-of-rath",
 	name: "Furnace of Rath",
 	types: ["enchantment"],
@@ -511,7 +513,7 @@ export const FURNACE_OF_RATH = registerCard({
 	],
 });
 
-export const PALISADE_GIANT = registerCard({
+export const PALISADE_GIANT = defineCard({
 	id: "palisade-giant",
 	name: "Palisade Giant",
 	types: ["creature"],
@@ -553,7 +555,7 @@ export const PALISADE_GIANT = registerCard({
  * ------------------------------------------------------------------ */
 
 // this only implements the first half of mycosynth lattice card text.
-export const BABY_MYCOSYNTH = registerCard({
+export const BABY_MYCOSYNTH = defineCard({
 	id: "baby-mycosynth-lattice",
 	name: "Baby Mycosynth Lattice",
 	types: ["artifact"],
@@ -583,7 +585,7 @@ export const BABY_MYCOSYNTH = registerCard({
  * or card id. Do not import the real Clone under this definition.
  * ------------------------------------------------------------------ */
 
-export const TEST_FORCED_COPY = registerCard({
+export const TEST_FORCED_COPY = defineCard({
 	id: "test-forced-copy",
 	name: "TEST ONLY — Forced Copy",
 	types: ["creature"],
@@ -649,7 +651,7 @@ function pickForcedCopySource(
  * Can't lose / alternate win conditions
  * ------------------------------------------------------------------ */
 
-export const LABORATORY_MANIAC = registerCard({
+export const LABORATORY_MANIAC = defineCard({
 	id: "laboratory-maniac",
 	name: "Laboratory Maniac",
 	types: ["creature"],
@@ -685,7 +687,7 @@ export const LABORATORY_MANIAC = registerCard({
 	],
 });
 
-export const PLATINUM_ANGEL = registerCard({
+export const PLATINUM_ANGEL = defineCard({
 	id: "platinum-angel",
 	name: "Platinum Angel",
 	types: ["artifact", "creature"],
@@ -773,7 +775,7 @@ export function gatherSpecimens(): NewTemporaryEffect {
  * exercises it.
  * ------------------------------------------------------------------ */
 
-export const TEST_KALITAS_REPLACEMENT = registerCard({
+export const TEST_KALITAS_REPLACEMENT = defineCard({
 	id: "test-kalitas-replacement",
 	name: "TEST ONLY — Kalitas-Style Graveyard Replacement",
 	types: ["creature"],
@@ -836,3 +838,26 @@ export const TEST_KALITAS_REPLACEMENT = registerCard({
 		},
 	],
 });
+
+/** Complete card collection used by the demo and broad engine tests. */
+export const CARDS = [
+	...CORPUS_CARDS,
+	CLUE_CARD,
+	ABBOT_OF_KERAL_KEEP,
+	HARDENED_SCALES,
+	DOUBLING_SEASON,
+	TEST_ENTERS_WITH_COUNTERS,
+	EXPLORATION,
+	AZUSA_LOST_BUT_SEEKING,
+	AESTHIR_GLIDER,
+	BABY_LEYLINE_OF_THE_VOID,
+	CHAINS_OF_MEPHISTOPHELES,
+	TEST_SKIP_DRAW_STEP,
+	FURNACE_OF_RATH,
+	PALISADE_GIANT,
+	BABY_MYCOSYNTH,
+	TEST_FORCED_COPY,
+	LABORATORY_MANIAC,
+	PLATINUM_ANGEL,
+	TEST_KALITAS_REPLACEMENT,
+] as const;

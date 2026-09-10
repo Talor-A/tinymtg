@@ -71,7 +71,6 @@ import {
 	characteristicsFromCardDef,
 	cloneCharacteristics,
 	defineCard,
-	etbPreview,
 	getSnapshot,
 	MANA_COST_TYPES,
 	objectMatchesPredicate,
@@ -398,8 +397,7 @@ function parseDrawnPlayer(value: string | undefined): ValidPlayer | null {
 }
 
 function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
-	if (modifier === "Other")
-		return { kind: "not", predicate: { kind: "self" } };
+	if (modifier === "Other") return { kind: "not", predicate: { kind: "self" } };
 	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
 	if (modifier === "YouOwn") return { kind: "owner", player: "you" };
@@ -414,8 +412,7 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	if (color) predicate = { kind: "color", color };
 	else if (type) predicate = { kind: "type", type };
 	else if (supertype) predicate = { kind: "supertype", supertype };
-	if (predicate)
-		return negated ? { kind: "not", predicate } : predicate;
+	if (predicate) return negated ? { kind: "not", predicate } : predicate;
 	// `nonAngel`: a negated subtype. Only a surveyed one lowers, so Forge
 	// pseudo-restrictions such as `nonChosenCard`, and typos, reject rather
 	// than lower to a restriction no card can satisfy.
@@ -552,7 +549,9 @@ function parseSelector(value: string): ObjectPredicateDef | null {
 	const choices = value
 		.split(",")
 		.map((part) => parseSelectorPart(part.trim()));
-	return choices.every((choice): choice is ObjectPredicateDef => choice !== null)
+	return choices.every(
+		(choice): choice is ObjectPredicateDef => choice !== null,
+	)
 		? combinePredicates("or", choices)
 		: null;
 }
@@ -572,7 +571,9 @@ function parseCopySelector(value: string): ObjectPredicateDef | null {
 				])
 			: selector;
 	});
-	return choices.every((choice): choice is ObjectPredicateDef => choice !== null)
+	return choices.every(
+		(choice): choice is ObjectPredicateDef => choice !== null,
+	)
 		? combinePredicates("or", choices)
 		: null;
 }
@@ -2514,10 +2515,14 @@ function lowerGraveyardExileReplacement(
 			// The permanent is still on the battlefield while the replacement is
 			// evaluated, so its current characteristics are what the selector
 			// reads (CR 608.2h's last known information is not needed yet).
-			return objectMatchesPredicate(selector, getSnapshot(ctx.read, ev.object), {
-				controller: ctx.controller,
-				id: ctx.self.id,
-			});
+			return objectMatchesPredicate(
+				selector,
+				getSnapshot(ctx.read, ev.object),
+				{
+					controller: ctx.controller,
+					id: ctx.self.id,
+				},
+			);
 		},
 		// `from !== null` excludes a token's creation event, which shares the
 		// change-zone kind but must keep its battlefield destination.
@@ -2664,10 +2669,14 @@ function lowerReplacement(
 				ev.destination.tapped
 			)
 				return false;
-			return objectMatchesPredicate(selector, etbPreview(ctx.state, ev), {
-				controller: ctx.controller,
-				id: ctx.self.id,
-			});
+			return objectMatchesPredicate(
+				selector,
+				ctx.read.engine.etbPreview(ctx.state, ev),
+				{
+					controller: ctx.controller,
+					id: ctx.self.id,
+				},
+			);
 		},
 		replace: (ev: GameEvent) =>
 			ev.kind === "change zone" && ev.destination.zone === "battlefield"

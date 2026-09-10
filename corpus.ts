@@ -1,22 +1,22 @@
 /**
- * corpus.ts — registers cards straight out of the vendored Forge corpus.
+ * corpus.ts — loads cards straight out of the vendored Forge corpus.
  *
  * The card database is being migrated off hand-authored definitions and onto
  * `cards/cardsfolder`, so every card that the importer already lowers is
- * registered from its real Forge script rather than transcribed by hand. A
- * card registered this way is exactly what `forge/import.ts` produces; there
+ * loaded from its real Forge script rather than transcribed by hand. A card
+ * loaded this way is exactly what `forge/import.ts` produces; there
  * is no engine-side patching of the result.
  */
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { importForgeCard } from "./forge/import.ts";
-import { registerCard } from "./index.ts";
+import type { CardDef } from "./index.ts";
 
 const CORPUS_ROOT = join(import.meta.dir, "cards", "cardsfolder");
 
 /**
- * Registers `cards/cardsfolder/<cardsfolderPath>.txt`. The card id is the
+ * Loads `cards/cardsfolder/<cardsfolderPath>.txt`. The card id is the
  * corpus filename with underscores turned into dashes, so `g/grizzly_bears`
  * registers as `grizzly-bears`.
  *
@@ -24,7 +24,7 @@ const CORPUS_ROOT = join(import.meta.dir, "cards", "cardsfolder");
  * wants that card, and a silently missing registration would surface much
  * later as an `unknown card` at spawn time.
  */
-export function registerCardFixture(cardsfolderPath: string): void {
+export function loadCardFixture(cardsfolderPath: string): CardDef {
 	const text = readFileSync(
 		join(CORPUS_ROOT, `${cardsfolderPath}.txt`),
 		"utf8",
@@ -40,5 +40,5 @@ export function registerCardFixture(cardsfolderPath: string): void {
 				.map((d) => `${d.code}: ${d.message}`)
 				.join("; ")}`,
 		);
-	registerCard(result.card);
+	return result.card;
 }
