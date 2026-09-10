@@ -2464,6 +2464,7 @@ function lowerTrigger(
 				new Set([
 					"mode",
 					"validcard",
+					"number",
 					"triggerzones",
 					"execute",
 					"optionaldecider",
@@ -2472,10 +2473,18 @@ function lowerTrigger(
 				where,
 			);
 			if (badParams) return badParams;
-			if (getForgeParam(params, "TriggerZones") !== "Battlefield")
+			// Sneaky Snacker is the first graveyard-sourced Drawn trigger: it
+			// functions from its owner's graveyard, so only that single zone (or
+			// the default battlefield) is accepted, not a comma-separated list.
+			const triggerZones = getForgeParam(params, "TriggerZones");
+			if (
+				triggerZones !== undefined &&
+				triggerZones !== "Battlefield" &&
+				triggerZones !== "Graveyard"
+			)
 				return issue(
 					"UNSUPPORTED_EFFECT",
-					"only battlefield Drawn triggers are supported",
+					"only battlefield and graveyard Drawn triggers are supported",
 					where,
 				);
 			// Forge matches the drawn card, but a card is only ever drawn from
@@ -2490,12 +2499,50 @@ function lowerTrigger(
 					`unsupported Drawn ValidCard$ ${rawSelector}`,
 					where,
 				);
+			// Number$ N fires only on the Nth draw of the turn — an equality, not a
+			// threshold (Red Ghost Intangible Genius, Sneaky Snacker).
+			const numberText = getForgeParam(params, "Number");
+			const nth =
+				numberText === undefined ? undefined : positiveInteger(numberText);
+			if (nth === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"Drawn Number$ must be a positive integer",
+					where,
+				);
+			// A graveyard Drawn trigger functions with a card as its source, so
+			// the only effect the engine can resolve from there is the source
+			// reanimating itself: ChangeZone Graveyard -> Battlefield. Everything
+			// else assumes a permanent source (Cellar Coatl's self PutCounter) and
+			// would resolve to a silent no-op, so reject it here.
+			if (triggerZones === "Graveyard") {
+				const reanimation = effects.every(
+					(effect) =>
+						effect.kind === "change-zone" &&
+						effect.object === "source" &&
+						effect.from === "graveyard" &&
+						effect.destination.zone === "battlefield",
+				);
+				if (!reanimation)
+					return issue(
+						"UNSUPPORTED_EFFECT",
+						"a graveyard Drawn trigger can only reanimate its source",
+						where,
+					);
+			}
 			return {
 				id: execute,
 				text,
-				condition: { kind: "draw", player: drawPlayer },
+				condition: {
+					kind: "draw",
+					player: drawPlayer,
+					...(nth !== undefined ? { nth } : {}),
+				},
 				targets,
 				effects,
+				...(triggerZones === "Graveyard"
+					? { functionsFrom: ["graveyard"] }
+					: {}),
 			};
 		}
 		case "Attacks": {
@@ -3635,8 +3682,8 @@ export function lowerForgeCard(
 	)
 		usedSVarNames.add("playmain1");
 	// SacMe ranks how eagerly Forge's AI sacrifices the card, which only says
-	// anything about a card that wants to be in the graveyard. A dies trigger is
-	// the supported shape that gives it that reason.
+	// anything about a card that wants to be in the graveyard. A dies trigger,
+	// or an ability that functions from the graveyard, gives it that reason.
 	const sacMe = lookupForgeSVar(face, "SacMe")?.parsed;
 	if (
 		(triggers.some(
@@ -3648,18 +3695,20 @@ export function lowerForgeCard(
 				(ability) =>
 					ability.kind === "activated" &&
 					ability.functionsFrom?.[0] === "graveyard",
-			)) &&
+			) ||
+			triggers.some((trigger) => trigger.functionsFrom?.[0] === "graveyard")) &&
 		sacMe?.kind === "scalar" &&
 		/^[0-9]+$/.test(sacMe.value)
 	)
 		usedSVarNames.add("sacme");
 	const discardMe = lookupForgeSVar(face, "DiscardMe")?.parsed;
 	if (
-		activatedAbilities.some(
+		(activatedAbilities.some(
 			(ability) =>
 				ability.kind === "activated" &&
 				ability.functionsFrom?.[0] === "graveyard",
-		) &&
+		) ||
+			triggers.some((trigger) => trigger.functionsFrom?.[0] === "graveyard")) &&
 		discardMe?.kind === "scalar" &&
 		/^[0-9]+$/.test(discardMe.value)
 	)

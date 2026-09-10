@@ -1581,6 +1581,8 @@ interface PlayerState {
 	counters: PlayerCounterBag;
 	/** Turn-scoped counters, e.g. cards drawn in the draw step (Chains of Mephistopheles). */
 	drawnInDrawStep: number;
+	/** Cards this player has drawn during the current turn, from any zone or effect. */
+	drawnThisTurn: number;
 	/** Set when the player has attempted to draw from an empty library since the last SBA check (CR 704.5b). */
 	drewFromEmptyLibrary: boolean;
 	manaPool: ManaPool;
@@ -2227,6 +2229,13 @@ interface GainLifeTriggerCondition {
 interface DrawTriggerCondition {
 	kind: "draw";
 	player: ValidPlayer;
+	/**
+	 * Fire only on the Nth card that player has drawn this turn, e.g. Sneaky
+	 * Snacker's "when you draw your third card in a turn". The counter is
+	 * incremented before triggers are detected, so the event itself is already
+	 * counted when this is checked.
+	 */
+	nth?: number;
 }
 
 /** Matches this source dealing combat damage to a player. */
@@ -2906,6 +2915,7 @@ const newPlayerState = (id: PlayerId): PlayerState => ({
 	graveyard: [],
 	exile: [],
 	drawnInDrawStep: 0,
+	drawnThisTurn: 0,
 	drewFromEmptyLibrary: false,
 	manaPool: { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 },
 	landsPlayed: 0,
@@ -5189,6 +5199,7 @@ function executeIn(
 				happened = false;
 				break;
 			}
+			p.drawnThisTurn++;
 			if (
 				currentStepKind(state) === "draw" &&
 				activePlayer(state) === ev.player
@@ -6058,8 +6069,10 @@ function enqueueTrigger(
 	trigger: TriggeredAbilityDefinition,
 	triggeringEvent: DeepReadOnly<GameEvent>,
 ): void {
-	const controller = controllerOf(source);
-	assertDefined(controller);
+	// A card in the graveyard has no controller (CR 109.4). Its owner is the
+	// only player the engine can mean by "you" for a trigger that functions
+	// from there, so the pending trigger belongs to the owner.
+	const controller = controllerOf(source) ?? source.owner;
 	// Copied, not referenced: the pending trigger and the stack item built from
 	// it outlive the source and must not write back into the card registry.
 	state.pendingTriggers.push({
@@ -6084,8 +6097,9 @@ function relativePlayerMatches(
 	source: DeepReadOnly<GameObject>,
 ): boolean {
 	if (expected === "either") return true;
-	const controller = controllerOf(source);
-	assertDefined(controller);
+	// A card in the graveyard has no controller (CR 109.4); its owner is
+	// the player "you" means for a trigger that functions from there.
+	const controller = controllerOf(source) ?? source.owner;
 	return expected === "you" ? actual === controller : actual !== controller;
 }
 
@@ -6095,11 +6109,9 @@ function triggerSubjectsMatch(
 	subjects: DeepReadOnly<GameObject>[],
 	selector: ObjectSelectorDef,
 ): boolean {
-	const controller = controllerOf(source);
-	assertDefined(
-		controller,
-		"a functioning trigger source must have a controller",
-	);
+	// A card in the graveyard has no controller (CR 109.4); its owner is
+	// the player "you" means for a trigger that functions from there.
+	const controller = controllerOf(source) ?? source.owner;
 	return subjects.some((subject) =>
 		selectorMatches(selector, getSnapshot(read, subject.id), {
 			controller,
@@ -6131,13 +6143,20 @@ function triggerMatches(
 
 		case "gain life":
 		case "lose life":
-		case "draw":
-			assert(
-				ev.kind === "gain life" ||
-					ev.kind === "lose life" ||
-					ev.kind === "draw",
-			);
+			assert(ev.kind === "gain life" || ev.kind === "lose life");
 			return relativePlayerMatches(ev.player, condition.player, source);
+
+		case "draw": {
+			assert(ev.kind === "draw");
+			if (!relativePlayerMatches(ev.player, condition.player, source))
+				return false;
+			// An `nth` condition fires once: only on the draw that brings
+			// the turn's count to exactly `nth`.
+			return (
+				condition.nth === undefined ||
+				read.state.players[ev.player].drawnThisTurn === condition.nth
+			);
+		}
 
 		case "damage":
 			assert(ev.kind === "damage");
@@ -9328,6 +9347,9 @@ function advanceIn(state: GameState, choices: AnyChoiceController): void {
 				// so "whose turn is it" already answers with its player.
 				scheduler.progress = { kind: "inTurn", turn, location: null };
 				state.players[turn.player].landsPlayed = 0;
+				// A turn boundary closes every "...in a turn" draw count, for both
+				// players: an opponent can draw during your turn.
+				for (const p of state.players) p.drawnThisTurn = 0;
 				scheduler.remainingSteps = [];
 				scheduler.nextAction = { kind: "advancePhase", turn };
 				continue;

@@ -153,6 +153,7 @@ Ashen Rider
 Aspiring Aeronaut
 Assault Griffin
 Assault Zeppelid
+Atlantean Cavalry
 Atrocious Experiment
 Atzocan Seer
 Augmenting Automaton
@@ -790,6 +791,7 @@ Eroded Canyon
 Erratic Visionary
 Ertai, Wizard Adept
 Ertai, the Corrupted
+Erudite Wizard
 Esper Cormorants
 Essence Drain
 Essence Extraction
@@ -824,6 +826,7 @@ Fade into Antiquity
 Faerie Formation
 Faerie Invaders
 Faerie Seer
+Faerie Vandal
 Failed Inspection
 Faithbearer Paladin
 Faithful Watchdog
@@ -1273,6 +1276,7 @@ Implement of Improvement
 Implements of Sacrifice
 Implode
 Imposing Sovereign
+Improbable Alliance
 Improvised Weaponry
 Impulse
 Incurable Ogre
@@ -1303,6 +1307,7 @@ Intruding Soulrager
 Invasion Reinforcements
 Invoke the Divine
 Iona's Judgment
+Irencrag Pyromancer
 Iron Giant
 Iron Myr
 Iron Tusk Elephant
@@ -1418,7 +1423,9 @@ Knight of New Benalia
 Knight of the Keep
 Knight of the New Coalition
 Knight of the Tusk
+Knights of Dol Amroth
 Knotvine Mystic
+Knowledge Seeker
 Koala-Sheep
 Kobolds of Kher Keep
 Kolinahr Priest
@@ -1526,6 +1533,7 @@ Lys Alana Huntmaster
 Lys Alana Informant
 Maalfeld Twins
 Mad Prophet
+Mad Ratter
 Magic Pot
 Magma Jet
 Magmaw
@@ -1610,6 +1618,7 @@ Mintstrosity
 Mire Triton
 Mire in Misery
 Mirran Spy
+Mischievous Mystic
 Misshapen Fiend
 Mist Raven
 Mistral Charger
@@ -1885,6 +1894,7 @@ Primeval Bounty
 Primordial Pachyderm
 Primordial Sage
 Primordial Wurm
+Prince Imrahil the Fair
 Princess Lucrezia
 Prismari Campus
 Prismatic Lens
@@ -2343,6 +2353,7 @@ Smoldering Efreet
 Snake Pit
 Snapping Drake
 Snare Thopter
+Sneaky Snacker
 Sneering Shadewriter
 Snow-Covered Forest
 Snow-Covered Island
@@ -2614,6 +2625,7 @@ Think Tank
 Third Path Iconoclast
 Third Path Savant
 Thistledown Players
+Thopter Mechanic
 Thor Odinson
 Thornglint Bridge
 Thornhide Wolves
@@ -3005,4 +3017,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3002`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3014`;

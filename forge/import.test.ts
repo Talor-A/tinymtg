@@ -1203,15 +1203,52 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
-	test("a Drawn trigger outside the battlefield is rejected", () => {
+	test("a graveyard Drawn trigger can only reanimate its source", () => {
 		const result = importText(
 			`Name:Cellar Coatl\nManaCost:1 G U\nTypes:Creature Snake\nPT:2/2\nT:Mode$ Drawn | ValidCard$ Card.YouCtrl | TriggerZones$ Graveyard | Execute$ TrigPutCounter | TriggerDescription$ x\nSVar:TrigPutCounter:DB$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1\nOracle:\n`,
 		);
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.diagnostics[0]?.message).toBe(
-			"only battlefield Drawn triggers are supported",
+			"a graveyard Drawn trigger can only reanimate its source",
 		);
+	});
+
+	test("a Drawn trigger outside the battlefield and graveyard is rejected", () => {
+		const result = importText(
+			`Name:Sky Coatl\nManaCost:1 G U\nTypes:Creature Snake\nPT:2/2\nT:Mode$ Drawn | ValidCard$ Card.YouCtrl | TriggerZones$ Exile | Execute$ TrigPutCounter | TriggerDescription$ x\nSVar:TrigPutCounter:DB$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1\nOracle:\n`,
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.message).toBe(
+			"only battlefield and graveyard Drawn triggers are supported",
+		);
+	});
+
+	test("Sneaky Snacker lowers a graveyard Drawn trigger to a self reanimation", () => {
+		const result = importFixture("s/sneaky_snacker");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigChange",
+				text: expect.any(String),
+				condition: { kind: "draw", player: "you", nth: 3 },
+				functionsFrom: ["graveyard"],
+				targets: [],
+				effects: [
+					{
+						kind: "change-zone",
+						object: "source",
+						from: "graveyard",
+						destination: {
+							zone: "battlefield",
+							controller: "owner",
+							tapped: true,
+						},
+					},
+				],
+			},
+		]);
 	});
 
 	test("a Drawn trigger's unsupported ValidCard$ is rejected", () => {
