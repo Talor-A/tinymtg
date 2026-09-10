@@ -2309,19 +2309,30 @@ function lowerTrigger(
 					where,
 				);
 
+			// An omitted `ValidCard$`, or the bare `Card` spelling, watches every
+			// spell cast, so the condition carries no selector. Bare `Permanent`
+			// would need to exclude instant and sorcery spells, which the selector
+			// vocabulary cannot express, so it still rejects.
 			const rawSelector = getForgeParam(params, "ValidCard");
-			const selector = rawSelector ? parseSelector(rawSelector) : null;
-			if (selector === null)
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"SpellCast requires a supported ValidCard$ selector",
-					where,
-				);
+			let selector: ObjectSelectorDef | undefined;
+			if (rawSelector !== undefined && rawSelector !== "Card") {
+				const parsed = parseSelector(rawSelector);
+				if (parsed === null)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"SpellCast requires a supported ValidCard$ selector",
+						where,
+					);
+				selector = parsed;
+			}
 
 			return {
 				id: execute,
 				text,
-				condition: { kind: "cast", player: castPlayer, selector },
+				condition:
+					selector === undefined
+						? { kind: "cast", player: castPlayer }
+						: { kind: "cast", player: castPlayer, selector },
 				targets,
 				effects,
 			};

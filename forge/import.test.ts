@@ -1249,6 +1249,46 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Forced Fruition watches every spell an opponent casts", () => {
+		const result = importFixture("f/forced_fruition");
+		if (!result.ok) throw new Error("expected ok");
+		// `ValidCard$ Card` names no restriction, so the condition carries no
+		// selector: any spell cast by an opponent matches.
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigDraw",
+				text: expect.any(String),
+				condition: { kind: "cast", player: "opponent" },
+				targets: [],
+				effects: [{ kind: "draw", player: "triggering-player", amount: 7 }],
+			},
+		]);
+	});
+
+	test("SpellCast lowers an omitted or bare-Card ValidCard$ to an unrestricted condition", () => {
+		const card = (validCard: string) =>
+			[
+				"Name:Cast Watcher",
+				"ManaCost:1 U",
+				"Types:Enchantment",
+				`T:Mode$ SpellCast ${validCard} | ValidActivatingPlayer$ You | TriggerZones$ Battlefield | Execute$ Trig | TriggerDescription$ x`,
+				"SVar:Trig:DB$ Draw | Defined$ You | NumCards$ 1",
+				"Oracle:",
+				"",
+			].join("\n");
+
+		// Both an omitted `ValidCard$` and the bare `Card` spelling watch every
+		// spell cast, so neither lowers a selector onto the condition.
+		for (const validCard of ["", "| ValidCard$ Card"]) {
+			const result = importText(card(validCard));
+			if (!result.ok) throw new Error(`expected ${validCard} to import`);
+			expect(result.card.abilityDefinitions.triggered[0]?.condition).toEqual({
+				kind: "cast",
+				player: "you",
+			});
+		}
+	});
+
 	test("Staff of the Death Magus lowers both object-selected triggers", () => {
 		const result = importFixture("s/staff_of_the_death_magus");
 		if (!result.ok) throw new Error("expected ok");
@@ -1351,7 +1391,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				"",
 			].join("\n");
 
-		for (const selector of ["Card", "Creature.cmcGE5"]) {
+		for (const selector of ["Permanent", "Creature.cmcGE5"]) {
 			const result = importText(card(selector));
 			expect(result.ok).toBe(false);
 			if (result.ok) return;

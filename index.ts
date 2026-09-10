@@ -2241,7 +2241,8 @@ interface DealsCombatDamageTriggerCondition {
 interface CastTriggerCondition {
 	kind: "cast";
 	player: ValidPlayer;
-	selector: ObjectSelectorDef;
+	/** Omitted when the trigger matches every spell cast. */
+	selector?: ObjectSelectorDef;
 }
 
 /** Matches the player declaring attackers and/or each matching attacker. */
@@ -6122,6 +6123,7 @@ function triggerMatches(
 			assert(ev.kind === "cast");
 			if (!relativePlayerMatches(ev.player, condition.player, source))
 				return false;
+			if (condition.selector === undefined) return true;
 			const spell = maybeObject(read.state, ev.spell);
 			assert(spell?.kind === "spell", "cast event subject is not a spell");
 			return triggerSubjectsMatch(read, source, [spell], condition.selector);

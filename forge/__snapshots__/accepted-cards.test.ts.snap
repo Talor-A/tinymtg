@@ -474,6 +474,7 @@ Conservatory
 Consider
 Consulate Skygate
 Contaminated Aquifer
+Contemplation
 Contingency Plan
 Contraband Kingpin
 Contract Killing
@@ -669,6 +670,7 @@ Dragon Moose
 Dragon Sniper
 Dragon Trainer
 Dragonborn Looter
+Dragonlair Spider
 Dragoon's Wyvern
 Drake-Skull Cameo
 Drakewing Krasis
@@ -922,6 +924,7 @@ Foot Headquarters
 Foot Soldiers
 Foratog
 Force of Savagery
+Forced Fruition
 Forced Retreat
 Forecasting Fortune Teller
 Foresee
@@ -1257,6 +1260,7 @@ Icy Manipulator
 Idyllic Beachfront
 Iguana Parrot
 Illegitimate Business
+Illusory Demon
 Illvoi Galeblade
 Imaginary Friends
 Impact Tremors
@@ -1318,6 +1322,7 @@ Izzet Guildgate
 Izzet Signet
 Jace's Erasure
 Jace's Ingenuity
+Jackalope Herd
 Jaddi Offshoot
 Jade Avenger
 Jade Mage
@@ -1568,6 +1573,7 @@ Memorial to Genius
 Memorial to Glory
 Memorial to War
 Memory Drain
+Memory Erosion
 Meng Huo's Horde
 Mental Note
 Merchant of Many Hats
@@ -1614,6 +1620,7 @@ Moaning Spirit
 Moat Piranhas
 Mogg Fanatic
 Mogg Raider
+Mogg Sentry
 Mold Adder
 Molder Slug
 Moldering Karok
@@ -2503,6 +2510,7 @@ Sungrass Prairie
 Sunlance
 Sunlit Marsh
 Sunscape Apprentice
+Sunscorch Regent
 Sunscorched Divide
 Sunspire Griffin
 Suntail Hawk
@@ -2997,4 +3005,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2994`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3002`;
