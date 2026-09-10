@@ -510,6 +510,18 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Vision Skeins fans Defined$ Player out into one draw per player", () => {
+		const result = importFixture("v/vision_skeins");
+		if (!result.ok) throw new Error("expected ok");
+		// Forge's `Defined$ Player` names every player at once; the engine's
+		// player field holds one, so the lowering spells the instruction once
+		// for each side of the table.
+		expect(result.card.spell?.effects).toEqual([
+			{ kind: "draw", player: "you", amount: 2 },
+			{ kind: "draw", player: "opponent", amount: 2 },
+		]);
+	});
+
 	test("Preordain sequences scry then draw", () => {
 		const result = importFixture("p/preordain");
 		if (!result.ok) throw new Error("expected ok");

@@ -69,6 +69,7 @@ registerCardFixture("g/gilded_goose");
 registerCardFixture("s/sweettooth_witch");
 registerCardFixture("b/blood_servitor");
 registerCardFixture("s/samurai_of_the_pale_curtain");
+registerCardFixture("v/vision_skeins");
 
 /**
  * Gatherer 2X2 #100. The Forge corpus has no local entry for this card, so its

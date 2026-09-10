@@ -944,6 +944,7 @@ Frenzied Raptor
 Fresh Volunteers
 Fretwork Colony
 Friendly Ghost
+Friendly Teddy
 Frog-Squirrels
 Frontier Bivouac
 Frost Marsh
@@ -1590,6 +1591,7 @@ Meticulous Artisan
 Midnight Assassin
 Midnight Haunting
 Might of Oaks
+Mikokoro, Center of the Sea
 Millennial Gargoyle
 Millstone
 Minamo, School at Water's Edge
@@ -2089,6 +2091,7 @@ Rummaging Goblin
 Run Aground
 Rune-Sealed Wall
 Runeclaw Bear
+Runed Servitor
 Runewing
 Rushwood Elemental
 Russet Wolves
@@ -2342,6 +2345,7 @@ Snow-Covered Swamp
 Snow-Covered Wastes
 Snowfield Sinkhole
 Soaring Drake
+Soaring Show-Off
 Sokka's Sword Training
 Sokka, Wolf Cove's Protector
 Sol Ring
@@ -2560,6 +2564,7 @@ Tel-Jilad Justice
 Tel-Jilad Stylus
 Tempest Drake
 Temple Acolyte
+Temple Bell
 Temple of Abandon
 Temple of Deceit
 Temple of Enlightenment
@@ -2815,6 +2820,7 @@ Viridian Shaman
 Viridian Zealot
 Virus Beetle
 Viscera Seer
+Vision Skeins
 Vithian Renegades
 Vitu-Ghazi, the City-Tree
 Vivisection
@@ -2991,4 +2997,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2988`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `2994`;

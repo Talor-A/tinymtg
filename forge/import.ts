@@ -756,7 +756,40 @@ function parseEffectPlayer<Player extends TriggerEffectPlayer>(
 	return parsePlayer(defined);
 }
 
-function parseSingleEffect<Player extends TriggerEffectPlayer>(
+function parseEffects<Player extends TriggerEffectPlayer>(
+	params: ForgeParamList,
+	discriminatorLower: string,
+	api: string,
+	where: { nodeId?: string; line?: number },
+	parsePlayer: (value: string | undefined) => Player | null,
+	allowSourceObject: boolean,
+	tokenAbilityHost: TokenAbilityHost,
+): Exclude<EffectDef<Player>, { kind: "may" }>[] | ImportIssue {
+	const effect = parseOneEffect(
+		params,
+		discriminatorLower,
+		api,
+		where,
+		parsePlayer,
+		allowSourceObject,
+		tokenAbilityHost,
+	);
+	if ("code" in effect) return effect;
+	// Forge's `Defined$ Player` names every player at once. The engine's
+	// `RelativeEffectPlayer` holds exactly one player, so the lowering fans a
+	// many-player instruction out into one effect per player -- the same
+	// instruction, spelled once for each side of the table.
+	if (effect.kind === "draw" && getForgeParam(params, "Defined") === "Player") {
+		assert(
+			effect.player === "you",
+			"Defined$ Player must lower to the controller's draw",
+		);
+		return [effect, { ...effect, player: "opponent" as Player }];
+	}
+	return [effect];
+}
+
+function parseOneEffect<Player extends TriggerEffectPlayer>(
 	params: ForgeParamList,
 	discriminatorLower: string,
 	api: string,
@@ -908,7 +941,13 @@ function parseSingleEffect<Player extends TriggerEffectPlayer>(
 				where,
 			);
 			if (badParams) return badParams;
-			const who = parseEffectPlayer(params, parsePlayer);
+			// `Defined$ Player` is Forge's every-player spelling. The player set
+			// lowers as the controller's side here; parseEffects fans it out into
+			// one draw per player.
+			const who =
+				getForgeParam(params, "Defined") === "Player"
+					? ("you" as Player)
+					: parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!who || !amount)
 				return issue(
@@ -1556,7 +1595,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				where,
 			);
 		}
-		const effect = parseSingleEffect(
+		const lowered = parseEffects(
 			current,
 			disc.token.toLowerCase(),
 			disc.api,
@@ -1565,8 +1604,8 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			allowSourceObject,
 			tokenAbilityHost,
 		);
-		if ("code" in effect) return effect;
-		effects.push(effect);
+		if ("code" in lowered) return lowered;
+		effects.push(...lowered);
 		const next = getForgeParam(current, "SubAbility");
 		if (next === undefined) return { effects, usedSVarNames };
 		const nextLower = next.trim().toLowerCase();
