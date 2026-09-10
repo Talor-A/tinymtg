@@ -85,7 +85,12 @@ import type {
 	ForgeParamList,
 	ForgeSVarRecord,
 } from "./ast.ts";
-import { getForgeParam, lookupForgeSVar, parseForgeCardScript } from "./ast.ts";
+import {
+	forgeAbilityDiscriminator,
+	getForgeParam,
+	lookupForgeSVar,
+	parseForgeCardScript,
+} from "./ast.ts";
 import { forgeTokenScript } from "./token-corpus.ts";
 
 export interface ImportIssue {
@@ -688,6 +693,47 @@ interface TokenAbilityHost {
 	cardId: string;
 	activated: AnyActivatedAbilityDefinition[];
 	hostedActivatedIndices: Set<number>;
+}
+
+interface SVarResolver {
+	face: ForgeFaceAst;
+	consumed: Set<string>;
+}
+
+type ForgeAbilitySVarRecord = ForgeSVarRecord & {
+	parsed: { kind: "params"; params: ForgeParamList };
+};
+
+function consumeAbilitySVar(
+	resolver: SVarResolver,
+	name: string,
+	reference: string,
+	where: { nodeId?: string; line?: number },
+): ForgeAbilitySVarRecord | ImportIssue {
+	const normalized = name.trim().toLowerCase();
+	const bucket = resolver.face.svarIndex.get(normalized);
+	if (!bucket || bucket.length === 0)
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`unresolved ${reference} ${name}`,
+			where,
+		);
+	if (bucket.length > 1)
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`ambiguous duplicate SVar ${name}`,
+			where,
+		);
+	const svar = bucket[0];
+	assert(svar !== undefined, "a one-element SVar bucket has a record");
+	if (svar.parsed.kind !== "params")
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			`${reference} ${name} is not an ability body`,
+			where,
+		);
+	resolver.consumed.add(normalized);
+	return svar as ForgeAbilitySVarRecord;
 }
 
 function fixedTokenCharacteristics(
@@ -1590,10 +1636,11 @@ function discriminator(
 ):
 	| { token: (typeof ABILITY_DISCRIMINATOR_TOKENS)[number]; api: string }
 	| ImportIssue {
-	const present = ABILITY_DISCRIMINATOR_TOKENS.filter(
-		(token) => params.effectiveLower.has(token.toLowerCase()),
-	);
-	if (present.length !== 1) {
+	const normalized = forgeAbilityDiscriminator(params);
+	if (normalized === null) {
+		const present = ABILITY_DISCRIMINATOR_TOKENS.filter((token) =>
+			params.effectiveLower.has(token.toLowerCase()),
+		);
 		return issue(
 			"UNSUPPORTED_PARAMETER",
 			present.length === 0
@@ -1602,11 +1649,7 @@ function discriminator(
 			where,
 		);
 	}
-	const token = present[0] as (typeof ABILITY_DISCRIMINATOR_TOKENS)[number];
-	return {
-		token,
-		api: (params.effectiveLower.get(token.toLowerCase()) ?? "").toLowerCase(),
-	};
+	return normalized;
 }
 
 const CHAIN_FORBIDDEN = [
@@ -1624,7 +1667,7 @@ const CHAIN_FORBIDDEN = [
  * an ability declares its targets once, where it is announced.
  */
 function lowerEffectChain<Player extends TriggerEffectPlayer>(
-	face: ForgeFaceAst,
+	resolver: SVarResolver,
 	rootParams: ForgeParamList,
 	rootWhere: { nodeId?: string; line?: number },
 	rejectAtRoot: boolean,
@@ -1632,9 +1675,8 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
 	tokenAbilityHost: TokenAbilityHost,
-): { effects: EffectDef<Player>[]; usedSVarNames: string[] } | ImportIssue {
+): EffectDef<Player>[] | ImportIssue {
 	const effects: EffectDef<Player>[] = [];
-	const usedSVarNames: string[] = [];
 	let current = rootParams;
 	let where = rootWhere;
 	const seen = new Set<string>();
@@ -1725,26 +1767,13 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				);
 			}
 
-			const cleanupBucket = face.svarIndex.get(cleanupName.toLowerCase());
-			if (!cleanupBucket || cleanupBucket.length === 0)
-				return issue(
-					"UNSUPPORTED_REFERENCE",
-					`unresolved SubAbility ${cleanupName}`,
-					where,
-				);
-			if (cleanupBucket.length > 1)
-				return issue(
-					"UNSUPPORTED_REFERENCE",
-					`ambiguous duplicate SVar ${cleanupName}`,
-					where,
-				);
-			const cleanupSVar = cleanupBucket[0] as ForgeSVarRecord;
-			if (cleanupSVar.parsed.kind !== "params")
-				return issue(
-					"UNSUPPORTED_REFERENCE",
-					`SubAbility ${cleanupName} is not an ability body`,
-					where,
-				);
+			const cleanupSVar = consumeAbilitySVar(
+				resolver,
+				cleanupName,
+				"SubAbility",
+				where,
+			);
+			if ("code" in cleanupSVar) return cleanupSVar;
 			const cleanupWhere = {
 				nodeId: cleanupSVar.source.nodeId,
 				line: cleanupSVar.source.line,
@@ -1783,8 +1812,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				from: "exile",
 				destination: { zone: "battlefield", controller },
 			});
-			usedSVarNames.push(cleanupName.toLowerCase());
-			return { effects, usedSVarNames };
+			return effects;
 		}
 		if (disc.api === "effect") {
 			const rememberedDig = effects.at(-1);
@@ -1828,7 +1856,9 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				);
 			}
 
-			const staticBucket = face.svarIndex.get(staticName.toLowerCase());
+			const staticBucket = resolver.face.svarIndex.get(
+				staticName.toLowerCase(),
+			);
 			if (!staticBucket || staticBucket.length === 0)
 				return issue(
 					"UNSUPPORTED_REFERENCE",
@@ -1872,7 +1902,9 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				);
 			}
 
-			const cleanupBucket = face.svarIndex.get(cleanupName.toLowerCase());
+			const cleanupBucket = resolver.face.svarIndex.get(
+				cleanupName.toLowerCase(),
+			);
 			if (!cleanupBucket || cleanupBucket.length === 0)
 				return issue(
 					"UNSUPPORTED_REFERENCE",
@@ -1933,8 +1965,9 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				from: "exile",
 				duration: "until-end-of-your-next-turn",
 			});
-			usedSVarNames.push(staticName.toLowerCase(), cleanupName.toLowerCase());
-			return { effects, usedSVarNames };
+			resolver.consumed.add(staticName.toLowerCase());
+			resolver.consumed.add(cleanupName.toLowerCase());
+			return effects;
 		}
 		const lowered = parseEffects(
 			current,
@@ -1971,7 +2004,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 					where,
 				);
 			}
-			return { effects, usedSVarNames };
+			return effects;
 		}
 		const nextLower = next.trim().toLowerCase();
 		if (seen.has(nextLower))
@@ -1981,27 +2014,8 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				where,
 			);
 		seen.add(nextLower);
-		const bucket = face.svarIndex.get(nextLower);
-		if (!bucket || bucket.length === 0)
-			return issue(
-				"UNSUPPORTED_REFERENCE",
-				`unresolved SubAbility ${next}`,
-				where,
-			);
-		if (bucket.length > 1)
-			return issue(
-				"UNSUPPORTED_REFERENCE",
-				`ambiguous duplicate SVar ${next}`,
-				where,
-			);
-		const svar = bucket[0] as ForgeSVarRecord;
-		if (svar.parsed.kind !== "params")
-			return issue(
-				"UNSUPPORTED_REFERENCE",
-				`SubAbility ${next} is not an ability body`,
-				where,
-			);
-		usedSVarNames.push(nextLower);
+		const svar = consumeAbilitySVar(resolver, next, "SubAbility", where);
+		if ("code" in svar) return svar;
 		current = svar.parsed.params;
 		where = { nodeId: svar.source.nodeId, line: svar.source.line };
 		depth += 1;
@@ -2141,9 +2155,9 @@ type ReplacementLowering =
 	| { kind: "global"; def: ReplacementEffectDefinition };
 
 function lowerCopyEtbKeyword(
-	face: ForgeFaceAst,
+	resolver: SVarResolver,
 	record: ForgeKeywordRecord,
-): { def: ReplacementEffectDefinition; usedSVar: string } | ImportIssue {
+): ReplacementEffectDefinition | ImportIssue {
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
 	if (
 		record.segments.length !== 4 ||
@@ -2158,29 +2172,8 @@ function lowerCopyEtbKeyword(
 	}
 	const svarName = record.segments[2];
 	assert(svarName !== undefined);
-	const bucket = face.svarIndex.get(svarName.toLowerCase());
-	if (!bucket || bucket.length === 0) {
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`unresolved ETBReplacement ${svarName}`,
-			where,
-		);
-	}
-	if (bucket.length > 1) {
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`ambiguous duplicate SVar ${svarName}`,
-			where,
-		);
-	}
-	const body = bucket[0] as ForgeSVarRecord;
-	if (body.parsed.kind !== "params") {
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`${svarName} is not an ability body`,
-			where,
-		);
-	}
+	const body = consumeAbilitySVar(resolver, svarName, "ETBReplacement", where);
+	if ("code" in body) return body;
 	const bodyWhere = { nodeId: body.source.nodeId, line: body.source.line };
 	const badParams = checkParams(
 		body.parsed.params,
@@ -2264,7 +2257,7 @@ function lowerCopyEtbKeyword(
 			];
 		},
 	};
-	return { def, usedSVar: svarName.toLowerCase() };
+	return def;
 }
 
 /**
@@ -2278,7 +2271,7 @@ function lowerCopyEtbKeyword(
  * by its own ability. So no self-exclusion is imposed on the selector.
  */
 function lowerGraveyardExileReplacement(
-	face: ForgeFaceAst,
+	resolver: SVarResolver,
 	params: ForgeParamList,
 	where: { nodeId: string; line: number },
 ): ReplacementLowering | ImportIssue {
@@ -2302,26 +2295,13 @@ function lowerGraveyardExileReplacement(
 	const replaceWith = getForgeParam(params, "ReplaceWith");
 	if (replaceWith === undefined)
 		return issue("UNSUPPORTED_REFERENCE", "missing ReplaceWith$", where);
-	const bucket = face.svarIndex.get(replaceWith.trim().toLowerCase());
-	if (!bucket || bucket.length === 0)
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`unresolved ReplaceWith ${replaceWith}`,
-			where,
-		);
-	if (bucket.length > 1)
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`ambiguous duplicate SVar ${replaceWith}`,
-			where,
-		);
-	const effectSVar = bucket[0] as ForgeSVarRecord;
-	if (effectSVar.parsed.kind !== "params")
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`${replaceWith} is not an ability body`,
-			where,
-		);
+	const effectSVar = consumeAbilitySVar(
+		resolver,
+		replaceWith,
+		"ReplaceWith",
+		where,
+	);
+	if ("code" in effectSVar) return effectSVar;
 	const effectParams = effectSVar.parsed.params;
 	const effectWhere = {
 		nodeId: effectSVar.source.nodeId,
@@ -2400,7 +2380,7 @@ function lowerGraveyardExileReplacement(
  *   rejected.
  */
 function lowerReplacement(
-	face: ForgeFaceAst,
+	resolver: SVarResolver,
 	record:
 		| ForgeAbilityRecord
 		| { params: ForgeParamList; source: { nodeId: string; line: number } },
@@ -2427,7 +2407,7 @@ function lowerReplacement(
 	// The two families split on where the replaced movement was headed: into
 	// play (enters tapped, below) or into a graveyard (exiled instead).
 	if (getForgeParam(params, "Destination") === "Graveyard")
-		return lowerGraveyardExileReplacement(face, params, where);
+		return lowerGraveyardExileReplacement(resolver, params, where);
 	if (
 		getForgeParam(params, "Destination") !== "Battlefield" ||
 		getForgeParam(params, "Origin") !== undefined ||
@@ -2440,26 +2420,13 @@ function lowerReplacement(
 	const replaceWith = getForgeParam(params, "ReplaceWith");
 	if (replaceWith === undefined)
 		return issue("UNSUPPORTED_REFERENCE", "missing ReplaceWith$", where);
-	const bucket = face.svarIndex.get(replaceWith.trim().toLowerCase());
-	if (!bucket || bucket.length === 0)
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`unresolved ReplaceWith ${replaceWith}`,
-			where,
-		);
-	if (bucket.length > 1)
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`ambiguous duplicate SVar ${replaceWith}`,
-			where,
-		);
-	const effectSVar = bucket[0] as ForgeSVarRecord;
-	if (effectSVar.parsed.kind !== "params")
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`${replaceWith} is not an ability body`,
-			where,
-		);
+	const effectSVar = consumeAbilitySVar(
+		resolver,
+		replaceWith,
+		"ReplaceWith",
+		where,
+	);
+	if ("code" in effectSVar) return effectSVar;
 	const effectParams = effectSVar.parsed.params;
 	const effectWhere = {
 		nodeId: effectSVar.source.nodeId,
@@ -2546,9 +2513,8 @@ function lowerReplacement(
 /* ------------------------------------------------------------------------- */
 
 function lowerTrigger(
-	face: ForgeFaceAst,
+	resolver: SVarResolver,
 	record: { params: ForgeParamList; source: { nodeId: string; line: number } },
-	used: Set<string>,
 	tokenAbilityHost: TokenAbilityHost,
 ): TriggeredAbilityDefinition | ImportIssue {
 	const params = record.params;
@@ -2563,27 +2529,8 @@ function lowerTrigger(
 			where,
 		);
 
-	const bucket = face.svarIndex.get(execute.trim().toLowerCase());
-	if (!bucket || bucket.length === 0)
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`unresolved Execute ${execute}`,
-			where,
-		);
-	if (bucket.length > 1)
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`ambiguous duplicate SVar ${execute}`,
-			where,
-		);
-	const executeSVar = bucket[0] as ForgeSVarRecord;
-	if (executeSVar.parsed.kind !== "params")
-		return issue(
-			"UNSUPPORTED_REFERENCE",
-			`${execute} is not an ability body`,
-			where,
-		);
-	used.add(execute.trim().toLowerCase());
+	const executeSVar = consumeAbilitySVar(resolver, execute, "Execute", where);
+	if ("code" in executeSVar) return executeSVar;
 
 	const optionalDecider = getForgeParam(params, "OptionalDecider");
 	if (optionalDecider !== undefined && optionalDecider !== "You")
@@ -2599,7 +2546,7 @@ function lowerTrigger(
 		getForgeParam(params, "Destination") === "Graveyard" &&
 		getForgeParam(params, "ValidCard") === "Card.Self";
 	const chain = lowerEffectChain(
-		face,
+		resolver,
 		executeSVar.parsed.params,
 		{ nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
 		true,
@@ -2613,16 +2560,15 @@ function lowerTrigger(
 		tokenAbilityHost,
 	);
 	if ("code" in chain) return chain;
-	for (const n of chain.usedSVarNames) used.add(n);
 	const effects = optionalDecider
 		? [
 				{
 					kind: "may" as const,
 					decider: "you" as const,
-					effects: chain.effects,
+					effects: chain,
 				},
 			]
-		: chain.effects;
+		: chain;
 
 	// The trigger declares its targets on the executed ability, not on the T:
 	// line, and the engine chooses them when the ability goes on the stack.
@@ -3544,15 +3490,15 @@ export function lowerForgeCard(
 
 	const keywords: Keyword[] = [];
 	const keywordReplacements: ReplacementEffectDefinition[] = [];
-	const usedSVarNames = new Set<string>();
+	const resolver: SVarResolver = { face, consumed: new Set() };
+	const usedSVarNames = resolver.consumed;
 	const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
 	for (const record of face.keywordRecords) {
 		const where = { nodeId: record.source.nodeId, line: record.source.line };
 		if (record.keyword === "ETBReplacement") {
-			const lowered = lowerCopyEtbKeyword(face, record);
+			const lowered = lowerCopyEtbKeyword(resolver, record);
 			if ("code" in lowered) return reject(lowered);
-			keywordReplacements.push(lowered.def);
-			usedSVarNames.add(lowered.usedSVar);
+			keywordReplacements.push(lowered);
 			continue;
 		}
 		if (record.keyword === "etbCounter") {
@@ -3635,7 +3581,7 @@ export function lowerForgeCard(
 	const replacements: ReplacementEffectDefinition[] = [...keywordReplacements];
 	let entersTappedFromReplacement = false;
 	for (const record of face.replacements) {
-		const lowered = lowerReplacement(face, record);
+		const lowered = lowerReplacement(resolver, record);
 		if ("code" in lowered) return reject(lowered);
 		if (lowered.kind === "self-entry") {
 			if (entersTappedFromReplacement) {
@@ -3650,8 +3596,6 @@ export function lowerForgeCard(
 		} else {
 			replacements.push(lowered.def);
 		}
-		const replaceWith = getForgeParam(record.params, "ReplaceWith");
-		if (replaceWith) usedSVarNames.add(replaceWith.toLowerCase());
 	}
 
 	const activatedAbilities: AnyActivatedAbilityDefinition[] = [];
@@ -3662,7 +3606,7 @@ export function lowerForgeCard(
 	};
 	const triggers: TriggeredAbilityDefinition[] = [];
 	for (const record of face.triggers) {
-		const lowered = lowerTrigger(face, record, usedSVarNames, tokenAbilityHost);
+		const lowered = lowerTrigger(resolver, record, tokenAbilityHost);
 		if ("code" in lowered) return reject(lowered);
 		triggers.push(lowered);
 	}
@@ -3912,7 +3856,7 @@ export function lowerForgeCard(
 		}
 
 		const chain = lowerEffectChain(
-			face,
+			resolver,
 			params,
 			where,
 			false,
@@ -3937,15 +3881,13 @@ export function lowerForgeCard(
 			return reject(
 				issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where),
 			);
-		const slotIssue = checkEffectTargetSlots(chain.effects, targets, where);
+		const slotIssue = checkEffectTargetSlots(chain, targets, where);
 		if (slotIssue) return reject(slotIssue);
 		const description = getForgeParam(params, "SpellDescription");
 		if (!description)
 			return reject(
 				issue("UNSUPPORTED_PARAMETER", "SpellDescription$ is required", where),
 			);
-
-		for (const n of chain.usedSVarNames) usedSVarNames.add(n);
 
 		if (disc.token === "SP") {
 			spellCount += 1;
@@ -3963,7 +3905,7 @@ export function lowerForgeCard(
 				text: description,
 				...(additionalCost ? { additionalCost } : {}),
 				targets,
-				effects: chain.effects,
+				effects: chain,
 			};
 		} else {
 			assert(activationCost !== undefined && !("code" in activationCost));
@@ -3975,7 +3917,7 @@ export function lowerForgeCard(
 				cost: activationCost,
 				...(functionsFrom ? { functionsFrom } : {}),
 				targets,
-				effects: chain.effects,
+				effects: chain,
 			});
 		}
 	}
@@ -4037,13 +3979,12 @@ export function lowerForgeCard(
 		}
 	}
 
-	// Recognized non-referenced SVars, kept exactly as data by design (AI hints /
-	// deck-building metadata), scoped to when the feature they describe is present.
-	const buffedBy = lookupForgeSVar(face, "BuffedBy")?.parsed;
-	// `BuffedBy` is an AI/deck-building hint. A cast trigger carries its complete
-	// rules in the trigger and executed SVar, so retain this conventional hint
-	// only when the card has a supported cast-triggered source modification or
-	// direct-damage effect.
+	// These are Forge AI/deck-building metadata, not rules instructions. Keep the
+	// established contextual checks so this refactor does not broaden acceptance.
+	const scalarMetadata = (name: string): string | undefined => {
+		const parsed = lookupForgeSVar(face, name)?.parsed;
+		return parsed?.kind === "scalar" ? parsed.value : undefined;
+	};
 	if (
 		triggers.some(
 			(trigger) =>
@@ -4053,62 +3994,42 @@ export function lowerForgeCard(
 						effect.kind === "add counters" || effect.kind === "damage",
 				),
 		) &&
-		buffedBy?.kind === "scalar"
+		scalarMetadata("BuffedBy") !== undefined
 	)
 		usedSVarNames.add("buffedby");
-	const hasAttackEffect = lookupForgeSVar(face, "HasAttackEffect")?.parsed;
 	if (
-		triggers.some((t) => t.condition.kind === "declare attackers") &&
-		hasAttackEffect?.kind === "scalar" &&
-		hasAttackEffect.value === "TRUE"
+		triggers.some(
+			(trigger) => trigger.condition.kind === "declare attackers",
+		) &&
+		scalarMetadata("HasAttackEffect") === "TRUE"
 	)
 		usedSVarNames.add("hasattackeffect");
-	// PlayMain1 tells Forge's AI to cast the card before combat, which only says
-	// anything about a card that does something once it is on the battlefield.
-	const playMain1 = lookupForgeSVar(face, "PlayMain1")?.parsed;
 	if (
 		(statics.length > 0 || triggers.length > 0) &&
-		playMain1?.kind === "scalar" &&
-		playMain1.value === "TRUE"
+		scalarMetadata("PlayMain1") === "TRUE"
 	)
 		usedSVarNames.add("playmain1");
-	// SacMe ranks how eagerly Forge's AI sacrifices the card, which only says
-	// anything about a card that wants to be in the graveyard. A dies trigger,
-	// or an ability that functions from the graveyard, gives it that reason.
-	const sacMe = lookupForgeSVar(face, "SacMe")?.parsed;
+	const hasGraveyardBehavior =
+		activatedAbilities.some(
+			(ability) =>
+				ability.kind === "activated" &&
+				ability.functionsFrom?.[0] === "graveyard",
+		) || triggers.some((trigger) => trigger.functionsFrom?.[0] === "graveyard");
 	if (
 		(triggers.some(
 			(trigger) =>
 				trigger.condition.kind === "change zone" &&
 				trigger.condition.from === "battlefield",
 		) ||
-			activatedAbilities.some(
-				(ability) =>
-					ability.kind === "activated" &&
-					ability.functionsFrom?.[0] === "graveyard",
-			) ||
-			triggers.some((trigger) => trigger.functionsFrom?.[0] === "graveyard")) &&
-		sacMe?.kind === "scalar" &&
-		/^[0-9]+$/.test(sacMe.value)
+			hasGraveyardBehavior) &&
+		/^\d+$/.test(scalarMetadata("SacMe") ?? "")
 	)
 		usedSVarNames.add("sacme");
-	const discardMe = lookupForgeSVar(face, "DiscardMe")?.parsed;
-	if (
-		(activatedAbilities.some(
-			(ability) =>
-				ability.kind === "activated" &&
-				ability.functionsFrom?.[0] === "graveyard",
-		) ||
-			triggers.some((trigger) => trigger.functionsFrom?.[0] === "graveyard")) &&
-		discardMe?.kind === "scalar" &&
-		/^[0-9]+$/.test(discardMe.value)
-	)
+	if (hasGraveyardBehavior && /^\d+$/.test(scalarMetadata("DiscardMe") ?? ""))
 		usedSVarNames.add("discardme");
-	const nonCombatPriority = lookupForgeSVar(face, "NonCombatPriority")?.parsed;
 	if (
 		activatedAbilities.length > 0 &&
-		nonCombatPriority?.kind === "scalar" &&
-		nonCombatPriority.value === "1"
+		scalarMetadata("NonCombatPriority") === "1"
 	)
 		usedSVarNames.add("noncombatpriority");
 
