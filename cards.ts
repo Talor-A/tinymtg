@@ -74,6 +74,7 @@ registerCardFixture("v/vision_skeins");
 registerCardFixture("f/forced_fruition");
 registerCardFixture("w/wrenns_resolve");
 registerCardFixture("c/cloudshift");
+registerCardFixture("r/restoration_angel");
 
 /**
  * Gatherer 2X2 #100. The Forge corpus has no local entry for this card, so its

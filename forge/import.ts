@@ -319,9 +319,10 @@ function combineSelectors(
 
 /**
  * One `.`-separated restriction following the base, such as the `nonBlack` of
- * `Creature.nonBlack`. Only this closed vocabulary lowers; every other Forge
- * restriction (zone, combat state, counters, subtype-as-modifier) rejects the
- * card rather than being approximated.
+ * `Creature.nonBlack`. Colors, card types, and supertypes lower exactly,
+ * and `NEGATABLE_SUBTYPES` extends the vocabulary to negated subtypes. Every
+ * other Forge restriction (zone, combat state, counters, subtype-as-modifier
+ * without `non`) rejects the card rather than being approximated.
  */
 /**
  * `ValidPlayer$` -> the engine's relative-player vocabulary.
@@ -372,7 +373,8 @@ function parseSelectorModifier(modifier: string): ObjectSelectorDef | null {
 	if (modifier === "YouOwn") return { kind: "owner", player: "you" };
 	if (modifier === "OppOwn") return { kind: "owner", player: "opponent" };
 	const negated = modifier.startsWith("non");
-	const word = (negated ? modifier.slice(3) : modifier).toLowerCase();
+	const inner = negated ? modifier.slice(3) : modifier;
+	const word = inner.toLowerCase();
 	const color = COLOR_WORDS.get(word);
 	const type = [...CARD_TYPES].find((candidate) => candidate === word);
 	const supertype = [...SUPERTYPES].find((candidate) => candidate === word);
@@ -380,13 +382,117 @@ function parseSelectorModifier(modifier: string): ObjectSelectorDef | null {
 	if (color) selector = { kind: "color", color };
 	else if (type) selector = { kind: "type", type };
 	else if (supertype) selector = { kind: "supertype", supertype };
-	if (!selector) return null;
-	return negated ? { kind: "not", selector } : selector;
+	if (selector) return negated ? { kind: "not", selector } : selector;
+	// `nonAngel`: a negated subtype. Only a surveyed one lowers, so Forge
+	// pseudo-restrictions such as `nonChosenCard`, and typos, reject rather
+	// than lower to a restriction no card can satisfy.
+	if (negated && NEGATABLE_SUBTYPES.has(inner))
+		return { kind: "not", selector: { kind: "subtype", subtype: inner } };
+	return null;
 }
+
+/**
+ * Subtypes the `non` modifier may negate, such as the `nonAngel` of
+ * `Creature.nonAngel`.
+ *
+ * Surveyed from the corpus: every word that follows `non` in a card script
+ * and names a subtype on some `Types:` line, plus `Army`, a real type whose
+ * only cards are tokens. Colors, card types, and supertypes resolve before
+ * this list is consulted; the words that follow `non` and are not subtypes at
+ * all — Forge pseudo-restrictions like `nonChosenCard` and `nonCopiedSpell` —
+ * reject. A subtype missing from this list rejects too: add it when a card
+ * needs it.
+ */
+const NEGATABLE_SUBTYPES: ReadonlySet<string> = new Set([
+	"Angel",
+	"Archon",
+	"Army",
+	"Assassin",
+	"Aura",
+	"Avatar",
+	"Bear",
+	"Bolas",
+	"Borg",
+	"Brushwagg",
+	"Cat",
+	"Dalek",
+	"Demon",
+	"Detective",
+	"Devil",
+	"Dinosaur",
+	"Dragon",
+	"Eldrazi",
+	"Elemental",
+	"Elephant",
+	"Elf",
+	"Equipment",
+	"Eye",
+	"Faerie",
+	"Food",
+	"Forest",
+	"Fox",
+	"Frog",
+	"Gideon",
+	"Giant",
+	"Gnome",
+	"Goat",
+	"God",
+	"Gorgon",
+	"Horror",
+	"Human",
+	"Hydra",
+	"Imp",
+	"Insect",
+	"Island",
+	"Kraken",
+	"Kree",
+	"Lair",
+	"Lemur",
+	"Lesson",
+	"Leviathan",
+	"Merfolk",
+	"Mount",
+	"Mountain",
+	"Mutant",
+	"Octopus",
+	"Ogre",
+	"Ooze",
+	"Phyrexian",
+	"Pilot",
+	"Pirate",
+	"Rat",
+	"Rogue",
+	"Saga",
+	"Salamander",
+	"Serpent",
+	"Shapeshifter",
+	"Shark",
+	"Skeleton",
+	"Sliver",
+	"Soldier",
+	"Spacecraft",
+	"Spider",
+	"Spirit",
+	"Squirrel",
+	"Swamp",
+	"Vampire",
+	"Vehicle",
+	"Villain",
+	"Wall",
+	"Warrior",
+	"Werewolf",
+	"Wizard",
+	"Wolf",
+	"Zombie",
+]);
 
 function parseSelectorPart(value: string): ObjectSelectorDef | null {
 	if (value === "Card.Self" || value === "Self") return { kind: "self" };
-	const pieces = value.split(".");
+	// `+` AND-combines restrictions, like the `YouCtrl` of
+	// `Creature.nonAngel+YouCtrl`. Only the first segment names a base; each
+	// later segment is a bare modifier with no base of its own.
+	const segments = value.split("+");
+	const pieces = segments[0]?.split(".") ?? [];
 	const base = pieces.shift();
 	const parts: ObjectSelectorDef[] = [];
 	const type = base
@@ -397,6 +503,11 @@ function parseSelectorPart(value: string): ObjectSelectorDef | null {
 	else if (base && base !== "Card" && base !== "Permanent")
 		parts.push({ kind: "subtype", subtype: base });
 	for (const modifier of pieces) {
+		const parsed = parseSelectorModifier(modifier);
+		if (!parsed) return null;
+		parts.push(parsed);
+	}
+	for (const modifier of segments.slice(1)) {
 		const parsed = parseSelectorModifier(modifier);
 		if (!parsed) return null;
 		parts.push(parsed);
@@ -657,19 +768,7 @@ function parseTarget(
 	else if (value === "Player") legal = { kind: "player", player: "either" };
 	else if (value === "Opponent") legal = { kind: "player", player: "opponent" };
 	else if (value === "Permanent") legal = { kind: "permanent" };
-	else if (value === "Creature.Other+YouCtrl") {
-		legal = {
-			kind: "permanent",
-			selector: {
-				kind: "all",
-				selectors: [
-					{ kind: "type", type: "creature" },
-					{ kind: "not", selector: { kind: "self" } },
-					{ kind: "controller", player: "you" },
-				],
-			},
-		};
-	} else {
+	else {
 		const selector = parseSelector(value);
 		if (!selector) return null;
 		legal = { kind: "permanent", selector };
@@ -1243,6 +1342,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"libraryposition",
 					"activationzone",
 					"remembertargets",
+					"forgetothertargets",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
@@ -1354,6 +1454,22 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				return issue(
 					"UNSUPPORTED_PARAMETER",
 					"RememberTargets$ must be True",
+					where,
+				);
+			// ForgetOtherTargets clears objects remembered by earlier resolutions
+			// of the same ability. The remembered chain below binds its target per
+			// resolution (the return sub-ability consumes it immediately), so on
+			// that chain the parameter is a no-op; anywhere else it would clear a
+			// cross-ability remembered set the engine does not model, so it
+			// rejects.
+			const forgetOtherTargets = getForgeParam(params, "ForgetOtherTargets");
+			if (
+				forgetOtherTargets !== undefined &&
+				(forgetOtherTargets !== "True" || rememberTargets !== "True")
+			)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"ForgetOtherTargets requires the RememberTargets chain",
 					where,
 				);
 			let object: "source" | TargetSlotRef;
@@ -1752,53 +1868,64 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			);
 			if (badReturnParams) return badReturnParams;
 			const cleanupName = getForgeParam(current, "SubAbility");
+			// The remembered object is the card the previous effect just moved to
+			// exile, and nothing can move it before this sub-ability resolves, so
+			// Origin$ Exile and Origin$ All spell the same return. GainControl$ True
+			// stays required: without it Forge returns the card under its owner's
+			// control, a different effect. The cleanup SubAbility is Forge-side
+			// bookkeeping — it lowers to nothing, since the engine consumes the
+			// remembered binding within this resolution — so a card that keeps its
+			// remembered set clean some other way (ForgetOtherTargets$ True on the
+			// exile step) may omit it.
+			const returnOrigin = getForgeParam(current, "Origin");
 			if (
 				disc.token !== "DB" ||
 				getForgeParam(current, "Defined") !== "Remembered" ||
-				getForgeParam(current, "Origin") !== "All" ||
+				(returnOrigin !== "All" && returnOrigin !== "Exile") ||
 				getForgeParam(current, "Destination") !== "Battlefield" ||
-				getForgeParam(current, "GainControl") !== "True" ||
-				!cleanupName
+				getForgeParam(current, "GainControl") !== "True"
 			) {
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"remembered ChangeZone return requires DB$ ChangeZone, Defined$ Remembered, Origin$ All, Destination$ Battlefield, GainControl$ True, and a cleanup SubAbility$",
+					"remembered ChangeZone return requires DB$ ChangeZone, Defined$ Remembered, Origin$ All/Exile, Destination$ Battlefield, and GainControl$ True",
 					where,
 				);
 			}
 
-			const cleanupSVar = consumeAbilitySVar(
-				resolver,
-				cleanupName,
-				"SubAbility",
-				where,
-			);
-			if ("code" in cleanupSVar) return cleanupSVar;
-			const cleanupWhere = {
-				nodeId: cleanupSVar.source.nodeId,
-				line: cleanupSVar.source.line,
-			};
-			const cleanupDisc = discriminator(
-				cleanupSVar.parsed.params,
-				cleanupWhere,
-			);
-			if ("code" in cleanupDisc) return cleanupDisc;
-			const badCleanupParams = consumeParams(
-				cleanupSVar.parsed.params,
-				new Set(["db", "clearremembered"]),
-				cleanupWhere,
-			);
-			if (badCleanupParams) return badCleanupParams;
-			if (
-				cleanupDisc.token !== "DB" ||
-				cleanupDisc.api !== "cleanup" ||
-				getForgeParam(cleanupSVar.parsed.params, "ClearRemembered") !== "True"
-			) {
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"remembered ChangeZone cleanup requires DB$ Cleanup and ClearRemembered$ True",
+			if (cleanupName) {
+				const cleanupSVar = consumeAbilitySVar(
+					resolver,
+					cleanupName,
+					"SubAbility",
+					where,
+				);
+				if ("code" in cleanupSVar) return cleanupSVar;
+				const cleanupWhere = {
+					nodeId: cleanupSVar.source.nodeId,
+					line: cleanupSVar.source.line,
+				};
+				const cleanupDisc = discriminator(
+					cleanupSVar.parsed.params,
 					cleanupWhere,
 				);
+				if ("code" in cleanupDisc) return cleanupDisc;
+				const badCleanupParams = consumeParams(
+					cleanupSVar.parsed.params,
+					new Set(["db", "clearremembered"]),
+					cleanupWhere,
+				);
+				if (badCleanupParams) return badCleanupParams;
+				if (
+					cleanupDisc.token !== "DB" ||
+					cleanupDisc.api !== "cleanup" ||
+					getForgeParam(cleanupSVar.parsed.params, "ClearRemembered") !== "True"
+				) {
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"remembered ChangeZone cleanup requires DB$ Cleanup and ClearRemembered$ True",
+						cleanupWhere,
+					);
+				}
 			}
 
 			const controller = parsePlayer("You");
@@ -2659,6 +2786,7 @@ function lowerTrigger(
 					"triggerzones",
 					"secondary",
 					"execute",
+					"optionaldecider",
 					"triggerdescription",
 				]),
 				where,

@@ -709,7 +709,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			["RememberTargets$ True", "RememberTargets$ False"],
 			["RememberTargets$ True", "RememberChanged$ True"],
 			["Defined$ Remembered", "Defined$ Targeted"],
-			["Origin$ All", "Origin$ Exile"],
+			["Origin$ All", "Origin$ Graveyard"],
 			["Destination$ Battlefield", "Destination$ Graveyard"],
 			["GainControl$ True", "GainControl$ False"],
 			["ClearRemembered$ True", "ClearRemembered$ False"],
@@ -2702,6 +2702,149 @@ describe("lowerForgeCard: one-object ChangeZone", () => {
 			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
 		});
 	}
+});
+
+describe("lowerForgeCard: `+` selector combination and negated subtypes", () => {
+	test("Restoration Angel targets a non-Angel creature its controller owns", () => {
+		const result = importFixture("r/restoration_angel");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.triggered[0]).toMatchObject({
+			condition: {
+				kind: "change zone",
+				from: "any",
+				to: "battlefield",
+				selector: { kind: "self" },
+			},
+			targets: [
+				{
+					id: "target-1",
+					legal: {
+						kind: "permanent",
+						selector: {
+							kind: "all",
+							selectors: [
+								{ kind: "type", type: "creature" },
+								{
+									kind: "not",
+									selector: { kind: "subtype", subtype: "Angel" },
+								},
+								{ kind: "controller", player: "you" },
+							],
+						},
+					},
+				},
+			],
+			effects: [
+				{
+					kind: "may",
+					decider: "you",
+					effects: [
+						{
+							kind: "change-zone",
+							object: { targetSlot: "target-1" },
+							from: "battlefield",
+							destination: { zone: "exile" },
+						},
+						{
+							kind: "change-zone",
+							object: {
+								binding: "effect-result",
+								slot: "remembered-zone-change-object",
+							},
+							from: "exile",
+							destination: { zone: "battlefield", controller: "you" },
+						},
+					],
+				},
+			],
+		});
+	});
+
+	test("`+` AND-combines a dotted restriction with bare modifiers", () => {
+		// Deputy of Acquittals spells the mirror of Restoration Angel's
+		// restriction: `Creature.YouCtrl+Other` instead of
+		// `Creature.Other+YouCtrl`. Both orders lower to the same three
+		// selectors, and neither took a hardcoded spelling to get there.
+		const result = importFixture("d/deputy_of_acquittals");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.triggered[0]).toMatchObject({
+			targets: [
+				{
+					legal: {
+						kind: "permanent",
+						selector: {
+							kind: "all",
+							selectors: [
+								{ kind: "type", type: "creature" },
+								{ kind: "controller", player: "you" },
+								{ kind: "not", selector: { kind: "self" } },
+							],
+						},
+					},
+				},
+			],
+		});
+	});
+
+	const hostile = [
+		"Name:Hostile Witness",
+		"ManaCost:B",
+		"Types:Instant",
+		"A:SP$ ChangeZone | ValidTgts$ %TARGET% | Origin$ Battlefield | Destination$ Exile | SpellDescription$ Exile target %TARGET%.",
+		"Oracle:Exile target %TARGET%.",
+		"",
+	].join("\n");
+
+	test("a non subtype from Forge's pseudo-restriction vocabulary rejects", () => {
+		const result = importForgeCard(
+			hostile.replaceAll("%TARGET%", "Creature.nonChosenCard"),
+			{ id: "hostile-witness" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({ code: "UNSUPPORTED_TARGET" });
+	});
+
+	test("a subtype missing from the surveyed list rejects", () => {
+		// Goblin is as real a subtype as Angel; it simply is not in the list,
+		// because no corpus card negates it. Rejecting keeps a typo from
+		// lowering to a restriction no card can satisfy.
+		const result = importForgeCard(
+			hostile.replaceAll("%TARGET%", "Creature.nonGoblin"),
+			{ id: "hostile-witness" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({ code: "UNSUPPORTED_TARGET" });
+	});
+
+	test("a bare `+` segment outside the modifier vocabulary rejects", () => {
+		const result = importForgeCard(
+			hostile.replaceAll("%TARGET%", "Creature.YouCtrl+attacking"),
+			{ id: "hostile-witness" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({ code: "UNSUPPORTED_TARGET" });
+	});
+
+	test("ForgetOtherTargets without the RememberTargets chain rejects", () => {
+		// Restoration Angel's script minus its RememberTargets: the remaining
+		// ForgetOtherTargets would clear a cross-ability remembered set the
+		// engine does not model.
+		const text = cardText("r/restoration_angel")
+			.replace(" | RememberTargets$ True", "")
+			.replace(" | SubAbility$ RestorationReturn", "");
+		const result = importForgeCard(text, { id: "restoration-angel-mutant" });
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_PARAMETER",
+			message: "ForgetOtherTargets requires the RememberTargets chain",
+		});
+	});
 });
 
 describe("lowerForgeCard: strict Clone shape", () => {
