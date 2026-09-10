@@ -113,6 +113,37 @@ export const ABBOT_OF_KERAL_KEEP = registerCard({
 	],
 });
 
+/**
+ * Forge w/wrenns_resolve. Its multi-card Dig/Effect chain is outside the
+ * importer's supported subset, so the Oracle definition is hand-authored here.
+ */
+export const WRENNS_RESOLVE = registerCard({
+	id: "wrenns-resolve",
+	name: "Wrenn's Resolve",
+	types: ["sorcery"],
+	colors: ["r"],
+	manaCost: { n: 1, r: 1 },
+	spell: {
+		id: "wrenns-resolve-spell",
+		text: "Exile the top two cards of your library. Until the end of your next turn, you may play those cards.",
+		targets: [],
+		effects: [
+			{
+				kind: "exile-top",
+				player: "you",
+				amount: 2,
+				resultSlot: "exiled-cards",
+			},
+			{
+				kind: "may-play",
+				object: { binding: "effect-result", slot: "exiled-cards" },
+				from: "exile",
+				duration: "until-end-of-your-next-turn",
+			},
+		],
+	},
+});
+
 /* ------------------------------------------------------------------ *
  * Helpers for the counter-modifying family
  *
