@@ -50,7 +50,7 @@ import type {
 	ManaCostType,
 	ManaPool,
 	ManaType,
-	ObjectSelectorDef,
+	ObjectPredicateDef,
 	PayableActivationManaCost,
 	PublicObjectZone,
 	RelativeEffectPlayer,
@@ -74,7 +74,7 @@ import {
 	etbPreview,
 	getSnapshot,
 	MANA_COST_TYPES,
-	selectorMatches,
+	objectMatchesPredicate,
 } from "../index.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
 import type {
@@ -331,12 +331,21 @@ function spellCastEffectPlayer(
 /* Selectors and targets                                                      */
 /* ------------------------------------------------------------------------- */
 
-function combineSelectors(
-	kind: "all" | "any",
-	selectors: ObjectSelectorDef[],
-): ObjectSelectorDef {
-	const only = selectors[0];
-	return selectors.length === 1 && only ? only : { kind, selectors };
+function combinePredicates(
+	kind: "and" | "or",
+	predicates: ObjectPredicateDef[],
+): ObjectPredicateDef {
+	const only = predicates[0];
+	if (predicates.length === 1 && only) return only;
+	assert(predicates.length >= 2, "a boolean predicate needs two operands");
+	return {
+		kind,
+		predicates: predicates as [
+			ObjectPredicateDef,
+			ObjectPredicateDef,
+			...ObjectPredicateDef[],
+		],
+	};
 }
 
 /**
@@ -388,8 +397,9 @@ function parseDrawnPlayer(value: string | undefined): ValidPlayer | null {
 	return null;
 }
 
-function parseSelectorModifier(modifier: string): ObjectSelectorDef | null {
-	if (modifier === "Other") return { kind: "not", selector: { kind: "self" } };
+function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
+	if (modifier === "Other")
+		return { kind: "not", predicate: { kind: "self" } };
 	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
 	if (modifier === "YouOwn") return { kind: "owner", player: "you" };
@@ -400,16 +410,17 @@ function parseSelectorModifier(modifier: string): ObjectSelectorDef | null {
 	const color = COLOR_WORDS.get(word);
 	const type = [...CARD_TYPES].find((candidate) => candidate === word);
 	const supertype = [...SUPERTYPES].find((candidate) => candidate === word);
-	let selector: ObjectSelectorDef | null = null;
-	if (color) selector = { kind: "color", color };
-	else if (type) selector = { kind: "type", type };
-	else if (supertype) selector = { kind: "supertype", supertype };
-	if (selector) return negated ? { kind: "not", selector } : selector;
+	let predicate: ObjectPredicateDef | null = null;
+	if (color) predicate = { kind: "color", color };
+	else if (type) predicate = { kind: "type", type };
+	else if (supertype) predicate = { kind: "supertype", supertype };
+	if (predicate)
+		return negated ? { kind: "not", predicate } : predicate;
 	// `nonAngel`: a negated subtype. Only a surveyed one lowers, so Forge
 	// pseudo-restrictions such as `nonChosenCard`, and typos, reject rather
 	// than lower to a restriction no card can satisfy.
 	if (negated && NEGATABLE_SUBTYPES.has(inner))
-		return { kind: "not", selector: { kind: "subtype", subtype: inner } };
+		return { kind: "not", predicate: { kind: "subtype", subtype: inner } };
 	return null;
 }
 
@@ -508,7 +519,7 @@ const NEGATABLE_SUBTYPES: ReadonlySet<string> = new Set([
 	"Zombie",
 ]);
 
-function parseSelectorPart(value: string): ObjectSelectorDef | null {
+function parseSelectorPart(value: string): ObjectPredicateDef | null {
 	if (value === "Card.Self" || value === "Self") return { kind: "self" };
 	// `+` AND-combines restrictions, like the `YouCtrl` of
 	// `Creature.nonAngel+YouCtrl`. Only the first segment names a base; each
@@ -516,7 +527,7 @@ function parseSelectorPart(value: string): ObjectSelectorDef | null {
 	const segments = value.split("+");
 	const pieces = segments[0]?.split(".") ?? [];
 	const base = pieces.shift();
-	const parts: ObjectSelectorDef[] = [];
+	const parts: ObjectPredicateDef[] = [];
 	const type = base
 		? ([...CARD_TYPES].find((t) => t === base.toLowerCase()) ?? null)
 		: null;
@@ -534,19 +545,19 @@ function parseSelectorPart(value: string): ObjectSelectorDef | null {
 		if (!parsed) return null;
 		parts.push(parsed);
 	}
-	return parts.length > 0 ? combineSelectors("all", parts) : null;
+	return parts.length > 0 ? combinePredicates("and", parts) : null;
 }
 
-function parseSelector(value: string): ObjectSelectorDef | null {
+function parseSelector(value: string): ObjectPredicateDef | null {
 	const choices = value
 		.split(",")
 		.map((part) => parseSelectorPart(part.trim()));
-	return choices.every((choice): choice is ObjectSelectorDef => choice !== null)
-		? combineSelectors("any", choices)
+	return choices.every((choice): choice is ObjectPredicateDef => choice !== null)
+		? combinePredicates("or", choices)
 		: null;
 }
 
-function parseCopySelector(value: string): ObjectSelectorDef | null {
+function parseCopySelector(value: string): ObjectPredicateDef | null {
 	const choices = value.split(",").map((part) => {
 		const trimmed = part.trim();
 		const other = trimmed.endsWith(".Other");
@@ -555,14 +566,14 @@ function parseCopySelector(value: string): ObjectSelectorDef | null {
 		);
 		if (!selector) return null;
 		return other
-			? combineSelectors("all", [
+			? combinePredicates("and", [
 					selector,
-					{ kind: "not", selector: { kind: "self" } },
+					{ kind: "not", predicate: { kind: "self" } },
 				])
 			: selector;
 	});
-	return choices.every((choice): choice is ObjectSelectorDef => choice !== null)
-		? combineSelectors("any", choices)
+	return choices.every((choice): choice is ObjectPredicateDef => choice !== null)
+		? combinePredicates("or", choices)
 		: null;
 }
 
@@ -766,25 +777,32 @@ function parseTarget(
 		else {
 			const parsed = parseSelector(value);
 			if (!parsed) return null;
-			const ownership = (selector: ObjectSelectorDef): ObjectSelectorDef => {
-				switch (selector.kind) {
+			const ownership = (predicate: ObjectPredicateDef): ObjectPredicateDef => {
+				switch (predicate.kind) {
 					case "controller":
 						// Forge's YouCtrl/OppCtrl restrictions use ownership for cards
 						// outside the battlefield, where cards have no controller.
-						return { kind: "owner", player: selector.player };
-					case "all":
-					case "any":
+						return { kind: "owner", player: predicate.player };
+					case "and":
+					case "or":
 						return {
-							kind: selector.kind,
-							selectors: selector.selectors.map(ownership),
+							kind: predicate.kind,
+							predicates: predicate.predicates.map(ownership) as [
+								ObjectPredicateDef,
+								ObjectPredicateDef,
+								...ObjectPredicateDef[],
+							],
 						};
 					case "not":
-						return { kind: "not", selector: ownership(selector.selector) };
+						return {
+							kind: "not",
+							predicate: ownership(predicate.predicate),
+						};
 					default:
-						return selector;
+						return predicate;
 				}
 			};
-			legal = { kind: "card", zone: cardZone, selector: ownership(parsed) };
+			legal = { kind: "card", zone: cardZone, predicate: ownership(parsed) };
 		}
 	} else if (value === "Any") legal = { kind: "any-target" };
 	else if (value === "Player") legal = { kind: "player", player: "either" };
@@ -793,7 +811,7 @@ function parseTarget(
 	else {
 		const selector = parseSelector(value);
 		if (!selector) return null;
-		legal = { kind: "permanent", selector };
+		legal = { kind: "permanent", predicate: selector };
 	}
 	return [{ id: TARGET_SLOT, min: 1, max: 1, legal }];
 }
@@ -1259,7 +1277,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"Sacrifice requires a supported player, selector, and an amount of one",
 					where,
 				);
-			return { kind: "sacrifice", player: who, selector, amount: 1 };
+			return { kind: "sacrifice", player: who, predicate: selector, amount: 1 };
 		}
 		case "dealdamage": {
 			const badParams = consumeParams(
@@ -2273,7 +2291,7 @@ function lowerStatic(
 		applies(view, _state, source) {
 			return (
 				source.zone === "battlefield" &&
-				selectorMatches(selector, view, {
+				objectMatchesPredicate(selector, view, {
 					controller: source.controller,
 					id: source.id,
 				})
@@ -2287,15 +2305,15 @@ function lowerStatic(
 	};
 }
 
-function selectorContainsSelf(selector: ObjectSelectorDef): boolean {
-	switch (selector.kind) {
+function predicateContainsSelf(predicate: ObjectPredicateDef): boolean {
+	switch (predicate.kind) {
 		case "self":
 			return true;
-		case "all":
-		case "any":
-			return selector.selectors.some(selectorContainsSelf);
+		case "and":
+		case "or":
+			return predicate.predicates.some(predicateContainsSelf);
 		case "not":
-			return selectorContainsSelf(selector.selector);
+			return predicateContainsSelf(predicate.predicate);
 		default:
 			return false;
 	}
@@ -2364,7 +2382,7 @@ function lowerCopyEtbKeyword(
 					const object = getSnapshot(ctx.read, id);
 					return (
 						object.kind === "permanent" &&
-						selectorMatches(selector, object, {
+						objectMatchesPredicate(selector, object, {
 							controller: ctx.controller,
 							id: ctx.self?.id ?? null,
 						})
@@ -2379,7 +2397,7 @@ function lowerCopyEtbKeyword(
 			const chosenId = ctx.choices.chooseObject(ctx.state, ctx.controller, {
 				reason: { kind: "copy", event: ev, source: source.id },
 				objects: ctx.read.state.battlefield,
-				selector: {
+				predicate: {
 					definition: selector,
 					context: { controller: ctx.controller, source: source.id },
 				},
@@ -2496,7 +2514,7 @@ function lowerGraveyardExileReplacement(
 			// The permanent is still on the battlefield while the replacement is
 			// evaluated, so its current characteristics are what the selector
 			// reads (CR 608.2h's last known information is not needed yet).
-			return selectorMatches(selector, getSnapshot(ctx.read, ev.object), {
+			return objectMatchesPredicate(selector, getSnapshot(ctx.read, ev.object), {
 				controller: ctx.controller,
 				id: ctx.self.id,
 			});
@@ -2622,7 +2640,7 @@ function lowerReplacement(
 			effectWhere,
 		);
 	const selector = parseSelector(validCard);
-	if (!selector || selectorContainsSelf(selector))
+	if (!selector || predicateContainsSelf(selector))
 		return issue("UNSUPPORTED_TARGET", "unsupported ValidCard selector", where);
 	const description = getForgeParam(params, "Description") ?? "Enters tapped.";
 	const def: ReplacementEffectDefinition = {
@@ -2646,7 +2664,7 @@ function lowerReplacement(
 				ev.destination.tapped
 			)
 				return false;
-			return selectorMatches(selector, etbPreview(ctx.state, ev), {
+			return objectMatchesPredicate(selector, etbPreview(ctx.state, ev), {
 				controller: ctx.controller,
 				id: ctx.self.id,
 			});
@@ -2774,7 +2792,7 @@ function lowerTrigger(
 			// would need to exclude instant and sorcery spells, which the selector
 			// vocabulary cannot express, so it still rejects.
 			const rawSelector = getForgeParam(params, "ValidCard");
-			let selector: ObjectSelectorDef | undefined;
+			let selector: ObjectPredicateDef | undefined;
 			if (rawSelector !== undefined && rawSelector !== "Card") {
 				const parsed = parseSelector(rawSelector);
 				if (parsed === null)
@@ -2792,7 +2810,7 @@ function lowerTrigger(
 				condition:
 					selector === undefined
 						? { kind: "cast", player: castPlayer }
-						: { kind: "cast", player: castPlayer, selector },
+						: { kind: "cast", player: castPlayer, predicate: selector },
 				targets,
 				effects,
 			};
@@ -2861,13 +2879,13 @@ function lowerTrigger(
 							kind: "change zone",
 							from: "battlefield",
 							to: "graveyard",
-							selector,
+							predicate: selector,
 						}
 					: {
 							kind: "change zone",
 							from: "any",
 							to: "battlefield",
-							selector,
+							predicate: selector,
 						},
 				targets,
 				effects,
@@ -3048,7 +3066,7 @@ function lowerTrigger(
 			return {
 				id: execute,
 				text,
-				condition: { kind: "declare attackers", selector: { kind: "self" } },
+				condition: { kind: "declare attackers", predicate: { kind: "self" } },
 				targets,
 				effects,
 			};
@@ -3227,7 +3245,7 @@ function parseActivationCost(
 			}
 			const selectorText = sacrificeMatch[1];
 			assert(selectorText !== undefined);
-			const selectorChoices: ObjectSelectorDef[] = [];
+			const selectorChoices: ObjectPredicateDef[] = [];
 			for (const choice of selectorText.split(";")) {
 				if (choice === "CARDNAME") {
 					selectorChoices.push({ kind: "self" });
@@ -3246,15 +3264,15 @@ function parseActivationCost(
 				}
 				selectorChoices.push(
 					excludesSelf
-						? combineSelectors("all", [
+						? combinePredicates("and", [
 								parsed,
-								{ kind: "not", selector: { kind: "self" } },
+								{ kind: "not", predicate: { kind: "self" } },
 							])
 						: parsed,
 				);
 			}
 			sacrifice = {
-				selector: combineSelectors("any", selectorChoices),
+				predicate: combinePredicates("or", selectorChoices),
 				amount: 1,
 			};
 			continue;
@@ -3975,7 +3993,7 @@ export function lowerForgeCard(
 				// The engine models exactly one additional cost: sacrifice one
 				// creature you control. A narrower or wider selector (Sac<1/Goblin>,
 				// Sac<1/Permanent>) would change which permanents pay it.
-				const selector = parsed.sacrifice.selector;
+				const selector = parsed.sacrifice.predicate;
 				if (!(selector.kind === "type" && selector.type === "creature")) {
 					return reject(
 						issue(
@@ -3987,7 +4005,7 @@ export function lowerForgeCard(
 				}
 				additionalCost = {
 					kind: "sacrifice",
-					selector: { kind: "type", type: "creature" },
+					predicate: { kind: "type", type: "creature" },
 					amount: 1,
 				};
 			}

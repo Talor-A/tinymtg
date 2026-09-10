@@ -45,7 +45,7 @@ describe("named artifact tokens", () => {
 			cost: {
 				mana: { n: 2 },
 				tapSelf: false,
-				sacrifice: { selector: { kind: "self" }, amount: 1 },
+				sacrifice: { predicate: { kind: "self" }, amount: 1 },
 			},
 			targets: [],
 			effects: [{ kind: "draw", player: "you", amount: 1 }],

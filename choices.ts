@@ -9,13 +9,13 @@ import type {
 	GameState,
 	ManaAmount,
 	ObjectId,
-	ObjectSelectorDef,
+	ObjectPredicateDef,
 	PendingTrigger,
 	PlayerId,
 	PlayerView,
 	PriorityAction,
 	ReadonlyGameState,
-	SelectorContext,
+	PredicateContext,
 	TargetDef,
 	TriggeredAbilityStackItem,
 	TurnLocation,
@@ -27,7 +27,7 @@ import {
 	eligibleBlockers as eligibleBlockersFor,
 	getSnapshot,
 	name,
-	selectorMatches,
+	objectMatchesPredicate,
 	turnLocation,
 } from "./index.ts";
 import { assert, assertDefined } from "./lib/assert.ts";
@@ -73,9 +73,9 @@ export interface ObjectChoiceRequest extends ChoiceRequestBase {
 	context: {
 		reason: ObjectChoiceReason;
 		objects: ObjectId[];
-		selector?: {
-			definition: ObjectSelectorDef;
-			context: SelectorContext;
+		predicate?: {
+			definition: ObjectPredicateDef;
+			context: PredicateContext;
 		};
 		optional: boolean;
 	};
@@ -84,9 +84,9 @@ export interface ObjectChoiceRequest extends ChoiceRequestBase {
 export interface ObjectChoiceInput {
 	reason: ObjectChoiceReason;
 	objects: readonly ObjectId[];
-	selector?: {
-		definition: ObjectSelectorDef;
-		context: SelectorContext;
+	predicate?: {
+		definition: ObjectPredicateDef;
+		context: PredicateContext;
 	};
 }
 
@@ -935,14 +935,18 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			new Set(input.objects).size === input.objects.length,
 			"object choice received duplicate objects",
 		);
-		const read = input.selector ? createReadContext(state) : null;
+		const read = input.predicate ? createReadContext(state) : null;
 		const objects = input.objects.filter((id) => {
-			if (!input.selector) return true;
+			if (!input.predicate) return true;
 			assertDefined(read);
-			return selectorMatches(input.selector.definition, getSnapshot(read, id), {
-				controller: input.selector.context.controller,
-				id: input.selector.context.source,
-			});
+			return objectMatchesPredicate(
+				input.predicate.definition,
+				getSnapshot(read, id),
+				{
+					controller: input.predicate.context.controller,
+					id: input.predicate.context.source,
+				},
+			);
 		});
 		if (objects.length === 0) {
 			assert(input.optional, "required object choice has no legal objects");
@@ -958,7 +962,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			context: {
 				reason: input.reason,
 				objects: [...objects],
-				...(input.selector ? { selector: input.selector } : {}),
+				...(input.predicate ? { predicate: input.predicate } : {}),
 				optional: input.optional !== undefined,
 			},
 			options: [

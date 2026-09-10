@@ -30,7 +30,7 @@ const sacrificeOnly = {
 	mana: "zero",
 	tapSelf: false,
 	sacrifice: {
-		selector: { kind: "type", type: "creature" },
+		predicate: { kind: "type", type: "creature" },
 		amount: 1,
 	},
 } satisfies ActivationCost;
@@ -38,7 +38,7 @@ const combinedWithSacrifice = {
 	mana: { b: 1 },
 	tapSelf: true,
 	sacrifice: {
-		selector: { kind: "self" },
+		predicate: { kind: "self" },
 		amount: 1,
 	},
 } satisfies ActivationCost;
@@ -89,14 +89,14 @@ describe("payable activation costs", () => {
 			mana: "zero",
 			tapSelf: false,
 			sacrifice: {
-				selector: { kind: "type", type: "creature" },
+				predicate: { kind: "type", type: "creature" },
 				amount: 1,
 			},
 		});
 		expect(combinedWithSacrifice).toEqual({
 			mana: { b: 1 },
 			tapSelf: true,
-			sacrifice: { selector: { kind: "self" }, amount: 1 },
+			sacrifice: { predicate: { kind: "self" }, amount: 1 },
 		});
 	});
 

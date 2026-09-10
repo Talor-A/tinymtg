@@ -30,7 +30,7 @@ registerCard({
 				mana: "zero",
 				tapSelf: false,
 				sacrifice: {
-					selector: { kind: "type", type: "creature" },
+					predicate: { kind: "type", type: "creature" },
 					amount: 1,
 				},
 			},
@@ -55,7 +55,7 @@ registerCard({
 				mana: "zero",
 				tapSelf: false,
 				sacrifice: {
-					selector: { kind: "type", type: "creature" },
+					predicate: { kind: "type", type: "creature" },
 					amount: 1,
 				},
 			},
@@ -80,7 +80,7 @@ registerCard({
 			cost: {
 				mana: { b: 1 },
 				tapSelf: true,
-				sacrifice: { selector: { kind: "self" }, amount: 1 },
+				sacrifice: { predicate: { kind: "self" }, amount: 1 },
 			},
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
@@ -112,7 +112,7 @@ registerCard({
 				{
 					kind: "sacrifice",
 					player: { targetSlot: "player" },
-					selector: { kind: "type", type: "creature" },
+					predicate: { kind: "type", type: "creature" },
 					amount: 1,
 				},
 			],
@@ -127,7 +127,7 @@ registerCard({
 				{
 					kind: "sacrifice",
 					player: "you",
-					selector: { kind: "type", type: "creature" },
+					predicate: { kind: "type", type: "creature" },
 					amount: 1,
 				},
 			],
@@ -151,7 +151,7 @@ registerCard({
 				kind: "change zone",
 				from: "battlefield",
 				to: "graveyard",
-				selector: { kind: "type", type: "creature" },
+				predicate: { kind: "type", type: "creature" },
 			},
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 1 }],

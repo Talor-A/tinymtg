@@ -20,11 +20,11 @@ import {
 	InvalidChoiceAnswerError,
 	newGame,
 	type ObjectId,
-	type ObjectSelectorDef,
+	type ObjectPredicateDef,
 	perform,
 	registerCard,
 	type SyncAgent,
-	selectorMatches,
+	objectMatchesPredicate,
 	settlePriority,
 	spawnCard,
 	spawnPermanent,
@@ -86,20 +86,20 @@ const creatureTarget: TargetDef = {
 	id: "target-1",
 	min: 1,
 	max: 1,
-	legal: { kind: "permanent", selector: { kind: "type", type: "creature" } },
+	legal: { kind: "permanent", predicate: { kind: "type", type: "creature" } },
 };
 
-describe("target selectors", () => {
-	test("each selector kind reads the object's current characteristics", () => {
+describe("target predicates", () => {
+	test("each predicate kind reads the object's current characteristics", () => {
 		const state = newGame();
 		const bears = spawnPermanent(state, "grizzly-bears", 0);
 		const swamp = spawnPermanent(state, "swamp", 1);
 		const ownedCard = spawnCard(state, "grizzly-bears", 0, "graveyard");
 		const mine = { controller: 0 as const, id: bears.id };
 
-		const matches = (selector: ObjectSelectorDef, id: ObjectId) => {
+		const matches = (predicate: ObjectPredicateDef, id: ObjectId) => {
 			const snapshot = getSnapshot(createReadContext(state), id);
-			return selectorMatches(selector, snapshot, mine);
+			return objectMatchesPredicate(predicate, snapshot, mine);
 		};
 
 		expect(matches({ kind: "self" }, bears.id)).toBe(true);
@@ -132,15 +132,15 @@ describe("target selectors", () => {
 		);
 		expect(
 			matches(
-				{ kind: "not", selector: { kind: "color", color: "b" } },
+				{ kind: "not", predicate: { kind: "color", color: "b" } },
 				bears.id,
 			),
 		).toBe(true);
 		expect(
 			matches(
 				{
-					kind: "all",
-					selectors: [
+					kind: "and",
+					predicates: [
 						{ kind: "type", type: "creature" },
 						{ kind: "controller", player: "you" },
 					],
@@ -151,8 +151,8 @@ describe("target selectors", () => {
 		expect(
 			matches(
 				{
-					kind: "all",
-					selectors: [
+					kind: "and",
+					predicates: [
 						{ kind: "type", type: "creature" },
 						{ kind: "controller", player: "opponent" },
 					],
@@ -163,8 +163,8 @@ describe("target selectors", () => {
 		expect(
 			matches(
 				{
-					kind: "any",
-					selectors: [
+					kind: "or",
+					predicates: [
 						{ kind: "type", type: "land" },
 						{ kind: "type", type: "creature" },
 					],

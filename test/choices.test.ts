@@ -77,7 +77,7 @@ describe("ScriptedAgent priority actions", () => {
 });
 
 describe("choice transcripts", () => {
-	test("object choices filter a mixed object set with a selector", () => {
+	test("object choices filter a mixed object set with a predicate", () => {
 		const state = newGame();
 		const land = spawnCard(state, "forest", 0, "hand");
 		const card = spawnCard(state, "flying-men", 0, "hand");
@@ -95,7 +95,7 @@ describe("choice transcripts", () => {
 			recorder.chooseObject(state, 0, {
 				reason: { kind: "select", prompt: "Choose a creature" },
 				objects: [land.id, card.id, permanent.id],
-				selector: {
+				predicate: {
 					definition: { kind: "type", type: "creature" },
 					context: { controller: 0, source: null },
 				},

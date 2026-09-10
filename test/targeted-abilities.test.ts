@@ -59,7 +59,7 @@ const artifactTarget = {
 	max: 1,
 	legal: {
 		kind: "permanent" as const,
-		selector: { kind: "type" as const, type: "artifact" as const },
+		predicate: { kind: "type" as const, type: "artifact" as const },
 	},
 };
 
@@ -148,7 +148,7 @@ registerCard({
 				kind: "change zone",
 				from: "any",
 				to: "battlefield",
-				selector: { kind: "self" },
+				predicate: { kind: "self" },
 			},
 			targets: [
 				{
@@ -157,7 +157,7 @@ registerCard({
 					max: 1,
 					legal: {
 						kind: "permanent",
-						selector: { kind: "type", type: "creature" },
+						predicate: { kind: "type", type: "creature" },
 					},
 				},
 			],
@@ -220,9 +220,9 @@ registerCard({
 					max: 1,
 					legal: {
 						kind: "permanent",
-						selector: {
-							kind: "all",
-							selectors: [
+						predicate: {
+							kind: "and",
+							predicates: [
 								{ kind: "type", type: "creature" },
 								{ kind: "controller", player: "opponent" },
 							],

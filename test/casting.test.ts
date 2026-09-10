@@ -117,9 +117,9 @@ registerCard({
 			condition: {
 				kind: "cast",
 				player: "you",
-				selector: {
-					kind: "any",
-					selectors: [
+				predicate: {
+					kind: "or",
+					predicates: [
 						{ kind: "type", type: "instant" },
 						{ kind: "type", type: "sorcery" },
 					],
@@ -188,9 +188,9 @@ registerCard({
 			condition: {
 				kind: "cast",
 				player: "you",
-				selector: {
-					kind: "all",
-					selectors: [
+				predicate: {
+					kind: "and",
+					predicates: [
 						{ kind: "type", type: "artifact" },
 						{ kind: "type", type: "creature" },
 					],
@@ -205,9 +205,9 @@ registerCard({
 			condition: {
 				kind: "cast",
 				player: "you",
-				selector: {
+				predicate: {
 					kind: "not",
-					selector: { kind: "type", type: "creature" },
+					predicate: { kind: "type", type: "creature" },
 				},
 			},
 			targets: [],

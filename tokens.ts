@@ -23,7 +23,7 @@ export const CLUE_TOKEN = characteristicsFromCardDef(
 					mana: { n: 2 },
 					tapSelf: false,
 					sacrifice: {
-						selector: { kind: "self" },
+						predicate: { kind: "self" },
 						amount: 1,
 					},
 				},

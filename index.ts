@@ -2172,7 +2172,7 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			kind: "sacrifice";
 			/** A relative player, or the player bound to a target slot. */
 			player: Player | TargetSlotRef;
-			selector: ObjectSelectorDef;
+			predicate: ObjectPredicateDef;
 			amount: 1;
 	  }
 	| {
@@ -2262,14 +2262,14 @@ interface CastTriggerCondition {
 	kind: "cast";
 	player: ValidPlayer;
 	/** Omitted when the trigger matches every spell cast. */
-	selector?: ObjectSelectorDef;
+	predicate?: ObjectPredicateDef;
 }
 
 /** Matches the player declaring attackers and/or each matching attacker. */
 interface DeclareAttackersTriggerCondition {
 	kind: "declare attackers";
 	attacker?: ValidPlayer;
-	selector?: ObjectSelectorDef;
+	predicate?: ObjectPredicateDef;
 }
 
 /**
@@ -2297,13 +2297,13 @@ interface ZoneChangeTriggerCondition {
 	kind: "change zone";
 	from: Zone | "any";
 	to: Zone | "any";
-	selector: ObjectSelectorDef;
+	predicate: ObjectPredicateDef;
 }
 
 /** Matches a permanent becoming tapped or untapped. */
 interface TapTriggerCondition {
 	kind: "untap" | "tap";
-	selector: ObjectSelectorDef;
+	predicate: ObjectPredicateDef;
 }
 
 type TriggerCondition =
@@ -2358,11 +2358,16 @@ export type Keyword =
 	| `bushido ${number}`;
 
 /**
- * Object restrictions shared by targeting, triggers, costs, and imported
- * continuous effects. Every case is evaluated against an object's *current*
- * characteristics.
+ * A predicate over one object supplied by a caller-defined domain. Targeting,
+ * triggers, costs, and continuous effects establish that domain before testing
+ * the predicate against the object's current characteristics.
+ *
+ * `not` is therefore relative to that existing domain: negating `creature`
+ * while examining permanents can match a land, but can never introduce a
+ * player, spell, or card from another zone. Requiring at least two operands for
+ * `and` and `or` leaves no empty or single-operand boolean form to interpret.
  */
-export type ObjectSelectorDef =
+export type ObjectPredicateDef =
 	| { kind: "self" }
 	| { kind: "type"; type: CardType }
 	| { kind: "supertype"; supertype: Supertype }
@@ -2370,8 +2375,15 @@ export type ObjectSelectorDef =
 	| { kind: "color"; color: Color }
 	| { kind: "owner"; player: "you" | "opponent" }
 	| { kind: "controller"; player: "you" | "opponent" }
-	| { kind: "all" | "any"; selectors: ObjectSelectorDef[] }
-	| { kind: "not"; selector: ObjectSelectorDef };
+	| {
+			kind: "and" | "or";
+			predicates: [
+				ObjectPredicateDef,
+				ObjectPredicateDef,
+				...ObjectPredicateDef[],
+			];
+	  }
+	| { kind: "not"; predicate: ObjectPredicateDef };
 
 /** Declarative targeting; the runtime supports one required target slot. */
 export interface TargetDef {
@@ -2385,63 +2397,63 @@ export interface TargetDef {
 				kind: "card";
 				/** Only public card zones can supply Magic targets in this slice. */
 				zone: Extract<CardZone, "graveyard" | "exile">;
-				selector?: ObjectSelectorDef;
+				predicate?: ObjectPredicateDef;
 		  }
 		| {
 				kind: "permanent";
 				/** Omitted when every permanent is legal. */
-				selector?: ObjectSelectorDef;
+				predicate?: ObjectPredicateDef;
 		  }
 		| { kind: "any-target" };
 }
 
-/** What an object selector reads `self`, `you`, and `opponent` relative to. */
-export interface SelectorContext {
+/** What an object predicate reads `self`, `you`, and `opponent` relative to. */
+export interface PredicateContext {
 	controller: PlayerId;
 	source: ObjectId | null;
 }
 
 /**
- * Whether one object satisfies a selector. `source` carries the id the `self`
+ * Whether one object satisfies a predicate. `source` carries the id the `self`
  * case compares against, or null where there is no source object.
  */
-export function selectorMatches(
-	selector: ObjectSelectorDef,
+export function objectMatchesPredicate(
+	predicate: ObjectPredicateDef,
 	object: DeepReadOnly<GameObjectSnapshot | ContinuousEffectEvaluation>,
 	source: { controller: PlayerId; id: ObjectId | null },
 ): boolean {
 	const characteristics = object.currentCharacteristics;
-	switch (selector.kind) {
+	switch (predicate.kind) {
 		case "self":
 			return source.id !== null && object.objectId === source.id;
 		case "type":
-			return characteristics.types.includes(selector.type);
+			return characteristics.types.includes(predicate.type);
 		case "supertype":
-			return characteristics.supertypes.includes(selector.supertype);
+			return characteristics.supertypes.includes(predicate.supertype);
 		case "subtype":
-			return characteristics.subtypes.includes(selector.subtype);
+			return characteristics.subtypes.includes(predicate.subtype);
 		case "color":
-			return characteristics.colors.includes(selector.color);
+			return characteristics.colors.includes(predicate.color);
 		case "owner":
-			return selector.player === "you"
+			return predicate.player === "you"
 				? object.owner === source.controller
 				: object.owner !== source.controller;
 		case "controller":
 			// An object with no controller matches neither "you" nor "opponent".
 			if (object.controller === null) return false;
-			return selector.player === "you"
+			return predicate.player === "you"
 				? object.controller === source.controller
 				: object.controller !== source.controller;
-		case "all":
-			return selector.selectors.every((part) =>
-				selectorMatches(part, object, source),
+		case "and":
+			return predicate.predicates.every((part) =>
+				objectMatchesPredicate(part, object, source),
 			);
-		case "any":
-			return selector.selectors.some((part) =>
-				selectorMatches(part, object, source),
+		case "or":
+			return predicate.predicates.some((part) =>
+				objectMatchesPredicate(part, object, source),
 			);
 		case "not":
-			return !selectorMatches(selector.selector, object, source);
+			return !objectMatchesPredicate(predicate.predicate, object, source);
 	}
 }
 
@@ -2456,12 +2468,12 @@ export interface SpellAbilityDef {
 /** The one required additional spell cost currently supported. */
 export type SpellAdditionalCostDef = {
 	kind: "sacrifice";
-	selector: { kind: "type"; type: "creature" };
+	predicate: { kind: "type"; type: "creature" };
 	amount: 1;
 };
 
 export interface SacrificeActivationCost {
-	selector: ObjectSelectorDef;
+	predicate: ObjectPredicateDef;
 	amount: 1;
 }
 
@@ -6118,13 +6130,13 @@ function triggerSubjectsMatch(
 	read: ReadContext,
 	source: DeepReadOnly<GameObject>,
 	subjects: DeepReadOnly<GameObject>[],
-	selector: ObjectSelectorDef,
+	predicate: ObjectPredicateDef,
 ): boolean {
 	// A card in the graveyard has no controller (CR 109.4); its owner is
 	// the player "you" means for a trigger that functions from there.
 	const controller = controllerOf(source) ?? source.owner;
 	return subjects.some((subject) =>
-		selectorMatches(selector, getSnapshot(read, subject.id), {
+		objectMatchesPredicate(predicate, getSnapshot(read, subject.id), {
 			controller,
 			id: source.id,
 		}),
@@ -6146,10 +6158,10 @@ function triggerMatches(
 			assert(ev.kind === "cast");
 			if (!relativePlayerMatches(ev.player, condition.player, source))
 				return false;
-			if (condition.selector === undefined) return true;
+			if (condition.predicate === undefined) return true;
 			const spell = maybeObject(read.state, ev.spell);
 			assert(spell?.kind === "spell", "cast event subject is not a spell");
-			return triggerSubjectsMatch(read, source, [spell], condition.selector);
+			return triggerSubjectsMatch(read, source, [spell], condition.predicate);
 		}
 
 		case "gain life":
@@ -6200,12 +6212,12 @@ function triggerMatches(
 			) {
 				return false;
 			}
-			if (!condition.selector) return true;
+			if (!condition.predicate) return true;
 			const attackers = ev.attackers.flatMap((id) => {
 				const attacker = maybeObject(read.state, id);
 				return attacker ? [attacker] : [];
 			});
-			return triggerSubjectsMatch(read, source, attackers, condition.selector);
+			return triggerSubjectsMatch(read, source, attackers, condition.predicate);
 		}
 
 		case "declare blockers": {
@@ -6227,7 +6239,7 @@ function triggerMatches(
 			if (condition.from === "battlefield") {
 				// The exact self-death form is detected from the pre-event context. A
 				// surviving permanent with the same ability is not the departed self.
-				if (condition.to === "graveyard" && condition.selector.kind === "self")
+				if (condition.to === "graveyard" && condition.predicate.kind === "self")
 					return false;
 				throw new Error("leaves the battlefield triggers are not supported");
 			}
@@ -6242,7 +6254,7 @@ function triggerMatches(
 				read,
 				source,
 				movedObjects,
-				condition.selector,
+				condition.predicate,
 			);
 		}
 
@@ -6253,7 +6265,7 @@ function triggerMatches(
 				const subject = maybeObject(read.state, id);
 				return subject ? [subject] : [];
 			});
-			return triggerSubjectsMatch(read, source, subjects, condition.selector);
+			return triggerSubjectsMatch(read, source, subjects, condition.predicate);
 		}
 	}
 }
@@ -6332,7 +6344,7 @@ function selfDeathTriggerCandidates(
 		if (
 			ev.destination.zone !== "graveyard" ||
 			condition.to !== "graveyard" ||
-			condition.selector.kind !== "self"
+			condition.predicate.kind !== "self"
 		) {
 			throw new Error("leaves the battlefield triggers are not supported");
 		}
@@ -6860,7 +6872,7 @@ function resolveEffects(
 			const candidates = legalSacrifices(
 				createReadContext(state),
 				sacrificingPlayer,
-				effect.selector,
+				effect.predicate,
 				{ controller: item.controller, source: item.source },
 			);
 			// CR 701.21: an impossible sacrifice does nothing; it does not make
@@ -7701,7 +7713,7 @@ function isLegalTarget(
 	read: ReadContext,
 	definition: TargetDef,
 	target: EntityRef,
-	ctx: SelectorContext,
+	ctx: PredicateContext,
 ): boolean {
 	if (target.type === "player") {
 		if (
@@ -7731,8 +7743,8 @@ function isLegalTarget(
 		return (
 			snapshot?.kind === "card" &&
 			snapshot.zone === definition.legal.zone &&
-			(definition.legal.selector === undefined ||
-				selectorMatches(definition.legal.selector, snapshot, {
+			(definition.legal.predicate === undefined ||
+				objectMatchesPredicate(definition.legal.predicate, snapshot, {
 					controller: ctx.controller,
 					id: ctx.source,
 				}))
@@ -7754,8 +7766,8 @@ function isLegalTarget(
 		);
 	}
 	return (
-		definition.legal.selector === undefined ||
-		selectorMatches(definition.legal.selector, snapshot, {
+		definition.legal.predicate === undefined ||
+		objectMatchesPredicate(definition.legal.predicate, snapshot, {
 			controller: ctx.controller,
 			id: ctx.source,
 		})
@@ -7765,7 +7777,7 @@ function isLegalTarget(
 function legalTargets(
 	read: ReadContext,
 	definition: TargetDef,
-	ctx: SelectorContext,
+	ctx: PredicateContext,
 ): EntityRef[] {
 	const candidates: EntityRef[] = [
 		{ type: "player", player: 0 },
@@ -7793,15 +7805,15 @@ function legalTargets(
 function legalSacrifices(
 	read: ReadContext,
 	player: PlayerId,
-	selector: ObjectSelectorDef,
-	context: SelectorContext,
+	predicate: ObjectPredicateDef,
+	context: PredicateContext,
 ): ObjectId[] {
 	return read.state.battlefield.filter((id) => {
 		const snapshot = read.view.objects.get(id);
 		return (
 			snapshot?.kind === "permanent" &&
 			snapshot.controller === player &&
-			selectorMatches(selector, snapshot, {
+			objectMatchesPredicate(predicate, snapshot, {
 				controller: context.controller,
 				id: context.source,
 			})
@@ -7910,7 +7922,7 @@ function canCast(
 		assert(additionalCost.kind === "sacrifice");
 		assert(additionalCost.amount === 1);
 		if (
-			legalSacrifices(read, player, additionalCost.selector, {
+			legalSacrifices(read, player, additionalCost.predicate, {
 				controller: player,
 				source: object.id,
 			}).length === 0
@@ -8034,7 +8046,7 @@ function activatedAbilityActions(
 				continue;
 			if (
 				definition.cost.sacrifice &&
-				legalSacrifices(read, player, definition.cost.sacrifice.selector, {
+				legalSacrifices(read, player, definition.cost.sacrifice.predicate, {
 					controller: player,
 					source: object.id,
 				}).length === 0
@@ -8400,7 +8412,7 @@ function activateAbilityIn(
 		const candidates = legalSacrifices(
 			createReadContext(state),
 			priorityPlayer,
-			sacrificeCost.selector,
+			sacrificeCost.predicate,
 			{ controller: priorityPlayer, source: object.id },
 		);
 		if (candidates.length === 0) {
@@ -8654,7 +8666,7 @@ function castSpellIn(
 		assert(additionalCost.kind === "sacrifice");
 		assert(additionalCost.amount === 1);
 		if (
-			legalSacrifices(read, priorityPlayer, additionalCost.selector, {
+			legalSacrifices(read, priorityPlayer, additionalCost.predicate, {
 				controller: priorityPlayer,
 				source: action.card,
 			}).length === 0
@@ -8753,7 +8765,7 @@ function castSpellIn(
 			const candidates = legalSacrifices(
 				createReadContext(state),
 				priorityPlayer,
-				additionalCost.selector,
+				additionalCost.predicate,
 				{ controller: priorityPlayer, source: spellId },
 			);
 			if (candidates.length === 0) {

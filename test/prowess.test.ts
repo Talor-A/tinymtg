@@ -89,7 +89,7 @@ describe("prowess", () => {
 		).toEqual({
 			kind: "cast",
 			player: "you",
-			selector: { kind: "not", selector: { kind: "type", type: "creature" } },
+			predicate: { kind: "not", predicate: { kind: "type", type: "creature" } },
 		});
 	});
 

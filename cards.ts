@@ -98,7 +98,7 @@ export const ABBOT_OF_KERAL_KEEP = registerCard({
 				kind: "change zone",
 				from: "any",
 				to: "battlefield",
-				selector: { kind: "self" },
+				predicate: { kind: "self" },
 			},
 			targets: [],
 			effects: [

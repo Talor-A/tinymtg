@@ -53,9 +53,9 @@ export function printedKeywordTriggers(
 				condition: {
 					kind: "cast",
 					player: "you",
-					selector: {
+					predicate: {
 						kind: "not",
-						selector: { kind: "type", type: "creature" },
+						predicate: { kind: "type", type: "creature" },
 					},
 				},
 				targets: [],

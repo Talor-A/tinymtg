@@ -35,9 +35,9 @@ const opponentCreatureTarget: TargetDef = {
 	max: 1,
 	legal: {
 		kind: "permanent",
-		selector: {
-			kind: "all",
-			selectors: [
+		predicate: {
+			kind: "and",
+			predicates: [
 				{ kind: "type", type: "creature" },
 				{ kind: "controller", player: "opponent" },
 			],
@@ -56,7 +56,7 @@ registerCard({
 		text: "As an additional cost to cast this spell, sacrifice a creature. Destroy target creature an opponent controls.",
 		additionalCost: {
 			kind: "sacrifice",
-			selector: { kind: "type", type: "creature" },
+			predicate: { kind: "type", type: "creature" },
 			amount: 1,
 		},
 		targets: [opponentCreatureTarget],

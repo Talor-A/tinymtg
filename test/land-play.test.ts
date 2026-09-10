@@ -55,7 +55,7 @@ registerCard({
 				kind: "change zone",
 				from: "any",
 				to: "battlefield",
-				selector: { kind: "self" },
+				predicate: { kind: "self" },
 			},
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 3 }],

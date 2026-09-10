@@ -140,10 +140,13 @@ amounts and non-bottom dispositions; `Investigate` with an explicit count or
 player; random/multi-card discard, alternate costs, hexproof/shroud/protection,
 and more).
 
-The engine's own selector vocabulary is wider than the spellings the bridge
-accepts: `ObjectSelectorDef` covers the source itself, card type, supertype,
-subtype, color, owner, and controller, combined with all/any/not to any depth. A
-hand-written card definition can use all of it.
+The engine's own predicate vocabulary is wider than the spellings the bridge
+accepts: `ObjectPredicateDef` covers the source itself, card type, supertype,
+subtype, color, owner, and controller, combined with `and`/`or`/`not` to any
+depth. A hand-written card definition can use all of it. A caller supplies the
+domain before evaluating a predicate, so `not` complements only within that
+domain: for example, `not creature` over permanents can match a land, but it
+cannot introduce a player, spell, or card in another zone.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
 `cards/cardsfolder` that the bridge currently lowers — 2,883 of 33,664 — so the
@@ -231,12 +234,12 @@ and alternative activation costs are also not implemented yet.
 ### Targeting
 
 Spells, activated abilities, and triggered abilities may each declare at most
-one required target. A target is a player, a spell, or a permanent matching a
-restriction built from card type, supertype, subtype, color, controller, and
-the source itself, combined with all/any/not. `any-target` accepts a player, a
-creature, or a planeswalker. Restrictions are always evaluated against current
-characteristics, so a permanent that changes color, type, or controller can
-stop being a legal target.
+one required target. A target is a player, a spell, or a permanent in its
+established domain that matches a predicate built from card type, supertype,
+subtype, color, controller, and the source itself, combined with
+`and`/`or`/`not`. `any-target` accepts a player, a creature, or a planeswalker.
+Predicates are always evaluated against current characteristics, so a permanent
+that changes color, type, or controller can stop being a legal target.
 
 A spell or activated ability with no legal target is absent from the priority
 options, and executing one directly is rejected. The agent answers a separate

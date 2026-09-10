@@ -62,13 +62,13 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						kind: "change zone",
 						from: "any",
 						to: "battlefield",
-						selector: {
-							kind: "all",
-							selectors: [
+						predicate: {
+							kind: "and",
+							predicates: [
 								{ kind: "type", type: "creature" },
 								{
 									kind: "not",
-									selector: { kind: "self" },
+									predicate: { kind: "self" },
 								},
 							],
 						},
@@ -268,7 +268,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					max: 1,
 					legal: {
 						kind: "permanent",
-						selector: { kind: "type", type: "creature" },
+						predicate: { kind: "type", type: "creature" },
 					},
 				},
 			],
@@ -324,11 +324,11 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				max: 1,
 				legal: {
 					kind: "permanent",
-					selector: {
-						kind: "all",
-						selectors: [
+					predicate: {
+						kind: "and",
+						predicates: [
 							{ kind: "type", type: "creature" },
-							{ kind: "not", selector: { kind: "color", color: "b" } },
+							{ kind: "not", predicate: { kind: "color", color: "b" } },
 						],
 					},
 				},
@@ -388,9 +388,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						max: 1,
 						legal: {
 							kind: "permanent",
-							selector: {
-								kind: "any",
-								selectors: [
+							predicate: {
+								kind: "or",
+								predicates: [
 									{ kind: "type", type: "artifact" },
 									{ kind: "type", type: "creature" },
 									{ kind: "type", type: "land" },
@@ -419,7 +419,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					max: 1,
 					legal: {
 						kind: "permanent",
-						selector: { kind: "subtype", subtype: "Elf" },
+						predicate: { kind: "subtype", subtype: "Elf" },
 					},
 				},
 			],
@@ -447,7 +447,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [
 					{
@@ -469,14 +469,14 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			condition: {
 				kind: "change zone",
 				to: "battlefield",
-				selector: { kind: "self" },
+				predicate: { kind: "self" },
 			},
 			targets: [
 				{
 					id: "target-1",
 					legal: {
 						kind: "permanent",
-						selector: { kind: "type", type: "creature" },
+						predicate: { kind: "type", type: "creature" },
 					},
 				},
 			],
@@ -493,7 +493,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					id: "target-1",
 					legal: {
 						kind: "permanent",
-						selector: { kind: "type", type: "artifact" },
+						predicate: { kind: "type", type: "artifact" },
 					},
 				},
 			],
@@ -672,9 +672,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					max: 1,
 					legal: {
 						kind: "permanent",
-						selector: {
-							kind: "all",
-							selectors: [
+						predicate: {
+							kind: "and",
+							predicates: [
 								{ kind: "type", type: "creature" },
 								{ kind: "controller", player: "you" },
 							],
@@ -838,7 +838,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [],
 				effects: [
@@ -870,7 +870,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [],
 				effects: [{ kind: "draw", player: "you", amount: 1 }],
@@ -898,7 +898,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [
 					{
@@ -939,7 +939,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "battlefield",
 					to: "graveyard",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [],
 				effects: [
@@ -980,7 +980,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				kind: "change zone",
 				from: "any",
 				to: "battlefield",
-				selector: { kind: "self" },
+				predicate: { kind: "self" },
 			},
 			targets: [],
 			effects: [
@@ -1031,7 +1031,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [],
 				effects: [{ kind: "gain-life", player: "you", amount: 3 }],
@@ -1050,7 +1050,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [],
 				effects: [
@@ -1200,7 +1200,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			{
 				id: "TrigGainLife",
 				text: expect.any(String),
-				condition: { kind: "declare attackers", selector: { kind: "self" } },
+				condition: { kind: "declare attackers", predicate: { kind: "self" } },
 				targets: [],
 				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
 			},
@@ -1242,7 +1242,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				condition: {
 					kind: "cast",
 					player: "you",
-					selector: { kind: "type", type: "creature" },
+					predicate: { kind: "type", type: "creature" },
 				},
 				targets: [],
 				effects: [{ kind: "draw", player: "you", amount: 1 }],
@@ -1260,9 +1260,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				condition: {
 					kind: "cast",
 					player: "you",
-					selector: {
+					predicate: {
 						kind: "not",
-						selector: { kind: "type", type: "creature" },
+						predicate: { kind: "type", type: "creature" },
 					},
 				},
 				targets: [],
@@ -1289,7 +1289,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [
 					{
@@ -1298,7 +1298,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						max: 1,
 						legal: {
 							kind: "permanent",
-							selector: { kind: "type", type: "creature" },
+							predicate: { kind: "type", type: "creature" },
 						},
 					},
 				],
@@ -1346,9 +1346,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				condition: {
 					kind: "cast",
 					player: "you",
-					selector: {
+					predicate: {
 						kind: "not",
-						selector: { kind: "type", type: "creature" },
+						predicate: { kind: "type", type: "creature" },
 					},
 				},
 				targets: [],
@@ -1490,9 +1490,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				condition: {
 					kind: "cast",
 					player: "opponent",
-					selector: {
+					predicate: {
 						kind: "not",
-						selector: { kind: "type", type: "creature" },
+						predicate: { kind: "type", type: "creature" },
 					},
 				},
 				targets: [],
@@ -1554,7 +1554,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				condition: {
 					kind: "cast",
 					player: "you",
-					selector: { kind: "color", color: "b" },
+					predicate: { kind: "color", color: "b" },
 				},
 				targets: [],
 				effects: [{ kind: "gain-life", player: "you", amount: 1 }],
@@ -1566,9 +1566,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: {
-						kind: "all",
-						selectors: [
+					predicate: {
+						kind: "and",
+						predicates: [
 							{ kind: "subtype", subtype: "Swamp" },
 							{ kind: "controller", player: "you" },
 						],
@@ -1596,8 +1596,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			[
 				"Instant,Sorcery",
 				{
-					kind: "any",
-					selectors: [
+					kind: "or",
+					predicates: [
 						{ kind: "type", type: "instant" },
 						{ kind: "type", type: "sorcery" },
 					],
@@ -1606,8 +1606,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			[
 				"Artifact.Creature",
 				{
-					kind: "all",
-					selectors: [
+					kind: "and",
+					predicates: [
 						{ kind: "type", type: "artifact" },
 						{ kind: "type", type: "creature" },
 					],
@@ -1617,7 +1617,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				"Card.nonCreature",
 				{
 					kind: "not",
-					selector: { kind: "type", type: "creature" },
+					predicate: { kind: "type", type: "creature" },
 				},
 			],
 			["Card.Black", { kind: "color", color: "b" }],
@@ -1629,7 +1629,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			).toEqual({
 				kind: "cast",
 				player: "you",
-				selector,
+				predicate: selector,
 			});
 		}
 	});
@@ -1713,7 +1713,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [],
 				effects: [{ kind: "draw", player: "you", amount: 1 }],
@@ -1934,7 +1934,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				cost: {
 					mana: "zero",
 					tapSelf: true,
-					sacrifice: { selector: { kind: "self" }, amount: 1 },
+					sacrifice: { predicate: { kind: "self" }, amount: 1 },
 				},
 				manaOptions: [
 					{ w: 1, u: 0, b: 0, r: 0, g: 0, c: 0 },
@@ -1951,7 +1951,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				effects: [
 					expect.objectContaining({
@@ -1985,7 +1985,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				cost: {
 					mana: { n: 1 },
 					tapSelf: true,
-					sacrifice: { selector: { kind: "self" }, amount: 1 },
+					sacrifice: { predicate: { kind: "self" }, amount: 1 },
 					discard: { amount: 1 },
 				},
 				targets: [],
@@ -2040,7 +2040,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			cost: {
 				mana: { n: 2 },
 				tapSelf: true,
-				sacrifice: { selector: { kind: "self" }, amount: 1 },
+				sacrifice: { predicate: { kind: "self" }, amount: 1 },
 			},
 			targets: [],
 			effects: [{ kind: "gain-life", player: "you", amount: 3 }],
@@ -2109,7 +2109,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					mana: "zero",
 					tapSelf: false,
 					sacrifice: {
-						selector: { kind: "type", type: "creature" },
+						predicate: { kind: "type", type: "creature" },
 						amount: 1,
 					},
 				},
@@ -2138,7 +2138,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				cost: {
 					mana: { n: 1 },
 					tapSelf: false,
-					sacrifice: { selector: { kind: "self" }, amount: 1 },
+					sacrifice: { predicate: { kind: "self" }, amount: 1 },
 				},
 				targets: [
 					{
@@ -2147,9 +2147,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						max: 1,
 						legal: {
 							kind: "permanent",
-							selector: {
-								kind: "any",
-								selectors: [
+							predicate: {
+								kind: "or",
+								predicates: [
 									{ kind: "type", type: "artifact" },
 									{ kind: "type", type: "enchantment" },
 								],
@@ -2182,7 +2182,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				cost: {
 					mana: { n: 1 },
 					tapSelf: false,
-					sacrifice: { selector: { kind: "self" }, amount: 1 },
+					sacrifice: { predicate: { kind: "self" }, amount: 1 },
 				},
 				targets: [
 					{
@@ -2191,9 +2191,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						max: 1,
 						legal: {
 							kind: "permanent",
-							selector: {
-								kind: "any",
-								selectors: [
+							predicate: {
+								kind: "or",
+								predicates: [
 									{ kind: "type", type: "artifact" },
 									{ kind: "type", type: "enchantment" },
 								],
@@ -2227,7 +2227,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [],
 				effects: [
@@ -2267,11 +2267,11 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			mana: { n: 1 },
 			tapSelf: false,
 			sacrifice: {
-				selector: {
-					kind: "all",
-					selectors: [
+				predicate: {
+					kind: "and",
+					predicates: [
 						{ kind: "type", type: "creature" },
-						{ kind: "not", selector: { kind: "self" } },
+						{ kind: "not", predicate: { kind: "self" } },
 					],
 				},
 				amount: 1,
@@ -2300,21 +2300,21 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					mana: "zero",
 					tapSelf: false,
 					sacrifice: {
-						selector: {
-							kind: "any",
-							selectors: [
+						predicate: {
+							kind: "or",
+							predicates: [
 								{
-									kind: "all",
-									selectors: [
+									kind: "and",
+									predicates: [
 										{ kind: "type", type: "creature" },
-										{ kind: "not", selector: { kind: "self" } },
+										{ kind: "not", predicate: { kind: "self" } },
 									],
 								},
 								{
-									kind: "all",
-									selectors: [
+									kind: "and",
+									predicates: [
 										{ kind: "type", type: "artifact" },
-										{ kind: "not", selector: { kind: "self" } },
+										{ kind: "not", predicate: { kind: "self" } },
 									],
 								},
 							],
@@ -2339,22 +2339,22 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		const result = importFixture("a/acolyte_of_aclazotz");
 		if (!result.ok) throw new Error("expected ok");
 		expect(
-			result.card.abilityDefinitions.activated[0]?.cost.sacrifice?.selector,
+			result.card.abilityDefinitions.activated[0]?.cost.sacrifice?.predicate,
 		).toEqual({
-			kind: "any",
-			selectors: [
+			kind: "or",
+			predicates: [
 				{
-					kind: "all",
-					selectors: [
+					kind: "and",
+					predicates: [
 						{ kind: "type", type: "creature" },
-						{ kind: "not", selector: { kind: "self" } },
+						{ kind: "not", predicate: { kind: "self" } },
 					],
 				},
 				{
-					kind: "all",
-					selectors: [
+					kind: "and",
+					predicates: [
 						{ kind: "type", type: "artifact" },
-						{ kind: "not", selector: { kind: "self" } },
+						{ kind: "not", predicate: { kind: "self" } },
 					],
 				},
 			],
@@ -2365,7 +2365,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		const result = importFixture("upcoming/disruptor_pistol");
 		if (!result.ok) throw new Error("expected ok");
 		expect(
-			result.card.abilityDefinitions.activated[0]?.cost.sacrifice?.selector,
+			result.card.abilityDefinitions.activated[0]?.cost.sacrifice?.predicate,
 		).toEqual({ kind: "self" });
 	});
 
@@ -2395,7 +2395,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			text: "Draw two cards.",
 			additionalCost: {
 				kind: "sacrifice",
-				selector: { kind: "type", type: "creature" },
+				predicate: { kind: "type", type: "creature" },
 				amount: 1,
 			},
 			targets: [],
@@ -2421,7 +2421,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				{
 					kind: "sacrifice",
 					player: { targetSlot: "target-1" },
-					selector: { kind: "type", type: "creature" },
+					predicate: { kind: "type", type: "creature" },
 					amount: 1,
 				},
 			],
@@ -2458,7 +2458,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.manaCost).toEqual({ r: 1 });
 		expect(result.card.spell?.additionalCost).toEqual({
 			kind: "sacrifice",
-			selector: { kind: "type", type: "creature" },
+			predicate: { kind: "type", type: "creature" },
 			amount: 1,
 		});
 	});
@@ -2472,7 +2472,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					id: "target-1",
 					legal: {
 						kind: "permanent",
-						selector: { kind: "type", type: "creature" },
+						predicate: { kind: "type", type: "creature" },
 					},
 				},
 			],
@@ -2499,7 +2499,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				cost: {
 					mana: "zero",
 					tapSelf: false,
-					sacrifice: { selector: { kind: "self" }, amount: 1 },
+					sacrifice: { predicate: { kind: "self" }, amount: 1 },
 				},
 				targets: [
 					{
@@ -2508,11 +2508,11 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						max: 1,
 						legal: {
 							kind: "permanent",
-							selector: {
-								kind: "all",
-								selectors: [
+							predicate: {
+								kind: "and",
+								predicates: [
 									{ kind: "type", type: "creature" },
-									{ kind: "not", selector: { kind: "self" } },
+									{ kind: "not", predicate: { kind: "self" } },
 									{ kind: "controller", player: "you" },
 								],
 							},
@@ -2560,9 +2560,9 @@ describe("lowerForgeCard: one-object ChangeZone", () => {
 					legal: {
 						kind: "card",
 						zone: "graveyard",
-						selector: {
-							kind: "all",
-							selectors: [
+						predicate: {
+							kind: "and",
+							predicates: [
 								{ kind: "type", type: "creature" },
 								{ kind: "owner", player: "you" },
 							],
@@ -2714,20 +2714,20 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 				kind: "change zone",
 				from: "any",
 				to: "battlefield",
-				selector: { kind: "self" },
+				predicate: { kind: "self" },
 			},
 			targets: [
 				{
 					id: "target-1",
 					legal: {
 						kind: "permanent",
-						selector: {
-							kind: "all",
-							selectors: [
+						predicate: {
+							kind: "and",
+							predicates: [
 								{ kind: "type", type: "creature" },
 								{
 									kind: "not",
-									selector: { kind: "subtype", subtype: "Angel" },
+									predicate: { kind: "subtype", subtype: "Angel" },
 								},
 								{ kind: "controller", player: "you" },
 							],
@@ -2774,12 +2774,12 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 				{
 					legal: {
 						kind: "permanent",
-						selector: {
-							kind: "all",
-							selectors: [
+						predicate: {
+							kind: "and",
+							predicates: [
 								{ kind: "type", type: "creature" },
 								{ kind: "controller", player: "you" },
-								{ kind: "not", selector: { kind: "self" } },
+								{ kind: "not", predicate: { kind: "self" } },
 							],
 						},
 					},
@@ -2995,7 +2995,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(result.card.manaCost).toEqual({ r: 1 });
 		expect(result.card.spell?.additionalCost).toEqual({
 			kind: "sacrifice",
-			selector: { kind: "type", type: "creature" },
+			predicate: { kind: "type", type: "creature" },
 			amount: 1,
 		});
 	});
@@ -3446,7 +3446,7 @@ describe("lowerForgeCard: hardening regressions", () => {
 				cost: {
 					mana: "zero",
 					tapSelf: true,
-					sacrifice: { selector: { kind: "self" }, amount: 1 },
+					sacrifice: { predicate: { kind: "self" }, amount: 1 },
 				},
 				manaOptions: [
 					{ w: 1, u: 0, b: 0, r: 0, g: 0, c: 0 },
@@ -3475,7 +3475,7 @@ describe("lowerForgeCard: hardening regressions", () => {
 				cost: {
 					mana: "zero",
 					tapSelf: true,
-					sacrifice: { selector: { kind: "self" }, amount: 1 },
+					sacrifice: { predicate: { kind: "self" }, amount: 1 },
 				},
 				manaOptions: [
 					{ w: 3, u: 0, b: 0, r: 0, g: 0, c: 0 },
@@ -3708,7 +3708,7 @@ describe("lowerForgeCard: chain traversal", () => {
 					kind: "change zone",
 					from: "any",
 					to: "battlefield",
-					selector: { kind: "self" },
+					predicate: { kind: "self" },
 				},
 				targets: [],
 				effects: [
@@ -3823,7 +3823,7 @@ describe("lowerForgeCard: ChangesZone dies triggers", () => {
 			kind: "change zone",
 			from: "battlefield",
 			to: "graveyard",
-			selector: { kind: "self" },
+			predicate: { kind: "self" },
 		});
 	});
 
