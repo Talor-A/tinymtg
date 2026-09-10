@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts"; // side effect: registers the card database
+import { CARDS } from "../cards.ts";
 import type {
 	SyncAgent as Agent,
 	ChoiceRequest,
@@ -13,17 +13,11 @@ import {
 	abilityId,
 	activePlayer,
 	ChoiceController,
-	checkStateBasedActions,
-	createReadContext,
+	createEngine,
+	defineCard,
 	getSnapshot,
 	isTurnStep,
-	newGame,
-	perform,
 	permanent,
-	registerCard,
-	settlePriority,
-	spawnCard,
-	spawnPermanent,
 } from "../index.ts";
 import {
 	type SyncAgents as Agents,
@@ -35,7 +29,7 @@ import {
 	passingAgents,
 } from "./utils/engine-helpers.ts";
 
-registerCard({
+const TEST_CARD_1 = defineCard({
 	id: "test-self-death-pinger",
 	name: "Test self-death pinger",
 	types: ["creature"],
@@ -64,7 +58,7 @@ registerCard({
 	],
 });
 
-registerCard({
+const TEST_CARD_2 = defineCard({
 	id: "test-broad-self-death",
 	name: "Test broad self-death",
 	types: ["creature"],
@@ -88,7 +82,7 @@ registerCard({
 	],
 });
 
-registerCard({
+const TEST_CARD_3 = defineCard({
 	id: "test-nonself-death",
 	name: "Test nonself death",
 	types: ["creature"],
@@ -111,6 +105,8 @@ registerCard({
 		},
 	],
 });
+
+const engine = createEngine([...CARDS, TEST_CARD_1, TEST_CARD_2, TEST_CARD_3]);
 
 describe("triggered abilities", () => {
 	function queueTestTrigger(
@@ -136,19 +132,19 @@ describe("triggered abilities", () => {
 	}
 
 	test("puts active-player triggers below nonactive-player triggers", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		// APNAP is meaningless without an active player, so run a real turn.
-		beginFirstTurn(state, agents);
+		beginFirstTurn(engine, state, agents);
 		expect(activePlayer(state)).toBe(ALICE);
 
-		const activeSource = spawnPermanent(state, "grizzly-bears", ALICE);
-		const nonactiveSource = spawnPermanent(state, "grizzly-bears", BOB);
+		const activeSource = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const nonactiveSource = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
 		// Deliberately enqueue in the opposite order from APNAP placement.
 		queueTestTrigger(state, nonactiveSource.id, BOB, "nonactive trigger");
 		queueTestTrigger(state, activeSource.id, ALICE, "active trigger");
-		settlePriority(state, agents);
+		engine.settlePriority(state, agents);
 
 		expect(state.log.filter((line) => line.includes("[stack]"))).toEqual([
 			"  [stack] active trigger",
@@ -161,10 +157,10 @@ describe("triggered abilities", () => {
 	});
 
 	test("records and replays a controller's chosen trigger order", () => {
-		const checkpoint = newGame();
-		beginFirstTurn(checkpoint, passingAgents());
-		const first = spawnPermanent(checkpoint, "grizzly-bears", ALICE);
-		const second = spawnPermanent(checkpoint, "eager-cadet", ALICE);
+		const checkpoint = engine.newGame();
+		beginFirstTurn(engine, checkpoint, passingAgents());
+		const first = engine.spawnPermanent(checkpoint, "grizzly-bears", ALICE);
+		const second = engine.spawnPermanent(checkpoint, "eager-cadet", ALICE);
 		queueTestTrigger(checkpoint, first.id, ALICE, "first trigger");
 		queueTestTrigger(checkpoint, second.id, ALICE, "second trigger");
 
@@ -185,11 +181,11 @@ describe("triggered abilities", () => {
 			},
 		};
 		const recordedState = structuredClone(checkpoint);
-		const recorder = ChoiceController.record([
+		const recorder = ChoiceController.record(engine, [
 			orderingAgent,
 			new ScriptedAgent(),
 		]);
-		settlePriority(recordedState, recorder);
+		engine.settlePriority(recordedState, recorder);
 
 		const transcript = JSON.parse(
 			JSON.stringify(recorder.transcript()),
@@ -204,20 +200,20 @@ describe("triggered abilities", () => {
 		).toEqual(["  [stack] second trigger", "  [stack] first trigger"]);
 
 		const replayedState = structuredClone(checkpoint);
-		const replay = ChoiceController.replay(transcript);
-		settlePriority(replayedState, replay);
+		const replay = ChoiceController.replay(engine, transcript);
+		engine.settlePriority(replayedState, replay);
 		replay.assertComplete();
 		expect(replayedState).toEqual(recordedState);
 	});
 
 	test("the forced-copy fixture queues and resolves a copied ETB trigger from its characteristics", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		beginFirstTurn(state, agents);
-		spawnPermanent(state, "arashin-cleric", ALICE);
-		const clone = spawnCard(state, "test-forced-copy", ALICE, "hand");
+		beginFirstTurn(engine, state, agents);
+		engine.spawnPermanent(state, "arashin-cleric", ALICE);
+		const clone = engine.spawnCard(state, "test-forced-copy", ALICE, "hand");
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -231,8 +227,8 @@ describe("triggered abilities", () => {
 
 		const entered = created(result);
 		expect(
-			getSnapshot(createReadContext(state), entered).currentCharacteristics
-				.name,
+			getSnapshot(engine.createReadContext(state), entered)
+				.currentCharacteristics.name,
 		).toBe("Arashin Cleric");
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(state.pendingTriggers[0]).toMatchObject({
@@ -241,15 +237,15 @@ describe("triggered abilities", () => {
 		});
 		expect(() => structuredClone(state)).not.toThrow();
 
-		settlePriority(state, agents);
+		engine.settlePriority(state, agents);
 		expect(state.players[ALICE].life).toBe(23);
 	});
 
 	test("Arashin Cleric queues its ETB trigger and gains life on resolution", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		beginFirstTurn(state, agents);
-		const cleric = spawnCard(state, "arashin-cleric", ALICE, "hand");
+		beginFirstTurn(engine, state, agents);
+		const cleric = engine.spawnCard(state, "arashin-cleric", ALICE, "hand");
 
 		const triggeringEvent = {
 			kind: "change zone",
@@ -258,14 +254,14 @@ describe("triggered abilities", () => {
 			destination: { zone: "battlefield", controller: ALICE },
 			cause: "resolve",
 		} satisfies GameEvent;
-		perform(state, triggeringEvent, agents);
+		engine.perform(state, triggeringEvent, agents);
 
 		expect(state.players[ALICE].life, "trigger has not resolved yet").toBe(20);
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(state.pendingTriggers[0]?.source).not.toBe(cleric.id);
 		expect(state.pendingTriggers[0]?.triggeringEvent).toBe(triggeringEvent);
 
-		settlePriority(state, agents);
+		engine.settlePriority(state, agents);
 		expect(state.players[ALICE].life).toBe(23);
 		expect(state.pendingTriggers).toHaveLength(0);
 		expect(state.stack).toHaveLength(0);
@@ -274,7 +270,8 @@ describe("triggered abilities", () => {
 	/** Enough library for both players to survive the turns a test advances. */
 	function stockLibraries(state: GameState): void {
 		for (const player of [ALICE, BOB]) {
-			for (let i = 0; i < 3; i++) spawnCard(state, "forest", player, "library");
+			for (let i = 0; i < 3; i++)
+				engine.spawnCard(state, "forest", player, "library");
 		}
 	}
 
@@ -283,16 +280,16 @@ describe("triggered abilities", () => {
 	}
 
 	test("Ajani's Mantra triggers only on its controller's upkeep", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "ajanis-mantra", ALICE);
+		engine.spawnPermanent(state, "ajanis-mantra", ALICE);
 		stockLibraries(state);
 
 		// The scheduler emits the upkeep itself: no hand-built begin-step event.
-		advanceUntil(state, agents, (next) => atUpkeepOf(next, ALICE));
+		advanceUntil(engine, state, agents, (next) => atUpkeepOf(next, ALICE));
 		expect(state.players[ALICE].life, "gains life on its own upkeep").toBe(21);
 
-		advanceUntil(state, agents, (next) => atUpkeepOf(next, BOB));
+		advanceUntil(engine, state, agents, (next) => atUpkeepOf(next, BOB));
 		expect(state.players[ALICE].life, "opponent's upkeep does nothing").toBe(
 			21,
 		);
@@ -300,27 +297,31 @@ describe("triggered abilities", () => {
 	});
 
 	test("Ajani's Mantra's controller may decline", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [
 			new ScriptedAgent([], [false]),
 			new ScriptedAgent(),
 		];
-		spawnPermanent(state, "ajanis-mantra", ALICE);
+		engine.spawnPermanent(state, "ajanis-mantra", ALICE);
 		stockLibraries(state);
 
-		advanceUntil(state, agents, (next) => atUpkeepOf(next, ALICE));
+		advanceUntil(engine, state, agents, (next) => atUpkeepOf(next, ALICE));
 
 		expect(state.players[ALICE].life).toBe(20);
 	});
 
 	test("a self-death trigger snapshots its old source and resolves targeted damage", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const alice = new ScriptedAgent();
 		const bob = new ScriptedAgent();
 		bob.targetChoices.push({ type: "player", player: ALICE });
 		const agents: Agents = [alice, bob];
-		beginFirstTurn(state, agents);
-		const source = spawnPermanent(state, "test-self-death-pinger", ALICE);
+		beginFirstTurn(engine, state, agents);
+		const source = engine.spawnPermanent(
+			state,
+			"test-self-death-pinger",
+			ALICE,
+		);
 		permanent(state, source.id).controller = BOB;
 		state.revision++;
 
@@ -331,7 +332,7 @@ describe("triggered abilities", () => {
 			destination: { zone: "graveyard" },
 			cause: "sacrifice",
 		} satisfies GameEvent;
-		const result = perform(state, triggeringEvent, agents);
+		const result = engine.perform(state, triggeringEvent, agents);
 
 		expect(state.objects.has(source.id), "the old object is gone").toBe(false);
 		expect(created(result), "the graveyard object has a new ID").not.toBe(
@@ -359,7 +360,7 @@ describe("triggered abilities", () => {
 				return alice.choose(view, request);
 			},
 		};
-		expect(() => settlePriority(state, [stoppingAlice, bob])).toThrow(
+		expect(() => engine.settlePriority(state, [stoppingAlice, bob])).toThrow(
 			stopAfterStacking,
 		);
 		expect(state.stack).toHaveLength(1);
@@ -376,7 +377,7 @@ describe("triggered abilities", () => {
 		});
 		expect(() => structuredClone(state)).not.toThrow();
 
-		settlePriority(state, agents);
+		engine.settlePriority(state, agents);
 		expect(state.players[ALICE].life, "the departed source dealt damage").toBe(
 			18,
 		);
@@ -389,18 +390,22 @@ describe("triggered abilities", () => {
 	});
 
 	test("departed sources retain deathtouch for noncombat damage", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const alice = new ScriptedAgent();
 		const bob = new ScriptedAgent();
 		const agents: Agents = [alice, bob];
-		beginFirstTurn(state, agents);
-		const source = spawnPermanent(state, "test-self-death-pinger", ALICE);
-		const target = spawnPermanent(state, "grizzly-bears", BOB, {
+		beginFirstTurn(engine, state, agents);
+		const source = engine.spawnPermanent(
+			state,
+			"test-self-death-pinger",
+			ALICE,
+		);
+		const target = engine.spawnPermanent(state, "grizzly-bears", BOB, {
 			counters: { "+1/+1": 1 },
 		});
 		alice.targetChoices.push({ type: "permanent", id: target.id });
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -411,7 +416,7 @@ describe("triggered abilities", () => {
 			},
 			agents,
 		);
-		settlePriority(state, agents);
+		engine.settlePriority(state, agents);
 
 		expect(
 			state.objects.has(target.id),
@@ -426,8 +431,8 @@ describe("triggered abilities", () => {
 	test.each(["destroy", "state-based action"] as const)(
 		"queues the self-death trigger through %s movement",
 		(mechanism) => {
-			const state = newGame();
-			const source = spawnPermanent(
+			const state = engine.newGame();
+			const source = engine.spawnPermanent(
 				state,
 				"test-self-death-pinger",
 				ALICE,
@@ -437,13 +442,13 @@ describe("triggered abilities", () => {
 			);
 
 			if (mechanism === "destroy") {
-				perform(
+				engine.perform(
 					state,
 					{ kind: "destroy", object: source.id, noRegen: true },
 					passingAgents(),
 				);
 			} else {
-				checkStateBasedActions(state, passingAgents());
+				engine.checkStateBasedActions(state, passingAgents());
 			}
 
 			expect(state.objects.has(source.id)).toBe(false);
@@ -453,12 +458,16 @@ describe("triggered abilities", () => {
 	);
 
 	test("a graveyard redirect does not queue the self-death trigger", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnPermanent(state, "samurai-of-the-pale-curtain", ALICE);
-		const source = spawnPermanent(state, "test-self-death-pinger", ALICE);
+		engine.spawnPermanent(state, "samurai-of-the-pale-curtain", ALICE);
+		const source = engine.spawnPermanent(
+			state,
+			"test-self-death-pinger",
+			ALICE,
+		);
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -482,11 +491,11 @@ describe("triggered abilities", () => {
 	test.each(["test-broad-self-death", "test-nonself-death"])(
 		"keeps %s as an explicit unsupported leaves trigger",
 		(cardId) => {
-			const state = newGame();
-			const source = spawnPermanent(state, cardId, ALICE);
+			const state = engine.newGame();
+			const source = engine.spawnPermanent(state, cardId, ALICE);
 
 			expect(() =>
-				perform(
+				engine.perform(
 					state,
 					{
 						kind: "change zone",
@@ -502,11 +511,11 @@ describe("triggered abilities", () => {
 	);
 
 	test("a trigger resolves after its source leaves", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		beginFirstTurn(state, agents);
-		const cleric = spawnCard(state, "arashin-cleric", ALICE, "hand");
-		const result = perform(
+		beginFirstTurn(engine, state, agents);
+		const cleric = engine.spawnCard(state, "arashin-cleric", ALICE, "hand");
+		const result = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -517,12 +526,12 @@ describe("triggered abilities", () => {
 			},
 			agents,
 		);
-		perform(
+		engine.perform(
 			state,
 			{ kind: "destroy", object: created(result), noRegen: true },
 			agents,
 		);
-		settlePriority(state, agents);
+		engine.settlePriority(state, agents);
 		expect(state.players[ALICE].life).toBe(23);
 	});
 });

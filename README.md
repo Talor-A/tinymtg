@@ -48,15 +48,15 @@ external Forge text
   -> parseForgeCardScript(text).card       Forge-owned syntax and references
   -> lowerForgeCard(ast, { id })           supported semantic subset
   -> CardDefInput -> defineCard(input)     engine-owned definitions
-  -> registerCard(definition)              explicit caller action
+  -> createEngine(definitions)             explicit immutable registry
 ```
 
 - `importForgeCard(text, { id })` composes parsing and lowering.
 - `lowerForgeCard(ast, { id })` lowers an already-parsed `ForgeCardAst`.
 
 Both return an `ImportResult`: either `{ ok: true, card, diagnostics }` or
-`{ ok: false, diagnostics }`. Neither function registers a card or touches game
-state, and a rejected card exposes no partially-usable `CardDef` — `ok: false`
+`{ ok: false, diagnostics }`. Neither function touches game state, and a
+rejected card exposes no partially-usable `CardDef` — `ok: false`
 carries only diagnostics (stable codes such as `UNSUPPORTED_FACE`,
 `UNSUPPORTED_PARAMETER`, `UNSUPPORTED_COST`, `UNSUPPORTED_TARGET`,
 `UNSUPPORTED_EFFECT`, `UNSUPPORTED_KEYWORD`, `UNSUPPORTED_REFERENCE`). The
@@ -149,15 +149,16 @@ domain: for example, `not creature` over permanents can match a land, but it
 cannot introduce a player, spell, or card in another zone.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 2,883 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 3,333 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
 
-`test/utils/engine-helpers.ts`'s `registerCardFixture(cardsfolderPath)` reads
-a real card from `cards/cardsfolder`, imports it through this bridge, and
-registers the result — so a card whose printed definition no longer lowers
-fails the tests that depend on it, rather than silently drifting.
+`test/utils/engine-helpers.ts`'s `loadCardFixture(cardsfolderPath)` reads a real
+card from `cards/cardsfolder` and imports it through this bridge. Tests pass the
+returned definition to their engine explicitly, so a card whose printed
+definition no longer lowers fails the tests that depend on it rather than
+silently drifting.
 
 ## Current gameplay boundary
 

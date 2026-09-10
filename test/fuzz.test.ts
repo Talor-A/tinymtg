@@ -1,16 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { FuzzAgent } from "./utils/fuzz-agent.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import {
-	advance,
 	ChoiceController,
+	createEngine,
 	type GameState,
 	gameOver,
-	newGame,
 	type SyncAgent,
-	spawnCard,
-	spawnPermanent,
 } from "../index.ts";
+import { FuzzAgent } from "./utils/fuzz-agent.ts";
+
+const engine = createEngine(CARDS);
 
 const LIBRARY_CARDS = [
 	"forest",
@@ -55,29 +54,29 @@ function pick<T>(rng: () => number, values: readonly T[]): T {
 }
 
 /**
- * Builds varied but scheduler-valid games. The fuzzer only calls advance(); it
+ * Builds varied but scheduler-valid games. The fuzzer only calls engine.advance(); it
  * does not inject arbitrary events into states where their preconditions may
  * not hold.
  */
 function startingState(seed: number): GameState {
 	const rng = mulberry32(seed);
-	const state = newGame();
+	const state = engine.newGame();
 
 	for (const player of [0, 1] as const) {
 		const librarySize = 8 + Math.floor(rng() * 8);
 		for (let i = 0; i < librarySize; i++) {
-			spawnCard(state, pick(rng, LIBRARY_CARDS), player, "library");
+			engine.spawnCard(state, pick(rng, LIBRARY_CARDS), player, "library");
 		}
 
 		// Some games begin above maximum hand size so cleanup produces choices.
 		const handSize = Math.floor(rng() * 11);
 		for (let i = 0; i < handSize; i++) {
-			spawnCard(state, pick(rng, LIBRARY_CARDS), player, "hand");
+			engine.spawnCard(state, pick(rng, LIBRARY_CARDS), player, "hand");
 		}
 
 		const permanentCount = 1 + Math.floor(rng() * 8);
 		for (let i = 0; i < permanentCount; i++) {
-			spawnPermanent(state, pick(rng, PERMANENTS), player);
+			engine.spawnPermanent(state, pick(rng, PERMANENTS), player);
 		}
 	}
 
@@ -91,7 +90,7 @@ function runAdvances(
 ): number {
 	let advances = 0;
 	while (advances < limit && !gameOver(state)) {
-		advance(state, choices);
+		engine.advance(state, choices);
 		advances++;
 	}
 	return advances;
@@ -107,7 +106,7 @@ describe("choice transcript fuzz", () => {
 		for (let seed = 0; seed < 200; seed++) {
 			const checkpoint = startingState(seed);
 			const recordedState = structuredClone(checkpoint);
-			const recorder = ChoiceController.record(agents(seed));
+			const recorder = ChoiceController.record(engine, agents(seed));
 			const advances = runAdvances(recordedState, recorder, 200);
 			const transcript = JSON.parse(
 				JSON.stringify(recorder.transcript()),
@@ -117,7 +116,7 @@ describe("choice transcript fuzz", () => {
 			}
 
 			const replayedState = structuredClone(checkpoint);
-			const replay = ChoiceController.replay(transcript);
+			const replay = ChoiceController.replay(engine, transcript);
 			const replayedAdvances = runAdvances(replayedState, replay, advances);
 			replay.assertComplete();
 

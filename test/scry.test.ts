@@ -1,32 +1,33 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import {
 	type Agent,
 	type ChoiceAnswer,
 	ChoiceController,
 	ChoicePendingError,
 	type ChoiceRequest,
+	createEngine,
+	type GameState,
 	InvalidChoiceAnswerError,
-	newGame,
 	type ObjectId,
 	type PlayerView,
-	perform,
 	type SyncAgent,
-	spawnCard,
 } from "../index.ts";
 
-function cards(state: ReturnType<typeof newGame>): ObjectId[] {
+const engine = createEngine(CARDS);
+
+function cards(state: GameState): ObjectId[] {
 	return [
-		spawnCard(state, "forest", 0, "library").id,
-		spawnCard(state, "grizzly-bears", 0, "library").id,
-		spawnCard(state, "eager-cadet", 0, "library").id,
+		engine.spawnCard(state, "forest", 0, "library").id,
+		engine.spawnCard(state, "grizzly-bears", 0, "library").id,
+		engine.spawnCard(state, "eager-cadet", 0, "library").id,
 	];
 }
 
 describe("scry choices", () => {
 	test("returns an ordered partition and replays it exactly", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected three cards");
@@ -38,7 +39,7 @@ describe("scry choices", () => {
 				return { top: [String(b), String(c)], bottom: [String(a)] };
 			},
 		};
-		const recorder = ChoiceController.record([agent, agent]);
+		const recorder = ChoiceController.record(engine, [agent, agent]);
 
 		expect(recorder.chooseScry(state, 0, [c, b, a])).toEqual({
 			top: [b, c],
@@ -50,6 +51,7 @@ describe("scry choices", () => {
 		}
 
 		const replay = ChoiceController.replay(
+			engine,
 			JSON.parse(JSON.stringify(recorder.transcript())),
 		);
 		expect(replay.chooseScry(state, 0, [c, b, a])).toEqual({
@@ -60,7 +62,7 @@ describe("scry choices", () => {
 	});
 
 	test("rejects missing, duplicate, and unknown cards", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const [a, b] = cards(state);
 		if (a === undefined || b === undefined) throw new Error("expected cards");
 		const answers: ChoiceAnswer[] = [
@@ -71,7 +73,7 @@ describe("scry choices", () => {
 		];
 		for (const answer of answers) {
 			expect(() =>
-				ChoiceController.record([
+				ChoiceController.record(engine, [
 					{ choose: () => answer },
 					new ScriptedAgent(),
 				]).chooseScry(state, 0, [a, b]),
@@ -80,7 +82,7 @@ describe("scry choices", () => {
 	});
 
 	test("supports suspension without recording a speculative answer", async () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const [a, b] = cards(state);
 		if (a === undefined || b === undefined) throw new Error("expected cards");
 		let resolveAnswer: ((answer: ChoiceAnswer) => void) | undefined;
@@ -88,7 +90,7 @@ describe("scry choices", () => {
 			resolveAnswer = resolve;
 		});
 		const agent: Agent = { choose: () => answer };
-		const choices = ChoiceController.suspending([agent, agent]);
+		const choices = ChoiceController.suspending(engine, [agent, agent]);
 
 		let pending: ChoicePendingError | undefined;
 		try {
@@ -113,8 +115,8 @@ describe("scry choices", () => {
 
 describe("scry events", () => {
 	test("applies top and bottom order to the library atomically", () => {
-		const state = newGame();
-		const untouched = spawnCard(state, "darksteel-myr", 0, "library").id;
+		const state = engine.newGame();
+		const untouched = engine.spawnCard(state, "darksteel-myr", 0, "library").id;
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected cards");
@@ -128,10 +130,11 @@ describe("scry events", () => {
 			},
 		};
 
-		const result = perform(state, { kind: "scry", player: 0, amount: 3 }, [
-			agent,
-			agent,
-		]);
+		const result = engine.perform(
+			state,
+			{ kind: "scry", player: 0, amount: 3 },
+			[agent, agent],
+		);
 
 		expect(seen).toEqual([c, b, a]);
 		// Canonical storage is bottom-to-top, so draws are b, c, untouched, a.
@@ -140,7 +143,7 @@ describe("scry events", () => {
 	});
 
 	test("positive scry on an empty library happens, while scry 0 does not", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		let choices = 0;
 		const agent: SyncAgent = {
 			choose() {
@@ -150,19 +153,23 @@ describe("scry events", () => {
 		};
 
 		expect(
-			perform(state, { kind: "scry", player: 0, amount: 3 }, [agent, agent])
-				.executed,
+			engine.perform(state, { kind: "scry", player: 0, amount: 3 }, [
+				agent,
+				agent,
+			]).executed,
 		).toEqual([{ kind: "scry", player: 0, amount: 3 }]);
 		expect(
-			perform(state, { kind: "scry", player: 0, amount: 0 }, [agent, agent])
-				.executed,
+			engine.perform(state, { kind: "scry", player: 0, amount: 0 }, [
+				agent,
+				agent,
+			]).executed,
 		).toEqual([]);
 		expect(choices).toBe(0);
 	});
 
 	test("looks at every available card when the library has fewer than X", () => {
-		const state = newGame();
-		const only = spawnCard(state, "forest", 0, "library").id;
+		const state = engine.newGame();
+		const only = engine.spawnCard(state, "forest", 0, "library").id;
 		let seen: ObjectId[] | undefined;
 		const agent: SyncAgent = {
 			choose(_view, request) {
@@ -172,7 +179,10 @@ describe("scry events", () => {
 			},
 		};
 
-		perform(state, { kind: "scry", player: 0, amount: 5 }, [agent, agent]);
+		engine.perform(state, { kind: "scry", player: 0, amount: 5 }, [
+			agent,
+			agent,
+		]);
 		expect(seen).toEqual([only]);
 		expect(state.players[0].library).toEqual([only]);
 	});

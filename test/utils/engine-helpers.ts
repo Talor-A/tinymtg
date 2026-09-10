@@ -1,21 +1,15 @@
 import { ScriptedAgent } from "../../agents.ts";
 import type {
+	Engine,
 	GameState,
 	ObjectId,
 	PlayerId,
 	StepKind,
 	SyncAgent,
 } from "../../index.ts";
-import {
-	advance,
-	gameOver,
-	isTurnStep,
-	newGame,
-	spawnCard,
-	turnLocation,
-} from "../../index.ts";
+import { gameOver, isTurnStep, turnLocation } from "../../index.ts";
 
-export { registerCardFixture } from "../../corpus.ts";
+export { loadCardFixture } from "../../corpus.ts";
 
 export const ALICE = 0 as PlayerId;
 export const BOB = 1 as PlayerId;
@@ -44,6 +38,7 @@ export function expectScriptConsumed(agent: ScriptedAgent): void {
 }
 
 export function advanceUntil(
+	engine: Engine,
 	state: GameState,
 	agents: SyncAgents,
 	done: (state: GameState) => boolean,
@@ -51,7 +46,7 @@ export function advanceUntil(
 ): void {
 	for (let count = 0; count < maxAdvances; count++) {
 		if (done(state)) return;
-		advance(state, agents);
+		engine.advance(state, agents);
 	}
 	throw new Error(
 		`engine did not reach the expected state after ${maxAdvances} advances`,
@@ -67,19 +62,28 @@ export function advanceUntil(
  * opens no priority window and deliberately holds triggers back (CR 502.4),
  * and the draw step would draw from the empty libraries most tests set up.
  */
-export function beginFirstTurn(state: GameState, agents: SyncAgents): void {
-	advanceUntil(state, agents, (next) => isTurnStep(next, "upkeep"));
+export function beginFirstTurn(
+	engine: Engine,
+	state: GameState,
+	agents: SyncAgents,
+): void {
+	advanceUntil(engine, state, agents, (next) => isTurnStep(next, "upkeep"));
 }
 
 /**
  * Consumes the CR 103 pre-game without entering the first turn, leaving the
- * next advance() to be the one that installs the turn and its untap step.
+ * next engine.advance() to be the one that installs the turn and its untap step.
  *
- * `startGame()` stops one transition later, inside the turn. Use this instead
+ * `engine.startGame()` stops one transition later, inside the turn. Use this instead
  * when the untap transition itself is what a test is exercising.
  */
-export function completePreGame(state: GameState, agents: SyncAgents): void {
+export function completePreGame(
+	engine: Engine,
+	state: GameState,
+	agents: SyncAgents,
+): void {
 	advanceUntil(
+		engine,
 		state,
 		agents,
 		(next) =>
@@ -106,9 +110,14 @@ export function atMain(
 }
 
 /** Advances until one more turn has completed, or the game has ended. */
-export function playOneTurn(state: GameState, agents: SyncAgents): void {
+export function playOneTurn(
+	engine: Engine,
+	state: GameState,
+	agents: SyncAgents,
+): void {
 	const completedTurns = state.completedTurns;
 	advanceUntil(
+		engine,
 		state,
 		agents,
 		(next) => next.completedTurns > completedTurns || gameOver(next),
@@ -122,20 +131,25 @@ export function playOneTurn(state: GameState, agents: SyncAgents): void {
  * library would lose the drawing player the game before the test's own subject
  * is ever reached.
  */
-export function seedLibraries(state: GameState, count = 3): void {
+export function seedLibraries(
+	engine: Engine,
+	state: GameState,
+	count = 3,
+): void {
 	for (let i = 0; i < count; i++) {
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
 	}
 }
 
 /** A fresh game advanced to the named main phase, with libraries seeded. */
 export function setupMain(
+	engine: Engine,
 	role: "precombat" | "postcombat" = "precombat",
 ): GameState {
-	const state = newGame();
-	seedLibraries(state);
-	advanceUntil(state, passingAgents(), (next) => atMain(next, role));
+	const state = engine.newGame();
+	seedLibraries(engine, state);
+	advanceUntil(engine, state, passingAgents(), (next) => atMain(next, role));
 	return state;
 }
 
@@ -146,8 +160,8 @@ export function created(result: { created: ObjectId[] }): ObjectId {
 	return id;
 }
 /** start a game, skipping pregame shuffle / deal / mulligan. */
-export function newInProgressGame(seed = 0) {
-	const state = newGame(seed);
+export function newInProgressGame(engine: Engine, seed = 0) {
+	const state = engine.newGame(seed);
 	state.turnScheduler = {
 		nextAction: { kind: "finishPreGameStep" },
 		// start the game after opening hand actions.

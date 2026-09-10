@@ -2825,6 +2825,10 @@ export class Engine {
 		return definition;
 	}
 
+	withCards(inputs: readonly (CardDefInput | CardDef)[]): Engine {
+		return new Engine([...this.#cards.values(), ...inputs]);
+	}
+
 	getAbilityDefinition<C extends AbilityCategory>(
 		category: C,
 		id: AbilityId<C>,
@@ -3162,7 +3166,7 @@ function emptyManaPools(state: GameState): void {
  * on purpose: tests and the fuzzer depend on `newGame()` being reproducible.
  * Callers that want a different game each run pass their own seed.
  */
-export function newGame(seed = 0): GameState {
+function newGame(seed = 0): GameState {
 	return {
 		revision: 0,
 		objects: new Map(),
@@ -3194,7 +3198,7 @@ export function newGame(seed = 0): GameState {
  * Object creation
  * ------------------------------------------------------------------ */
 
-export function spawnCard(
+function spawnCard(
 	state: GameState,
 	cardId: string,
 	owner: PlayerId,
@@ -3274,7 +3278,7 @@ function spawnPermanent(
 	return spawnOnBattlefield(state, owner, representation, opts);
 }
 
-export function spawnToken(
+function spawnToken(
 	state: GameState,
 	owner: PlayerId,
 	characteristics: CharacteristicsSnapshot,

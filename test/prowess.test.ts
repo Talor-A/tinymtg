@@ -8,19 +8,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import "../cards.ts"; // side effect: registers the card database
+import { CARDS } from "../cards.ts";
 import type { CastAction, GameState, ObjectId } from "../index.ts";
-import {
-	abilityId,
-	createReadContext,
-	executeCastAction,
-	getAbilityDefinition,
-	getSnapshot,
-	registerCard,
-	settlePriority,
-	spawnCard,
-	spawnPermanent,
-} from "../index.ts";
+import { abilityId, createEngine, defineCard, getSnapshot } from "../index.ts";
 import {
 	ALICE,
 	BOB,
@@ -29,7 +19,7 @@ import {
 	setupMain,
 } from "./utils/engine-helpers.ts";
 
-registerCard({
+const TEST_CARD_1 = defineCard({
 	id: "test-prowess-free-instant",
 	name: "Test Prowess Free Instant",
 	types: ["instant"],
@@ -43,7 +33,7 @@ registerCard({
 	},
 });
 
-registerCard({
+const TEST_CARD_2 = defineCard({
 	id: "test-prowess-free-creature",
 	name: "Test Prowess Free Creature",
 	types: ["creature"],
@@ -53,13 +43,15 @@ registerCard({
 	toughness: 1,
 });
 
+const engine = createEngine([...CARDS, TEST_CARD_1, TEST_CARD_2]);
+
 function castAction(card: ObjectId): CastAction {
 	return { kind: "cast", card };
 }
 
 /** Power and toughness as the layer walk currently derives them. */
 function currentPT(state: GameState, id: ObjectId): [number, number] {
-	const snapshot = getSnapshot(createReadContext(state), id);
+	const snapshot = getSnapshot(engine.createReadContext(state), id);
 	const current = snapshot.currentCharacteristics;
 	if (current.kind !== "creature")
 		throw new Error("expected a creature snapshot");
@@ -68,9 +60,16 @@ function currentPT(state: GameState, id: ObjectId): [number, number] {
 
 describe("prowess", () => {
 	test("Monastery Swiftspear prints the keyword and the ability it stands for", () => {
-		const state = setupMain();
-		const swiftspear = spawnPermanent(state, "monastery-swiftspear", ALICE);
-		const snapshot = getSnapshot(createReadContext(state), swiftspear.id);
+		const state = setupMain(engine);
+		const swiftspear = engine.spawnPermanent(
+			state,
+			"monastery-swiftspear",
+			ALICE,
+		);
+		const snapshot = getSnapshot(
+			engine.createReadContext(state),
+			swiftspear.id,
+		);
 
 		expect(snapshot.currentCharacteristics.keywords).toEqual([
 			"haste",
@@ -82,7 +81,7 @@ describe("prowess", () => {
 			abilityId("triggered", "monastery-swiftspear", 0),
 		]);
 		expect(
-			getAbilityDefinition(
+			engine.getAbilityDefinition(
 				"triggered",
 				abilityId("triggered", "monastery-swiftspear", 0),
 			).condition,
@@ -94,110 +93,165 @@ describe("prowess", () => {
 	});
 
 	test("a noncreature spell pumps the creature until end of turn", () => {
-		const state = setupMain();
-		const swiftspear = spawnPermanent(state, "monastery-swiftspear", ALICE);
+		const state = setupMain(engine);
+		const swiftspear = engine.spawnPermanent(
+			state,
+			"monastery-swiftspear",
+			ALICE,
+		);
 		expect(currentPT(state, swiftspear.id)).toEqual([1, 2]);
 
-		const instant = spawnCard(
+		const instant = engine.spawnCard(
 			state,
 			"test-prowess-free-instant",
 			ALICE,
 			"hand",
 		);
-		executeCastAction(state, ALICE, castAction(instant.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(instant.id),
+			passingAgents(),
+		);
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(state.pendingTriggers[0]?.triggerId).toBe(
 			abilityId("triggered", "monastery-swiftspear", 0),
 		);
 
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		expect(currentPT(state, swiftspear.id)).toEqual([2, 3]);
 	});
 
 	test("a creature spell does not trigger it", () => {
-		const state = setupMain();
-		const swiftspear = spawnPermanent(state, "monastery-swiftspear", ALICE);
-		const creature = spawnCard(
+		const state = setupMain(engine);
+		const swiftspear = engine.spawnPermanent(
+			state,
+			"monastery-swiftspear",
+			ALICE,
+		);
+		const creature = engine.spawnCard(
 			state,
 			"test-prowess-free-creature",
 			ALICE,
 			"hand",
 		);
 
-		executeCastAction(state, ALICE, castAction(creature.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(creature.id),
+			passingAgents(),
+		);
 		expect(state.pendingTriggers).toHaveLength(0);
 
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		expect(currentPT(state, swiftspear.id)).toEqual([1, 2]);
 	});
 
 	test("an opponent's noncreature spell does not trigger it", () => {
-		const state = setupMain();
-		const swiftspear = spawnPermanent(state, "monastery-swiftspear", ALICE);
-		const instant = spawnCard(state, "test-prowess-free-instant", BOB, "hand");
+		const state = setupMain(engine);
+		const swiftspear = engine.spawnPermanent(
+			state,
+			"monastery-swiftspear",
+			ALICE,
+		);
+		const instant = engine.spawnCard(
+			state,
+			"test-prowess-free-instant",
+			BOB,
+			"hand",
+		);
 
-		executeCastAction(state, BOB, castAction(instant.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			BOB,
+			castAction(instant.id),
+			passingAgents(),
+		);
 		expect(state.pendingTriggers).toHaveLength(0);
 
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		expect(currentPT(state, swiftspear.id)).toEqual([1, 2]);
 	});
 
 	test("each instance triggers separately (CR 702.108b)", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		// Thor Odinson prints `K:Prowess` twice, so it has prowess twice.
-		const thor = spawnPermanent(state, "thor-odinson", ALICE);
+		const thor = engine.spawnPermanent(state, "thor-odinson", ALICE);
 		expect(currentPT(state, thor.id)).toEqual([4, 4]);
 
-		const instant = spawnCard(
+		const instant = engine.spawnCard(
 			state,
 			"test-prowess-free-instant",
 			ALICE,
 			"hand",
 		);
-		executeCastAction(state, ALICE, castAction(instant.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(instant.id),
+			passingAgents(),
+		);
 		expect(state.pendingTriggers.map((pending) => pending.triggerId)).toEqual([
 			abilityId("triggered", "thor-odinson", 0),
 			abilityId("triggered", "thor-odinson", 1),
 		]);
 
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		expect(currentPT(state, thor.id)).toEqual([6, 6]);
 	});
 
 	test("two noncreature spells stack their bonuses", () => {
-		const state = setupMain();
-		const swiftspear = spawnPermanent(state, "monastery-swiftspear", ALICE);
+		const state = setupMain(engine);
+		const swiftspear = engine.spawnPermanent(
+			state,
+			"monastery-swiftspear",
+			ALICE,
+		);
 
 		for (let cast = 0; cast < 2; cast++) {
-			const instant = spawnCard(
+			const instant = engine.spawnCard(
 				state,
 				"test-prowess-free-instant",
 				ALICE,
 				"hand",
 			);
-			executeCastAction(state, ALICE, castAction(instant.id), passingAgents());
-			settlePriority(state, passingAgents());
+			engine.executeCastAction(
+				state,
+				ALICE,
+				castAction(instant.id),
+				passingAgents(),
+			);
+			engine.settlePriority(state, passingAgents());
 		}
 
 		expect(currentPT(state, swiftspear.id)).toEqual([3, 4]);
 	});
 
 	test("the bonus wears off at end of turn", () => {
-		const state = setupMain();
-		const swiftspear = spawnPermanent(state, "monastery-swiftspear", ALICE);
-		const instant = spawnCard(
+		const state = setupMain(engine);
+		const swiftspear = engine.spawnPermanent(
+			state,
+			"monastery-swiftspear",
+			ALICE,
+		);
+		const instant = engine.spawnCard(
 			state,
 			"test-prowess-free-instant",
 			ALICE,
 			"hand",
 		);
 
-		executeCastAction(state, ALICE, castAction(instant.id), passingAgents());
-		settlePriority(state, passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(instant.id),
+			passingAgents(),
+		);
+		engine.settlePriority(state, passingAgents());
 		expect(currentPT(state, swiftspear.id)).toEqual([2, 3]);
 
-		playOneTurn(state, passingAgents());
+		playOneTurn(engine, state, passingAgents());
 		expect(currentPT(state, swiftspear.id)).toEqual([1, 2]);
 	});
 });

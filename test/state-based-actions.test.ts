@@ -1,19 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import { regenerationShield } from "../cards.ts"; // also a side effect: registers the card database
+import { CARDS, regenerationShield } from "../cards.ts";
 import {
 	addTemporaryEffect,
 	type CharacteristicsSnapshot,
-	checkStateBasedActions,
-	createReadContext,
+	createEngine,
+	defineCard,
 	getSnapshot,
-	newGame,
-	perform,
 	permanent,
 	physicalCardId,
-	registerCard,
-	spawnPermanent,
-	spawnToken,
 } from "../index.ts";
 import { assert } from "../lib/assert.ts";
 import {
@@ -43,7 +38,7 @@ const ZOMBIE_TOKEN: CharacteristicsSnapshot = {
 	toughness: 2,
 };
 
-const INDESTRUCTIBLE_ANTHEM = registerCard({
+const INDESTRUCTIBLE_ANTHEM = defineCard({
 	id: "test-indestructible-anthem",
 	name: "Indestructible Anthem",
 	types: ["enchantment"],
@@ -69,24 +64,30 @@ const INDESTRUCTIBLE_ANTHEM = registerCard({
 	],
 });
 
+const engine = createEngine([...CARDS, INDESTRUCTIBLE_ANTHEM]);
+
 describe("indestructible permanents", () => {
 	test("a layer-6 grant follows its source without changing copiable values", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const anthem = spawnPermanent(state, INDESTRUCTIBLE_ANTHEM.id, ALICE);
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
+		const anthem = engine.spawnPermanent(
+			state,
+			INDESTRUCTIBLE_ANTHEM.id,
+			ALICE,
+		);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 
-		const granted = getSnapshot(createReadContext(state), bears.id);
+		const granted = getSnapshot(engine.createReadContext(state), bears.id);
 		expect(granted.currentCharacteristics.keywords).toContain("indestructible");
 		expect(granted.copiableValues.keywords).not.toContain("indestructible");
-		perform(
+		engine.perform(
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			agents,
 		);
 		expect(state.battlefield).toContain(bears.id);
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -97,12 +98,12 @@ describe("indestructible permanents", () => {
 			},
 			agents,
 		);
-		const expired = getSnapshot(createReadContext(state), bears.id);
+		const expired = getSnapshot(engine.createReadContext(state), bears.id);
 		expect(expired.currentCharacteristics.keywords).not.toContain(
 			"indestructible",
 		);
 
-		perform(
+		engine.perform(
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			agents,
@@ -111,12 +112,12 @@ describe("indestructible permanents", () => {
 	});
 
 	test("a failed destruction attempt doesn't consume a regeneration shield", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const myr = spawnPermanent(state, "darksteel-myr", ALICE);
+		const myr = engine.spawnPermanent(state, "darksteel-myr", ALICE);
 		addTemporaryEffect(state, ALICE, regenerationShield(myr.id));
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{ kind: "destroy", object: myr.id, noRegen: false },
 			agents,
@@ -134,17 +135,17 @@ describe("indestructible permanents", () => {
 	});
 
 	test("lethal damage and deathtouch don't destroy them", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const lethal = spawnPermanent(state, "darksteel-myr", ALICE);
-		const deathtouched = spawnPermanent(state, "darksteel-myr", ALICE, {
+		const lethal = engine.spawnPermanent(state, "darksteel-myr", ALICE);
+		const deathtouched = engine.spawnPermanent(state, "darksteel-myr", ALICE, {
 			counters: { "+1/+1": 1 },
 		});
 		permanent(state, lethal.id).damage = 1;
 		permanent(state, deathtouched.id).damage = 1;
 		permanent(state, deathtouched.id).attributes.deathtouched = true;
 
-		checkStateBasedActions(state, agents);
+		engine.checkStateBasedActions(state, agents);
 
 		expect(state.battlefield.includes(lethal.id)).toBe(true);
 		expect(state.battlefield.includes(deathtouched.id)).toBe(true);
@@ -155,13 +156,13 @@ describe("indestructible permanents", () => {
 	});
 
 	test("zero toughness still puts them into the graveyard", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const myr = spawnPermanent(state, "darksteel-myr", ALICE, {
+		const myr = engine.spawnPermanent(state, "darksteel-myr", ALICE, {
 			counters: { "-1/-1": 1 },
 		});
 
-		checkStateBasedActions(state, agents);
+		engine.checkStateBasedActions(state, agents);
 
 		expect(state.battlefield.includes(myr.id)).toBe(false);
 	});
@@ -169,18 +170,18 @@ describe("indestructible permanents", () => {
 
 describe("tokens leaving the battlefield", () => {
 	test("a token on the battlefield has no physical card ID", () => {
-		const state = newGame();
-		const token = spawnToken(state, ALICE, ZOMBIE_TOKEN);
+		const state = engine.newGame();
+		const token = engine.spawnToken(state, ALICE, ZOMBIE_TOKEN);
 
 		expect(physicalCardId(token)).toBe(null);
 	});
 
 	test("the zone change happens before the token ceases to exist as an SBA", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const token = spawnToken(state, ALICE, ZOMBIE_TOKEN);
+		const token = engine.spawnToken(state, ALICE, ZOMBIE_TOKEN);
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -203,7 +204,7 @@ describe("tokens leaving the battlefield", () => {
 		if (moved.kind !== "nonbattlefield-token") return;
 		expect(moved.createdValues.name).toBe("Zombie Token");
 
-		checkStateBasedActions(state, agents);
+		engine.checkStateBasedActions(state, agents);
 		expect(state.objects.has(movedId)).toBe(false);
 		expect(state.players[ALICE].graveyard.includes(movedId)).toBe(false);
 	});
@@ -211,13 +212,13 @@ describe("tokens leaving the battlefield", () => {
 
 describe("regenerating a creature", () => {
 	test("regeneration saves it from lethal damage but not zero toughness", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const bears = spawnPermanent(state, "grizzly-bears", 0);
-		const pyro = spawnPermanent(state, "eager-cadet", 1);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", 0);
+		const pyro = engine.spawnPermanent(state, "eager-cadet", 1);
 		addTemporaryEffect(state, 0, regenerationShield(bears.id));
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "damage",
@@ -233,7 +234,7 @@ describe("regenerating a creature", () => {
 			},
 			agents,
 		);
-		checkStateBasedActions(state, agents);
+		engine.checkStateBasedActions(state, agents);
 		expect(state.battlefield.includes(bears.id), "bears survived").toBe(true);
 		expect(
 			permanent(state, bears.id).tapped,
@@ -242,7 +243,7 @@ describe("regenerating a creature", () => {
 		expect(permanent(state, bears.id).damage, "damage removed").toBe(0);
 
 		// Shrink it to 0 toughness: no destroy event, so no shield to hook.
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "add counters",
@@ -252,7 +253,7 @@ describe("regenerating a creature", () => {
 			},
 			agents,
 		);
-		checkStateBasedActions(state, agents);
+		engine.checkStateBasedActions(state, agents);
 		expect(state.battlefield.includes(bears.id), "bears died to SBA").toBe(
 			false,
 		);
@@ -261,10 +262,10 @@ describe("regenerating a creature", () => {
 
 describe("player counters", () => {
 	test("poison counters go on, come off, and kill at ten", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "add player counters",
@@ -278,7 +279,7 @@ describe("player counters", () => {
 
 		// Removal is symmetric with addition: nine off leaves one, below the
 		// 704.5c threshold.
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "remove player counters",
@@ -288,10 +289,10 @@ describe("player counters", () => {
 			agents,
 		);
 		expect(state.players[ALICE].counters.poison).toBe(1);
-		checkStateBasedActions(state, agents);
+		engine.checkStateBasedActions(state, agents);
 		expect(state.players[ALICE].lost, "one poison is survivable").toBe(false);
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "add player counters",
@@ -301,7 +302,7 @@ describe("player counters", () => {
 			},
 			agents,
 		);
-		checkStateBasedActions(state, agents);
+		engine.checkStateBasedActions(state, agents);
 		expect(state.players[ALICE].lost, "ten poison loses the game").toBe(true);
 	});
 });

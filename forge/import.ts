@@ -5,10 +5,9 @@
  *       -> parseForgeCardScript(text).card       Forge-owned syntax/references
  *       -> lowerForgeCard(ast, { id })           supported semantic subset
  *       -> CardDefInput -> defineCard(input)      engine-owned definitions
- *       -> registerCard(definition)               explicit caller action
  *
- * Neither `lowerForgeCard` nor `importForgeCard` register a card or touch game
- * state. A rejected card exposes no partially-usable `CardDef`: `ok: false`
+ * Neither `lowerForgeCard` nor `importForgeCard` touches game state. A rejected
+ * card exposes no partially-usable `CardDef`: `ok: false`
  * carries only diagnostics.
  *
  * This module accounts for every root rule (`A`, `T`, `R`, `S`, `K`) on a card

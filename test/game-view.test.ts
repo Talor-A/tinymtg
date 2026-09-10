@@ -1,24 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import {
 	abilityId,
-	advanceWithReplay,
-	buildGameView,
 	type CharacteristicsSnapshot,
-	createReadContext,
+	createEngine,
+	defineCard,
+	type Engine,
 	effectiveCharacteristics,
-	getAbilityDefinition,
 	getSnapshot,
-	newGame,
 	type PlayerId,
-	perform,
 	permanent,
 	physicalCardId,
-	registerCard,
-	spawnCard,
-	spawnPermanent,
-	spawnToken,
 } from "../index.ts";
 import { assert, assertDefined } from "../lib/assert.ts";
 
@@ -40,7 +33,7 @@ const GRANTED_ACTIVATED = String(abilityId("activated", GRANT_CARD, 0));
 const GRANTED_TRIGGERED = String(abilityId("triggered", GRANT_CARD, 0));
 const GRANT_STATIC = String(abilityId("static", GRANT_CARD, 0));
 
-const COMMUNAL_INSTRUCTION = registerCard({
+const COMMUNAL_INSTRUCTION = defineCard({
 	id: GRANT_CARD,
 	name: "Communal Instruction",
 	types: ["enchantment"],
@@ -94,7 +87,7 @@ const COMMUNAL_INSTRUCTION = registerCard({
  * A layer-7d swap with a power-sensitive condition: the only way to observe
  * whether counters (CR 613.4, layer 7c) were applied before 7d runs.
  */
-const SWAP_SOURCE = registerCard({
+const SWAP_SOURCE = defineCard({
 	id: "test-power-sensitive-swap",
 	name: "Power-Sensitive Swap",
 	types: ["enchantment"],
@@ -120,7 +113,7 @@ const SWAP_SOURCE = registerCard({
 	],
 });
 
-const LAYER_ONE_SOURCE = registerCard({
+const LAYER_ONE_SOURCE = defineCard({
 	id: "test-layer-one-snapshot-source",
 	name: "Layer-One Snapshot Source",
 	types: ["enchantment"],
@@ -143,9 +136,9 @@ const LAYER_ONE_SOURCE = registerCard({
 
 describe("derived game views", () => {
 	test("static ability IDs are exact cardId:index registry references", () => {
-		const state = newGame();
-		const source = spawnPermanent(state, "baby-mycosynth-lattice", P1);
-		const snapshot = getSnapshot(createReadContext(state), source.id);
+		const state = engine.newGame();
+		const source = engine.spawnPermanent(state, "baby-mycosynth-lattice", P1);
+		const snapshot = getSnapshot(engine.createReadContext(state), source.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
 		expect(snapshot.copiableValues.abilities.static.map(String)).toEqual([
@@ -157,20 +150,24 @@ describe("derived game views", () => {
 			applies: () => false,
 			modify: () => {},
 		};
-		registerCard({
-			id: "card:id:with:colons",
-			name: "Colon Test Card",
-			types: ["artifact"],
-			colors: [],
-			manaCost: "zero",
-			statics: [colonCardStatic],
-		});
+		const localEngine = engine.withCards([
+			{
+				id: "card:id:with:colons",
+				name: "Colon Test Card",
+				types: ["artifact"],
+				colors: [],
+				manaCost: "zero",
+				statics: [colonCardStatic],
+			},
+		]);
 		const id = abilityId("static", "card:id:with:colons", 0);
 		expect(String(id)).toBe("card:id:with:colons:0");
-		expect(getAbilityDefinition("static", id)).toBe(colonCardStatic);
+		expect(localEngine.getAbilityDefinition("static", id)).toBe(
+			colonCardStatic,
+		);
 		assertDefined(snapshot.copiableValues.abilities.static[0]);
 		expect(
-			getAbilityDefinition(
+			localEngine.getAbilityDefinition(
 				"static",
 				snapshot.copiableValues.abilities.static[0],
 			),
@@ -178,52 +175,64 @@ describe("derived game views", () => {
 	});
 
 	test("activated ability IDs resolve and survive tokens and copying", () => {
-		registerCard({
-			id: "snapshot-activation-test",
-			name: "Snapshot Activation Test",
-			types: ["creature"],
-			colors: [],
-			manaCost: "zero",
-			power: 1,
-			toughness: 1,
-			activatedAbilities: [
-				{
-					kind: "activated",
-					id: "unused-runtime-name",
-					text: "{T}: Draw a card.",
-					cost: { mana: "zero", tapSelf: true },
-					targets: [],
-					effects: [{ kind: "draw", player: "you", amount: 1 }],
-				},
-			],
-		});
-		const state = newGame();
-		const source = spawnPermanent(state, "snapshot-activation-test", P1);
-		const sourceSnapshot = getSnapshot(createReadContext(state), source.id);
+		const localEngine = engine.withCards([
+			{
+				id: "snapshot-activation-test",
+				name: "Snapshot Activation Test",
+				types: ["creature"],
+				colors: [],
+				manaCost: "zero",
+				power: 1,
+				toughness: 1,
+				activatedAbilities: [
+					{
+						kind: "activated",
+						id: "unused-runtime-name",
+						text: "{T}: Draw a card.",
+						cost: { mana: "zero", tapSelf: true },
+						targets: [],
+						effects: [{ kind: "draw", player: "you", amount: 1 }],
+					},
+				],
+			},
+		]);
+		const state = localEngine.newGame();
+		const source = localEngine.spawnPermanent(
+			state,
+			"snapshot-activation-test",
+			P1,
+		);
+		const sourceSnapshot = getSnapshot(
+			localEngine.createReadContext(state),
+			source.id,
+		);
 		expect(sourceSnapshot.kind).toBe("permanent");
 		if (sourceSnapshot.kind !== "permanent") return;
 		expect(
 			sourceSnapshot.copiableValues.abilities.activated.map(String),
 		).toEqual(["snapshot-activation-test:0"]);
 		const id = abilityId("activated", "snapshot-activation-test", 0);
-		expect(getAbilityDefinition("activated", id).id).toBe(
+		expect(localEngine.getAbilityDefinition("activated", id).id).toBe(
 			"unused-runtime-name",
 		);
 
-		const token = spawnToken(
+		const token = localEngine.spawnToken(
 			state,
 			P1,
 			structuredClone(sourceSnapshot.copiableValues),
 		);
-		const tokenSnapshot = getSnapshot(createReadContext(state), token.id);
+		const tokenSnapshot = getSnapshot(
+			localEngine.createReadContext(state),
+			token.id,
+		);
 		expect(tokenSnapshot.kind).toBe("permanent");
 		if (tokenSnapshot.kind !== "permanent") return;
 		expect(
 			tokenSnapshot.copiableValues.abilities.activated.map(String),
 		).toEqual(["snapshot-activation-test:0"]);
 
-		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
-		const result = perform(
+		const clone = localEngine.spawnCard(state, "test-forced-copy", P1, "hand");
+		const result = localEngine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -235,7 +244,10 @@ describe("derived game views", () => {
 			agents,
 		);
 		assert(result.created[0]);
-		const copied = getSnapshot(createReadContext(state), result.created[0]);
+		const copied = getSnapshot(
+			localEngine.createReadContext(state),
+			result.created[0],
+		);
 		expect(copied.kind).toBe("permanent");
 		if (copied.kind !== "permanent") return;
 		expect(copied.copiableValues.abilities.activated.map(String)).toEqual([
@@ -245,9 +257,9 @@ describe("derived game views", () => {
 	});
 
 	test("triggered ability IDs resolve directly by cardId:index", () => {
-		const state = newGame();
-		const cleric = spawnPermanent(state, "arashin-cleric", P1);
-		const snapshot = getSnapshot(createReadContext(state), cleric.id);
+		const state = engine.newGame();
+		const cleric = engine.spawnPermanent(state, "arashin-cleric", P1);
+		const snapshot = getSnapshot(engine.createReadContext(state), cleric.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
 		expect(snapshot.copiableValues.abilities.triggered.map(String)).toEqual([
@@ -256,15 +268,17 @@ describe("derived game views", () => {
 		const id = abilityId("triggered", "arashin-cleric", 0);
 		// `TrigGainLife` is the SVar name the Forge script gives the trigger;
 		// the importer carries it through as the definition id.
-		expect(getAbilityDefinition("triggered", id).id).toBe("TrigGainLife");
+		expect(engine.getAbilityDefinition("triggered", id).id).toBe(
+			"TrigGainLife",
+		);
 	});
 
 	test("counters change current characteristics but not copiable values", () => {
-		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", P1, {
+		const state = engine.newGame();
+		const bears = engine.spawnPermanent(state, "grizzly-bears", P1, {
 			counters: { "+1/+1": 1 },
 		});
-		const read = createReadContext(state);
+		const read = engine.createReadContext(state);
 		const snapshot = getSnapshot(read, bears.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
@@ -286,11 +300,11 @@ describe("derived game views", () => {
 	});
 
 	test("the forced-copy fixture retains a layer-1 snapshot after the source effect leaves", () => {
-		const state = newGame();
-		const creatureToCopy = spawnPermanent(state, "grizzly-bears", P1);
-		const source = spawnPermanent(state, LAYER_ONE_SOURCE.id, P1);
+		const state = engine.newGame();
+		const creatureToCopy = engine.spawnPermanent(state, "grizzly-bears", P1);
+		const source = engine.spawnPermanent(state, LAYER_ONE_SOURCE.id, P1);
 
-		const beforeCopy = createReadContext(state);
+		const beforeCopy = engine.createReadContext(state);
 		const modifiedCreature = getSnapshot(beforeCopy, creatureToCopy.id);
 		if (modifiedCreature.kind !== "permanent")
 			throw new Error("expected a permanent");
@@ -302,8 +316,8 @@ describe("derived game views", () => {
 		);
 		const captured = structuredClone(modifiedCreature.copiableValues);
 
-		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
-		const entered = perform(
+		const clone = engine.spawnCard(state, "test-forced-copy", P1, "hand");
+		const entered = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -318,7 +332,7 @@ describe("derived game views", () => {
 		expect(permanent(state, entered).copiableOverride).toEqual(captured);
 		expect(physicalCardId(permanent(state, entered))).toBe("test-forced-copy");
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -330,7 +344,7 @@ describe("derived game views", () => {
 			agents,
 		);
 
-		const afterSourceLeaves = createReadContext(state);
+		const afterSourceLeaves = engine.createReadContext(state);
 		const revertedCreature = getSnapshot(afterSourceLeaves, creatureToCopy.id);
 		const retainedCopy = getSnapshot(afterSourceLeaves, entered);
 		if (
@@ -347,7 +361,7 @@ describe("derived game views", () => {
 
 		const roundTripped = structuredClone(state);
 		const replaySnapshot = getSnapshot(
-			createReadContext(roundTripped),
+			engine.createReadContext(roundTripped),
 			entered,
 		);
 		if (replaySnapshot.kind !== "permanent")
@@ -356,11 +370,11 @@ describe("derived game views", () => {
 	});
 
 	test("a successful mutation makes an existing ReadContext stale", () => {
-		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", P1);
-		const read = createReadContext(state);
+		const state = engine.newGame();
+		const bears = engine.spawnPermanent(state, "grizzly-bears", P1);
+		const read = engine.createReadContext(state);
 		expect(getSnapshot(read, bears.id).kind).toBe("permanent");
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "add counters",
@@ -374,12 +388,15 @@ describe("derived game views", () => {
 	});
 
 	test("the forced-copy fixture copies a creature token's actual copiable values", () => {
-		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", P1);
-		const bearsSnapshot = getSnapshot(createReadContext(state), bears.id);
+		const state = engine.newGame();
+		const bears = engine.spawnPermanent(state, "grizzly-bears", P1);
+		const bearsSnapshot = getSnapshot(
+			engine.createReadContext(state),
+			bears.id,
+		);
 		expect(bearsSnapshot.kind).toBe("permanent");
 		if (bearsSnapshot.kind !== "permanent") return;
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -392,9 +409,9 @@ describe("derived game views", () => {
 		);
 		const tokenValues = structuredClone(bearsSnapshot.copiableValues);
 		tokenValues.name = "Test Bear Token";
-		spawnToken(state, P1, tokenValues);
-		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
-		const result = perform(
+		engine.spawnToken(state, P1, tokenValues);
+		const clone = engine.spawnCard(state, "test-forced-copy", P1, "hand");
+		const result = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -408,7 +425,7 @@ describe("derived game views", () => {
 		const copiedId = result.created[0];
 		expect(copiedId).toBeDefined();
 		if (copiedId === undefined) return;
-		const copied = getSnapshot(createReadContext(state), copiedId);
+		const copied = getSnapshot(engine.createReadContext(state), copiedId);
 		expect(copied.kind).toBe("permanent");
 		if (copied.kind !== "permanent") return;
 		expect(copied.copiableValues.name).toBe("Test Bear Token");
@@ -420,9 +437,9 @@ describe("derived game views", () => {
 	});
 
 	test("an arbitrary token name never becomes registry identity", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const arbitraryName = "Definitely Not A Registered Card";
-		const token = spawnToken(state, P1, {
+		const token = engine.spawnToken(state, P1, {
 			kind: "creature",
 			name: arbitraryName,
 			manaCost: "zero",
@@ -446,22 +463,26 @@ describe("derived game views", () => {
 			kind: "token",
 			createdValues: expect.objectContaining({ name: arbitraryName }),
 		});
-		expect(() => buildGameView(state)).not.toThrow();
-		expect(buildGameView(state).objects.get(token.id)).toMatchObject({
+		expect(() => engine.buildGameView(state)).not.toThrow();
+		expect(engine.buildGameView(state).objects.get(token.id)).toMatchObject({
 			kind: "permanent",
 			currentCharacteristics: { name: arbitraryName },
 		});
-		expect(() => getSnapshot(createReadContext(state), token.id)).not.toThrow();
-		expect(getSnapshot(createReadContext(state), token.id)).toMatchObject({
+		expect(() =>
+			getSnapshot(engine.createReadContext(state), token.id),
+		).not.toThrow();
+		expect(
+			getSnapshot(engine.createReadContext(state), token.id),
+		).toMatchObject({
 			currentCharacteristics: { name: arbitraryName },
 			representation: { kind: "token" },
 		});
 		expect(physicalCardId(token)).toBe(null);
 
-		const clone = spawnCard(state, "test-forced-copy", P1, "hand");
-		let result: ReturnType<typeof perform> | undefined;
+		const clone = engine.spawnCard(state, "test-forced-copy", P1, "hand");
+		let result: ReturnType<Engine["perform"]> | undefined;
 		expect(() => {
-			result = perform(
+			result = engine.perform(
 				state,
 				{
 					kind: "change zone",
@@ -479,17 +500,21 @@ describe("derived game views", () => {
 		expect(copiedId).toBeDefined();
 		if (copiedId === undefined) return;
 		expect(
-			getSnapshot(createReadContext(state), copiedId).currentCharacteristics
-				.name,
+			getSnapshot(engine.createReadContext(state), copiedId)
+				.currentCharacteristics.name,
 		).toBe(arbitraryName);
 		expect(physicalCardId(token)).toBe(null);
 	});
 
 	test("copy-of-copy keeps effective values and a copied fixture leaves as the fixture", () => {
-		const state = newGame();
-		const ballista = spawnPermanent(state, "test-enters-with-counters", P1);
-		const firstCard = spawnCard(state, "test-forced-copy", P1, "hand");
-		const firstResult = perform(
+		const state = engine.newGame();
+		const ballista = engine.spawnPermanent(
+			state,
+			"test-enters-with-counters",
+			P1,
+		);
+		const firstCard = engine.spawnCard(state, "test-forced-copy", P1, "hand");
+		const firstResult = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -502,7 +527,7 @@ describe("derived game views", () => {
 		);
 		const firstId = firstResult.created[0];
 		assertDefined(firstId);
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -513,8 +538,8 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const secondCard = spawnCard(state, "test-forced-copy", P1, "hand");
-		const secondResult = perform(
+		const secondCard = engine.spawnCard(state, "test-forced-copy", P1, "hand");
+		const secondResult = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -525,10 +550,10 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const first = getSnapshot(createReadContext(state), firstId);
+		const first = getSnapshot(engine.createReadContext(state), firstId);
 		assertDefined(secondResult.created[0]);
 		const second = getSnapshot(
-			createReadContext(state),
+			engine.createReadContext(state),
 			secondResult.created[0],
 		);
 		expect(first.kind).toBe("permanent");
@@ -536,7 +561,7 @@ describe("derived game views", () => {
 		if (first.kind !== "permanent" || second.kind !== "permanent") return;
 		expect(second.copiableValues).toEqual(first.copiableValues);
 
-		const leave = perform(
+		const leave = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -557,15 +582,15 @@ describe("derived game views", () => {
 	});
 
 	test("callback-bearing token state is structuredClone and replay safe", async () => {
-		const state = newGame();
-		const lattice = spawnPermanent(state, "baby-mycosynth-lattice", P1);
-		const source = getSnapshot(createReadContext(state), lattice.id);
+		const state = engine.newGame();
+		const lattice = engine.spawnPermanent(state, "baby-mycosynth-lattice", P1);
+		const source = getSnapshot(engine.createReadContext(state), lattice.id);
 		expect(source.kind).toBe("permanent");
 		if (source.kind !== "permanent") return;
 		const values = structuredClone(
 			source.copiableValues,
 		) as CharacteristicsSnapshot;
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -576,32 +601,35 @@ describe("derived game views", () => {
 			},
 			agents,
 		);
-		const bears = spawnPermanent(state, "grizzly-bears", P1);
-		const token = spawnToken(state, P1, values);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", P1);
+		const token = engine.spawnToken(state, P1, values);
 		expect(values.abilities.static.map(String)).toEqual([
 			"baby-mycosynth-lattice:0",
 		]);
 		expect(physicalCardId(token)).toBe(null);
 		expect(
-			getSnapshot(createReadContext(state), bears.id).currentCharacteristics
-				.types,
+			getSnapshot(engine.createReadContext(state), bears.id)
+				.currentCharacteristics.types,
 		).toContain("artifact");
 		expect(() => structuredClone(state)).not.toThrow();
-		expect(() => buildGameView(structuredClone(state))).not.toThrow();
-		const result = await advanceWithReplay(state, agents);
+		expect(() => engine.buildGameView(structuredClone(state))).not.toThrow();
+		const result = await engine.advanceWithReplay(state, agents);
 		expect(result.state.objects.has(token.id)).toBe(true);
 	});
 
 	test("counters apply in layer 7c, before the 7d swap sees power", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		// 1/3 with three +1/+1 counters is a 4/6 at the end of 7c, so the swap
 		// applies and it ends up 6/4. Applying counters after the whole layer walk
 		// would show the swap a 1/3, leaving it an unswapped 4/6.
-		const cleric = spawnPermanent(state, "arashin-cleric", P1, {
+		const cleric = engine.spawnPermanent(state, "arashin-cleric", P1, {
 			counters: { "+1/+1": 3 },
 		});
-		spawnPermanent(state, SWAP_SOURCE.id, P1);
-		const current = effectiveCharacteristics(createReadContext(state), cleric);
+		engine.spawnPermanent(state, SWAP_SOURCE.id, P1);
+		const current = effectiveCharacteristics(
+			engine.createReadContext(state),
+			cleric,
+		);
 		expect(current.kind).toBe("creature");
 		if (current.kind !== "creature") return;
 		expect([current.power, current.toughness]).toEqual([6, 4]);
@@ -616,7 +644,7 @@ const WARD_CARD = "test-collective-ward";
 const GRANTED_REPLACEMENT = String(abilityId("replacement", WARD_CARD, 0));
 const GRANTED_PROHIBITION = String(abilityId("prohibition", WARD_CARD, 0));
 
-registerCard({
+const TEST_CARD_1 = defineCard({
 	id: WARD_CARD,
 	name: "Collective Ward",
 	types: ["enchantment"],
@@ -663,15 +691,15 @@ registerCard({
 
 describe("layer 6 ability grants", () => {
 	function withInstruction() {
-		const state = newGame();
-		const instruction = spawnPermanent(state, GRANT_CARD, P1);
+		const state = engine.newGame();
+		const instruction = engine.spawnPermanent(state, GRANT_CARD, P1);
 		return { state, instruction };
 	}
 
 	test("a granted ability reaches current characteristics, never copiable values", () => {
 		const { state } = withInstruction();
-		const bears = spawnPermanent(state, "grizzly-bears", P1);
-		const snapshot = getSnapshot(createReadContext(state), bears.id);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", P1);
+		const snapshot = getSnapshot(engine.createReadContext(state), bears.id);
 		expect(snapshot.kind).toBe("permanent");
 		if (snapshot.kind !== "permanent") return;
 
@@ -690,15 +718,17 @@ describe("layer 6 ability grants", () => {
 		const granted = snapshot.currentCharacteristics.abilities.activated[0];
 		expect(granted).toBeDefined();
 		if (!granted) return;
-		expect(getAbilityDefinition("activated", granted).id).toBe("granted-draw");
+		expect(engine.getAbilityDefinition("activated", granted).id).toBe(
+			"granted-draw",
+		);
 		expect(() => structuredClone(state)).not.toThrow();
 	});
 
 	test("the grant respects its own condition", () => {
 		const { state } = withInstruction();
-		const theirs = spawnPermanent(state, "grizzly-bears", P2);
-		const mine = spawnPermanent(state, "baby-mycosynth-lattice", P1);
-		const read = createReadContext(state);
+		const theirs = engine.spawnPermanent(state, "grizzly-bears", P2);
+		const mine = engine.spawnPermanent(state, "baby-mycosynth-lattice", P1);
+		const read = engine.createReadContext(state);
 
 		const theirSnapshot = getSnapshot(read, theirs.id);
 		if (theirSnapshot.kind !== "permanent")
@@ -724,12 +754,17 @@ describe("layer 6 ability grants", () => {
 		// A definition it does not print still resolves: the registry owns the
 		// implementation, `printedAbilities` owns possession.
 		expect(
-			getAbilityDefinition("triggered", abilityId("triggered", GRANT_CARD, 0))
-				.id,
+			engine.getAbilityDefinition(
+				"triggered",
+				abilityId("triggered", GRANT_CARD, 0),
+			).id,
 		).toBe("granted-etb-life");
 
 		const { state, instruction } = withInstruction();
-		const snapshot = getSnapshot(createReadContext(state), instruction.id);
+		const snapshot = getSnapshot(
+			engine.createReadContext(state),
+			instruction.id,
+		);
 		if (snapshot.kind !== "permanent") throw new Error("expected permanent");
 		expect(snapshot.currentCharacteristics.abilities.activated).toEqual([]);
 		expect(snapshot.currentCharacteristics.abilities.triggered).toEqual([]);
@@ -740,8 +775,8 @@ describe("layer 6 ability grants", () => {
 
 	test("a granted trigger fires through its reference", () => {
 		const { state } = withInstruction();
-		const cadet = spawnCard(state, "eager-cadet", P1, "hand");
-		const result = perform(
+		const cadet = engine.spawnCard(state, "eager-cadet", P1, "hand");
+		const result = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -765,9 +800,9 @@ describe("layer 6 ability grants", () => {
 
 	test("the forced-copy fixture copies the creature, not the grant hanging on it", () => {
 		const { state, instruction } = withInstruction();
-		spawnPermanent(state, "grizzly-bears", P1);
-		const cloneCard = spawnCard(state, "test-forced-copy", P1, "hand");
-		const result = perform(
+		engine.spawnPermanent(state, "grizzly-bears", P1);
+		const cloneCard = engine.spawnCard(state, "test-forced-copy", P1, "hand");
+		const result = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -782,7 +817,7 @@ describe("layer 6 ability grants", () => {
 		expect(copiedId).toBeDefined();
 		if (copiedId === undefined) return;
 
-		const copied = getSnapshot(createReadContext(state), copiedId);
+		const copied = getSnapshot(engine.createReadContext(state), copiedId);
 		if (copied.kind !== "permanent") throw new Error("expected permanent");
 		expect(copied.copiableValues.name).toBe("Grizzly Bears");
 		// The fixture copies copiable values, and the grant was never part of them.
@@ -793,7 +828,7 @@ describe("layer 6 ability grants", () => {
 			copied.currentCharacteristics.abilities.activated.map(String),
 		).toEqual([GRANTED_ACTIVATED]);
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -805,7 +840,7 @@ describe("layer 6 ability grants", () => {
 			agents,
 		);
 
-		const afterwards = getSnapshot(createReadContext(state), copiedId);
+		const afterwards = getSnapshot(engine.createReadContext(state), copiedId);
 		if (afterwards.kind !== "permanent") throw new Error("expected permanent");
 		expect(afterwards.currentCharacteristics.abilities.activated).toEqual([]);
 		expect(afterwards.currentCharacteristics.abilities.triggered).toEqual([]);
@@ -814,7 +849,7 @@ describe("layer 6 ability grants", () => {
 
 		// Physical identity is untouched by any of it: the copy is still the
 		// fixture card once it leaves the battlefield.
-		const left = perform(
+		const left = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -835,29 +870,29 @@ describe("layer 6 ability grants", () => {
 
 	test("granted references survive structuredClone and replay", async () => {
 		const { state } = withInstruction();
-		const bears = spawnPermanent(state, "grizzly-bears", P1);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", P1);
 		const cloned = structuredClone(state);
-		const snapshot = getSnapshot(createReadContext(cloned), bears.id);
+		const snapshot = getSnapshot(engine.createReadContext(cloned), bears.id);
 		if (snapshot.kind !== "permanent") throw new Error("expected permanent");
 		expect(
 			snapshot.currentCharacteristics.abilities.activated.map(String),
 		).toEqual([GRANTED_ACTIVATED]);
-		const result = await advanceWithReplay(state, agents);
+		const result = await engine.advanceWithReplay(state, agents);
 		expect(result.state.objects.has(bears.id)).toBe(true);
 	});
 });
 
 describe("granted replacements and prohibitions resolve through references", () => {
 	function withWard() {
-		const state = newGame();
-		const ward = spawnPermanent(state, WARD_CARD, P1);
-		const bears = spawnPermanent(state, "grizzly-bears", P1);
+		const state = engine.newGame();
+		const ward = engine.spawnPermanent(state, WARD_CARD, P1);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", P1);
 		return { state, ward, bears };
 	}
 
 	test("the grant shows up as references on the creature, not on the ward", () => {
 		const { state, ward, bears } = withWard();
-		const read = createReadContext(state);
+		const read = engine.createReadContext(state);
 		const creature = getSnapshot(read, bears.id);
 		const source = getSnapshot(read, ward.id);
 		if (creature.kind !== "permanent" || source.kind !== "permanent")
@@ -877,7 +912,7 @@ describe("granted replacements and prohibitions resolve through references", () 
 
 	test("a granted replacement is collected and applied", () => {
 		const { state, ward, bears } = withWard();
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "add counters",
@@ -891,7 +926,7 @@ describe("granted replacements and prohibitions resolve through references", () 
 			counters: { "+1/+1": 2 },
 		});
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -902,7 +937,7 @@ describe("granted replacements and prohibitions resolve through references", () 
 			},
 			agents,
 		);
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "add counters",
@@ -919,14 +954,14 @@ describe("granted replacements and prohibitions resolve through references", () 
 
 	test("a granted prohibition is collected and stops the event", () => {
 		const { state, ward, bears } = withWard();
-		perform(
+		engine.perform(
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			agents,
 		);
 		expect(state.battlefield).toContain(bears.id);
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -937,7 +972,7 @@ describe("granted replacements and prohibitions resolve through references", () 
 			},
 			agents,
 		);
-		perform(
+		engine.perform(
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			agents,
@@ -959,7 +994,7 @@ describe("granted replacements and prohibitions resolve through references", () 
  * Forge encodes the same split we do: its `EffectZone$ Graveyard` is our
  * `functionsFrom`, and its `Affected$ Creature.YouCtrl` is our `affects`.
  */
-const GRAVEYARD_ANTHEM = registerCard({
+const GRAVEYARD_ANTHEM = defineCard({
 	id: "test-graveyard-anthem",
 	name: "Graveyard Anthem",
 	types: ["enchantment"],
@@ -983,26 +1018,38 @@ const GRAVEYARD_ANTHEM = registerCard({
 	],
 });
 
+const engine = createEngine([
+	...CARDS,
+	COMMUNAL_INSTRUCTION,
+	SWAP_SOURCE,
+	LAYER_ONE_SOURCE,
+	TEST_CARD_1,
+	GRAVEYARD_ANTHEM,
+]);
+
 describe("functionsFrom and affects are separate questions", () => {
 	test("an anthem functions from the graveyard and affects the battlefield", () => {
-		const state = newGame();
-		const bear = spawnPermanent(state, "grizzly-bears", P1);
+		const state = engine.newGame();
+		const bear = engine.spawnPermanent(state, "grizzly-bears", P1);
 		expect(
-			getSnapshot(createReadContext(state), bear.id).currentCharacteristics,
+			getSnapshot(engine.createReadContext(state), bear.id)
+				.currentCharacteristics,
 		).toMatchObject({ power: 2 });
 
-		spawnCard(state, GRAVEYARD_ANTHEM.id, P1, "graveyard");
+		engine.spawnCard(state, GRAVEYARD_ANTHEM.id, P1, "graveyard");
 		expect(
-			getSnapshot(createReadContext(state), bear.id).currentCharacteristics,
+			getSnapshot(engine.createReadContext(state), bear.id)
+				.currentCharacteristics,
 		).toMatchObject({ power: 3, toughness: 3 });
 	});
 
 	test("the same anthem does nothing from the battlefield", () => {
-		const state = newGame();
-		const bear = spawnPermanent(state, "grizzly-bears", P1);
-		spawnPermanent(state, GRAVEYARD_ANTHEM.id, P1);
+		const state = engine.newGame();
+		const bear = engine.spawnPermanent(state, "grizzly-bears", P1);
+		engine.spawnPermanent(state, GRAVEYARD_ANTHEM.id, P1);
 		expect(
-			getSnapshot(createReadContext(state), bear.id).currentCharacteristics,
+			getSnapshot(engine.createReadContext(state), bear.id)
+				.currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 	});
 });

@@ -1,14 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import "../cards.ts";
-import {
-	abilityId,
-	createReadContext,
-	executeAbilityAction,
-	getAbilityDefinition,
-	getSnapshot,
-	perform,
-	settlePriority,
-} from "../index.ts";
+import { CARDS } from "../cards.ts";
+import { abilityId, createEngine, getSnapshot } from "../index.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
 import {
 	ALICE,
@@ -16,6 +8,8 @@ import {
 	passingAgents,
 	setupMain,
 } from "./utils/engine-helpers.ts";
+
+const engine = createEngine(CARDS);
 
 const CLUE_ABILITY = abilityId("activated", "clue-token", 0);
 
@@ -38,7 +32,7 @@ describe("named artifact tokens", () => {
 				prohibition: [],
 			},
 		});
-		expect(getAbilityDefinition("activated", CLUE_ABILITY)).toEqual({
+		expect(engine.getAbilityDefinition("activated", CLUE_ABILITY)).toEqual({
 			kind: "activated",
 			id: "draw-card",
 			text: "{2}, Sacrifice this token: Draw a card.",
@@ -53,10 +47,10 @@ describe("named artifact tokens", () => {
 	});
 
 	test("Clue pays two mana and sacrifices itself before drawing", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		const handSize = state.players[ALICE].hand.length;
 		const librarySize = state.players[ALICE].library.length;
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{
 				kind: "create token",
@@ -67,12 +61,12 @@ describe("named artifact tokens", () => {
 			passingAgents(),
 		);
 		const clue = created(result);
-		const snapshot = getSnapshot(createReadContext(state), clue);
+		const snapshot = getSnapshot(engine.createReadContext(state), clue);
 		expect(snapshot.currentCharacteristics).toEqual(CLUE_TOKEN);
 
 		state.players[ALICE].manaPool.c = 2;
 		const agents = passingAgents();
-		executeAbilityAction(
+		engine.executeAbilityAction(
 			state,
 			ALICE,
 			{
@@ -89,7 +83,7 @@ describe("named artifact tokens", () => {
 		expect(state.players[ALICE].hand).toHaveLength(handSize);
 		expect(state.players[ALICE].library).toHaveLength(librarySize);
 
-		settlePriority(state, agents);
+		engine.settlePriority(state, agents);
 
 		expect(state.players[ALICE].hand).toHaveLength(handSize + 1);
 		expect(state.players[ALICE].library).toHaveLength(librarySize - 1);

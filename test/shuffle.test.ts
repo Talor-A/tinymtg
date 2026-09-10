@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import "../cards.ts";
-import { type GameState, newGame, type PlayerId, spawnCard } from "../index.ts";
+import { CARDS } from "../cards.ts";
+import { createEngine, type GameState, type PlayerId } from "../index.ts";
 import {
 	ALICE,
 	advanceUntil,
 	BOB,
 	passingAgents,
 } from "./utils/engine-helpers.ts";
+
+const engine = createEngine(CARDS);
 
 /** A library of distinguishable cards, so a reordering is actually visible. */
 const DECK = [
@@ -23,9 +25,10 @@ const DECK = [
 ] as const;
 
 function seededGame(seed: number): GameState {
-	const state = newGame(seed);
+	const state = engine.newGame(seed);
 	for (const player of [ALICE, BOB]) {
-		for (const cardId of DECK) spawnCard(state, cardId, player, "library");
+		for (const cardId of DECK)
+			engine.spawnCard(state, cardId, player, "library");
 	}
 	return state;
 }
@@ -43,6 +46,7 @@ function libraryCardIds(state: GameState, player: PlayerId): string[] {
 function shuffled(seed: number): GameState {
 	const state = seededGame(seed);
 	advanceUntil(
+		engine,
 		state,
 		passingAgents(),
 		(next) => next.turnScheduler.progress.kind === "inTurn",
@@ -92,9 +96,10 @@ describe("CR 103.2 shuffling", () => {
 	});
 
 	test("an empty or single-card library survives shuffling", () => {
-		const state = newGame(7);
-		spawnCard(state, "forest", ALICE, "library");
+		const state = engine.newGame(7);
+		engine.spawnCard(state, "forest", ALICE, "library");
 		advanceUntil(
+			engine,
 			state,
 			passingAgents(),
 			(next) => next.turnScheduler.progress.kind === "inTurn",

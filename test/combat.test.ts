@@ -1,22 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
-import type { GameState, ObjectId } from "../index.ts";
+import { CARDS } from "../cards.ts";
+import type { Engine, GameState, ObjectId } from "../index.ts";
 import {
-	advance,
-	createReadContext,
-	eligibleAttackers,
-	eligibleBlockers,
+	createEngine,
 	gameOver,
 	getSnapshot,
 	IllegalAttackDeclarationError,
 	IllegalBlockDeclarationError,
 	isTurnStep,
-	newGame,
-	perform,
 	permanent,
-	spawnCard,
-	spawnPermanent,
 	winner,
 } from "../index.ts";
 import {
@@ -25,27 +18,32 @@ import {
 	advanceUntil,
 	BOB,
 	isAt,
+	loadCardFixture,
 	playOneTurn,
-	registerCardFixture,
 } from "./utils/engine-helpers.ts";
 
-registerCardFixture("h/herald_of_faith");
-registerCardFixture("f/flying_men");
-registerCardFixture("g/giant_spider");
-registerCardFixture("r/raging_goblin");
-registerCardFixture("s/stealer_of_secrets");
-registerCardFixture("w/wall_of_omens");
-registerCardFixture("m/mire_triton");
+const engine = createEngine([
+	...CARDS,
+	...[
+		"h/herald_of_faith",
+		"f/flying_men",
+		"g/giant_spider",
+		"r/raging_goblin",
+		"s/stealer_of_secrets",
+		"w/wall_of_omens",
+		"m/mire_triton",
+	].map(loadCardFixture),
+]);
 
 /** One attacker-eligible creature plus enough library to survive a full turn. */
 function setupAttackTurn(cardId: string): {
 	state: GameState;
-	attacker: ReturnType<typeof spawnPermanent>;
+	attacker: ReturnType<Engine["spawnPermanent"]>;
 } {
-	const state = newGame();
-	const attacker = spawnPermanent(state, cardId, ALICE);
-	spawnCard(state, "forest", ALICE, "library");
-	spawnCard(state, "forest", BOB, "library");
+	const state = engine.newGame();
+	const attacker = engine.spawnPermanent(state, cardId, ALICE);
+	engine.spawnCard(state, "forest", ALICE, "library");
+	engine.spawnCard(state, "forest", BOB, "library");
 	return { state, attacker };
 }
 
@@ -72,26 +70,26 @@ describe("declaring attackers", () => {
 		state: GameState;
 		agents: Agents;
 	} {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		// Enough library cards that the normal draw step along the way doesn't
 		// lose either player the game before combat is reached.
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
-		// Establish a real declare-attackers scheduler boundary via advance(): the
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
+		// Establish a real declare-attackers scheduler boundary via engine.advance(): the
 		// battlefield is still empty here, so the step's own turn-based action
-		// declares no attackers, and advance() returns at that occurrence.
+		// declares no attackers, and engine.advance() returns at that occurrence.
 		while (!isTurnStep(state, "declare attackers")) {
-			advance(state, agents);
+			engine.advance(state, agents);
 		}
 		return { state, agents };
 	}
 
 	test("an empty declaration is legal and changes nothing", () => {
 		const { state, agents } = declareAttackersSetup();
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{ kind: "declare attackers", player: ALICE, attackers: [] },
 			agents,
@@ -104,14 +102,14 @@ describe("declaring attackers", () => {
 
 	test("a partial subset of eligible creatures taps and marks only those selected", () => {
 		const { state, agents } = declareAttackersSetup();
-		const attacker = spawnPermanent(state, "grizzly-bears", ALICE, {
+		const attacker = engine.spawnPermanent(state, "grizzly-bears", ALICE, {
 			summoningSick: false,
 		});
-		const stayHome = spawnPermanent(state, "eager-cadet", ALICE, {
+		const stayHome = engine.spawnPermanent(state, "eager-cadet", ALICE, {
 			summoningSick: false,
 		});
 
-		perform(
+		engine.perform(
 			state,
 			{ kind: "declare attackers", player: ALICE, attackers: [attacker.id] },
 			agents,
@@ -133,13 +131,13 @@ describe("declaring attackers", () => {
 
 	test("a creature with defender is neither offered nor accepted as an attacker", () => {
 		const { state, agents } = declareAttackersSetup();
-		const defender = spawnPermanent(state, "wall-of-omens", ALICE, {
+		const defender = engine.spawnPermanent(state, "wall-of-omens", ALICE, {
 			summoningSick: false,
 		});
 
-		expect(eligibleAttackers(state, ALICE)).not.toContain(defender.id);
+		expect(engine.eligibleAttackers(state, ALICE)).not.toContain(defender.id);
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare attackers",
@@ -155,12 +153,12 @@ describe("declaring attackers", () => {
 
 	test("rejects a tapped creature", () => {
 		const { state, agents } = declareAttackersSetup();
-		const tapped = spawnPermanent(state, "grizzly-bears", ALICE, {
+		const tapped = engine.spawnPermanent(state, "grizzly-bears", ALICE, {
 			tapped: true,
 		});
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{ kind: "declare attackers", player: ALICE, attackers: [tapped.id] },
 				agents,
@@ -171,10 +169,10 @@ describe("declaring attackers", () => {
 
 	test("rejects a creature controlled by the opponent", () => {
 		const { state, agents } = declareAttackersSetup();
-		const opposing = spawnPermanent(state, "grizzly-bears", BOB);
+		const opposing = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{ kind: "declare attackers", player: ALICE, attackers: [opposing.id] },
 				agents,
@@ -185,10 +183,10 @@ describe("declaring attackers", () => {
 
 	test("rejects a noncreature permanent", () => {
 		const { state, agents } = declareAttackersSetup();
-		const mantra = spawnPermanent(state, "ajanis-mantra", ALICE);
+		const mantra = engine.spawnPermanent(state, "ajanis-mantra", ALICE);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{ kind: "declare attackers", player: ALICE, attackers: [mantra.id] },
 				agents,
@@ -198,10 +196,10 @@ describe("declaring attackers", () => {
 
 	test("rejects duplicate IDs atomically, even with only one eligible creature", () => {
 		const { state, agents } = declareAttackersSetup();
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare attackers",
@@ -219,13 +217,13 @@ describe("declaring attackers", () => {
 
 	test("rejects the whole declaration atomically when a valid ID precedes an ineligible one", () => {
 		const { state, agents } = declareAttackersSetup();
-		const eligible = spawnPermanent(state, "grizzly-bears", ALICE);
-		const tapped = spawnPermanent(state, "eager-cadet", ALICE, {
+		const eligible = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const tapped = engine.spawnPermanent(state, "eager-cadet", ALICE, {
 			tapped: true,
 		});
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare attackers",
@@ -243,12 +241,12 @@ describe("declaring attackers", () => {
 	});
 
 	test("rejects declaring attackers outside the declare attackers step", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{ kind: "declare attackers", player: ALICE, attackers: [bears.id] },
 				agents,
@@ -258,10 +256,10 @@ describe("declaring attackers", () => {
 
 	test("rejects a declaration from a player who isn't the active player", () => {
 		const { state, agents } = declareAttackersSetup();
-		const bears = spawnPermanent(state, "grizzly-bears", BOB);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
 		// default activePlayer is ALICE; BOB tries to declare attackers.
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{ kind: "declare attackers", player: BOB, attackers: [bears.id] },
 				agents,
@@ -271,17 +269,17 @@ describe("declaring attackers", () => {
 
 	test("regeneration still clears attacking (and blocking), not just damage and tapped state", () => {
 		const { state, agents } = declareAttackersSetup();
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE, {
+		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE, {
 			summoningSick: false,
 		});
-		perform(
+		engine.perform(
 			state,
 			{ kind: "declare attackers", player: ALICE, attackers: [bears.id] },
 			agents,
 		);
 		expect(permanent(state, bears.id).attacking).toBe(true);
 
-		perform(state, { kind: "regenerate", object: bears.id }, agents);
+		engine.perform(state, { kind: "regenerate", object: bears.id }, agents);
 
 		expect(
 			permanent(state, bears.id).attacking,
@@ -298,26 +296,26 @@ describe("declaring blockers", () => {
 	function declareBlockersSetup(attackerCard = "grizzly-bears"): {
 		state: GameState;
 		agents: Agents;
-		attacker: ReturnType<typeof spawnPermanent>;
+		attacker: ReturnType<Engine["spawnPermanent"]>;
 	} {
-		const state = newGame();
+		const state = engine.newGame();
 		const attackerAgent = new ScriptedAgent();
 		const agents: Agents = [attackerAgent, new ScriptedAgent()];
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
-		const attacker = spawnPermanent(state, attackerCard, ALICE);
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
+		const attacker = engine.spawnPermanent(state, attackerCard, ALICE);
 		attackerAgent.attackerChoices.push([attacker.id]);
 		while (!isTurnStep(state, "declare blockers")) {
-			advance(state, agents);
+			engine.advance(state, agents);
 		}
 		return { state, agents, attacker };
 	}
 
 	test("an empty declaration is legal and changes nothing", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{ kind: "declare blockers", player: BOB, blockers: [] },
 			agents,
@@ -331,13 +329,13 @@ describe("declaring blockers", () => {
 
 	test("Aesthir Glider is neither offered nor accepted as a blocker", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const glider = spawnPermanent(state, "aesthir-glider", BOB);
-		const bear = spawnPermanent(state, "grizzly-bears", BOB);
+		const glider = engine.spawnPermanent(state, "aesthir-glider", BOB);
+		const bear = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
-		expect(eligibleBlockers(state, BOB)).toEqual([bear.id]);
+		expect(engine.eligibleBlockers(state, BOB)).toEqual([bear.id]);
 		const before = structuredClone(state);
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare blockers",
@@ -347,20 +345,20 @@ describe("declaring blockers", () => {
 				agents,
 			),
 		).toThrow(IllegalBlockDeclarationError);
-		// perform() logs the attempted event before validation; gameplay state is
+		// engine.perform() logs the attempted event before validation; gameplay state is
 		// otherwise unchanged by the rejected declaration.
 		expect({ ...state, log: before.log }).toEqual(before);
 	});
 
 	test("a creature without flying or reach cannot block a flying attacker", () => {
 		const { state, agents, attacker } = declareBlockersSetup("herald-of-faith");
-		const bear = spawnPermanent(state, "grizzly-bears", BOB);
+		const bear = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
-		expect(eligibleBlockers(state, BOB)).toEqual([bear.id]);
-		expect(eligibleBlockers(state, BOB, attacker.id)).toEqual([]);
+		expect(engine.eligibleBlockers(state, BOB)).toEqual([bear.id]);
+		expect(engine.eligibleBlockers(state, BOB, attacker.id)).toEqual([]);
 		const before = structuredClone(state);
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare blockers",
@@ -375,10 +373,12 @@ describe("declaring blockers", () => {
 
 	test("a creature with flying can block a flying attacker", () => {
 		const { state, agents, attacker } = declareBlockersSetup("herald-of-faith");
-		const blocker = spawnPermanent(state, "flying-men", BOB);
+		const blocker = engine.spawnPermanent(state, "flying-men", BOB);
 
-		expect(eligibleBlockers(state, BOB, attacker.id)).toEqual([blocker.id]);
-		perform(
+		expect(engine.eligibleBlockers(state, BOB, attacker.id)).toEqual([
+			blocker.id,
+		]);
+		engine.perform(
 			state,
 			{
 				kind: "declare blockers",
@@ -392,10 +392,12 @@ describe("declaring blockers", () => {
 
 	test("a creature with reach can block a flying attacker", () => {
 		const { state, agents, attacker } = declareBlockersSetup("herald-of-faith");
-		const blocker = spawnPermanent(state, "giant-spider", BOB);
+		const blocker = engine.spawnPermanent(state, "giant-spider", BOB);
 
-		expect(eligibleBlockers(state, BOB, attacker.id)).toEqual([blocker.id]);
-		perform(
+		expect(engine.eligibleBlockers(state, BOB, attacker.id)).toEqual([
+			blocker.id,
+		]);
+		engine.perform(
 			state,
 			{
 				kind: "declare blockers",
@@ -409,10 +411,12 @@ describe("declaring blockers", () => {
 
 	test("a creature with flying can block a creature without flying", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "flying-men", BOB);
+		const blocker = engine.spawnPermanent(state, "flying-men", BOB);
 
-		expect(eligibleBlockers(state, BOB, attacker.id)).toEqual([blocker.id]);
-		perform(
+		expect(engine.eligibleBlockers(state, BOB, attacker.id)).toEqual([
+			blocker.id,
+		]);
+		engine.perform(
 			state,
 			{
 				kind: "declare blockers",
@@ -426,9 +430,9 @@ describe("declaring blockers", () => {
 
 	test("a blocker assignment marks the blocker but does not tap it", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "declare blockers",
@@ -449,10 +453,10 @@ describe("declaring blockers", () => {
 
 	test("multiple blockers can block the same attacker", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const alpha = spawnPermanent(state, "grizzly-bears", BOB);
-		const beta = spawnPermanent(state, "eager-cadet", BOB);
+		const alpha = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const beta = engine.spawnPermanent(state, "eager-cadet", BOB);
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "declare blockers",
@@ -471,12 +475,12 @@ describe("declaring blockers", () => {
 
 	test("rejects a tapped creature as a blocker", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const tapped = spawnPermanent(state, "grizzly-bears", BOB, {
+		const tapped = engine.spawnPermanent(state, "grizzly-bears", BOB, {
 			tapped: true,
 		});
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare blockers",
@@ -491,10 +495,10 @@ describe("declaring blockers", () => {
 
 	test("rejects a creature controlled by the active player as a blocker", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const activeBlocker = spawnPermanent(state, "grizzly-bears", ALICE);
+		const activeBlocker = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare blockers",
@@ -509,10 +513,10 @@ describe("declaring blockers", () => {
 
 	test("rejects a noncreature permanent as a blocker", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const mantra = spawnPermanent(state, "ajanis-mantra", BOB);
+		const mantra = engine.spawnPermanent(state, "ajanis-mantra", BOB);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare blockers",
@@ -526,14 +530,14 @@ describe("declaring blockers", () => {
 
 	test("rejects a blocker assigned to multiple attackers atomically", () => {
 		const { state, agents } = declareBlockersSetup();
-		const alpha = spawnPermanent(state, "grizzly-bears", ALICE);
-		const beta = spawnPermanent(state, "eager-cadet", ALICE);
+		const alpha = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const beta = engine.spawnPermanent(state, "eager-cadet", ALICE);
 		alpha.attacking = true;
 		beta.attacking = true;
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare blockers",
@@ -553,11 +557,11 @@ describe("declaring blockers", () => {
 
 	test("rejects a blocker assigned to a creature that is not attacking", () => {
 		const { state, agents } = declareBlockersSetup();
-		const nonAttacker = spawnPermanent(state, "eager-cadet", ALICE);
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
+		const nonAttacker = engine.spawnPermanent(state, "eager-cadet", ALICE);
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare blockers",
@@ -570,13 +574,13 @@ describe("declaring blockers", () => {
 	});
 
 	test("rejects declaring blockers outside the declare blockers step", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
+		const attacker = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare blockers",
@@ -590,10 +594,10 @@ describe("declaring blockers", () => {
 
 	test("rejects a declaration from a player who isn't the defending player", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
 		expect(() =>
-			perform(
+			engine.perform(
 				state,
 				{
 					kind: "declare blockers",
@@ -607,10 +611,10 @@ describe("declaring blockers", () => {
 
 	test("blocking clears at end combat", () => {
 		const { state, agents, attacker } = declareBlockersSetup();
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB, {
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB, {
 			counters: { "+1/+1": 1 },
 		});
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "declare blockers",
@@ -622,7 +626,7 @@ describe("declaring blockers", () => {
 		expect(permanent(state, blocker.id).blocking).toBe(true);
 
 		while (!isTurnStep(state, "end combat")) {
-			advance(state, agents);
+			engine.advance(state, agents);
 		}
 
 		expect(
@@ -641,46 +645,50 @@ describe("declaring blockers", () => {
 
 describe("declaring attackers during normal progression", () => {
 	test("summoning sickness clears as its controller's turn begins", () => {
-		const state = newGame();
-		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
+		const state = engine.newGame();
+		const attacker = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
 
 		expect(permanent(state, attacker.id).summoningSick).toBe(true);
-		advanceUntil(state, agents, (next) => isAt(next, "main"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "main"));
 		expect(permanent(state, attacker.id).summoningSick).toBe(false);
-		expect(eligibleAttackers(state, ALICE)).toContain(attacker.id);
+		expect(engine.eligibleAttackers(state, ALICE)).toContain(attacker.id);
 	});
 
 	test("a creature cannot attack on the turn it enters", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
 
-		advanceUntil(state, agents, (next) => isAt(next, "main"));
-		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
+		advanceUntil(engine, state, agents, (next) => isAt(next, "main"));
+		const attacker = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 
-		expect(eligibleAttackers(state, ALICE)).not.toContain(attacker.id);
-		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
+		expect(engine.eligibleAttackers(state, ALICE)).not.toContain(attacker.id);
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare attackers"),
+		);
 		expect(permanent(state, attacker.id).attacking).toBe(false);
 		expect(permanent(state, attacker.id).tapped).toBe(false);
 	});
 
 	test("haste allows a creature to attack on the turn it enters", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const attackerAgent = new ScriptedAgent();
 		const agents: Agents = [attackerAgent, new ScriptedAgent()];
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
 
-		advanceUntil(state, agents, (next) => isAt(next, "main"));
-		const attacker = spawnPermanent(state, "raging-goblin", ALICE);
-		expect(eligibleAttackers(state, ALICE)).toContain(attacker.id);
+		advanceUntil(engine, state, agents, (next) => isAt(next, "main"));
+		const attacker = engine.spawnPermanent(state, "raging-goblin", ALICE);
+		expect(engine.eligibleAttackers(state, ALICE)).toContain(attacker.id);
 		attackerAgent.attackerChoices.push([attacker.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare attackers"),
+		);
 		expect(permanent(state, attacker.id).attacking).toBe(true);
 		expect(permanent(state, attacker.id).tapped).toBe(true);
 	});
@@ -692,7 +700,7 @@ describe("declaring attackers during normal progression", () => {
 			new ScriptedAgent(),
 		];
 
-		advanceUntil(state, agents, (next) => isAt(next, "end combat"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "end combat"));
 		expect(
 			permanent(state, attacker.id).attacking,
 			"end combat clears attacking",
@@ -710,13 +718,14 @@ describe("declaring attackers during normal progression", () => {
 			new ScriptedAgent(),
 		];
 
-		playOneTurn(state, agents);
+		playOneTurn(engine, state, agents);
 
 		// A 2/2 that pumps itself to 3/3 on attack deals 3.
 		expect(state.players[BOB].life).toBe(17);
 		// The bonus is gone once the turn ends, and the printed 2/2 is back.
 		expect(
-			getSnapshot(createReadContext(state), veteran.id).currentCharacteristics,
+			getSnapshot(engine.createReadContext(state), veteran.id)
+				.currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 		expect(state.temporaryEffects).toHaveLength(0);
 		expect(state.pendingTriggers).toHaveLength(0);
@@ -730,7 +739,7 @@ describe("declaring attackers during normal progression", () => {
 			new ScriptedAgent(),
 		];
 
-		playOneTurn(state, agents);
+		playOneTurn(engine, state, agents);
 
 		expect(permanent(state, attacker.id).attacking).toBe(false);
 		expect(permanent(state, attacker.id).tapped).toBe(false);
@@ -743,7 +752,7 @@ describe("declaring attackers during normal progression", () => {
 			new ScriptedAgent(),
 		];
 
-		playOneTurn(state, agents);
+		playOneTurn(engine, state, agents);
 
 		const declarations = state.log.filter((line) =>
 			line.startsWith("> declareAttackers("),
@@ -759,7 +768,7 @@ describe("declaring attackers during normal progression", () => {
 			new ScriptedAgent(),
 		];
 
-		playOneTurn(state, agents);
+		playOneTurn(engine, state, agents);
 
 		expect(state.players[ALICE].life, "gained exactly 2 life").toBe(22);
 		expect(
@@ -781,15 +790,17 @@ describe("declaring attackers during normal progression", () => {
 describe("dealing combat damage", () => {
 	test("a blocked attacker damages its blocker instead of the defending player", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
 		const agents = attackAndBlock(attacker.id, [blocker.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "declare blockers"));
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare blockers"),
+		);
 		expect(state.blockAssignments).toEqual([
 			{ blocker: blocker.id, attacker: attacker.id },
 		]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "combat damage"));
 		expect(state.players[BOB].life, "blocked attacker did not hit BOB").toBe(
 			20,
 		);
@@ -802,17 +813,17 @@ describe("dealing combat damage", () => {
 	});
 
 	test("multiple blockers all deal damage and receive a legal ordered assignment", () => {
-		const state = newGame();
-		const attacker = spawnPermanent(state, "grizzly-bears", ALICE, {
+		const state = engine.newGame();
+		const attacker = engine.spawnPermanent(state, "grizzly-bears", ALICE, {
 			counters: { "+1/+1": 1 },
 		});
-		const first = spawnPermanent(state, "grizzly-bears", BOB);
-		const second = spawnPermanent(state, "eager-cadet", BOB);
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
+		const first = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const second = engine.spawnPermanent(state, "eager-cadet", BOB);
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
 		const agents = attackAndBlock(attacker.id, [first.id, second.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "combat damage"));
 
 		expect(state.players[BOB].life).toBe(20);
 		expect(state.objects.has(attacker.id), "blockers dealt 2 + 1").toBe(false);
@@ -827,15 +838,15 @@ describe("dealing combat damage", () => {
 
 	test("Mire Triton assigns one lethal deathtouch damage to each blocker", () => {
 		const { state, attacker } = setupAttackTurn("mire-triton");
-		const first = spawnPermanent(state, "grizzly-bears", BOB, {
+		const first = engine.spawnPermanent(state, "grizzly-bears", BOB, {
 			counters: { "+1/+1": 1 },
 		});
-		const second = spawnPermanent(state, "grizzly-bears", BOB, {
+		const second = engine.spawnPermanent(state, "grizzly-bears", BOB, {
 			counters: { "+1/+1": 1 },
 		});
 		const agents = attackAndBlock(attacker.id, [first.id, second.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "combat damage"));
 
 		expect(state.players[BOB].life).toBe(20);
 		expect(state.objects.has(attacker.id), "both blockers damaged Triton").toBe(
@@ -853,14 +864,16 @@ describe("dealing combat damage", () => {
 
 	test("an attacker remains blocked if its blocker regenerates before damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
-		const blocker = spawnPermanent(state, "grizzly-bears", BOB);
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
 		const agents = attackAndBlock(attacker.id, [blocker.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "declare blockers"));
-		perform(state, { kind: "regenerate", object: blocker.id }, agents);
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare blockers"),
+		);
+		engine.perform(state, { kind: "regenerate", object: blocker.id }, agents);
 		expect(permanent(state, blocker.id).blocking).toBe(false);
 
-		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "combat damage"));
 		expect(
 			state.players[BOB].life,
 			"blocked attacker did not become unblocked",
@@ -872,12 +885,14 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
 		const agents = attackWith([attacker.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare attackers"),
+		);
 		expect(state.players[BOB].life, "no damage dealt merely by declaring").toBe(
 			20,
 		);
 
-		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "combat damage"));
 		expect(
 			state.players[BOB].life,
 			"Grizzly Bears' 2 power hit the opponent",
@@ -885,15 +900,15 @@ describe("dealing combat damage", () => {
 	});
 
 	test("multiple selected attackers deal the sum of their current powers while an unselected creature deals none", () => {
-		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE);
-		const attackingCadet = spawnPermanent(state, "eager-cadet", ALICE);
-		const benchedCadet = spawnPermanent(state, "eager-cadet", ALICE);
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
+		const state = engine.newGame();
+		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const attackingCadet = engine.spawnPermanent(state, "eager-cadet", ALICE);
+		const benchedCadet = engine.spawnPermanent(state, "eager-cadet", ALICE);
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
 		const agents = attackWith([bears.id, attackingCadet.id]);
 
-		playOneTurn(state, agents);
+		playOneTurn(engine, state, agents);
 
 		// 2 (Bears) + 1 (attacking Cadet) = 3; the benched Cadet contributes 0.
 		expect(state.players[BOB].life).toBe(17);
@@ -901,15 +916,15 @@ describe("dealing combat damage", () => {
 	});
 
 	test("current modified power is used: a +1/+1 counter makes Bears deal 3", () => {
-		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", ALICE, {
+		const state = engine.newGame();
+		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE, {
 			counters: { "+1/+1": 1 },
 		});
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
 		const agents = attackWith([bears.id]);
 
-		playOneTurn(state, agents);
+		playOneTurn(engine, state, agents);
 
 		expect(state.players[BOB].life, "3/3 Bears dealt 3").toBe(17);
 	});
@@ -918,10 +933,10 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("stealer-of-secrets");
 		// One card is consumed by the turn's normal draw; this one remains for the
 		// combat-damage trigger.
-		spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", ALICE, "library");
 		const agents = attackWith([attacker.id]);
 
-		playOneTurn(state, agents);
+		playOneTurn(engine, state, agents);
 
 		expect(state.players[BOB].life).toBe(18);
 		expect(state.players[ALICE].hand).toHaveLength(2);
@@ -930,9 +945,9 @@ describe("dealing combat damage", () => {
 	});
 
 	test("Stealer of Secrets triggers only from combat damage to a player", () => {
-		const state = newGame();
-		const source = spawnPermanent(state, "stealer-of-secrets", ALICE);
-		const creature = spawnPermanent(state, "grizzly-bears", BOB);
+		const state = engine.newGame();
+		const source = engine.spawnPermanent(state, "stealer-of-secrets", ALICE);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", BOB);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		const damage = {
 			kind: "damage" as const,
@@ -945,7 +960,7 @@ describe("dealing combat damage", () => {
 			unpreventable: false,
 		};
 
-		perform(
+		engine.perform(
 			state,
 			{
 				...damage,
@@ -954,7 +969,7 @@ describe("dealing combat damage", () => {
 			},
 			agents,
 		);
-		perform(
+		engine.perform(
 			state,
 			{
 				...damage,
@@ -973,7 +988,7 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("rhox-war-monk");
 		const agents = attackWith([attacker.id]);
 
-		playOneTurn(state, agents);
+		playOneTurn(engine, state, agents);
 
 		expect(state.players[ALICE].life, "gained 3 life via lifelink").toBe(23);
 		expect(state.players[BOB].life, "lost 3 life to the same hit").toBe(17);
@@ -981,10 +996,10 @@ describe("dealing combat damage", () => {
 
 	test("Furnace of Rath doubles combat damage through the normal replacement pipeline", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
-		spawnPermanent(state, "furnace-of-rath", ALICE);
+		engine.spawnPermanent(state, "furnace-of-rath", ALICE);
 		const agents = attackWith([attacker.id]);
 
-		playOneTurn(state, agents);
+		playOneTurn(engine, state, agents);
 
 		expect(
 			state.players[BOB].life,
@@ -996,15 +1011,17 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
 		const agents = attackWith([attacker.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare attackers"),
+		);
 		expect(permanent(state, attacker.id).attacking).toBe(true);
-		perform(
+		engine.perform(
 			state,
 			{ kind: "destroy", object: attacker.id, noRegen: true },
 			agents,
 		);
 
-		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "combat damage"));
 		expect(state.players[BOB].life, "the destroyed attacker dealt none").toBe(
 			20,
 		);
@@ -1014,14 +1031,16 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
 		const agents = attackWith([attacker.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "declare attackers"));
-		perform(state, { kind: "regenerate", object: attacker.id }, agents);
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare attackers"),
+		);
+		engine.perform(state, { kind: "regenerate", object: attacker.id }, agents);
 		expect(
 			permanent(state, attacker.id).attacking,
 			"regeneration clears attacking",
 		).toBe(false);
 
-		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "combat damage"));
 		expect(state.players[BOB].life, "the regenerated creature dealt none").toBe(
 			20,
 		);
@@ -1032,7 +1051,7 @@ describe("dealing combat damage", () => {
 		state.players[BOB].life = 1;
 		const agents = attackWith([attacker.id]);
 
-		advanceUntil(state, agents, gameOver);
+		advanceUntil(engine, state, agents, gameOver);
 
 		expect(state.players[BOB].lost, "BOB died to combat damage").toBe(true);
 		expect(winner(state)).toBe(ALICE);
@@ -1043,13 +1062,13 @@ describe("dealing combat damage", () => {
 		const { state, attacker } = setupAttackTurn("grizzly-bears");
 		const agents = attackWith([attacker.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "combat damage"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "combat damage"));
 		expect(
 			permanent(state, attacker.id).attacking,
 			"still attacking during the damage step",
 		).toBe(true);
 
-		advanceUntil(state, agents, (next) => isAt(next, "end combat"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "end combat"));
 		expect(
 			permanent(state, attacker.id).attacking,
 			"end combat clears attacking",

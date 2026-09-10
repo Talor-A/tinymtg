@@ -18,10 +18,10 @@ const CORPUS_ROOT = join(import.meta.dir, "cards", "cardsfolder");
 /**
  * Loads `cards/cardsfolder/<cardsfolderPath>.txt`. The card id is the
  * corpus filename with underscores turned into dashes, so `g/grizzly_bears`
- * registers as `grizzly-bears`.
+ * returns with the id `grizzly-bears`.
  *
  * Throws on a card the importer rejects: a caller asking for a card by path
- * wants that card, and a silently missing registration would surface much
+ * wants that card, and a silently missing definition would surface much
  * later as an `unknown card` at spawn time.
  */
 export function loadCardFixture(cardsfolderPath: string): CardDef {

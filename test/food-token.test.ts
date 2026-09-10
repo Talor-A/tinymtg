@@ -9,20 +9,15 @@
 
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import {
 	abilityId,
-	createReadContext,
-	executeAbilityAction,
+	createEngine,
 	type GameState,
 	getSnapshot,
-	name,
 	type ObjectId,
 	type PlayerId,
-	perform,
 	permanent,
-	settlePriority,
-	spawnCard,
 } from "../index.ts";
 import {
 	ALICE,
@@ -32,6 +27,8 @@ import {
 	type SyncAgents,
 	setupMain,
 } from "./utils/engine-helpers.ts";
+
+const engine = createEngine(CARDS);
 
 /**
  * A creating card hosts each Food ability it makes, in the order the abilities
@@ -51,8 +48,8 @@ function enterAndSettle(
 	controller: PlayerId,
 	agents: SyncAgents,
 ): { source: ObjectId; food: ObjectId } {
-	const card = spawnCard(state, cardId, controller, "hand");
-	const entry = perform(
+	const card = engine.spawnCard(state, cardId, controller, "hand");
+	const entry = engine.perform(
 		state,
 		{
 			kind: "change zone",
@@ -64,10 +61,10 @@ function enterAndSettle(
 		agents,
 	);
 	expect(state.pendingTriggers).toHaveLength(1);
-	settlePriority(state, agents);
+	engine.settlePriority(state, agents);
 
 	const food = state.battlefield.filter(
-		(id) => name(state, id) === "Food Token",
+		(id) => engine.name(state, id) === "Food Token",
 	);
 	expect(food).toHaveLength(1);
 	const only = food[0];
@@ -77,7 +74,7 @@ function enterAndSettle(
 
 describe("Food token", () => {
 	test("Gilded Goose's entry makes a Food whose ability its creator hosts", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		const { food } = enterAndSettle(
 			state,
 			"gilded-goose",
@@ -90,7 +87,7 @@ describe("Food token", () => {
 			token: true,
 		});
 		expect(
-			getSnapshot(createReadContext(state), food).currentCharacteristics,
+			getSnapshot(engine.createReadContext(state), food).currentCharacteristics,
 		).toEqual({
 			kind: "non-creature",
 			name: "Food Token",
@@ -111,22 +108,22 @@ describe("Food token", () => {
 	});
 
 	test("a Food's own ability costs {2}, its tap and itself, and gains 3 life", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		const agents = passingAgents();
 		const { food } = enterAndSettle(state, "sweettooth-witch", ALICE, agents);
 		expect(
-			getSnapshot(createReadContext(state), food).currentCharacteristics
+			getSnapshot(engine.createReadContext(state), food).currentCharacteristics
 				.abilities.activated,
 		).toEqual([WITCH_FOOD_SAC]);
 		state.players[ALICE].manaPool.g = 2;
 
-		executeAbilityAction(
+		engine.executeAbilityAction(
 			state,
 			ALICE,
 			{ kind: "activate ability", source: food, ability: WITCH_FOOD_SAC },
 			agents,
 		);
-		settlePriority(state, agents);
+		engine.settlePriority(state, agents);
 
 		expect(state.players[ALICE].manaPool.g, "{2} was paid").toBe(0);
 		expect(state.objects.has(food), "the token sacrificed itself").toBe(false);
@@ -134,7 +131,7 @@ describe("Food token", () => {
 	});
 
 	test("Sweettooth Witch's own ability sacrifices the Food it created", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		const alice = new ScriptedAgent();
 		const bob = new ScriptedAgent();
 		const { source: witch, food } = enterAndSettle(
@@ -149,7 +146,7 @@ describe("Food token", () => {
 		// and its ability needs no tap, so a freshly entered Witch can use it.
 		alice.sacrificeChoices = [food];
 		alice.targetChoices = [{ type: "player", player: BOB }];
-		executeAbilityAction(
+		engine.executeAbilityAction(
 			state,
 			ALICE,
 			{
@@ -159,7 +156,7 @@ describe("Food token", () => {
 			},
 			[alice, bob],
 		);
-		settlePriority(state, [alice, bob]);
+		engine.settlePriority(state, [alice, bob]);
 
 		expect(state.objects.has(food), "the Food paid the cost").toBe(false);
 		expect(state.players[BOB].life).toBe(18);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import type {
 	ChoiceAnswer,
 	ChoiceRequest,
@@ -9,13 +9,9 @@ import type {
 } from "../index.ts";
 import {
 	activePlayer,
-	advanceWithReplay,
-	newGame,
-	perform,
+	createEngine,
+	defineCard,
 	permanent,
-	registerCard,
-	settlePriority,
-	spawnPermanent,
 	turnLocation,
 } from "../index.ts";
 import { beginFirstTurn, completePreGame } from "./utils/engine-helpers.ts";
@@ -24,7 +20,7 @@ const ALICE = 0 as PlayerId;
 const BOB = 1 as PlayerId;
 
 const TAP_OBSERVER = "test-tap-observer";
-registerCard({
+const TEST_CARD_1 = defineCard({
 	id: TAP_OBSERVER,
 	name: "Tap Observer",
 	types: ["creature"],
@@ -51,7 +47,7 @@ registerCard({
 });
 
 const BULK_OBSERVER = "test-bulk-tap-observer";
-registerCard({
+const TEST_CARD_2 = defineCard({
 	id: BULK_OBSERVER,
 	name: "Bulk Tap Observer",
 	types: ["enchantment"],
@@ -81,11 +77,13 @@ registerCard({
 	],
 });
 
-for (const [id, name, color] of [
-	["test-red-permanent", "Red Permanent", "r"],
-	["test-green-permanent", "Green Permanent", "g"],
-] as const) {
-	registerCard({
+const COLORED_PERMANENTS = (
+	[
+		["test-red-permanent", "Red Permanent", "r"],
+		["test-green-permanent", "Green Permanent", "g"],
+	] as const
+).map(([id, name, color]) =>
+	defineCard({
 		id,
 		name,
 		types: ["creature"],
@@ -93,14 +91,16 @@ for (const [id, name, color] of [
 		manaCost: { [color]: 1 },
 		power: 1,
 		toughness: 1,
-	});
-}
+	}),
+);
 
-for (const [id, name] of [
-	["test-bulk-tap-replacement-a", "Bulk Tap Replacement A"],
-	["test-bulk-tap-replacement-b", "Bulk Tap Replacement B"],
-] as const) {
-	registerCard({
+const BULK_TAP_REPLACEMENTS = (
+	[
+		["test-bulk-tap-replacement-a", "Bulk Tap Replacement A"],
+		["test-bulk-tap-replacement-b", "Bulk Tap Replacement B"],
+	] as const
+).map(([id, name]) =>
+	defineCard({
 		id,
 		name,
 		types: ["enchantment"],
@@ -115,8 +115,16 @@ for (const [id, name] of [
 				replace: (event) => [event],
 			},
 		],
-	});
-}
+	}),
+);
+
+const engine = createEngine([
+	...CARDS,
+	TEST_CARD_1,
+	TEST_CARD_2,
+	...COLORED_PERMANENTS,
+	...BULK_TAP_REPLACEMENTS,
+]);
 
 const passingAgents: [ScriptedAgent, ScriptedAgent] = [
 	new ScriptedAgent(),
@@ -125,13 +133,13 @@ const passingAgents: [ScriptedAgent, ScriptedAgent] = [
 
 describe("tap and untap occurrences", () => {
 	test("single-object events occur and trigger only for actual transitions", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		// The trigger reaches the stack through a priority window, which only
 		// exists inside a turn.
-		beginFirstTurn(state, passingAgents);
-		const observer = spawnPermanent(state, TAP_OBSERVER, ALICE);
+		beginFirstTurn(engine, state, passingAgents);
+		const observer = engine.spawnPermanent(state, TAP_OBSERVER, ALICE);
 
-		const tap = perform(
+		const tap = engine.perform(
 			state,
 			{ kind: "tap", ref: { kind: "object", object: observer.id } },
 			passingAgents,
@@ -141,10 +149,10 @@ describe("tap and untap occurrences", () => {
 		expect(
 			state.pendingTriggers.map((trigger) => String(trigger.triggerId)),
 		).toEqual([`${TAP_OBSERVER}:0`]);
-		settlePriority(state, passingAgents);
+		engine.settlePriority(state, passingAgents);
 		expect(state.players[ALICE].life).toBe(21);
 
-		const untap = perform(
+		const untap = engine.perform(
 			state,
 			{ kind: "untap", ref: { kind: "object", object: observer.id } },
 			passingAgents,
@@ -157,22 +165,22 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("single-object events already in the requested state do not occur", () => {
-		const state = newGame();
-		const tapped = spawnPermanent(state, TAP_OBSERVER, ALICE, {
+		const state = engine.newGame();
+		const tapped = engine.spawnPermanent(state, TAP_OBSERVER, ALICE, {
 			tapped: true,
 		});
-		const untapped = spawnPermanent(state, TAP_OBSERVER, ALICE);
+		const untapped = engine.spawnPermanent(state, TAP_OBSERVER, ALICE);
 		const revision = state.revision;
 
 		expect(
-			perform(
+			engine.perform(
 				state,
 				{ kind: "tap", ref: { kind: "object", object: tapped.id } },
 				passingAgents,
 			).executed,
 		).toEqual([]);
 		expect(
-			perform(
+			engine.perform(
 				state,
 				{ kind: "untap", ref: { kind: "object", object: untapped.id } },
 				passingAgents,
@@ -183,14 +191,14 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("bulk events expose exactly the permanents whose state changed to triggers", () => {
-		const state = newGame();
-		spawnPermanent(state, BULK_OBSERVER, ALICE);
-		const red = spawnPermanent(state, "test-red-permanent", ALICE, {
+		const state = engine.newGame();
+		engine.spawnPermanent(state, BULK_OBSERVER, ALICE);
+		const red = engine.spawnPermanent(state, "test-red-permanent", ALICE, {
 			tapped: true,
 		});
-		const green = spawnPermanent(state, "test-green-permanent", ALICE);
+		const green = engine.spawnPermanent(state, "test-green-permanent", ALICE);
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{ kind: "tap", ref: { kind: "all", player: ALICE } },
 			passingAgents,
@@ -205,14 +213,14 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("a bulk event with no state transitions does not occur", () => {
-		const state = newGame();
-		spawnPermanent(state, TAP_OBSERVER, ALICE, { tapped: true });
-		spawnPermanent(state, "test-red-permanent", ALICE, {
+		const state = engine.newGame();
+		engine.spawnPermanent(state, TAP_OBSERVER, ALICE, { tapped: true });
+		engine.spawnPermanent(state, "test-red-permanent", ALICE, {
 			tapped: true,
 		});
 		const revision = state.revision;
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{ kind: "tap", ref: { kind: "all", player: ALICE } },
 			passingAgents,
@@ -224,11 +232,11 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("the nonactive affected player orders replacements for their bulk event", () => {
-		const state = newGame();
-		beginFirstTurn(state, passingAgents);
-		spawnPermanent(state, "test-bulk-tap-replacement-a", ALICE);
-		spawnPermanent(state, "test-bulk-tap-replacement-b", ALICE);
-		spawnPermanent(state, "grizzly-bears", BOB);
+		const state = engine.newGame();
+		beginFirstTurn(engine, state, passingAgents);
+		engine.spawnPermanent(state, "test-bulk-tap-replacement-a", ALICE);
+		engine.spawnPermanent(state, "test-bulk-tap-replacement-b", ALICE);
+		engine.spawnPermanent(state, "grizzly-bears", BOB);
 		const requests: ChoiceRequest[] = [];
 		const unexpected: SyncAgent = {
 			choose: () => {
@@ -244,7 +252,7 @@ describe("tap and untap occurrences", () => {
 			},
 		};
 
-		perform(state, { kind: "tap", ref: { kind: "all", player: BOB } }, [
+		engine.perform(state, { kind: "tap", ref: { kind: "all", player: BOB } }, [
 			unexpected,
 			affected,
 		]);
@@ -255,14 +263,14 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("untap-step triggers stay pending until the upkeep priority window", async () => {
-		const checkpoint = newGame();
-		const observer = spawnPermanent(checkpoint, TAP_OBSERVER, ALICE, {
+		const checkpoint = engine.newGame();
+		const observer = engine.spawnPermanent(checkpoint, TAP_OBSERVER, ALICE, {
 			tapped: true,
 		});
 
-		completePreGame(checkpoint, passingAgents);
+		completePreGame(engine, checkpoint, passingAgents);
 
-		const untap = await advanceWithReplay(checkpoint, passingAgents);
+		const untap = await engine.advanceWithReplay(checkpoint, passingAgents);
 		expect(turnLocation(untap.state)).toMatchObject({
 			kind: "step",
 			step: { kind: "untap" },
@@ -273,7 +281,7 @@ describe("tap and untap occurrences", () => {
 		expect(untap.state.players[ALICE].life).toBe(20);
 		expect(() => structuredClone(untap.state)).not.toThrow();
 
-		const upkeep = await advanceWithReplay(untap.state, passingAgents);
+		const upkeep = await engine.advanceWithReplay(untap.state, passingAgents);
 		expect(turnLocation(upkeep.state)).toMatchObject({
 			kind: "step",
 			step: { kind: "upkeep" },

@@ -1,44 +1,35 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import { priorityOptionId } from "../choices.ts";
 import {
 	type Agent,
 	abilityId,
-	advanceWithReplay,
-	buildPlayerView,
 	ChoiceController,
 	ChoicePendingError,
 	ChoiceReplayMismatchError,
-	createReadContext,
+	createEngine,
+	defineCard,
 	type EntityRef,
-	executeCastAction,
 	type GameState,
-	getObservableActions,
 	getSnapshot,
 	IllegalCastError,
 	InvalidChoiceAnswerError,
-	newGame,
 	type ObjectId,
 	type ObjectPredicateDef,
-	perform,
-	registerCard,
-	type SyncAgent,
 	objectMatchesPredicate,
-	settlePriority,
-	spawnCard,
-	spawnPermanent,
+	type SyncAgent,
 	type TargetBindings,
 	type TargetDef,
 	turnLocation,
 } from "../index.ts";
 import {
 	advanceUntil,
+	loadCardFixture,
 	passingAgents,
-	registerCardFixture,
 } from "./utils/engine-helpers.ts";
 
-for (const file of [
+const FIXTURE_CARDS = [
 	"m/murder",
 	"l/lightning_bolt",
 	"s/swamp",
@@ -47,11 +38,9 @@ for (const file of [
 	"p/prodigal_sorcerer",
 	"f/flametongue_kavu",
 	"m/manic_vandal",
-]) {
-	registerCardFixture(file);
-}
+].map(loadCardFixture);
 
-registerCard({
+const TEST_CARD_1 = defineCard({
 	id: "target-test-replace-cast",
 	name: "Target Test Replace Cast",
 	types: ["artifact"],
@@ -91,14 +80,14 @@ const creatureTarget: TargetDef = {
 
 describe("target predicates", () => {
 	test("each predicate kind reads the object's current characteristics", () => {
-		const state = newGame();
-		const bears = spawnPermanent(state, "grizzly-bears", 0);
-		const swamp = spawnPermanent(state, "swamp", 1);
-		const ownedCard = spawnCard(state, "grizzly-bears", 0, "graveyard");
+		const state = engine.newGame();
+		const bears = engine.spawnPermanent(state, "grizzly-bears", 0);
+		const swamp = engine.spawnPermanent(state, "swamp", 1);
+		const ownedCard = engine.spawnCard(state, "grizzly-bears", 0, "graveyard");
 		const mine = { controller: 0 as const, id: bears.id };
 
 		const matches = (predicate: ObjectPredicateDef, id: ObjectId) => {
-			const snapshot = getSnapshot(createReadContext(state), id);
+			const snapshot = getSnapshot(engine.createReadContext(state), id);
 			return objectMatchesPredicate(predicate, snapshot, mine);
 		};
 
@@ -177,13 +166,13 @@ describe("target predicates", () => {
 
 describe("target bindings and choices", () => {
 	test("zone movement installs detached bindings visible to both players", () => {
-		const state = newGame();
-		const spell = spawnCard(state, "murder", 0, "hand");
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const state = engine.newGame();
+		const spell = engine.spawnCard(state, "murder", 0, "hand");
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		const targets: TargetBindings = [
 			{ slot: "target-1", target: { type: "permanent", id: creature.id } },
 		];
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -200,22 +189,24 @@ describe("target bindings and choices", () => {
 		expect(entry.targets).toEqual(targets);
 		expect(entry.targets).not.toBe(targets);
 		for (const player of [0, 1] as const) {
-			const view = buildPlayerView(state, player);
+			const view = engine.buildPlayerView(state, player);
 			expect(view.stack[0]).toMatchObject({ targets });
 			expect(JSON.parse(JSON.stringify(view)).stack[0].targets).toEqual(
 				targets,
 			);
 		}
 		const cloned = structuredClone(state);
-		expect(buildPlayerView(cloned, 1).stack[0]).toMatchObject({ targets });
+		expect(engine.buildPlayerView(cloned, 1).stack[0]).toMatchObject({
+			targets,
+		});
 	});
 
 	test("target choices replay and reject a changed candidate list", () => {
-		const state = newGame();
-		const spell = spawnCard(state, "murder", 0, "hand");
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const state = engine.newGame();
+		const spell = engine.spawnCard(state, "murder", 0, "hand");
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		const target: EntityRef = { type: "permanent", id: creature.id };
-		const controller = ChoiceController.record(passingAgents());
+		const controller = ChoiceController.record(engine, passingAgents());
 		expect(
 			controller.chooseTarget(
 				state,
@@ -226,7 +217,7 @@ describe("target bindings and choices", () => {
 			),
 		).toEqual(target);
 		const transcript = JSON.parse(JSON.stringify(controller.transcript()));
-		const replay = ChoiceController.replay(transcript);
+		const replay = ChoiceController.replay(engine, transcript);
 		expect(
 			replay.chooseTarget(state, 0, announcement(spell.id), creatureTarget, [
 				target,
@@ -234,7 +225,7 @@ describe("target bindings and choices", () => {
 		).toEqual(target);
 		replay.assertComplete();
 		expect(() =>
-			ChoiceController.replay(transcript).chooseTarget(
+			ChoiceController.replay(engine, transcript).chooseTarget(
 				state,
 				0,
 				announcement(spell.id),
@@ -250,7 +241,7 @@ describe("target bindings and choices", () => {
 // requiredTargetDefinition. The importer rejects Giant Growth's real definition
 // outright (see test/forge-import.test.ts); this is not a claim that Giant
 // Growth is supported.
-registerCard({
+const TEST_CARD_2 = defineCard({
 	id: "target-test-deferred-pt",
 	name: "Test Deferred P/T",
 	types: ["instant"],
@@ -272,7 +263,7 @@ registerCard({
 	},
 });
 // Synthetic fixture isolates a layer-4 change without adding another card mechanic.
-registerCard({
+const TEST_CARD_3 = defineCard({
 	id: "target-test-remove-creature-type",
 	name: "Test creature type removal",
 	types: ["enchantment"],
@@ -291,7 +282,7 @@ registerCard({
 });
 
 // Synthetic fixture isolates a layer-5 change, for Doom Blade's colour restriction.
-registerCard({
+const TEST_CARD_4 = defineCard({
 	id: "target-test-black-creatures",
 	name: "Test creature colour change",
 	types: ["enchantment"],
@@ -310,7 +301,7 @@ registerCard({
 });
 
 // Only the type matters: this fixture deliberately has no planeswalker mechanics.
-registerCard({
+const TEST_CARD_5 = defineCard({
 	id: "target-test-planeswalker-type",
 	name: "Test planeswalker type change",
 	types: ["enchantment"],
@@ -328,19 +319,31 @@ registerCard({
 	],
 });
 
+const engine = createEngine([
+	...CARDS,
+	...FIXTURE_CARDS,
+	TEST_CARD_1,
+	TEST_CARD_2,
+	TEST_CARD_3,
+	TEST_CARD_4,
+	TEST_CARD_5,
+]);
+
 function setupCast(cardId = "murder") {
-	const state = newGame();
+	const state = engine.newGame();
 	for (const player of [0, 1] as const) {
-		for (let i = 0; i < 5; i++) spawnCard(state, "forest", player, "library");
+		for (let i = 0; i < 5; i++)
+			engine.spawnCard(state, "forest", player, "library");
 	}
 	advanceUntil(
+		engine,
 		state,
 		passingAgents(),
 		(next) => turnLocation(next)?.kind === "mainPhase",
 	);
-	const spell = spawnCard(state, cardId, 0, "hand");
+	const spell = engine.spawnCard(state, cardId, 0, "hand");
 	// Focus these tests on targeting; mana activation has its own integration tests.
-	perform(
+	engine.perform(
 		state,
 		{
 			kind: "add mana",
@@ -356,14 +359,14 @@ function setupCast(cardId = "murder") {
 function castAt(state: GameState, card: ObjectId, target: EntityRef) {
 	const agents = passingAgents();
 	agents[0].targetChoices.push(target);
-	executeCastAction(state, 0, { kind: "cast", card }, agents);
+	engine.executeCastAction(state, 0, { kind: "cast", card }, agents);
 	expect(agents[0].targetChoices).toHaveLength(0);
 }
 
 describe("single-target spell casting", () => {
 	test("target choice observes and binds the newly announced spell", () => {
 		const { state, spell: cardInHand } = setupCast();
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		let announcedSpell: ObjectId | null = null;
 		const observer: SyncAgent = {
 			choose(view, request) {
@@ -381,7 +384,7 @@ describe("single-target spell casting", () => {
 			},
 		};
 
-		executeCastAction(state, 0, { kind: "cast", card: cardInHand.id }, [
+		engine.executeCastAction(state, 0, { kind: "cast", card: cardInHand.id }, [
 			observer,
 			new ScriptedAgent(),
 		]);
@@ -407,14 +410,14 @@ describe("single-target spell casting", () => {
 
 	test("Murder is unavailable with no creature; direct execution changes nothing", () => {
 		const { state, spell } = setupCast();
-		spawnPermanent(state, "forest", 1);
-		expect(getObservableActions(state, 0)).not.toContainEqual({
+		engine.spawnPermanent(state, "forest", 1);
+		expect(engine.getObservableActions(state, 0)).not.toContainEqual({
 			kind: "cast",
 			card: spell.id,
 		});
 		const before = structuredClone(state);
 		expect(() =>
-			executeCastAction(
+			engine.executeCastAction(
 				state,
 				0,
 				{ kind: "cast", card: spell.id },
@@ -430,10 +433,10 @@ describe("single-target spell casting", () => {
 			{ optionIds: ["player:0", "player:1"] },
 		]) {
 			const { state, spell } = setupCast();
-			spawnPermanent(state, "grizzly-bears", 1);
+			engine.spawnPermanent(state, "grizzly-bears", 1);
 			const before = canonicalStateBytes(state);
 			expect(() =>
-				executeCastAction(state, 0, { kind: "cast", card: spell.id }, [
+				engine.executeCastAction(state, 0, { kind: "cast", card: spell.id }, [
 					{ choose: () => answer },
 					new ScriptedAgent(),
 				]),
@@ -444,9 +447,9 @@ describe("single-target spell casting", () => {
 
 	test("suspended target selection restores canonical state byte-for-byte", () => {
 		const { state, spell } = setupCast();
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		const before = canonicalStateBytes(state);
-		const choices = ChoiceController.suspending([
+		const choices = ChoiceController.suspending(engine, [
 			{
 				choose(view, request) {
 					expect(request.kind).toBe("target");
@@ -460,7 +463,7 @@ describe("single-target spell casting", () => {
 		]);
 
 		expect(() =>
-			executeCastAction(
+			engine.executeCastAction(
 				state,
 				0,
 				{ kind: "cast", card: spell.id },
@@ -472,12 +475,12 @@ describe("single-target spell casting", () => {
 
 	test("a replacement-interfered announcement restores canonical state byte-for-byte", () => {
 		const { state, spell } = setupCast();
-		spawnPermanent(state, "grizzly-bears", 1);
-		spawnPermanent(state, "target-test-replace-cast", 1);
+		engine.spawnPermanent(state, "grizzly-bears", 1);
+		engine.spawnPermanent(state, "target-test-replace-cast", 1);
 		const before = canonicalStateBytes(state);
 
 		expect(() =>
-			executeCastAction(
+			engine.executeCastAction(
 				state,
 				0,
 				{ kind: "cast", card: spell.id },
@@ -489,14 +492,18 @@ describe("single-target spell casting", () => {
 
 	test("Doom Blade's colour restriction decides its candidates", () => {
 		const { state, spell } = setupCast("doom-blade");
-		const bears = spawnPermanent(state, "grizzly-bears", 1);
-		const blackened = spawnPermanent(state, "target-test-black-creatures", 1);
-		expect(getObservableActions(state, 0)).not.toContainEqual({
+		const bears = engine.spawnPermanent(state, "grizzly-bears", 1);
+		const blackened = engine.spawnPermanent(
+			state,
+			"target-test-black-creatures",
+			1,
+		);
+		expect(engine.getObservableActions(state, 0)).not.toContainEqual({
 			kind: "cast",
 			card: spell.id,
 		});
 
-		perform(
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -508,16 +515,16 @@ describe("single-target spell casting", () => {
 			passingAgents(),
 		);
 		castAt(state, spell.id, { type: "permanent", id: bears.id });
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		expect(state.objects.has(bears.id)).toBe(false);
 	});
 
 	test("a target that turns black before Doom Blade resolves is illegal", () => {
 		const { state, spell } = setupCast("doom-blade");
-		const bears = spawnPermanent(state, "grizzly-bears", 1);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", 1);
 		castAt(state, spell.id, { type: "permanent", id: bears.id });
-		spawnPermanent(state, "target-test-black-creatures", 1);
-		settlePriority(state, passingAgents());
+		engine.spawnPermanent(state, "target-test-black-creatures", 1);
+		engine.settlePriority(state, passingAgents());
 		expect(state.battlefield).toContain(bears.id);
 		expect(state.log.some((line) => line.includes("[illegal target]"))).toBe(
 			true,
@@ -526,17 +533,17 @@ describe("single-target spell casting", () => {
 
 	test("Unsummon returns the targeted creature to its owner's hand", () => {
 		const { state, spell } = setupCast("unsummon");
-		perform(
+		engine.perform(
 			state,
 			{ kind: "add mana", source: spell.id, player: 0, mana: { u: 1 } },
 			passingAgents(),
 		);
 		// Owned by P1, so it must return to P1's hand rather than the caster's.
-		const bears = spawnPermanent(state, "grizzly-bears", 1);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", 1);
 		const handBefore = state.players[1].hand.length;
 
 		castAt(state, spell.id, { type: "permanent", id: bears.id });
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 
 		expect(state.battlefield).not.toContain(bears.id);
 		expect(state.players[1].hand).toHaveLength(handBefore + 1);
@@ -552,11 +559,11 @@ describe("single-target spell casting", () => {
 
 	test("a temporary P/T effect resolves into the layer system", () => {
 		const { state, spell } = setupCast("target-test-deferred-pt");
-		const bears = spawnPermanent(state, "grizzly-bears", 1);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", 1);
 		castAt(state, spell.id, { type: "permanent", id: bears.id });
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 
-		const snapshot = getSnapshot(createReadContext(state), bears.id);
+		const snapshot = getSnapshot(engine.createReadContext(state), bears.id);
 		expect(snapshot.currentCharacteristics).toMatchObject({
 			kind: "creature",
 			power: 5,
@@ -579,7 +586,7 @@ describe("single-target spell casting", () => {
 	test("Murder resolves through the destroy pipeline, including indestructible", () => {
 		for (const cardId of ["grizzly-bears", "darksteel-myr"]) {
 			const { state, spell } = setupCast();
-			const creature = spawnPermanent(state, cardId, 1);
+			const creature = engine.spawnPermanent(state, cardId, 1);
 			castAt(state, spell.id, { type: "permanent", id: creature.id });
 			expect(state.players[0].manaPool.b).toBe(0);
 			expect(state.stack[0]).toMatchObject({
@@ -587,7 +594,7 @@ describe("single-target spell casting", () => {
 					{ slot: "target-1", target: { type: "permanent", id: creature.id } },
 				],
 			});
-			settlePriority(state, passingAgents());
+			engine.settlePriority(state, passingAgents());
 			expect(state.objects.has(creature.id)).toBe(cardId === "darksteel-myr");
 			expect(state.stack).toHaveLength(0);
 			expect(state.players[0].graveyard).toHaveLength(1);
@@ -596,11 +603,16 @@ describe("single-target spell casting", () => {
 
 	test("Bolt offers players and creatures, excludes ordinary lands, and honors damage replacement", () => {
 		const { state, spell } = setupCast("lightning-bolt");
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
-		spawnPermanent(state, "forest", 1);
-		spawnPermanent(state, "furnace-of-rath", 1);
-		const choices = ChoiceController.record(passingAgents());
-		executeCastAction(state, 0, { kind: "cast", card: spell.id }, choices);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
+		engine.spawnPermanent(state, "forest", 1);
+		engine.spawnPermanent(state, "furnace-of-rath", 1);
+		const choices = ChoiceController.record(engine, passingAgents());
+		engine.executeCastAction(
+			state,
+			0,
+			{ kind: "cast", card: spell.id },
+			choices,
+		);
 		const request = choices.transcript().choices[0]?.request;
 		expect(request?.kind).toBe("target");
 		expect(request?.options.map((option) => option.id)).toEqual([
@@ -608,25 +620,25 @@ describe("single-target spell casting", () => {
 			"player:1",
 			`permanent:${creature.id}`,
 		]);
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		expect(state.players[0].life).toBe(14);
 	});
 
 	test("Bolt kills a creature through state-based actions", () => {
 		const { state, spell } = setupCast("lightning-bolt");
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		castAt(state, spell.id, { type: "permanent", id: creature.id });
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		expect(state.objects.has(creature.id)).toBe(false);
 		expect(state.players[1].graveyard).toHaveLength(1);
 	});
 
 	test("a response removes Murder's target before it resolves", () => {
 		const { state, spell } = setupCast();
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		castAt(state, spell.id, { type: "permanent", id: creature.id });
-		const response = spawnCard(state, "lightning-bolt", 1, "hand");
-		perform(
+		const response = engine.spawnCard(state, "lightning-bolt", 1, "hand");
+		engine.perform(
 			state,
 			{ kind: "add mana", source: response.id, player: 1, mana: { r: 1 } },
 			passingAgents(),
@@ -634,7 +646,7 @@ describe("single-target spell casting", () => {
 		const agents = passingAgents();
 		agents[1].priorityActions.push({ kind: "cast", card: response.id });
 		agents[1].targetChoices.push({ type: "permanent", id: creature.id });
-		settlePriority(state, agents);
+		engine.settlePriority(state, agents);
 		expect(agents[1].priorityActions).toHaveLength(0);
 		expect(state.stack).toHaveLength(0);
 		expect(state.objects.has(creature.id)).toBe(false);
@@ -645,9 +657,9 @@ describe("single-target spell casting", () => {
 
 	test("leaving and returning creates a new object that Murder cannot destroy", () => {
 		const { state, spell } = setupCast();
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		castAt(state, spell.id, { type: "permanent", id: creature.id });
-		const [away] = perform(
+		const [away] = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -659,7 +671,7 @@ describe("single-target spell casting", () => {
 			passingAgents(),
 		).created;
 		if (away === undefined) throw new Error("missing exiled card");
-		const [returned] = perform(
+		const [returned] = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -670,7 +682,7 @@ describe("single-target spell casting", () => {
 			},
 			passingAgents(),
 		).created;
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		if (returned === undefined) throw new Error("missing returned permanent");
 		expect(returned).not.toBe(creature.id);
 		expect(state.battlefield).toContain(returned);
@@ -678,10 +690,10 @@ describe("single-target spell casting", () => {
 
 	test("current type is rechecked before resolving Murder", () => {
 		const { state, spell } = setupCast();
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		castAt(state, spell.id, { type: "permanent", id: creature.id });
-		spawnPermanent(state, "target-test-remove-creature-type", 1);
-		settlePriority(state, passingAgents());
+		engine.spawnPermanent(state, "target-test-remove-creature-type", 1);
+		engine.settlePriority(state, passingAgents());
 		expect(state.battlefield).toContain(creature.id);
 		expect(state.log.some((line) => line.includes("[illegal target]"))).toBe(
 			true,
@@ -690,10 +702,10 @@ describe("single-target spell casting", () => {
 
 	test("damage asserts on current planeswalker characteristics", () => {
 		const { state, spell } = setupCast("lightning-bolt");
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		castAt(state, spell.id, { type: "permanent", id: creature.id });
-		spawnPermanent(state, "target-test-planeswalker-type", 1);
-		expect(() => settlePriority(state, passingAgents())).toThrow(
+		engine.spawnPermanent(state, "target-test-planeswalker-type", 1);
+		expect(() => engine.settlePriority(state, passingAgents())).toThrow(
 			"planeswalker damage is not implemented",
 		);
 		expect(creature.damage).toBe(0);
@@ -701,22 +713,24 @@ describe("single-target spell casting", () => {
 
 	test("an illegal target stops even Sorin's Thirst's untargeted life gain", () => {
 		const { state, spell } = setupCast("sorins-thirst");
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
 		castAt(state, spell.id, { type: "permanent", id: creature.id });
-		perform(
+		engine.perform(
 			state,
 			{ kind: "destroy", object: creature.id, noRegen: false },
 			passingAgents(),
 		);
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		expect(state.players[0].life).toBe(20);
 		expect(state.stack).toHaveLength(0);
 	});
 
 	test("async target selection replays the cast without repeating the priority choice", async () => {
 		const { state, spell } = setupCast();
-		const creature = spawnPermanent(state, "grizzly-bears", 1);
-		const swamps = [0, 1, 2].map(() => spawnPermanent(state, "swamp", 0));
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
+		const swamps = [0, 1, 2].map(() =>
+			engine.spawnPermanent(state, "swamp", 0),
+		);
 		const scripted = new ScriptedAgent(
 			[],
 			[],
@@ -750,7 +764,7 @@ describe("single-target spell casting", () => {
 		let checkpoint = state;
 		let attempts = 0;
 		for (let i = 0; i < 10 && checkpoint.objects.has(spell.id); i++) {
-			const result = await advanceWithReplay(checkpoint, [
+			const result = await engine.advanceWithReplay(checkpoint, [
 				agent,
 				new ScriptedAgent(),
 			]);

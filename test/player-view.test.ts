@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import {
 	abilityId,
-	buildPlayerView,
-	newGame,
+	createEngine,
 	type PhaseId,
 	type PlayerBattlefieldObjectView,
 	type PlayerExileObjectView,
@@ -12,13 +11,12 @@ import {
 	type PlayerHandObjectView,
 	type PlayerObjectView,
 	type PlayerStackView,
-	perform,
 	type StackItemId,
 	type StepId,
-	spawnCard,
-	spawnPermanent,
 	type TurnId,
 } from "../index.ts";
+
+const engine = createEngine(CARDS);
 
 function assertExactPlayerViewTypes(
 	hand: PlayerHandObjectView,
@@ -75,14 +73,14 @@ function expectJsonSafe(value: unknown): void {
 
 describe("player views", () => {
 	test("show each viewer only their hand and no library identities", () => {
-		const state = newGame();
-		const p0Hand = spawnCard(state, "forest", 0, "hand");
-		const p1Hand = spawnCard(state, "test-forced-copy", 1, "hand");
-		const p0Library = spawnCard(state, "doubling-season", 0, "library");
-		const p1Library = spawnCard(state, "hardened-scales", 1, "library");
+		const state = engine.newGame();
+		const p0Hand = engine.spawnCard(state, "forest", 0, "hand");
+		const p1Hand = engine.spawnCard(state, "test-forced-copy", 1, "hand");
+		const p0Library = engine.spawnCard(state, "doubling-season", 0, "library");
+		const p1Library = engine.spawnCard(state, "hardened-scales", 1, "library");
 
-		const p0 = buildPlayerView(state, 0);
-		const p1 = buildPlayerView(state, 1);
+		const p0 = engine.buildPlayerView(state, 0);
+		const p1 = engine.buildPlayerView(state, 1);
 
 		expect(p0.hand.map((object) => object.objectId)).toEqual([p0Hand.id]);
 		expect(p1.hand.map((object) => object.objectId)).toEqual([p1Hand.id]);
@@ -105,16 +103,21 @@ describe("player views", () => {
 	});
 
 	test("includes both boards and every public zone with derived values", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		state.players[0].manaPool.g = 2;
 		state.players[0].manaPool.c = 3;
 		state.players[1].manaPool.u = 1;
-		const mine = spawnPermanent(state, "grizzly-bears", 0, {
+		const mine = engine.spawnPermanent(state, "grizzly-bears", 0, {
 			counters: { "+1/+1": 1 },
 		});
-		const theirs = spawnPermanent(state, "eager-cadet", 1);
-		const graveyard = spawnCard(state, "test-forced-copy", 0, "graveyard");
-		const exile = spawnCard(state, "forest", 1, "exile");
+		const theirs = engine.spawnPermanent(state, "eager-cadet", 1);
+		const graveyard = engine.spawnCard(
+			state,
+			"test-forced-copy",
+			0,
+			"graveyard",
+		);
+		const exile = engine.spawnCard(state, "forest", 1, "exile");
 		const stackId = state.nextStackItemId++ as StackItemId;
 		state.stack.push({
 			id: stackId,
@@ -138,7 +141,7 @@ describe("player views", () => {
 		});
 		state.revision++;
 
-		const view = buildPlayerView(state, 0);
+		const view = engine.buildPlayerView(state, 0);
 
 		expect(view.battlefield.map((object) => object.objectId)).toEqual([
 			mine.id,
@@ -164,9 +167,9 @@ describe("player views", () => {
 	});
 
 	test("is JSON-safe and detached from state and later views", () => {
-		const state = newGame();
-		const card = spawnCard(state, "forest", 0, "hand");
-		const view = buildPlayerView(state, 0);
+		const state = engine.newGame();
+		const card = engine.spawnCard(state, "forest", 0, "hand");
+		const view = engine.buildPlayerView(state, 0);
 
 		expectJsonSafe(view);
 		expect(JSON.parse(JSON.stringify(view))).toEqual(view);
@@ -189,10 +192,10 @@ describe("player views", () => {
 		expect(() => {
 			mutable.players[0].manaPool.g = 1;
 		}).toThrow(TypeError);
-		expect(buildPlayerView(state, 0)).toBe(view);
-		spawnCard(state, "test-forced-copy", 0, "hand");
+		expect(engine.buildPlayerView(state, 0)).toBe(view);
+		engine.spawnCard(state, "test-forced-copy", 0, "hand");
 
-		const fresh = buildPlayerView(state, 0);
+		const fresh = engine.buildPlayerView(state, 0);
 		expect(view.hand).toHaveLength(1);
 		expect(fresh.hand).toHaveLength(2);
 		expect(fresh.players[0].life).toBe(20);
@@ -203,9 +206,9 @@ describe("player views", () => {
 	});
 
 	test("projects the exact spell-or-ability stack union", () => {
-		const state = newGame();
-		const spellCard = spawnCard(state, "grizzly-bears", 0, "hand");
-		perform(
+		const state = engine.newGame();
+		const spellCard = engine.spawnCard(state, "grizzly-bears", 0, "hand");
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -216,7 +219,7 @@ describe("player views", () => {
 			},
 			[new ScriptedAgent(), new ScriptedAgent()],
 		);
-		const source = spawnPermanent(state, "ajanis-mantra", 0);
+		const source = engine.spawnPermanent(state, "ajanis-mantra", 0);
 		state.stack.push({
 			id: state.nextStackItemId++ as StackItemId,
 			kind: "triggered ability",
@@ -239,7 +242,7 @@ describe("player views", () => {
 		});
 		state.revision++;
 
-		const view = buildPlayerView(state, 0);
+		const view = engine.buildPlayerView(state, 0);
 		expect(view.stack.map((entry) => entry.kind)).toEqual([
 			"spell",
 			"triggered ability",

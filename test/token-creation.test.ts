@@ -1,15 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import {
 	abilityId,
 	type CharacteristicsSnapshot,
-	createReadContext,
+	createEngine,
+	defineCard,
 	getSnapshot,
-	newGame,
-	perform,
 	permanent,
-	registerCard,
-	spawnPermanent,
 } from "../index.ts";
 import { ALICE, BOB, created, passingAgents } from "./utils/engine-helpers.ts";
 
@@ -31,7 +28,7 @@ const TEST_ARTIFACT_TOKEN: CharacteristicsSnapshot = {
 	},
 };
 
-registerCard({
+const TEST_CARD_1 = defineCard({
 	id: "test-trigger-token",
 	name: "Test Trigger Token",
 	types: ["creature"],
@@ -54,6 +51,8 @@ registerCard({
 		},
 	],
 });
+
+const engine = createEngine([...CARDS, TEST_CARD_1]);
 
 const TEST_TRIGGER_TOKEN: CharacteristicsSnapshot = {
 	kind: "creature",
@@ -97,10 +96,10 @@ const COPY_TOKEN: CharacteristicsSnapshot = {
 
 describe("token creation", () => {
 	test("runs enter-the-battlefield replacements before materializing the token", () => {
-		const state = newGame();
-		spawnPermanent(state, "root-maze", BOB);
+		const state = engine.newGame();
+		engine.spawnPermanent(state, "root-maze", BOB);
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{
 				kind: "create token",
@@ -117,16 +116,16 @@ describe("token creation", () => {
 		expect(token.token).toBe(true);
 		expect(token.representation.kind).toBe("token");
 		expect(
-			getSnapshot(createReadContext(state), tokenId).currentCharacteristics
-				.name,
+			getSnapshot(engine.createReadContext(state), tokenId)
+				.currentCharacteristics.name,
 		).toBe("Test Artifact Token");
 		expect(() => structuredClone(state)).not.toThrow();
 	});
 
 	test("detects the newly created token's own enter-the-battlefield trigger", () => {
-		const state = newGame();
+		const state = engine.newGame();
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{
 				kind: "create token",
@@ -147,10 +146,10 @@ describe("token creation", () => {
 	});
 
 	test("runs the token's copy-tier replacement with the same reserved identity", () => {
-		const state = newGame();
-		spawnPermanent(state, "grizzly-bears", BOB);
+		const state = engine.newGame();
+		engine.spawnPermanent(state, "grizzly-bears", BOB);
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{
 				kind: "create token",
@@ -167,17 +166,17 @@ describe("token creation", () => {
 		expect(token.token).toBe(true);
 		expect(token.representation.kind).toBe("token");
 		expect(
-			getSnapshot(createReadContext(state), tokenId).currentCharacteristics
-				.name,
+			getSnapshot(engine.createReadContext(state), tokenId)
+				.currentCharacteristics.name,
 		).toBe("Grizzly Bears");
 	});
 
 	test("applies CreateTokenEvent replacements before each token enters", () => {
-		const state = newGame();
-		spawnPermanent(state, "doubling-season", ALICE);
-		spawnPermanent(state, "root-maze", BOB);
+		const state = engine.newGame();
+		engine.spawnPermanent(state, "doubling-season", ALICE);
+		engine.spawnPermanent(state, "root-maze", BOB);
 
-		const result = perform(
+		const result = engine.perform(
 			state,
 			{
 				kind: "create token",

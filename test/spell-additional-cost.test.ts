@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import type {
 	Agent,
 	ChoiceRequest,
@@ -12,15 +12,10 @@ import type {
 } from "../index.ts";
 import {
 	abilityId,
-	advanceWithReplay,
-	executeCastAction,
-	getObservableActions,
+	createEngine,
+	defineCard,
 	IllegalCastError,
 	InvalidChoiceAnswerError,
-	perform,
-	registerCard,
-	spawnCard,
-	spawnPermanent,
 } from "../index.ts";
 import {
 	ALICE,
@@ -45,7 +40,7 @@ const opponentCreatureTarget: TargetDef = {
 	},
 };
 
-registerCard({
+const TEST_CARD_1 = defineCard({
 	id: "test-sacrifice-creature-spell",
 	name: "Test Sacrifice Creature Spell",
 	types: ["instant"],
@@ -69,7 +64,7 @@ registerCard({
 	},
 });
 
-registerCard({
+const TEST_CARD_2 = defineCard({
 	id: "test-additional-cost-black-source",
 	name: "Test Additional Cost Black Source",
 	types: ["land"],
@@ -86,7 +81,7 @@ registerCard({
 	],
 });
 
-registerCard({
+const TEST_CARD_3 = defineCard({
 	id: "test-prevent-sacrifice-move",
 	name: "Test Prevent Sacrifice Move",
 	types: ["artifact"],
@@ -106,6 +101,8 @@ registerCard({
 	],
 });
 
+const engine = createEngine([...CARDS, TEST_CARD_1, TEST_CARD_2, TEST_CARD_3]);
+
 function canonicalStateBytes(state: GameState): string {
 	return JSON.stringify(state, (_key, value) =>
 		value instanceof Map ? [...value.entries()] : value,
@@ -113,7 +110,7 @@ function canonicalStateBytes(state: GameState): string {
 }
 
 function addBlackMana(state: GameState, source: ObjectId): void {
-	perform(
+	engine.perform(
 		state,
 		{ kind: "add mana", source, player: ALICE, mana: { b: 1 } },
 		passingAgents(),
@@ -125,9 +122,9 @@ function castAction(card: ObjectId) {
 }
 
 function offered(state: GameState, spell: ObjectId): boolean {
-	return getObservableActions(state, ALICE).some(
-		(action) => action.kind === "cast" && action.card === spell,
-	);
+	return engine
+		.getObservableActions(state, ALICE)
+		.some((action) => action.kind === "cast" && action.card === spell);
 }
 
 function setupCast(): {
@@ -136,15 +133,15 @@ function setupCast(): {
 	target: ObjectId;
 	sacrifice: ObjectId;
 } {
-	const state = setupMain();
-	const spell = spawnCard(
+	const state = setupMain(engine);
+	const spell = engine.spawnCard(
 		state,
 		"test-sacrifice-creature-spell",
 		ALICE,
 		"hand",
 	);
-	const target = spawnPermanent(state, "grizzly-bears", BOB);
-	const sacrifice = spawnPermanent(state, "eager-cadet", ALICE);
+	const target = engine.spawnPermanent(state, "grizzly-bears", BOB);
+	const sacrifice = engine.spawnPermanent(state, "eager-cadet", ALICE);
 	addBlackMana(state, spell.id);
 	return {
 		state,
@@ -156,29 +153,29 @@ function setupCast(): {
 
 describe("spell additional sacrifice cost", () => {
 	test("offering requires mana, a legal target, and a legal sacrifice", () => {
-		const state = setupMain();
-		const spell = spawnCard(
+		const state = setupMain(engine);
+		const spell = engine.spawnCard(
 			state,
 			"test-sacrifice-creature-spell",
 			ALICE,
 			"hand",
 		);
-		const target = spawnPermanent(state, "grizzly-bears", BOB);
-		const sacrifice = spawnPermanent(state, "eager-cadet", ALICE);
+		const target = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const sacrifice = engine.spawnPermanent(state, "eager-cadet", ALICE);
 
 		expect(offered(state, spell.id)).toBe(false);
 		addBlackMana(state, spell.id);
 		expect(offered(state, spell.id)).toBe(true);
 
-		perform(
+		engine.perform(
 			state,
 			{ kind: "sacrifice", object: sacrifice.id },
 			passingAgents(),
 		);
 		expect(offered(state, spell.id)).toBe(false);
 
-		spawnPermanent(state, "eager-cadet", ALICE);
-		perform(
+		engine.spawnPermanent(state, "eager-cadet", ALICE);
+		engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -220,7 +217,7 @@ describe("spell additional sacrifice cost", () => {
 			},
 		};
 
-		executeCastAction(state, ALICE, castAction(spell), [
+		engine.executeCastAction(state, ALICE, castAction(spell), [
 			alice,
 			new ScriptedAgent(),
 		]);
@@ -242,7 +239,7 @@ describe("spell additional sacrifice cost", () => {
 
 	test("a sacrifice that cannot execute rejects the cast atomically", () => {
 		const { state, spell, target, sacrifice } = setupCast();
-		spawnPermanent(state, "test-prevent-sacrifice-move", BOB);
+		engine.spawnPermanent(state, "test-prevent-sacrifice-move", BOB);
 		const before = canonicalStateBytes(state);
 		const alice = new ScriptedAgent(
 			[],
@@ -256,7 +253,7 @@ describe("spell additional sacrifice cost", () => {
 		);
 
 		expect(() =>
-			executeCastAction(state, ALICE, castAction(spell), [
+			engine.executeCastAction(state, ALICE, castAction(spell), [
 				alice,
 				new ScriptedAgent(),
 			]),
@@ -281,7 +278,7 @@ describe("spell additional sacrifice cost", () => {
 		};
 
 		expect(() =>
-			executeCastAction(state, ALICE, castAction(spell), [
+			engine.executeCastAction(state, ALICE, castAction(spell), [
 				alice,
 				new ScriptedAgent(),
 			]),
@@ -291,7 +288,7 @@ describe("spell additional sacrifice cost", () => {
 
 	test("a graveyard destination replacement still pays the sacrifice", () => {
 		const { state, spell, target, sacrifice } = setupCast();
-		spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
+		engine.spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
 		const alice = new ScriptedAgent(
 			[],
 			[],
@@ -304,7 +301,7 @@ describe("spell additional sacrifice cost", () => {
 		);
 
 		expect(() =>
-			executeCastAction(state, ALICE, castAction(spell), [
+			engine.executeCastAction(state, ALICE, castAction(spell), [
 				alice,
 				new ScriptedAgent(),
 			]),
@@ -315,16 +312,20 @@ describe("spell additional sacrifice cost", () => {
 	});
 
 	test("advanceWithReplay replays an async sacrifice from an untouched checkpoint", async () => {
-		const checkpoint = setupMain();
-		const spell = spawnCard(
+		const checkpoint = setupMain(engine);
+		const spell = engine.spawnCard(
 			checkpoint,
 			"test-sacrifice-creature-spell",
 			ALICE,
 			"hand",
 		).id;
-		const target = spawnPermanent(checkpoint, "grizzly-bears", BOB).id;
-		const sacrifice = spawnPermanent(checkpoint, "eager-cadet", ALICE).id;
-		const blackSource = spawnPermanent(
+		const target = engine.spawnPermanent(checkpoint, "grizzly-bears", BOB).id;
+		const sacrifice = engine.spawnPermanent(
+			checkpoint,
+			"eager-cadet",
+			ALICE,
+		).id;
+		const blackSource = engine.spawnPermanent(
 			checkpoint,
 			"test-additional-cost-black-source",
 			ALICE,
@@ -372,7 +373,7 @@ describe("spell additional sacrifice cost", () => {
 			advances++
 		) {
 			const inputBytes = canonicalStateBytes(state);
-			const result = await advanceWithReplay(state, [
+			const result = await engine.advanceWithReplay(state, [
 				alice,
 				new ScriptedAgent(),
 			]);

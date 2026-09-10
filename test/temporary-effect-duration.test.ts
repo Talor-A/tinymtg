@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import {
 	activePlayer,
 	addTemporaryEffect,
-	advance,
+	createEngine,
 	type GameState,
 	type PlayerId,
 	type TemporaryEffect,
@@ -17,6 +17,8 @@ import {
 	passingAgents,
 	setupMain,
 } from "./utils/engine-helpers.ts";
+
+const engine = createEngine(CARDS);
 
 function hasEffect(state: GameState, id: TemporaryEffect["id"]): boolean {
 	return state.temporaryEffects.some((effect) => effect.id === id);
@@ -55,7 +57,7 @@ function advanceToStep(
 	player: PlayerId,
 	step: "end" | "cleanup",
 ): void {
-	advanceUntil(state, passingAgents(), (next) => {
+	advanceUntil(engine, state, passingAgents(), (next) => {
 		const location = turnLocation(next);
 		return (
 			activePlayer(next) === player &&
@@ -67,7 +69,7 @@ function advanceToStep(
 
 describe("temporary effect durations", () => {
 	test("next-turn duration survives this turn and the opponent's turn", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		const endOfTurn = addDurationEffect(state, ALICE, "until-end-of-turn");
 		const nextTurn = addDurationEffect(
 			state,
@@ -82,7 +84,7 @@ describe("temporary effect durations", () => {
 		expect(hasEffect(state, endOfTurn)).toBe(true);
 		expect(hasEffect(state, nextTurn)).toBe(true);
 
-		advance(state, passingAgents());
+		engine.advance(state, passingAgents());
 		const cleanup = turnLocation(state);
 		expect(cleanup?.kind === "step" && cleanup.step.kind).toBe("cleanup");
 		expect(hasEffect(state, endOfTurn)).toBe(false);
@@ -100,12 +102,12 @@ describe("temporary effect durations", () => {
 			expiresAtEndOfTurn: currentTurnId(state),
 		});
 
-		advance(state, passingAgents());
+		engine.advance(state, passingAgents());
 		expect(hasEffect(state, nextTurn)).toBe(false);
 	});
 
 	test("next turn means the controller's next turn when created during an opponent's turn", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		const nextTurn = addDurationEffect(
 			state,
 			BOB,
@@ -128,7 +130,7 @@ describe("temporary effect durations", () => {
 		});
 		expect(hasEffect(state, nextTurn)).toBe(true);
 
-		advance(state, passingAgents());
+		engine.advance(state, passingAgents());
 		expect(hasEffect(state, nextTurn)).toBe(false);
 	});
 });

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import type {
 	CastAction,
+	Engine,
 	GameState,
 	ObjectId,
 	PlayerId,
@@ -11,18 +12,9 @@ import type {
 import {
 	abilityId,
 	activePlayer,
-	advance,
-	executeAbilityAction,
-	executeCastAction,
-	executeLandAction,
-	getObservableActions,
+	createEngine,
+	defineCard,
 	IllegalCastError,
-	newGame,
-	perform,
-	registerCard,
-	settlePriority,
-	spawnCard,
-	spawnPermanent,
 	turnLocation,
 } from "../index.ts";
 import {
@@ -37,7 +29,7 @@ import {
  * Forest is the only basic in the card set, so a white source is defined here
  * rather than registering a Plains as a side effect of writing tests.
  */
-registerCard({
+const TEST_CARD_1 = defineCard({
 	id: "test-white-source",
 	name: "Test White Source",
 	types: ["land"],
@@ -60,7 +52,7 @@ registerCard({
 	],
 });
 
-registerCard({
+const TEST_CARD_2 = defineCard({
 	id: "test-free-instant",
 	name: "Test Free Instant",
 	types: ["instant"],
@@ -76,7 +68,7 @@ registerCard({
 
 // Synthetic: isolates a temporary permission for one already-exiled card.
 // It is not an implementation claim about a printed card.
-registerCard({
+const TEST_CARD_3 = defineCard({
 	id: "test-may-play-from-exile",
 	name: "Test May Play From Exile",
 	types: ["instant"],
@@ -104,7 +96,7 @@ registerCard({
 	},
 });
 
-registerCard({
+const TEST_CARD_4 = defineCard({
 	id: "test-cast-watcher",
 	name: "Test Cast Watcher",
 	types: ["enchantment"],
@@ -131,7 +123,7 @@ registerCard({
 	],
 });
 
-registerCard({
+const TEST_CARD_5 = defineCard({
 	id: "test-free-black-instant",
 	name: "Test Free Black Instant",
 	types: ["instant"],
@@ -145,7 +137,7 @@ registerCard({
 	},
 });
 
-registerCard({
+const TEST_CARD_6 = defineCard({
 	id: "test-swamp",
 	name: "Test Swamp",
 	supertypes: ["basic"],
@@ -155,7 +147,7 @@ registerCard({
 	manaCost: "none",
 });
 
-registerCard({
+const TEST_CARD_7 = defineCard({
 	id: "test-free-creature",
 	name: "Test Free Creature",
 	types: ["creature"],
@@ -165,7 +157,7 @@ registerCard({
 	toughness: 1,
 });
 
-registerCard({
+const TEST_CARD_8 = defineCard({
 	id: "test-free-artifact-creature",
 	name: "Test Free Artifact Creature",
 	types: ["artifact", "creature"],
@@ -175,7 +167,7 @@ registerCard({
 	toughness: 1,
 });
 
-registerCard({
+const TEST_CARD_9 = defineCard({
 	id: "test-cast-type-watcher",
 	name: "Test Cast Type Watcher",
 	types: ["enchantment"],
@@ -216,6 +208,19 @@ registerCard({
 	],
 });
 
+const engine = createEngine([
+	...CARDS,
+	TEST_CARD_1,
+	TEST_CARD_2,
+	TEST_CARD_3,
+	TEST_CARD_4,
+	TEST_CARD_5,
+	TEST_CARD_6,
+	TEST_CARD_7,
+	TEST_CARD_8,
+	TEST_CARD_9,
+]);
+
 const forestMana = abilityId("activated", "forest", 0);
 const whiteMana = abilityId("activated", "test-white-source", 0);
 
@@ -223,18 +228,18 @@ function castAction(card: ObjectId): CastAction {
 	return { kind: "cast", card };
 }
 
-function seedLibraries(state: GameState): void {
+function seedLibraries(engine: Engine, state: GameState): void {
 	for (let i = 0; i < 3; i++) {
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
 	}
 }
 
 /** A game advanced through the real scheduler to its first precombat main. */
-function setupMain(): GameState {
-	const state = newGame();
-	seedLibraries(state);
-	advanceUntil(state, passingAgents(), (next) => {
+function setupMain(engine: Engine): GameState {
+	const state = engine.newGame();
+	seedLibraries(engine, state);
+	advanceUntil(engine, state, passingAgents(), (next) => {
 		const location = turnLocation(next);
 		return location?.kind === "mainPhase" && location.role === "precombat";
 	});
@@ -253,7 +258,7 @@ function tapForMana(
 	sources: { id: ObjectId; ability: typeof forestMana }[],
 ): void {
 	for (const { id, ability } of sources) {
-		executeAbilityAction(
+		engine.executeAbilityAction(
 			state,
 			player,
 			{ kind: "activate ability", source: id, ability },
@@ -263,17 +268,17 @@ function tapForMana(
 }
 
 function castActionsFor(state: GameState, player: PlayerId): CastAction[] {
-	return getObservableActions(state, player).flatMap((action) =>
-		action.kind === "cast" ? [action] : [],
-	);
+	return engine
+		.getObservableActions(state, player)
+		.flatMap((action) => (action.kind === "cast" ? [action] : []));
 }
 
 describe("cast actions offered at priority", () => {
 	test("a spell is offered only once the pool can pay for it", () => {
-		const state = setupMain();
-		const bears = spawnCard(state, "grizzly-bears", ALICE, "hand");
-		const first = spawnPermanent(state, "forest", ALICE);
-		const second = spawnPermanent(state, "forest", ALICE);
+		const state = setupMain(engine);
+		const bears = engine.spawnCard(state, "grizzly-bears", ALICE, "hand");
+		const first = engine.spawnPermanent(state, "forest", ALICE);
+		const second = engine.spawnPermanent(state, "forest", ALICE);
 
 		expect(castActionsFor(state, ALICE)).toEqual([]);
 
@@ -286,10 +291,10 @@ describe("cast actions offered at priority", () => {
 	});
 
 	test("colored requirements are not payable by the wrong color", () => {
-		const state = setupMain();
-		spawnCard(state, "faithful-watchdog", ALICE, "hand");
-		const first = spawnPermanent(state, "forest", ALICE);
-		const second = spawnPermanent(state, "forest", ALICE);
+		const state = setupMain(engine);
+		engine.spawnCard(state, "faithful-watchdog", ALICE, "hand");
+		const first = engine.spawnPermanent(state, "forest", ALICE);
+		const second = engine.spawnPermanent(state, "forest", ALICE);
 
 		// {G}{W} against two green: enough mana, wrong colors.
 		tapForMana(state, ALICE, [
@@ -301,28 +306,33 @@ describe("cast actions offered at priority", () => {
 	});
 
 	test("a zero-cost spell is offered with an empty pool", () => {
-		const state = setupMain();
-		const relic = spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const state = setupMain(engine);
+		const relic = engine.spawnCard(state, "darksteel-relic", ALICE, "hand");
 
 		expect(state.players[ALICE].manaPool).toMatchObject({ g: 0, c: 0 });
 		expect(castActionsFor(state, ALICE)).toEqual([castAction(relic.id)]);
 	});
 
 	test("a land is played, never cast, even though it is in hand", () => {
-		const state = setupMain();
-		const forest = spawnCard(state, "forest", ALICE, "hand");
+		const state = setupMain(engine);
+		const forest = engine.spawnCard(state, "forest", ALICE, "hand");
 
 		expect(castActionsFor(state, ALICE)).toEqual([]);
-		expect(getObservableActions(state, ALICE)).toContainEqual({
+		expect(engine.getObservableActions(state, ALICE)).toContainEqual({
 			kind: "play land",
 			card: forest.id,
 		});
 	});
 
 	test("a card in the opponent's hand is never offered to the caster", () => {
-		const state = setupMain();
-		const bobsRelic = spawnCard(state, "darksteel-relic", BOB, "hand");
-		const alicesRelic = spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const state = setupMain(engine);
+		const bobsRelic = engine.spawnCard(state, "darksteel-relic", BOB, "hand");
+		const alicesRelic = engine.spawnCard(
+			state,
+			"darksteel-relic",
+			ALICE,
+			"hand",
+		);
 
 		// Alice is the active player, so only she is at sorcery speed here; the
 		// point is that Bob's card is absent from her menu, not that Bob has one.
@@ -335,12 +345,12 @@ describe("cast actions offered at priority", () => {
 	});
 
 	test("sorcery timing is enforced outside a main phase", () => {
-		const state = setupMain();
-		const relic = spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const state = setupMain(engine);
+		const relic = engine.spawnCard(state, "darksteel-relic", ALICE, "hand");
 		expect(castActionsFor(state, ALICE)).toEqual([castAction(relic.id)]);
 
 		// Leaving the main phase closes the sorcery-speed window (CR 307.1).
-		advanceUntil(state, passingAgents(), (next) => {
+		advanceUntil(engine, state, passingAgents(), (next) => {
 			const location = turnLocation(next);
 			return location?.kind === "step" && location.step.kind === "begin combat";
 		});
@@ -348,9 +358,9 @@ describe("cast actions offered at priority", () => {
 	});
 
 	test("two copies of a card produce two distinguishable actions", () => {
-		const state = setupMain();
-		const first = spawnCard(state, "darksteel-relic", ALICE, "hand");
-		const second = spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const state = setupMain(engine);
+		const first = engine.spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const second = engine.spawnCard(state, "darksteel-relic", ALICE, "hand");
 
 		const actions = castActionsFor(state, ALICE);
 		expect(actions).toEqual([castAction(first.id), castAction(second.id)]);
@@ -360,9 +370,9 @@ describe("cast actions offered at priority", () => {
 
 describe("temporary permission to play one card from exile", () => {
 	test("the effect controller is offered and can cast the bound card", () => {
-		const state = setupMain();
-		const exiled = spawnCard(state, "test-free-instant", BOB, "exile");
-		const permission = spawnCard(
+		const state = setupMain(engine);
+		const exiled = engine.spawnCard(state, "test-free-instant", BOB, "exile");
+		const permission = engine.spawnCard(
 			state,
 			"test-may-play-from-exile",
 			ALICE,
@@ -371,8 +381,8 @@ describe("temporary permission to play one card from exile", () => {
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
 
-		executeCastAction(state, ALICE, castAction(permission.id), agents);
-		settlePriority(state, agents);
+		engine.executeCastAction(state, ALICE, castAction(permission.id), agents);
+		engine.settlePriority(state, agents);
 
 		expect(castActionsFor(state, ALICE)).toContainEqual(castAction(exiled.id));
 		expect(castActionsFor(state, BOB)).not.toContainEqual(
@@ -380,11 +390,21 @@ describe("temporary permission to play one card from exile", () => {
 		);
 		const beforeIllegalCast = structuredClone(state);
 		expect(() =>
-			executeCastAction(state, BOB, castAction(exiled.id), passingAgents()),
+			engine.executeCastAction(
+				state,
+				BOB,
+				castAction(exiled.id),
+				passingAgents(),
+			),
 		).toThrow(IllegalCastError);
 		expect(state).toEqual(beforeIllegalCast);
 
-		executeCastAction(state, ALICE, castAction(exiled.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(exiled.id),
+			passingAgents(),
+		);
 		expect(state.objects.has(exiled.id)).toBe(false);
 		const entry = state.stack.at(-1);
 		expect(entry).toMatchObject({ kind: "spell" });
@@ -397,9 +417,9 @@ describe("temporary permission to play one card from exile", () => {
 	});
 
 	test("the permission does not follow a card through a zone change", () => {
-		const state = setupMain();
-		const exiled = spawnCard(state, "test-free-instant", ALICE, "exile");
-		const permission = spawnCard(
+		const state = setupMain(engine);
+		const exiled = engine.spawnCard(state, "test-free-instant", ALICE, "exile");
+		const permission = engine.spawnCard(
 			state,
 			"test-may-play-from-exile",
 			ALICE,
@@ -407,10 +427,10 @@ describe("temporary permission to play one card from exile", () => {
 		);
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
-		executeCastAction(state, ALICE, castAction(permission.id), agents);
-		settlePriority(state, agents);
+		engine.executeCastAction(state, ALICE, castAction(permission.id), agents);
+		engine.settlePriority(state, agents);
 
-		const graveyard = perform(
+		const graveyard = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -423,7 +443,7 @@ describe("temporary permission to play one card from exile", () => {
 		);
 		const graveyardId = graveyard.created[0];
 		if (graveyardId === undefined) throw new Error("expected graveyard card");
-		const returned = perform(
+		const returned = engine.perform(
 			state,
 			{
 				kind: "change zone",
@@ -441,14 +461,19 @@ describe("temporary permission to play one card from exile", () => {
 			castAction(returnedId),
 		);
 		expect(() =>
-			executeCastAction(state, ALICE, castAction(returnedId), passingAgents()),
+			engine.executeCastAction(
+				state,
+				ALICE,
+				castAction(returnedId),
+				passingAgents(),
+			),
 		).toThrow(IllegalCastError);
 	});
 
 	test("the permission expires during cleanup", () => {
-		const state = setupMain();
-		const exiled = spawnCard(state, "test-free-instant", ALICE, "exile");
-		const permission = spawnCard(
+		const state = setupMain(engine);
+		const exiled = engine.spawnCard(state, "test-free-instant", ALICE, "exile");
+		const permission = engine.spawnCard(
 			state,
 			"test-may-play-from-exile",
 			ALICE,
@@ -456,11 +481,12 @@ describe("temporary permission to play one card from exile", () => {
 		);
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
-		executeCastAction(state, ALICE, castAction(permission.id), agents);
-		settlePriority(state, agents);
+		engine.executeCastAction(state, ALICE, castAction(permission.id), agents);
+		engine.settlePriority(state, agents);
 		expect(castActionsFor(state, ALICE)).toContainEqual(castAction(exiled.id));
 
 		advanceUntil(
+			engine,
 			state,
 			passingAgents(),
 			(next) =>
@@ -481,15 +507,15 @@ describe("authoritative cast rejection", () => {
 	): void {
 		const before = structuredClone(state);
 		expect(() =>
-			executeCastAction(state, player, action, passingAgents()),
+			engine.executeCastAction(state, player, action, passingAgents()),
 		).toThrow(IllegalCastError);
 		expect(state).toEqual(before);
 	}
 
 	test("an unaffordable spell leaves the pool and hand untouched", () => {
-		const state = setupMain();
-		const bears = spawnCard(state, "grizzly-bears", ALICE, "hand");
-		const forest = spawnPermanent(state, "forest", ALICE);
+		const state = setupMain(engine);
+		const bears = engine.spawnCard(state, "grizzly-bears", ALICE, "hand");
+		const forest = engine.spawnPermanent(state, "forest", ALICE);
 		tapForMana(state, ALICE, [{ id: forest.id, ability: forestMana }]);
 
 		expectAtomicRejection(state, ALICE, castAction(bears.id));
@@ -499,41 +525,60 @@ describe("authoritative cast rejection", () => {
 	});
 
 	test("rejects lands, no-cost cards, and cards outside the caster's hand", () => {
-		const land = setupMain();
-		const forest = spawnCard(land, "forest", ALICE, "hand");
+		const land = setupMain(engine);
+		const forest = engine.spawnCard(land, "forest", ALICE, "hand");
 		expectAtomicRejection(land, ALICE, castAction(forest.id));
 
-		const opposing = setupMain();
-		const bobsRelic = spawnCard(opposing, "darksteel-relic", BOB, "hand");
+		const opposing = setupMain(engine);
+		const bobsRelic = engine.spawnCard(
+			opposing,
+			"darksteel-relic",
+			BOB,
+			"hand",
+		);
 		expectAtomicRejection(opposing, ALICE, castAction(bobsRelic.id));
 
-		const absent = setupMain();
+		const absent = setupMain(engine);
 		expectAtomicRejection(absent, ALICE, castAction(999 as ObjectId));
 
-		const onBattlefield = setupMain();
-		const relic = spawnPermanent(onBattlefield, "darksteel-relic", ALICE);
+		const onBattlefield = setupMain(engine);
+		const relic = engine.spawnPermanent(
+			onBattlefield,
+			"darksteel-relic",
+			ALICE,
+		);
 		expectAtomicRejection(onBattlefield, ALICE, castAction(relic.id));
 	});
 
 	test("rejects a sorcery-speed cast outside a turn", () => {
-		const state = newGame();
-		const relic = spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const state = engine.newGame();
+		const relic = engine.spawnCard(state, "darksteel-relic", ALICE, "hand");
 		expectAtomicRejection(state, ALICE, castAction(relic.id));
 	});
 });
 
 describe("casting onto the stack", () => {
 	test("emits a cast event with the caster and new spell object", () => {
-		const state = setupMain();
-		const watcher = spawnPermanent(state, "test-cast-watcher", ALICE);
-		const opposingInstant = spawnCard(state, "test-free-instant", BOB, "hand");
-		const artifact = spawnCard(state, "darksteel-relic", ALICE, "hand");
-		const instant = spawnCard(state, "test-free-instant", ALICE, "hand");
+		const state = setupMain(engine);
+		const watcher = engine.spawnPermanent(state, "test-cast-watcher", ALICE);
+		const opposingInstant = engine.spawnCard(
+			state,
+			"test-free-instant",
+			BOB,
+			"hand",
+		);
+		const artifact = engine.spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const instant = engine.spawnCard(state, "test-free-instant", ALICE, "hand");
 
-		executeCastAction(state, ALICE, castAction(artifact.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(artifact.id),
+			passingAgents(),
+		);
 		expect(state.pendingTriggers).toHaveLength(0);
 
-		executeCastAction(
+		engine.executeCastAction(
 			state,
 			BOB,
 			castAction(opposingInstant.id),
@@ -541,7 +586,12 @@ describe("casting onto the stack", () => {
 		);
 		expect(state.pendingTriggers).toHaveLength(0);
 
-		executeCastAction(state, ALICE, castAction(instant.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(instant.id),
+			passingAgents(),
+		);
 		expect(state.pendingTriggers).toHaveLength(1);
 		const spellEntry = state.stack.at(-1);
 		expect(spellEntry?.kind).toBe("spell");
@@ -561,11 +611,16 @@ describe("casting onto the stack", () => {
 			["darksteel-relic", 1],
 			["test-free-artifact-creature", 0],
 		] as const) {
-			const state = setupMain();
-			spawnPermanent(state, "test-cast-type-watcher", ALICE);
-			const spell = spawnCard(state, cardId, ALICE, "hand");
+			const state = setupMain(engine);
+			engine.spawnPermanent(state, "test-cast-type-watcher", ALICE);
+			const spell = engine.spawnCard(state, cardId, ALICE, "hand");
 
-			executeCastAction(state, ALICE, castAction(spell.id), passingAgents());
+			engine.executeCastAction(
+				state,
+				ALICE,
+				castAction(spell.id),
+				passingAgents(),
+			);
 
 			expect(state.pendingTriggers).toHaveLength(1);
 			expect(state.pendingTriggers[0]?.triggerId).toBe(
@@ -573,23 +628,33 @@ describe("casting onto the stack", () => {
 			);
 		}
 
-		const state = setupMain();
-		spawnPermanent(state, "test-cast-type-watcher", ALICE);
-		const creature = spawnCard(state, "test-free-creature", ALICE, "hand");
-		executeCastAction(state, ALICE, castAction(creature.id), passingAgents());
+		const state = setupMain(engine);
+		engine.spawnPermanent(state, "test-cast-type-watcher", ALICE);
+		const creature = engine.spawnCard(
+			state,
+			"test-free-creature",
+			ALICE,
+			"hand",
+		);
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(creature.id),
+			passingAgents(),
+		);
 		expect(state.pendingTriggers).toHaveLength(0);
 	});
 
 	test("Staff of the Death Magus matches a black spell and a controlled Swamp", () => {
-		const castState = setupMain();
-		spawnPermanent(castState, "staff-of-the-death-magus", ALICE);
-		const blackSpell = spawnCard(
+		const castState = setupMain(engine);
+		engine.spawnPermanent(castState, "staff-of-the-death-magus", ALICE);
+		const blackSpell = engine.spawnCard(
 			castState,
 			"test-free-black-instant",
 			ALICE,
 			"hand",
 		);
-		executeCastAction(
+		engine.executeCastAction(
 			castState,
 			ALICE,
 			castAction(blackSpell.id),
@@ -600,10 +665,10 @@ describe("casting onto the stack", () => {
 			abilityId("triggered", "staff-of-the-death-magus", 0),
 		);
 
-		const landState = setupMain();
-		spawnPermanent(landState, "staff-of-the-death-magus", ALICE);
-		const swamp = spawnCard(landState, "test-swamp", ALICE, "hand");
-		executeLandAction(
+		const landState = setupMain(engine);
+		engine.spawnPermanent(landState, "staff-of-the-death-magus", ALICE);
+		const swamp = engine.spawnCard(landState, "test-swamp", ALICE, "hand");
+		engine.executeLandAction(
 			landState,
 			ALICE,
 			{ kind: "play land", card: swamp.id },
@@ -616,15 +681,15 @@ describe("casting onto the stack", () => {
 	});
 
 	test("Student of Ojutai triggers only for a noncreature spell", () => {
-		const noncreatureState = setupMain();
-		spawnPermanent(noncreatureState, "student-of-ojutai", ALICE);
-		const instant = spawnCard(
+		const noncreatureState = setupMain(engine);
+		engine.spawnPermanent(noncreatureState, "student-of-ojutai", ALICE);
+		const instant = engine.spawnCard(
 			noncreatureState,
 			"test-free-instant",
 			ALICE,
 			"hand",
 		);
-		executeCastAction(
+		engine.executeCastAction(
 			noncreatureState,
 			ALICE,
 			castAction(instant.id),
@@ -635,15 +700,15 @@ describe("casting onto the stack", () => {
 			abilityId("triggered", "student-of-ojutai", 0),
 		);
 
-		const creatureState = setupMain();
-		spawnPermanent(creatureState, "student-of-ojutai", ALICE);
-		const creature = spawnCard(
+		const creatureState = setupMain(engine);
+		engine.spawnPermanent(creatureState, "student-of-ojutai", ALICE);
+		const creature = engine.spawnCard(
 			creatureState,
 			"test-free-creature",
 			ALICE,
 			"hand",
 		);
-		executeCastAction(
+		engine.executeCastAction(
 			creatureState,
 			ALICE,
 			castAction(creature.id),
@@ -653,12 +718,17 @@ describe("casting onto the stack", () => {
 	});
 
 	test("Third Path Iconoclast creates its Forge-defined token", () => {
-		const state = setupMain();
-		spawnPermanent(state, "third-path-iconoclast", ALICE);
-		const instant = spawnCard(state, "test-free-instant", ALICE, "hand");
+		const state = setupMain(engine);
+		engine.spawnPermanent(state, "third-path-iconoclast", ALICE);
+		const instant = engine.spawnCard(state, "test-free-instant", ALICE, "hand");
 
-		executeCastAction(state, ALICE, castAction(instant.id), passingAgents());
-		settlePriority(state, passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(instant.id),
+			passingAgents(),
+		);
+		engine.settlePriority(state, passingAgents());
 
 		const token = state.battlefield
 			.map((id) => state.objects.get(id))
@@ -683,32 +753,47 @@ describe("casting onto the stack", () => {
 	});
 
 	test("a Forge-imported Beast Whisperer trigger resolves before its creature spell", () => {
-		const state = setupMain();
-		spawnPermanent(state, "beast-whisperer", ALICE);
-		const creature = spawnCard(state, "test-free-creature", ALICE, "hand");
+		const state = setupMain(engine);
+		engine.spawnPermanent(state, "beast-whisperer", ALICE);
+		const creature = engine.spawnCard(
+			state,
+			"test-free-creature",
+			ALICE,
+			"hand",
+		);
 		const librarySize = state.players[ALICE].library.length;
 
-		executeCastAction(state, ALICE, castAction(creature.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(creature.id),
+			passingAgents(),
+		);
 		expect(state.pendingTriggers[0]?.triggerId).toBe(
 			abilityId("triggered", "beast-whisperer", 0),
 		);
 
-		settlePriority(state, passingAgents());
+		engine.settlePriority(state, passingAgents());
 		expect(state.players[ALICE].library).toHaveLength(librarySize - 1);
 		expect(state.battlefield).toHaveLength(2);
 	});
 
 	test("pays from the pool, moves to the stack, and keeps the card off the battlefield", () => {
-		const state = setupMain();
-		const bears = spawnCard(state, "grizzly-bears", ALICE, "hand");
-		const first = spawnPermanent(state, "forest", ALICE);
-		const second = spawnPermanent(state, "forest", ALICE);
+		const state = setupMain(engine);
+		const bears = engine.spawnCard(state, "grizzly-bears", ALICE, "hand");
+		const first = engine.spawnPermanent(state, "forest", ALICE);
+		const second = engine.spawnPermanent(state, "forest", ALICE);
 		tapForMana(state, ALICE, [
 			{ id: first.id, ability: forestMana },
 			{ id: second.id, ability: forestMana },
 		]);
 
-		executeCastAction(state, ALICE, castAction(bears.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(bears.id),
+			passingAgents(),
+		);
 
 		expect(state.players[ALICE].manaPool.g).toBe(0);
 		expect(state.players[ALICE].hand).not.toContain(bears.id);
@@ -726,11 +811,11 @@ describe("casting onto the stack", () => {
 	});
 
 	test("a permanent spell resolves onto the battlefield", () => {
-		const state = setupMain();
-		const relic = spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const state = setupMain(engine);
+		const relic = engine.spawnCard(state, "darksteel-relic", ALICE, "hand");
 		const caster = new ScriptedAgent([], [], [castAction(relic.id)]);
 
-		settlePriority(state, [caster, new ScriptedAgent()]);
+		engine.settlePriority(state, [caster, new ScriptedAgent()]);
 
 		expectScriptConsumed(caster);
 		expect(state.stack).toHaveLength(0);
@@ -743,17 +828,22 @@ describe("casting onto the stack", () => {
 	});
 
 	test("entry replacements apply through resolution", () => {
-		const state = setupMain();
-		const watchdog = spawnCard(state, "faithful-watchdog", ALICE, "hand");
-		const forest = spawnPermanent(state, "forest", ALICE);
-		const white = spawnPermanent(state, "test-white-source", ALICE);
+		const state = setupMain(engine);
+		const watchdog = engine.spawnCard(
+			state,
+			"faithful-watchdog",
+			ALICE,
+			"hand",
+		);
+		const forest = engine.spawnPermanent(state, "forest", ALICE);
+		const white = engine.spawnPermanent(state, "test-white-source", ALICE);
 		tapForMana(state, ALICE, [
 			{ id: forest.id, ability: forestMana },
 			{ id: white.id, ability: whiteMana },
 		]);
 
 		const caster = new ScriptedAgent([], [], [castAction(watchdog.id)]);
-		settlePriority(state, [caster, new ScriptedAgent()]);
+		engine.settlePriority(state, [caster, new ScriptedAgent()]);
 		expectScriptConsumed(caster);
 
 		// Faithful Watchdog is a 0/0; without its three +1/+1 counters the
@@ -775,10 +865,10 @@ describe("casting onto the stack", () => {
 	});
 
 	test("the whole sequence runs through one priority window", () => {
-		const state = setupMain();
-		const bears = spawnCard(state, "grizzly-bears", ALICE, "hand");
-		const first = spawnPermanent(state, "forest", ALICE);
-		const second = spawnPermanent(state, "forest", ALICE);
+		const state = setupMain(engine);
+		const bears = engine.spawnCard(state, "grizzly-bears", ALICE, "hand");
+		const first = engine.spawnPermanent(state, "forest", ALICE);
+		const second = engine.spawnPermanent(state, "forest", ALICE);
 
 		// Tapping and casting are all ordinary priority actions, so a single
 		// scripted sequence drives the real loop end to end.
@@ -789,7 +879,7 @@ describe("casting onto the stack", () => {
 		];
 		const caster = new ScriptedAgent([], [], actions);
 
-		settlePriority(state, [caster, new ScriptedAgent()]);
+		engine.settlePriority(state, [caster, new ScriptedAgent()]);
 
 		expectScriptConsumed(caster);
 		expect(state.players[ALICE].manaPool.g).toBe(0);
@@ -809,27 +899,32 @@ describe("casting onto the stack", () => {
 	});
 
 	test("mana left floating after casting empties as the phase ends", () => {
-		const state = setupMain();
-		const relic = spawnCard(state, "darksteel-relic", ALICE, "hand");
-		const forest = spawnPermanent(state, "forest", ALICE);
+		const state = setupMain(engine);
+		const relic = engine.spawnCard(state, "darksteel-relic", ALICE, "hand");
+		const forest = engine.spawnPermanent(state, "forest", ALICE);
 		tapForMana(state, ALICE, [{ id: forest.id, ability: forestMana }]);
 
 		// A zero-cost spell spends nothing, so the green mana survives the cast
 		// and is emptied by the ordinary phase boundary instead (CR 500.4).
-		executeCastAction(state, ALICE, castAction(relic.id), passingAgents());
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(relic.id),
+			passingAgents(),
+		);
 		expect(state.players[ALICE].manaPool.g).toBe(1);
 
-		advance(state, passingAgents());
+		engine.advance(state, passingAgents());
 		expect(state.players[ALICE].manaPool.g).toBe(0);
 	});
 });
 
 describe("instant and sorcery resolution", () => {
 	test("effects happen and the card is put into its owner's graveyard", () => {
-		const state = setupMain();
-		const revitalize = spawnCard(state, "revitalize", ALICE, "hand");
-		const forest = spawnPermanent(state, "forest", ALICE);
-		const white = spawnPermanent(state, "test-white-source", ALICE);
+		const state = setupMain(engine);
+		const revitalize = engine.spawnCard(state, "revitalize", ALICE, "hand");
+		const forest = engine.spawnPermanent(state, "forest", ALICE);
+		const white = engine.spawnPermanent(state, "test-white-source", ALICE);
 		tapForMana(state, ALICE, [
 			{ id: forest.id, ability: forestMana },
 			{ id: white.id, ability: whiteMana },
@@ -839,7 +934,7 @@ describe("instant and sorcery resolution", () => {
 		const startingLibrary = state.players[ALICE].library.length;
 
 		const caster = new ScriptedAgent([], [], [castAction(revitalize.id)]);
-		settlePriority(state, [caster, new ScriptedAgent()]);
+		engine.settlePriority(state, [caster, new ScriptedAgent()]);
 		expectScriptConsumed(caster);
 
 		// Revitalize: "You gain 3 life. Draw a card."
@@ -865,11 +960,11 @@ describe("instant and sorcery resolution", () => {
 	});
 
 	test("the spell is still on the stack while its own effects resolve", () => {
-		const state = setupMain();
-		spawnPermanent(state, "chains-of-mephistopheles", ALICE);
-		const revitalize = spawnCard(state, "revitalize", ALICE, "hand");
-		const forest = spawnPermanent(state, "forest", ALICE);
-		const white = spawnPermanent(state, "test-white-source", ALICE);
+		const state = setupMain(engine);
+		engine.spawnPermanent(state, "chains-of-mephistopheles", ALICE);
+		const revitalize = engine.spawnCard(state, "revitalize", ALICE, "hand");
+		const forest = engine.spawnPermanent(state, "forest", ALICE);
+		const white = engine.spawnPermanent(state, "test-white-source", ALICE);
 		tapForMana(state, ALICE, [
 			{ id: forest.id, ability: forestMana },
 			{ id: white.id, ability: whiteMana },
@@ -896,7 +991,7 @@ describe("instant and sorcery resolution", () => {
 			}
 		}
 		const caster = new ObservingAgent([], [], [castAction(revitalize.id)]);
-		settlePriority(state, [caster, new ScriptedAgent()]);
+		engine.settlePriority(state, [caster, new ScriptedAgent()]);
 		expectScriptConsumed(caster);
 
 		// CR 608.2m: the card is put into the graveyard only as the last step of
@@ -907,17 +1002,17 @@ describe("instant and sorcery resolution", () => {
 	});
 
 	test("an instant resolves during the opponent's turn", () => {
-		const state = newGame();
-		seedLibraries(state);
-		advanceUntil(state, passingAgents(), (next) => {
+		const state = engine.newGame();
+		seedLibraries(engine, state);
+		advanceUntil(engine, state, passingAgents(), (next) => {
 			const location = turnLocation(next);
 			return location?.kind === "mainPhase" && location.role === "precombat";
 		});
 		// Alice is active on turn one, so Bob casting here proves an instant is
 		// not bound by sorcery timing (CR 601.3).
-		const revitalize = spawnCard(state, "revitalize", BOB, "hand");
-		const forest = spawnPermanent(state, "forest", BOB);
-		const white = spawnPermanent(state, "test-white-source", BOB);
+		const revitalize = engine.spawnCard(state, "revitalize", BOB, "hand");
+		const forest = engine.spawnPermanent(state, "forest", BOB);
+		const white = engine.spawnPermanent(state, "test-white-source", BOB);
 		tapForMana(state, BOB, [
 			{ id: forest.id, ability: forestMana },
 			{ id: white.id, ability: whiteMana },
@@ -925,7 +1020,7 @@ describe("instant and sorcery resolution", () => {
 		const startingLife = state.players[BOB].life;
 
 		const caster = new ScriptedAgent([], [], [castAction(revitalize.id)]);
-		settlePriority(state, [new ScriptedAgent(), caster]);
+		engine.settlePriority(state, [new ScriptedAgent(), caster]);
 		expectScriptConsumed(caster);
 
 		expect(state.players[BOB].life).toBe(startingLife + 3);

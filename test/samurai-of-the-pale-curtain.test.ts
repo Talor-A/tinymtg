@@ -10,17 +10,13 @@
 
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import {
 	abilityId,
-	createReadContext,
+	createEngine,
+	type GameState,
 	getSnapshot,
-	newGame,
 	type ObjectId,
-	perform,
-	settlePriority,
-	spawnCard,
-	spawnPermanent,
 } from "../index.ts";
 import {
 	ALICE,
@@ -31,6 +27,8 @@ import {
 	type SyncAgents,
 	setupMain,
 } from "./utils/engine-helpers.ts";
+
+const engine = createEngine(CARDS);
 
 const SAMURAI = "samurai-of-the-pale-curtain";
 const BUSHIDO = abilityId("triggered", SAMURAI, 0);
@@ -50,21 +48,21 @@ function attackAndBlock(attacker: ObjectId, blockers: ObjectId[]): SyncAgents {
 }
 
 /** A game with libraries stocked, so the draw step never decks anyone. */
-function combatGame(): ReturnType<typeof newGame> {
-	const state = newGame();
+function combatGame(): GameState {
+	const state = engine.newGame();
 	for (let i = 0; i < 3; i++) {
-		spawnCard(state, "forest", ALICE, "library");
-		spawnCard(state, "forest", BOB, "library");
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
 	}
 	return state;
 }
 
 function powerToughness(
-	state: ReturnType<typeof newGame>,
+	state: GameState,
 	id: ObjectId,
 ): { power: number; toughness: number } {
 	const characteristics = getSnapshot(
-		createReadContext(state),
+		engine.createReadContext(state),
 		id,
 	).currentCharacteristics;
 	if (characteristics.kind !== "creature")
@@ -77,10 +75,10 @@ function powerToughness(
 
 describe("Samurai of the Pale Curtain: bushido", () => {
 	test("the printed keyword compiles to one blocks-or-becomes-blocked trigger", () => {
-		const state = setupMain();
-		const samurai = spawnPermanent(state, SAMURAI, ALICE);
+		const state = setupMain(engine);
+		const samurai = engine.spawnPermanent(state, SAMURAI, ALICE);
 		const characteristics = getSnapshot(
-			createReadContext(state),
+			engine.createReadContext(state),
 			samurai.id,
 		).currentCharacteristics;
 
@@ -90,95 +88,101 @@ describe("Samurai of the Pale Curtain: bushido", () => {
 
 	test("an attacking Samurai that becomes blocked gets +1/+1", () => {
 		const state = combatGame();
-		const samurai = spawnPermanent(state, SAMURAI, ALICE);
-		const blocker = spawnPermanent(state, "eager-cadet", BOB);
+		const samurai = engine.spawnPermanent(state, SAMURAI, ALICE);
+		const blocker = engine.spawnPermanent(state, "eager-cadet", BOB);
 		const agents = attackAndBlock(samurai.id, [blocker.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "declare blockers"));
-		settlePriority(state, agents);
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare blockers"),
+		);
+		engine.settlePriority(state, agents);
 
 		expect(powerToughness(state, samurai.id)).toEqual({
 			power: 3,
 			toughness: 3,
 		});
 		// The 1/1 blocker takes 3 and the 3/3 Samurai survives its 1 back.
-		advanceUntil(state, agents, (next) => isAt(next, "end combat"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "end combat"));
 		expect(state.objects.has(blocker.id)).toBe(false);
 		expect(state.objects.has(samurai.id)).toBe(true);
 	});
 
 	test("a blocking Samurai gets +1/+1 too", () => {
 		const state = combatGame();
-		const attacker = spawnPermanent(state, "grizzly-bears", ALICE);
-		const samurai = spawnPermanent(state, SAMURAI, BOB);
+		const attacker = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const samurai = engine.spawnPermanent(state, SAMURAI, BOB);
 		const agents = attackAndBlock(attacker.id, [samurai.id]);
 
-		advanceUntil(state, agents, (next) => isAt(next, "declare blockers"));
-		settlePriority(state, agents);
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare blockers"),
+		);
+		engine.settlePriority(state, agents);
 
 		expect(powerToughness(state, samurai.id)).toEqual({
 			power: 3,
 			toughness: 3,
 		});
 		// A 3/3 blocker kills the 2/2 attacker and outlives its 2 damage.
-		advanceUntil(state, agents, (next) => isAt(next, "end combat"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "end combat"));
 		expect(state.objects.has(attacker.id)).toBe(false);
 		expect(state.objects.has(samurai.id)).toBe(true);
 	});
 
 	test("an unblocked Samurai stays 2/2", () => {
 		const state = combatGame();
-		const samurai = spawnPermanent(state, SAMURAI, ALICE);
+		const samurai = engine.spawnPermanent(state, SAMURAI, ALICE);
 		const agents: SyncAgents = [
 			new ScriptedAgent([], [], [], [[samurai.id]]),
 			new ScriptedAgent(),
 		];
 
-		advanceUntil(state, agents, (next) => isAt(next, "declare blockers"));
-		settlePriority(state, agents);
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare blockers"),
+		);
+		engine.settlePriority(state, agents);
 
 		expect(state.pendingTriggers).toHaveLength(0);
 		expect(powerToughness(state, samurai.id)).toEqual({
 			power: 2,
 			toughness: 2,
 		});
-		advanceUntil(state, agents, (next) => isAt(next, "end combat"));
+		advanceUntil(engine, state, agents, (next) => isAt(next, "end combat"));
 		expect(state.players[BOB].life).toBe(18);
 	});
 });
 
 describe("Samurai of the Pale Curtain: graveyard replacement", () => {
 	test("a permanent that would die is exiled instead", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		const agents = passingAgents();
-		spawnPermanent(state, SAMURAI, ALICE);
-		const bears = spawnPermanent(state, "grizzly-bears", BOB);
+		engine.spawnPermanent(state, SAMURAI, ALICE);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
 
-		perform(state, { kind: "sacrifice", object: bears.id }, agents);
+		engine.perform(state, { kind: "sacrifice", object: bears.id }, agents);
 
 		expect(state.players[BOB].graveyard).toEqual([]);
 		expect(state.players[BOB].exile).toHaveLength(1);
 	});
 
 	test("the Samurai exiles itself, since it is a permanent too", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		const agents = passingAgents();
-		const samurai = spawnPermanent(state, SAMURAI, ALICE);
+		const samurai = engine.spawnPermanent(state, SAMURAI, ALICE);
 
-		perform(state, { kind: "sacrifice", object: samurai.id }, agents);
+		engine.perform(state, { kind: "sacrifice", object: samurai.id }, agents);
 
 		expect(state.players[ALICE].graveyard).toEqual([]);
 		expect(state.players[ALICE].exile).toHaveLength(1);
 	});
 
 	test("a card put into a graveyard from hand is untouched", () => {
-		const state = setupMain();
+		const state = setupMain(engine);
 		const agents = passingAgents();
-		spawnPermanent(state, SAMURAI, ALICE);
+		engine.spawnPermanent(state, SAMURAI, ALICE);
 		const graveyardBefore = state.players[ALICE].graveyard.length;
-		spawnCard(state, "forest", ALICE, "hand");
+		engine.spawnCard(state, "forest", ALICE, "hand");
 
-		perform(
+		engine.perform(
 			state,
 			{ kind: "discard", player: ALICE, cards: { kind: "any" } },
 			agents,

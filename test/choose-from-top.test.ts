@@ -1,32 +1,32 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import "../cards.ts";
+import { CARDS } from "../cards.ts";
 import {
 	type Agent,
 	type ChoiceAnswer,
 	ChoiceController,
 	ChoicePendingError,
 	type ChoiceRequest,
+	createEngine,
+	type GameState,
 	InvalidChoiceAnswerError,
-	name,
-	newGame,
 	type ObjectId,
-	perform,
 	type SyncAgent,
-	spawnCard,
 } from "../index.ts";
 
-function cards(state: ReturnType<typeof newGame>): ObjectId[] {
+const engine = createEngine(CARDS);
+
+function cards(state: GameState): ObjectId[] {
 	return [
-		spawnCard(state, "forest", 0, "library").id,
-		spawnCard(state, "grizzly-bears", 0, "library").id,
-		spawnCard(state, "eager-cadet", 0, "library").id,
+		engine.spawnCard(state, "forest", 0, "library").id,
+		engine.spawnCard(state, "grizzly-bears", 0, "library").id,
+		engine.spawnCard(state, "eager-cadet", 0, "library").id,
 	];
 }
 
 describe("choose-from-top choices", () => {
 	test("chooses two cards and replays the exact kept set and bottom order", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected three cards");
@@ -41,7 +41,7 @@ describe("choose-from-top choices", () => {
 				};
 			},
 		};
-		const recorder = ChoiceController.record([agent, agent]);
+		const recorder = ChoiceController.record(engine, [agent, agent]);
 
 		expect(recorder.chooseFromTop(state, 0, [c, b, a], 2)).toEqual({
 			kept: [b, a],
@@ -53,6 +53,7 @@ describe("choose-from-top choices", () => {
 		}
 
 		const replay = ChoiceController.replay(
+			engine,
 			JSON.parse(JSON.stringify(recorder.transcript())),
 		);
 		expect(replay.chooseFromTop(state, 0, [c, b, a], 2)).toEqual({
@@ -63,7 +64,7 @@ describe("choose-from-top choices", () => {
 	});
 
 	test("supports a one-card choice and suspension without a speculative answer", async () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const [a, b] = cards(state);
 		if (a === undefined || b === undefined) throw new Error("expected cards");
 		let resolveAnswer: ((answer: ChoiceAnswer) => void) | undefined;
@@ -71,7 +72,7 @@ describe("choose-from-top choices", () => {
 			resolveAnswer = resolve;
 		});
 		const agent: Agent = { choose: () => answer };
-		const choices = ChoiceController.suspending([agent, agent]);
+		const choices = ChoiceController.suspending(engine, [agent, agent]);
 
 		let pending: ChoicePendingError | undefined;
 		try {
@@ -94,7 +95,7 @@ describe("choose-from-top choices", () => {
 	});
 
 	test("rejects a wrong kept count, missing, duplicate, or unknown card", () => {
-		const state = newGame();
+		const state = engine.newGame();
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected cards");
@@ -108,7 +109,7 @@ describe("choose-from-top choices", () => {
 		];
 		for (const answer of answers) {
 			expect(() =>
-				ChoiceController.record([
+				ChoiceController.record(engine, [
 					{ choose: () => answer },
 					new ScriptedAgent(),
 				]).chooseFromTop(state, 0, [a, b, c], 2),
@@ -119,13 +120,13 @@ describe("choose-from-top choices", () => {
 
 describe("choose-from-top events", () => {
 	test("puts two kept cards into hand and the ordered rest on the bottom", () => {
-		const state = newGame();
-		const untouched = spawnCard(state, "darksteel-myr", 0, "library").id;
-		const a = spawnCard(state, "forest", 0, "library").id;
-		const b = spawnCard(state, "grizzly-bears", 0, "library").id;
-		const c = spawnCard(state, "eager-cadet", 0, "library").id;
-		const d = spawnCard(state, "darksteel-relic", 0, "library").id;
-		const e = spawnCard(state, "monastery-swiftspear", 0, "library").id;
+		const state = engine.newGame();
+		const untouched = engine.spawnCard(state, "darksteel-myr", 0, "library").id;
+		const a = engine.spawnCard(state, "forest", 0, "library").id;
+		const b = engine.spawnCard(state, "grizzly-bears", 0, "library").id;
+		const c = engine.spawnCard(state, "eager-cadet", 0, "library").id;
+		const d = engine.spawnCard(state, "darksteel-relic", 0, "library").id;
+		const e = engine.spawnCard(state, "monastery-swiftspear", 0, "library").id;
 		const agent: SyncAgent = {
 			choose(_view, request) {
 				if (request.kind !== "chooseFromTop") {
@@ -142,12 +143,13 @@ describe("choose-from-top events", () => {
 			},
 		};
 
-		perform(state, { kind: "choose from top", player: 0, amount: 5, keep: 2 }, [
-			agent,
-			agent,
-		]);
+		engine.perform(
+			state,
+			{ kind: "choose from top", player: 0, amount: 5, keep: 2 },
+			[agent, agent],
+		);
 
-		expect(state.players[0].hand.map((id) => name(state, id))).toEqual([
+		expect(state.players[0].hand.map((id) => engine.name(state, id))).toEqual([
 			"Eager Cadet",
 			"Monastery Swiftspear",
 		]);
@@ -157,27 +159,29 @@ describe("choose-from-top events", () => {
 	});
 
 	test("keeps every available card without a choice when fewer than n remain", () => {
-		const state = newGame();
-		const only = spawnCard(state, "forest", 0, "library").id;
+		const state = engine.newGame();
+		const only = engine.spawnCard(state, "forest", 0, "library").id;
 		const agent: SyncAgent = {
 			choose() {
 				throw new Error("an undersized library must not request a choice");
 			},
 		};
 
-		perform(state, { kind: "choose from top", player: 0, amount: 5, keep: 2 }, [
-			agent,
-			agent,
-		]);
+		engine.perform(
+			state,
+			{ kind: "choose from top", player: 0, amount: 5, keep: 2 },
+			[agent, agent],
+		);
 		expect(state.players[0].library).toEqual([]);
-		expect(state.players[0].hand.map((id) => name(state, id))).toEqual([
+		expect(state.players[0].hand.map((id) => engine.name(state, id))).toEqual([
 			"Forest",
 		]);
 		expect(state.objects.has(only)).toBe(false);
 
-		perform(state, { kind: "choose from top", player: 0, amount: 5, keep: 2 }, [
-			agent,
-			agent,
-		]);
+		engine.perform(
+			state,
+			{ kind: "choose from top", player: 0, amount: 5, keep: 2 },
+			[agent, agent],
+		);
 	});
 });

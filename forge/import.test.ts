@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { name, newGame, spawnCard } from "../index.ts";
+import { createEngine } from "../index.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
 import { parseForgeCardScript } from "./ast.ts";
 import { importForgeCard, lowerForgeCard } from "./import.ts";
@@ -3782,9 +3782,10 @@ describe("lowerForgeCard: bridge contract", () => {
 	test("importing never registers the card: it stays unknown to the engine", () => {
 		const result = importForgeCard(BEARS, { id: "unregistered-bears-probe" });
 		expect(result.ok).toBe(true);
-		const state = newGame();
-		const obj = spawnCard(state, "unregistered-bears-probe", 0, "hand");
-		expect(() => name(state, obj.id)).toThrow(/unknown card/);
+		const engine = createEngine([]);
+		const state = engine.newGame();
+		const obj = engine.spawnCard(state, "unregistered-bears-probe", 0, "hand");
+		expect(() => engine.name(state, obj.id)).toThrow(/unknown card/);
 	});
 });
 
