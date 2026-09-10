@@ -53,6 +53,7 @@ Alaborn Grenadier
 Alaborn Musketeer
 Alaborn Trooper
 Aladdin's Ring
+Alania's Pathmaker
 Alchemist's Apprentice
 Alert Shu Infantry
 Ali Baba
@@ -141,6 +142,7 @@ Armored Skaab
 Armored Warhorse
 Armored Whirl Turtle
 Armored Wolf-Rider
+Armory Paladin
 Arms Dealer
 Army Ants
 Arrogant Vampire
@@ -252,6 +254,7 @@ Black Widow, Natasha Romanoff
 Blade of the Sixth Pride
 Blanchwood Treefolk
 Blaster Mage
+Blazing Crescendo
 Blazing Hellhound
 Blessed Light
 Blessed Spirits
@@ -436,6 +439,7 @@ Cliffhaven Sell-Sword
 Clinquant Skymage
 Cloaked Siren
 Clockwork Drawbridge
+Clockwork Percussionist
 Cloistered Telepath
 Clone
 Cloud Manta
@@ -514,6 +518,7 @@ Cremate
 Creosote Heath
 Crested Herdcaller
 Crimson Kobolds
+Crimson Operative
 Crooked Custodian
 Crookshank Kobolds
 Crosis's Attendant
@@ -1129,6 +1134,7 @@ Guardian of Pilgrims
 Guardian of the Halls
 Guardians of Meletis
 Gumato
+Gundabad Opportunist
 Gutless Ghoul
 Gutter Skulk
 Guttersnipe
@@ -1625,6 +1631,7 @@ Mistral Charger
 Mistral Singer
 Mistvault Bridge
 Misty Palms Oasis
+Mjölnir's Might
 Moaning Spirit
 Moat Piranhas
 Mogg Fanatic
@@ -2277,6 +2284,7 @@ Silent Artisan
 Silent Attendant
 Silent Dart
 Silent Observer
+Silicate Surveyor
 Silver Erne
 Silver Myr
 Silver Raven
@@ -2981,6 +2989,7 @@ Worthy Cost
 Wreckage Wickerfolk
 Wrecking Ball
 Wrecking Crew
+Wrenn's Resolve
 Wretched Doll
 Wriggling Grub
 Wu Infantry
@@ -3017,4 +3026,4 @@ Zuko, Avatar Hunter
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3014`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3023`;

@@ -131,6 +131,7 @@ registerRuntimeFixture("l/lorescale_coatl", "rt-lorescale-coatl");
 registerRuntimeFixture("u/underworld_dreams", "rt-underworld-dreams");
 registerRuntimeFixture("r/rummaging_goblin", "rt-rummaging-goblin");
 registerRuntimeFixture("b/black_lotus", "rt-black-lotus");
+registerRuntimeFixture("w/wrenns_resolve", "rt-wrenns-resolve");
 registerCardFixture("d/darksteel_relic");
 
 {
@@ -1015,6 +1016,56 @@ describe("forge-import runtime: statics and replacements", () => {
 });
 
 describe("forge-import runtime: spell effects", () => {
+	test("Wrenn's Resolve permits only the cards its imported Dig actually exiles", () => {
+		const state = setupMain();
+		const unrelated = spawnCard(state, "darksteel-relic", ALICE, "exile");
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "darksteel-relic", ALICE, "library");
+		const spell = spawnCard(state, "rt-wrenns-resolve", ALICE, "hand");
+		state.players[ALICE].manaPool.c = 1;
+		state.players[ALICE].manaPool.r = 1;
+
+		executeCastAction(
+			state,
+			ALICE,
+			{ kind: "cast", card: spell.id },
+			passingAgents(),
+		);
+		settlePriority(state, passingAgents());
+
+		const [unrelatedId, firstExiled, secondExiled] = state.players[ALICE].exile;
+		expect(unrelatedId).toBe(unrelated.id);
+		if (firstExiled === undefined || secondExiled === undefined)
+			throw new Error("expected Wrenn's Resolve to exile two cards");
+		expect(getObservableActions(state, ALICE)).toEqual(
+			expect.arrayContaining([
+				{ kind: "cast", card: firstExiled },
+				{ kind: "play land", card: secondExiled },
+			]),
+		);
+		expect(getObservableActions(state, ALICE)).not.toContainEqual({
+			kind: "cast",
+			card: unrelated.id,
+		});
+		expect(getObservableActions(state, BOB)).not.toContainEqual({
+			kind: "cast",
+			card: firstExiled,
+		});
+		expect(state.temporaryEffects).toHaveLength(2);
+		for (const effect of state.temporaryEffects) {
+			expect(effect).toMatchObject({
+				controller: ALICE,
+				source: {
+					origin: "spell-effect",
+					cardId: "rt-wrenns-resolve",
+					effectIndex: 1,
+				},
+				duration: "until-end-of-your-next-turn",
+				expiresAtEndOfTurn: null,
+			});
+		}
+	});
+
 	test("Preordain's imported scry arrangement is applied before its draw", () => {
 		const state = setupMain();
 		const bottom = spawnCard(state, "darksteel-relic", ALICE, "library").id;

@@ -72,6 +72,7 @@ registerCardFixture("b/blood_servitor");
 registerCardFixture("s/samurai_of_the_pale_curtain");
 registerCardFixture("v/vision_skeins");
 registerCardFixture("f/forced_fruition");
+registerCardFixture("w/wrenns_resolve");
 
 /**
  * Gatherer 2X2 #100. The Forge corpus has no local entry for this card, so its
@@ -114,37 +115,6 @@ export const ABBOT_OF_KERAL_KEEP = registerCard({
 			],
 		},
 	],
-});
-
-/**
- * Forge w/wrenns_resolve. Its multi-card Dig/Effect chain is outside the
- * importer's supported subset, so the Oracle definition is hand-authored here.
- */
-export const WRENNS_RESOLVE = registerCard({
-	id: "wrenns-resolve",
-	name: "Wrenn's Resolve",
-	types: ["sorcery"],
-	colors: ["r"],
-	manaCost: { n: 1, r: 1 },
-	spell: {
-		id: "wrenns-resolve-spell",
-		text: "Exile the top two cards of your library. Until the end of your next turn, you may play those cards.",
-		targets: [],
-		effects: [
-			{
-				kind: "exile-top",
-				player: "you",
-				amount: 2,
-				resultSlot: "exiled-cards",
-			},
-			{
-				kind: "may-play",
-				object: { binding: "effect-result", slot: "exiled-cards" },
-				from: "exile",
-				duration: "until-end-of-your-next-turn",
-			},
-		],
-	},
 });
 
 /* ------------------------------------------------------------------ *

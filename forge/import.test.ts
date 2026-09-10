@@ -577,6 +577,85 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		}
 	});
 
+	test("Wrenn's Resolve lowers its complete remembered-exile may-play chain", () => {
+		const result = importFixture("w/wrenns_resolve");
+		if (!result.ok) throw new Error("expected Wrenn's Resolve to import");
+		expect(result.card).toMatchObject({
+			id: "wrenns-resolve",
+			name: "Wrenn's Resolve",
+			types: ["sorcery"],
+			colors: ["r"],
+			manaCost: { n: 1, r: 1 },
+		});
+		expect(result.card.spell).toEqual({
+			id: "spell-1",
+			text: "Exile the top two cards of your library. Until the end of your next turn, you may play those cards.",
+			targets: [],
+			effects: [
+				{
+					kind: "exile-top",
+					player: "you",
+					amount: 2,
+					resultSlot: "remembered-exile-cards",
+				},
+				{
+					kind: "may-play",
+					object: {
+						binding: "effect-result",
+						slot: "remembered-exile-cards",
+					},
+					from: "exile",
+					duration: "until-end-of-your-next-turn",
+				},
+			],
+		});
+	});
+
+	test("the remembered-exile may-play chain rejects semantic mutations", () => {
+		const definition = cardText("w/wrenns_resolve");
+		const mutations = [
+			["DestinationZone$ Exile", "DestinationZone$ Hand"],
+			["RememberChanged$ True", "RememberChanged$ False"],
+			["RememberObjects$ RememberedCard", "RememberObjects$ Remembered"],
+			["ForgetOnMoved$ Exile", "ForgetOnMoved$ Battlefield"],
+			["Duration$ UntilTheEndOfYourNextTurn", "Duration$ UntilEndOfTurn"],
+			["MayPlay$ True", "MayPlay$ False"],
+			["Affected$ Card.IsRemembered", "Affected$ Card"],
+			["AffectedZone$ Exile", "AffectedZone$ Graveyard"],
+			["ClearRemembered$ True", "ClearRemembered$ False"],
+		] as const;
+		for (const [from, to] of mutations) {
+			const mutated = definition.replace(from, to);
+			expect(mutated, `mutation source ${from}`).not.toBe(definition);
+			const result = importForgeCard(mutated, { id: "mutated-wrenns-resolve" });
+			expect(result.ok, `${from} -> ${to}`).toBe(false);
+		}
+	});
+
+	test("a remembered exile Dig without its DB$ Effect consumer rejects", () => {
+		const result = importText(
+			[
+				"Name:Orphaned Remembered Dig",
+				"ManaCost:1 R",
+				"Types:Sorcery",
+				"A:SP$ Dig | Defined$ You | DigNum$ 2 | ChangeNum$ All | DestinationZone$ Exile | RememberChanged$ True | SpellDescription$ x.",
+				"Oracle:",
+				"",
+			].join("\n"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message:
+				"remembered exile Dig must be followed immediately by DB$ Effect",
+		});
+	});
+
+	test("remembering support does not accept Cloudshift's target-return chain", () => {
+		expect(importFixture("c/cloudshift").ok).toBe(false);
+	});
+
 	test("Dig rejects dynamic, public, random-order, and impossible forms", () => {
 		for (const changed of [
 			"DigNum$ X | ChangeNum$ 1 | NoReveal$ True",

@@ -433,6 +433,12 @@ function parseCopySelector(value: string): ObjectSelectorDef | null {
 const TARGET_SLOT = "target-1";
 
 /**
+ * Forge's remembered-card set for the supported Dig -> Effect may-play chain.
+ * The engine binds the cards that actually reached exile under this slot.
+ */
+const REMEMBERED_EXILE_SLOT = "remembered-exile-cards";
+
+/**
  * A targeting effect and its ability's `ValidTgts$` have to agree, or the
  * engine would resolve an effect against a target nobody checked.
  */
@@ -885,6 +891,8 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"dignum",
 					"changenum",
 					"noreveal",
+					"destinationzone",
+					"rememberchanged",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
@@ -892,8 +900,33 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			if (badParams) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "DigNum"));
+			const changeNum = getForgeParam(params, "ChangeNum");
 			const keep = positiveInteger(getForgeParam(params, "ChangeNum"), 1);
 			const noReveal = getForgeParam(params, "NoReveal");
+			const destination = getForgeParam(params, "DestinationZone");
+			const rememberChanged = getForgeParam(params, "RememberChanged");
+			if (destination !== undefined || rememberChanged !== undefined) {
+				if (
+					who !== "you" ||
+					!amount ||
+					changeNum !== "All" ||
+					destination !== "Exile" ||
+					rememberChanged !== "True" ||
+					noReveal !== undefined
+				) {
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"remembered Dig requires a fixed positive DigNum, Defined$ You, ChangeNum$ All, DestinationZone$ Exile, and RememberChanged$ True",
+						where,
+					);
+				}
+				return {
+					kind: "exile-top",
+					player: who,
+					amount,
+					resultSlot: REMEMBERED_EXILE_SLOT,
+				};
+			}
 			if (
 				who !== "you" ||
 				!amount ||
@@ -1595,6 +1628,168 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				where,
 			);
 		}
+		const pendingRememberedDig = effects.at(-1);
+		if (
+			pendingRememberedDig?.kind === "exile-top" &&
+			pendingRememberedDig.resultSlot === REMEMBERED_EXILE_SLOT &&
+			disc.api !== "effect"
+		) {
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				"remembered exile Dig must be followed immediately by DB$ Effect",
+				where,
+			);
+		}
+		if (disc.api === "effect") {
+			const rememberedDig = effects.at(-1);
+			if (
+				rememberedDig?.kind !== "exile-top" ||
+				rememberedDig.resultSlot !== REMEMBERED_EXILE_SLOT
+			) {
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"Effect is supported only immediately after a remembered exile Dig",
+					where,
+				);
+			}
+
+			const badEffectParams = checkParams(
+				current,
+				new Set([
+					"db",
+					"rememberobjects",
+					"staticabilities",
+					"subability",
+					"forgetonmoved",
+					"duration",
+				]),
+				where,
+			);
+			if (badEffectParams) return badEffectParams;
+			const staticName = getForgeParam(current, "StaticAbilities");
+			const cleanupName = getForgeParam(current, "SubAbility");
+			if (
+				getForgeParam(current, "RememberObjects") !== "RememberedCard" ||
+				!staticName ||
+				!cleanupName ||
+				getForgeParam(current, "ForgetOnMoved") !== "Exile" ||
+				getForgeParam(current, "Duration") !== "UntilTheEndOfYourNextTurn"
+			) {
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"remembered-card Effect requires RememberObjects$ RememberedCard, one StaticAbilities$ reference, ForgetOnMoved$ Exile, Duration$ UntilTheEndOfYourNextTurn, and a cleanup SubAbility$",
+					where,
+				);
+			}
+
+			const staticBucket = face.svarIndex[staticName.toLowerCase()];
+			if (!staticBucket || staticBucket.length === 0)
+				return issue(
+					"UNSUPPORTED_REFERENCE",
+					`unresolved StaticAbilities ${staticName}`,
+					where,
+				);
+			if (staticBucket.length > 1)
+				return issue(
+					"UNSUPPORTED_REFERENCE",
+					`ambiguous duplicate SVar ${staticName}`,
+					where,
+				);
+			const staticSVar = staticBucket[0] as ForgeSVarRecord;
+			if (staticSVar.parsed.kind !== "params")
+				return issue(
+					"UNSUPPORTED_REFERENCE",
+					`StaticAbilities ${staticName} is not an ability body`,
+					where,
+				);
+			const staticWhere = {
+				nodeId: staticSVar.source.nodeId,
+				line: staticSVar.source.line,
+			};
+			const badStaticParams = checkParams(
+				staticSVar.parsed.params,
+				new Set(["mode", "mayplay", "affected", "affectedzone", "description"]),
+				staticWhere,
+			);
+			if (badStaticParams) return badStaticParams;
+			if (
+				getForgeParam(staticSVar.parsed.params, "Mode") !== "Continuous" ||
+				getForgeParam(staticSVar.parsed.params, "MayPlay") !== "True" ||
+				getForgeParam(staticSVar.parsed.params, "Affected") !==
+					"Card.IsRemembered" ||
+				getForgeParam(staticSVar.parsed.params, "AffectedZone") !== "Exile"
+			) {
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"remembered-card static requires Mode$ Continuous, MayPlay$ True, Affected$ Card.IsRemembered, and AffectedZone$ Exile",
+					staticWhere,
+				);
+			}
+
+			const cleanupBucket = face.svarIndex[cleanupName.toLowerCase()];
+			if (!cleanupBucket || cleanupBucket.length === 0)
+				return issue(
+					"UNSUPPORTED_REFERENCE",
+					`unresolved SubAbility ${cleanupName}`,
+					where,
+				);
+			if (cleanupBucket.length > 1)
+				return issue(
+					"UNSUPPORTED_REFERENCE",
+					`ambiguous duplicate SVar ${cleanupName}`,
+					where,
+				);
+			const cleanupSVar = cleanupBucket[0] as ForgeSVarRecord;
+			if (cleanupSVar.parsed.kind !== "params")
+				return issue(
+					"UNSUPPORTED_REFERENCE",
+					`SubAbility ${cleanupName} is not an ability body`,
+					where,
+				);
+			const cleanupWhere = {
+				nodeId: cleanupSVar.source.nodeId,
+				line: cleanupSVar.source.line,
+			};
+			const cleanupDisc = discriminator(
+				cleanupSVar.parsed.params,
+				cleanupWhere,
+			);
+			if ("code" in cleanupDisc) return cleanupDisc;
+			const badCleanupParams = checkParams(
+				cleanupSVar.parsed.params,
+				new Set(["db", "clearremembered"]),
+				cleanupWhere,
+			);
+			if (badCleanupParams) return badCleanupParams;
+			if (
+				cleanupDisc.token !== "DB" ||
+				cleanupDisc.api !== "cleanup" ||
+				getForgeParam(cleanupSVar.parsed.params, "ClearRemembered") !== "True"
+			) {
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"remembered-card Effect cleanup requires DB$ Cleanup and ClearRemembered$ True",
+					cleanupWhere,
+				);
+			}
+
+			assert.equal(
+				rememberedDig.resultSlot,
+				REMEMBERED_EXILE_SLOT,
+				"remembered Dig and may-play Effect must share one result slot",
+			);
+			effects.push({
+				kind: "may-play",
+				object: {
+					binding: "effect-result",
+					slot: rememberedDig.resultSlot,
+				},
+				from: "exile",
+				duration: "until-end-of-your-next-turn",
+			});
+			usedSVarNames.push(staticName.toLowerCase(), cleanupName.toLowerCase());
+			return { effects, usedSVarNames };
+		}
 		const lowered = parseEffects(
 			current,
 			disc.token.toLowerCase(),
@@ -1607,7 +1802,20 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 		if ("code" in lowered) return lowered;
 		effects.push(...lowered);
 		const next = getForgeParam(current, "SubAbility");
-		if (next === undefined) return { effects, usedSVarNames };
+		if (next === undefined) {
+			if (
+				lowered.length === 1 &&
+				lowered[0]?.kind === "exile-top" &&
+				lowered[0].resultSlot === REMEMBERED_EXILE_SLOT
+			) {
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"remembered exile Dig must be followed immediately by DB$ Effect",
+					where,
+				);
+			}
+			return { effects, usedSVarNames };
+		}
 		const nextLower = next.trim().toLowerCase();
 		if (seen.has(nextLower))
 			return issue(

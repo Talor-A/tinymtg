@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { WRENNS_RESOLVE } from "../cards.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import "../cards.ts";
+import { importForgeCard } from "../forge/import.ts";
 import type { CastAction, GameState, ObjectId } from "../index.ts";
 import {
 	activePlayer,
@@ -21,6 +24,24 @@ import {
 	passingAgents,
 	setupMain,
 } from "./utils/engine-helpers.ts";
+
+const importedWrennsResolve = importForgeCard(
+	readFileSync(
+		join(
+			import.meta.dir,
+			"..",
+			"cards",
+			"cardsfolder",
+			"w",
+			"wrenns_resolve.txt",
+		),
+		"utf8",
+	),
+	{ id: "wrenns-resolve" },
+);
+if (!importedWrennsResolve.ok)
+	throw new Error("expected Wrenn's Resolve Forge fixture to import");
+const WRENNS_RESOLVE = importedWrennsResolve.card;
 
 function castAction(card: ObjectId): CastAction {
 	return { kind: "cast", card };
@@ -47,7 +68,7 @@ describe("Wrenn's Resolve", () => {
 			kind: "non-creature",
 		});
 		expect(WRENNS_RESOLVE.spell).toEqual({
-			id: "wrenns-resolve-spell",
+			id: "spell-1",
 			text: "Exile the top two cards of your library. Until the end of your next turn, you may play those cards.",
 			targets: [],
 			effects: [
@@ -55,11 +76,14 @@ describe("Wrenn's Resolve", () => {
 					kind: "exile-top",
 					player: "you",
 					amount: 2,
-					resultSlot: "exiled-cards",
+					resultSlot: "remembered-exile-cards",
 				},
 				{
 					kind: "may-play",
-					object: { binding: "effect-result", slot: "exiled-cards" },
+					object: {
+						binding: "effect-result",
+						slot: "remembered-exile-cards",
+					},
 					from: "exile",
 					duration: "until-end-of-your-next-turn",
 				},
@@ -105,7 +129,7 @@ describe("Wrenn's Resolve", () => {
 				duration: "until-end-of-your-next-turn",
 				expiresAtEndOfTurn: null,
 			});
-			const subject = effect.bindings["exiled-cards"];
+			const subject = effect.bindings["remembered-exile-cards"];
 			if (subject?.type !== "card")
 				throw new Error("expected an exiled-card permission binding");
 			return subject.id;
