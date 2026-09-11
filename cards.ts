@@ -112,7 +112,7 @@ export const ABBOT_OF_KERAL_KEEP = defineCard({
 				},
 				{
 					kind: "may-play",
-					object: { binding: "effect-result", slot: "exiled-card" },
+					subject: { binding: "effect-result", slot: "exiled-card" },
 					from: "exile",
 					duration: "until-end-of-turn",
 				},

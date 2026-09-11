@@ -76,7 +76,7 @@ describe("Wrenn's Resolve", () => {
 				},
 				{
 					kind: "may-play",
-					object: {
+					subject: {
 						binding: "effect-result",
 						slot: "remembered-exile-cards",
 					},

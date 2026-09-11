@@ -101,7 +101,7 @@ const TEST_CARD_3 = defineCard({
 		effects: [
 			{
 				kind: "may-play",
-				object: { binding: "target", slot: "target-1" },
+				subject: { binding: "target", slot: "target-1" },
 				from: "exile",
 				duration: "until-end-of-turn",
 			},

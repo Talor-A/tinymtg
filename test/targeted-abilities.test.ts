@@ -77,7 +77,7 @@ const TEST_CARD_1 = defineCard({
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
 			effects: [
-				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
+				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
 			],
 		},
 	],
@@ -151,7 +151,7 @@ const TEST_CARD_4 = defineCard({
 				},
 			],
 			effects: [
-				{ kind: "destroy", object: { targetSlot: "target-1" } },
+				{ kind: "destroy", subject: { targetSlot: "target-1" } },
 				{ kind: "gain-life", subject: "you", amount: 3 },
 			],
 		},
@@ -179,8 +179,8 @@ const TEST_CARD_5 = defineCard({
 			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
 			effects: [
-				{ kind: "destroy", object: { targetSlot: "target-1" } },
-				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
+				{ kind: "destroy", subject: { targetSlot: "target-1" } },
+				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
 			],
 		},
 	],
@@ -219,7 +219,7 @@ const TEST_CARD_6 = defineCard({
 					},
 				},
 			],
-			effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
+			effects: [{ kind: "destroy", subject: { targetSlot: "target-1" } }],
 		},
 	],
 });
@@ -294,7 +294,7 @@ const TEST_CARD_9 = defineCard({
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
 			effects: [
-				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
+				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
 			],
 		},
 	],
@@ -318,7 +318,7 @@ const TEST_CARD_10 = defineCard({
 			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
 			effects: [
-				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 1 },
+				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 1 },
 			],
 		},
 	],
@@ -731,7 +731,7 @@ describe("captured stack items", () => {
 		if (item?.kind !== "activated ability") throw new Error("expected ability");
 		expect(item.targetDefinitions).toHaveLength(1);
 		expect(item.effects).toEqual([
-			{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
+			{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
 		]);
 
 		// A clone carries the same detached instructions, and resolving it runs

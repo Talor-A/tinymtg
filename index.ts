@@ -1418,9 +1418,9 @@ function buildFilteredGameView(
 				const definition = temporaryEffectDefinition(engine, effect);
 				if (definition?.kind !== "grant-keyword") continue;
 				const slot =
-					definition.object === "source"
+					definition.subject === "source"
 						? SELF_SLOT
-						: definition.object.targetSlot;
+						: definition.subject.targetSlot;
 				const bound = effect.bindings[slot];
 				assertDefined(
 					bound,
@@ -1439,9 +1439,9 @@ function buildFilteredGameView(
 				const definition = temporaryEffectDefinition(engine, effect);
 				if (definition?.kind !== "modify-pt") continue;
 				const slot =
-					definition.object === "source"
+					definition.subject === "source"
 						? SELF_SLOT
-						: definition.object.targetSlot;
+						: definition.subject.targetSlot;
 				const bound = effect.bindings[slot];
 				assertDefined(bound, `temporary P/T effect has no binding for ${slot}`);
 				if (bound.type !== "permanent") continue;
@@ -2112,7 +2112,7 @@ export interface EffectResultObjectRef {
 	slot: string;
 }
 
-export type MayPlayObjectRef =
+export type MayPlaySubjectRef =
 	| { binding: "target"; slot: string }
 	| EffectResultObjectRef;
 
@@ -2131,7 +2131,7 @@ export type ZoneChangeEffectDestination<Player extends TriggerEffectPlayer> =
 export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
 	[Origin in PublicObjectZone]: {
 		kind: "change-zone";
-		object: "source" | TargetSlotRef | EffectResultObjectRef;
+		subject: "source" | TargetSlotRef | EffectResultObjectRef;
 		from: Origin;
 		destination: Exclude<ZoneChangeEffectDestination<Player>, { zone: Origin }>;
 		/** Optionally bind the new object that reaches the declared destination. */
@@ -2182,16 +2182,16 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 	  }
 	| {
 			kind: "damage";
-			recipient: { player: Player } | TargetSlotRef;
+			subject: { player: Player } | TargetSlotRef;
 			amount: number;
 	  }
-	| { kind: "destroy"; object: TargetSlotRef }
-	| { kind: "tap" | "untap"; object: TargetSlotRef }
-	| { kind: "counter"; spell: TargetSlotRef }
+	| { kind: "destroy"; subject: TargetSlotRef }
+	| { kind: "tap" | "untap"; subject: TargetSlotRef }
+	| { kind: "counter"; subject: TargetSlotRef }
 	| {
 			kind: "add counters";
 			/** The permanent receiving the counters. */
-			object: "source" | TargetSlotRef;
+			subject: "source" | TargetSlotRef;
 			counter: PermanentCounter;
 			amount: number;
 	  }
@@ -2210,7 +2210,7 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			 * +1/+1"), or the creature bound to a declared target slot ("target
 			 * creature gets +3/+3").
 			 */
-			object: "source" | TargetSlotRef;
+			subject: "source" | TargetSlotRef;
 			power: number;
 			toughness: number;
 			duration: TemporaryEffectDuration;
@@ -2219,13 +2219,13 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			kind: "grant-keyword";
 			/** The first supported temporary keyword grant is indestructible. */
 			keyword: "indestructible";
-			object: "source" | TargetSlotRef;
+			subject: "source" | TargetSlotRef;
 			duration: TemporaryEffectDuration;
 	  }
 	| {
 			kind: "may-play";
 			/** The card in exile that this effect's controller may play. */
-			object: MayPlayObjectRef;
+			subject: MayPlaySubjectRef;
 			from: "exile";
 			duration: TemporaryEffectDuration;
 	  }
@@ -7153,8 +7153,8 @@ function resolveEffects(
 		}
 		let bound: EntityRef | null = null;
 		const damageTarget =
-			effect.kind === "damage" && "targetSlot" in effect.recipient
-				? effect.recipient
+			effect.kind === "damage" && "targetSlot" in effect.subject
+				? effect.subject
 				: null;
 		const sacrificeTarget =
 			effect.kind === "sacrifice" && typeof effect.subject !== "string"
@@ -7173,8 +7173,8 @@ function resolveEffects(
 				? effect.subject
 				: null;
 		const mayPlayTargetSlot =
-			effect.kind === "may-play" && effect.object.binding === "target"
-				? effect.object.slot
+			effect.kind === "may-play" && effect.subject.binding === "target"
+				? effect.subject.slot
 				: null;
 		const objectTarget =
 			(effect.kind === "destroy" ||
@@ -7184,11 +7184,11 @@ function resolveEffects(
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
-			effect.object !== "source" &&
-			"targetSlot" in effect.object
-				? effect.object
+			effect.subject !== "source" &&
+			"targetSlot" in effect.subject
+				? effect.subject
 				: null;
-		const counterTarget = effect.kind === "counter" ? effect.spell : null;
+		const counterTarget = effect.kind === "counter" ? effect.subject : null;
 		if (
 			damageTarget !== null ||
 			objectTarget !== null ||
@@ -7251,7 +7251,7 @@ function resolveEffects(
 			);
 			continue;
 		}
-		if (effect.kind === "add counters" && effect.object === "source") {
+		if (effect.kind === "add counters" && effect.subject === "source") {
 			// A source that has left the battlefield cannot receive counters.
 			const source = maybePermanent(state, item.source);
 			if (!source) continue;
@@ -7282,13 +7282,13 @@ function resolveEffects(
 				scope.bindings.set(effect.resultSlot, []);
 			}
 			let ref: EntityRef | null;
-			if (effect.object === "source") ref = null;
-			else if ("targetSlot" in effect.object) ref = bound;
+			if (effect.subject === "source") ref = null;
+			else if ("targetSlot" in effect.subject) ref = bound;
 			else {
-				const results = scope.bindings.get(effect.object.slot) ?? [];
+				const results = scope.bindings.get(effect.subject.slot) ?? [];
 				assert(
 					results.length <= 1,
-					`one-object change-zone result ${effect.object.slot} contains multiple objects`,
+					`one-object change-zone result ${effect.subject.slot} contains multiple objects`,
 				);
 				ref = results[0] ?? null;
 				if (ref === null) continue;
@@ -7359,7 +7359,7 @@ function resolveEffects(
 		if (effect.kind === "modify-pt" || effect.kind === "grant-keyword") {
 			let slot: string;
 			let subject: EntityRef;
-			if (effect.object === "source") {
+			if (effect.subject === "source") {
 				// An instruction affecting its source does nothing if that object
 				// has already left the battlefield.
 				const self = maybePermanent(state, item.source);
@@ -7371,7 +7371,7 @@ function resolveEffects(
 					bound?.type === "permanent",
 					"temporary characteristic effect requires a bound permanent target",
 				);
-				slot = effect.object.targetSlot;
+				slot = effect.subject.targetSlot;
 				subject = bound;
 			}
 			// The effect keeps a reference to the definition that created it, so
@@ -7410,9 +7410,9 @@ function resolveEffects(
 			continue;
 		}
 		if (effect.kind === "may-play") {
-			const slot = effect.object.slot;
+			const slot = effect.subject.slot;
 			let subjects: EntityRef[];
-			if (effect.object.binding === "effect-result") {
+			if (effect.subject.binding === "effect-result") {
 				subjects = scope.bindings.get(slot) ?? [];
 			} else {
 				assert(
@@ -7577,10 +7577,10 @@ function effectToEvent(
 		}
 		case "damage": {
 			const recipient =
-				"player" in effect.recipient
+				"player" in effect.subject
 					? {
 							type: "player" as const,
-							player: relativeEffectPlayer(item, effect.recipient.player),
+							player: relativeEffectPlayer(item, effect.subject.player),
 						}
 					: subject;
 			assert(
@@ -7857,13 +7857,13 @@ function requiredTargetDefinition(
 		if (effect.kind === "draw" && "subjects" in effect) return;
 		if (
 			effect.kind === "change-zone" &&
-			effect.object !== "source" &&
-			"binding" in effect.object &&
-			effect.object.binding === "effect-result"
+			effect.subject !== "source" &&
+			"binding" in effect.subject &&
+			effect.subject.binding === "effect-result"
 		) {
 			assert(
-				availableResultSlots.get(effect.object.slot) === effect.from,
-				`change-zone refers to unavailable ${effect.from} effect result ${effect.object.slot}`,
+				availableResultSlots.get(effect.subject.slot) === effect.from,
+				`change-zone refers to unavailable ${effect.from} effect result ${effect.subject.slot}`,
 			);
 		}
 		if (
@@ -7885,18 +7885,18 @@ function requiredTargetDefinition(
 		}
 		if (
 			effect.kind === "may-play" &&
-			effect.object.binding === "effect-result"
+			effect.subject.binding === "effect-result"
 		) {
 			assert(
-				availableResultSlots.get(effect.object.slot) === effect.from,
-				`may-play refers to unavailable effect result ${effect.object.slot}`,
+				availableResultSlots.get(effect.subject.slot) === effect.from,
+				`may-play refers to unavailable effect result ${effect.subject.slot}`,
 			);
 			return;
 		}
 		if (
 			effect.kind === "change-zone" &&
-			effect.object !== "source" &&
-			"binding" in effect.object
+			effect.subject !== "source" &&
+			"binding" in effect.subject
 		)
 			return;
 		if (
@@ -7918,12 +7918,12 @@ function requiredTargetDefinition(
 				effect.kind === "grant-keyword" ||
 				effect.kind === "change-zone" ||
 				effect.kind === "add counters") &&
-			effect.object === "source"
+			effect.subject === "source"
 		)
 			return;
 		const damageTarget =
-			effect.kind === "damage" && "targetSlot" in effect.recipient
-				? effect.recipient
+			effect.kind === "damage" && "targetSlot" in effect.subject
+				? effect.subject
 				: null;
 		if (
 			damageTarget === null &&
@@ -7963,8 +7963,8 @@ function requiredTargetDefinition(
 				? effect.subject
 				: null;
 		const mayPlayTargetSlot =
-			effect.kind === "may-play" && effect.object.binding === "target"
-				? effect.object.slot
+			effect.kind === "may-play" && effect.subject.binding === "target"
+				? effect.subject.slot
 				: null;
 		const objectTarget =
 			(effect.kind === "destroy" ||
@@ -7974,11 +7974,11 @@ function requiredTargetDefinition(
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
-			effect.object !== "source" &&
-			"targetSlot" in effect.object
-				? effect.object
+			effect.subject !== "source" &&
+			"targetSlot" in effect.subject
+				? effect.subject
 				: null;
-		const counterTarget = effect.kind === "counter" ? effect.spell : null;
+		const counterTarget = effect.kind === "counter" ? effect.subject : null;
 		const targetSlot =
 			damageTarget?.targetSlot ??
 			objectTarget?.targetSlot ??
@@ -8008,8 +8008,8 @@ function requiredTargetDefinition(
 		}
 		if (
 			effect.kind === "change-zone" &&
-			effect.object !== "source" &&
-			"targetSlot" in effect.object
+			effect.subject !== "source" &&
+			"targetSlot" in effect.subject
 		) {
 			if (effect.from === "battlefield") {
 				assert(
@@ -8036,7 +8036,7 @@ function requiredTargetDefinition(
 			);
 		}
 		if (effect.kind === "may-play") {
-			assert(effect.object.binding === "target");
+			assert(effect.subject.binding === "target");
 			assert(
 				target.legal.kind === "card" && target.legal.zone === effect.from,
 				"temporary play permission requires a card target in its origin",
@@ -8220,7 +8220,7 @@ function hasPlayPermission(
 		const definition = temporaryEffectDefinition(read.engine, temporary);
 		if (definition?.kind !== "may-play") continue;
 		assert(definition.from === "exile");
-		const subject = temporary.bindings[definition.object.slot];
+		const subject = temporary.bindings[definition.subject.slot];
 		assert(
 			subject?.type === "card",
 			"temporary play permission has no bound card",

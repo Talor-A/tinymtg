@@ -69,7 +69,7 @@ const TEST_CARD_3 = defineCard({
 			},
 			{
 				kind: "may-play",
-				object: { binding: "effect-result", slot: "exiled-cards" },
+				subject: { binding: "effect-result", slot: "exiled-cards" },
 				from: "exile",
 				duration: "until-end-of-turn",
 			},

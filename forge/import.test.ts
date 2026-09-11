@@ -236,7 +236,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			const result = importFixture(fixture);
 			if (!result.ok) throw new Error(`expected ${fixture} to import`);
 			expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
-				{ kind: "damage", recipient: { player: "opponent" }, amount: 1 },
+				{ kind: "damage", subject: { player: "opponent" }, amount: 1 },
 			]);
 		}
 	});
@@ -254,7 +254,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
 			effects: [
-				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 3 },
+				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 3 },
 			],
 		});
 
@@ -272,7 +272,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				},
 			],
-			effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
+			effects: [{ kind: "destroy", subject: { targetSlot: "target-1" } }],
 		});
 	});
 
@@ -285,7 +285,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			effects: [
 				{
 					kind: "change-zone",
-					object: "source",
+					subject: "source",
 					from: "battlefield",
 					destination: { zone: "hand" },
 				},
@@ -309,7 +309,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						legal: { kind: "spell" },
 					},
 				],
-				effects: [{ kind: "counter", spell: { targetSlot: "target-1" } }],
+				effects: [{ kind: "counter", subject: { targetSlot: "target-1" } }],
 			},
 		});
 	});
@@ -359,7 +359,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 				],
 				effects: [
-					{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 1 },
+					{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 1 },
 				],
 			},
 		]);
@@ -399,7 +399,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						},
 					},
 				],
-				effects: [{ kind: "tap", object: { targetSlot: "target-1" } }],
+				effects: [{ kind: "tap", subject: { targetSlot: "target-1" } }],
 			},
 		]);
 	});
@@ -423,7 +423,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				},
 			],
-			effects: [{ kind: "untap", object: { targetSlot: "target-1" } }],
+			effects: [{ kind: "untap", subject: { targetSlot: "target-1" } }],
 		});
 	});
 
@@ -457,7 +457,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						legal: { kind: "permanent" },
 					},
 				],
-				effects: [{ kind: "tap", object: { targetSlot: "target-1" } }],
+				effects: [{ kind: "tap", subject: { targetSlot: "target-1" } }],
 			},
 		]);
 	});
@@ -481,7 +481,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				},
 			],
 			effects: [
-				{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 4 },
+				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 4 },
 			],
 		});
 
@@ -497,7 +497,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				},
 			],
-			effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
+			effects: [{ kind: "destroy", subject: { targetSlot: "target-1" } }],
 		});
 	});
 
@@ -596,7 +596,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				},
 				{
 					kind: "may-play",
-					object: {
+					subject: {
 						binding: "effect-result",
 						slot: "remembered-exile-cards",
 					},
@@ -681,14 +681,14 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			effects: [
 				{
 					kind: "change-zone",
-					object: { targetSlot: "target-1" },
+					subject: { targetSlot: "target-1" },
 					from: "battlefield",
 					destination: { zone: "exile" },
 					resultSlot: "remembered-zone-change-object",
 				},
 				{
 					kind: "change-zone",
-					object: {
+					subject: {
 						binding: "effect-result",
 						slot: "remembered-zone-change-object",
 					},
@@ -951,7 +951,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.spell?.targets).toHaveLength(1);
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
+			{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
 			{ kind: "gain-life", subject: "you", amount: 2 },
 		]);
 	});
@@ -1265,7 +1265,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "add counters",
-						object: "source",
+						subject: "source",
 						counter: "+1/+1",
 						amount: 1,
 					},
@@ -1301,7 +1301,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "add counters",
-						object: { targetSlot: "target-1" },
+						subject: { targetSlot: "target-1" },
 						counter: "+1/+1",
 						amount: 1,
 					},
@@ -1365,7 +1365,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "add counters",
-						object: "source",
+						subject: "source",
 						counter: "+1/+1",
 						amount: 1,
 					},
@@ -1409,7 +1409,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "change-zone",
-						object: "source",
+						subject: "source",
 						from: "graveyard",
 						destination: {
 							zone: "battlefield",
@@ -1787,7 +1787,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "modify-pt",
-						object: "source",
+						subject: "source",
 						power: 1,
 						toughness: 1,
 						duration: "until-end-of-turn",
@@ -2153,7 +2153,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						},
 					},
 				],
-				effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
+				effects: [{ kind: "destroy", subject: { targetSlot: "target-1" } }],
 			},
 		]);
 	});
@@ -2197,7 +2197,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						},
 					},
 				],
-				effects: [{ kind: "destroy", object: { targetSlot: "target-1" } }],
+				effects: [{ kind: "destroy", subject: { targetSlot: "target-1" } }],
 			},
 		]);
 	});
@@ -2322,7 +2322,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "add counters",
-						object: "source",
+						subject: "source",
 						counter: "+1/+1",
 						amount: 1,
 					},
@@ -2475,7 +2475,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			effects: [
 				{
 					kind: "modify-pt",
-					object: { targetSlot: "target-1" },
+					subject: { targetSlot: "target-1" },
 					power: 3,
 					toughness: 3,
 					duration: "until-end-of-turn",
@@ -2519,7 +2519,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					{
 						kind: "grant-keyword",
 						keyword: "indestructible",
-						object: { targetSlot: "target-1" },
+						subject: { targetSlot: "target-1" },
 						duration: "until-end-of-turn",
 					},
 				],
@@ -2569,7 +2569,7 @@ describe("lowerForgeCard: one-object ChangeZone", () => {
 			effects: [
 				{
 					kind: "change-zone",
-					object: { targetSlot: "target-1" },
+					subject: { targetSlot: "target-1" },
 					from: "graveyard",
 					destination: { zone: "hand" },
 				},
@@ -2580,7 +2580,7 @@ describe("lowerForgeCard: one-object ChangeZone", () => {
 		if (!arcanis.ok) throw new Error("expected Arcanis to import");
 		expect(arcanis.card.abilityDefinitions.activated[1]).toMatchObject({
 			targets: [],
-			effects: [{ kind: "change-zone", object: "source" }],
+			effects: [{ kind: "change-zone", subject: "source" }],
 		});
 	});
 
@@ -2630,7 +2630,7 @@ describe("lowerForgeCard: one-object ChangeZone", () => {
 			effects: [
 				{
 					kind: "change-zone",
-					object: "source",
+					subject: "source",
 					from: "graveyard",
 					destination: {
 						zone: "battlefield",
@@ -2738,13 +2738,13 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 					effects: [
 						{
 							kind: "change-zone",
-							object: { targetSlot: "target-1" },
+							subject: { targetSlot: "target-1" },
 							from: "battlefield",
 							destination: { zone: "exile" },
 						},
 						{
 							kind: "change-zone",
-							object: {
+							subject: {
 								binding: "effect-result",
 								slot: "remembered-zone-change-object",
 							},

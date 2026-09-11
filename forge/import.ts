@@ -608,8 +608,8 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			continue;
 		}
 		const damageTarget =
-			effect.kind === "damage" && "targetSlot" in effect.recipient
-				? effect.recipient
+			effect.kind === "damage" && "targetSlot" in effect.subject
+				? effect.subject
 				: null;
 		const playerTarget =
 			(effect.kind === "gain-life" ||
@@ -648,9 +648,9 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
-			effect.object !== "source" &&
-			"targetSlot" in effect.object
-				? effect.object
+			effect.subject !== "source" &&
+			"targetSlot" in effect.subject
+				? effect.subject
 				: null;
 		// An effect on its own source declares no target to check.
 		if (
@@ -658,16 +658,16 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "add counters") &&
-			effect.object === "source"
+			effect.subject === "source"
 		)
 			continue;
 		if (
 			effect.kind === "change-zone" &&
-			effect.object !== "source" &&
-			"binding" in effect.object
+			effect.subject !== "source" &&
+			"binding" in effect.subject
 		)
 			continue;
-		const counterTarget = effect.kind === "counter" ? effect.spell : null;
+		const counterTarget = effect.kind === "counter" ? effect.subject : null;
 		const effectSlot =
 			damageTarget?.targetSlot ??
 			playerTarget?.targetSlot ??
@@ -1291,7 +1291,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			if (defined === undefined)
 				return {
 					kind: "damage",
-					recipient: { targetSlot: TARGET_SLOT },
+					subject: { targetSlot: TARGET_SLOT },
 					amount,
 				};
 			const player = parsePlayer(defined);
@@ -1301,7 +1301,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported Defined$ damage recipient",
 					where,
 				);
-			return { kind: "damage", recipient: { player }, amount };
+			return { kind: "damage", subject: { player }, amount };
 		}
 		case "destroy": {
 			const badParams = consumeParams(
@@ -1317,7 +1317,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			if (badParams) return badParams;
 			return {
 				kind: "destroy",
-				object: { targetSlot: TARGET_SLOT },
+				subject: { targetSlot: TARGET_SLOT },
 			};
 		}
 		case "tap":
@@ -1335,7 +1335,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			if (badParams) return badParams;
 			return {
 				kind: api,
-				object: { targetSlot: TARGET_SLOT },
+				subject: { targetSlot: TARGET_SLOT },
 			};
 		}
 		case "counter": {
@@ -1353,7 +1353,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			if (badParams) return badParams;
 			return {
 				kind: "counter",
-				spell: { targetSlot: TARGET_SLOT },
+				subject: { targetSlot: TARGET_SLOT },
 			};
 		}
 		case "changezone": {
@@ -1503,7 +1503,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"ForgetOtherTargets requires the RememberTargets chain",
 					where,
 				);
-			let object: "source" | TargetSlotRef;
+			let subject: "source" | TargetSlotRef;
 			if (validTargets !== undefined || defined === "Targeted") {
 				if (defined !== undefined && defined !== "Targeted")
 					return issue(
@@ -1511,7 +1511,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 						"targeted ChangeZone cannot name a different Defined$ subject",
 						where,
 					);
-				object = { targetSlot: TARGET_SLOT };
+				subject = { targetSlot: TARGET_SLOT };
 			} else {
 				// Forge defaults an omitted Defined$ to the source object. Accept the
 				// explicit spelling too, but reject every other non-target subject.
@@ -1521,11 +1521,11 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 						"unsupported Defined$ ChangeZone subject",
 						where,
 					);
-				object = "source";
+				subject = "source";
 			}
 			if (
 				rememberTargets === "True" &&
-				(object === "source" ||
+				(subject === "source" ||
 					origin !== "battlefield" ||
 					destination.zone !== "exile")
 			)
@@ -1544,7 +1544,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 						);
 					return {
 						kind: "change-zone",
-						object,
+						subject,
 						from: origin,
 						destination,
 						...(rememberTargets === "True"
@@ -1558,7 +1558,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 							"ChangeZone origin and destination must differ",
 							where,
 						);
-					return { kind: "change-zone", object, from: origin, destination };
+					return { kind: "change-zone", subject, from: origin, destination };
 				case "exile":
 					if (destination.zone === "exile")
 						return issue(
@@ -1566,7 +1566,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 							"ChangeZone origin and destination must differ",
 							where,
 						);
-					return { kind: "change-zone", object, from: origin, destination };
+					return { kind: "change-zone", subject, from: origin, destination };
 			}
 			throw new Error("unreachable ChangeZone origin");
 		}
@@ -1606,7 +1606,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					);
 				return {
 					kind: "add counters",
-					object: { targetSlot: TARGET_SLOT },
+					subject: { targetSlot: TARGET_SLOT },
 					counter,
 					amount,
 				};
@@ -1620,7 +1620,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported non-targeted PutCounter subject",
 					where,
 				);
-			return { kind: "add counters", object: "source", counter, amount };
+			return { kind: "add counters", subject: "source", counter, amount };
 		}
 		case "token": {
 			const badParams = consumeParams(
@@ -1727,7 +1727,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				if (keywordText === "Indestructible") {
 					return {
 						kind: "grant-keyword",
-						object: "source",
+						subject: "source",
 						keyword: "indestructible",
 						duration: "until-end-of-turn",
 					};
@@ -1735,7 +1735,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				assert(power !== null && toughness !== null);
 				return {
 					kind: "modify-pt",
-					object: "source",
+					subject: "source",
 					power,
 					toughness,
 					duration: "until-end-of-turn",
@@ -1745,7 +1745,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				if (keywordText === "Indestructible") {
 					return {
 						kind: "grant-keyword",
-						object: { targetSlot: TARGET_SLOT },
+						subject: { targetSlot: TARGET_SLOT },
 						keyword: "indestructible",
 						duration: "until-end-of-turn",
 					};
@@ -1753,7 +1753,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				assert(power !== null && toughness !== null);
 				return {
 					kind: "modify-pt",
-					object: { targetSlot: TARGET_SLOT },
+					subject: { targetSlot: TARGET_SLOT },
 					power,
 					toughness,
 					duration: "until-end-of-turn",
@@ -1963,7 +1963,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			assert(controller !== null, "controller must be supported");
 			effects.push({
 				kind: "change-zone",
-				object: {
+				subject: {
 					binding: "effect-result",
 					slot: pendingRememberedChange.resultSlot,
 				},
@@ -2116,7 +2116,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			);
 			effects.push({
 				kind: "may-play",
-				object: {
+				subject: {
 					binding: "effect-result",
 					slot: rememberedDig.resultSlot,
 				},
@@ -3023,7 +3023,7 @@ function lowerTrigger(
 				const reanimation = effects.every(
 					(effect) =>
 						effect.kind === "change-zone" &&
-						effect.object === "source" &&
+						effect.subject === "source" &&
 						effect.from === "graveyard" &&
 						effect.destination.zone === "battlefield",
 				);

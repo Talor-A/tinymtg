@@ -254,7 +254,7 @@ const TEST_CARD_2 = defineCard({
 		effects: [
 			{
 				kind: "modify-pt",
-				object: { targetSlot: "target-1" },
+				subject: { targetSlot: "target-1" },
 				power: 3,
 				toughness: 3,
 				duration: "until-end-of-turn",
