@@ -435,7 +435,8 @@ export const CHAINS_OF_MEPHISTOPHELES = defineCard({
 					location.step.kind === "draw" &&
 					activePlayer(ctx.state) === ev.player;
 				const isFirstDrawOfDrawStep =
-					inOwnDrawStep && ctx.state.players[ev.player].drawnInDrawStep === 0;
+					inOwnDrawStep &&
+					ctx.state.players[ev.player].stats.drawn.inDrawStep === 0;
 				// except the first draw of the draw step...
 				return !isFirstDrawOfDrawStep;
 			},

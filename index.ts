@@ -1579,14 +1579,20 @@ interface PlayerState {
 	graveyard: ObjectId[];
 	exile: ObjectId[];
 	counters: PlayerCounterBag;
-	/** Turn-scoped counters, e.g. cards drawn in the draw step (Chains of Mephistopheles). */
-	drawnInDrawStep: number;
-	/** Cards this player has drawn during the current turn, from any zone or effect. */
-	drawnThisTurn: number;
-	/** Set when the player has attempted to draw from an empty library since the last SBA check (CR 704.5b). */
-	drewFromEmptyLibrary: boolean;
+	stats: {
+		drawn: {
+			inDrawStep: number;
+			thisTurn: number;
+			fromEmptyLibrary: boolean;
+		};
+		attacks: {
+			attackedWithCreatures: number;
+		};
+		lands: {
+			played: number;
+		};
+	};
 	manaPool: ManaPool;
-	landsPlayed: number;
 	lost: boolean;
 	won: boolean;
 }
@@ -3143,11 +3149,20 @@ const newPlayerState = (id: PlayerId): PlayerState => ({
 	hand: [],
 	graveyard: [],
 	exile: [],
-	drawnInDrawStep: 0,
-	drawnThisTurn: 0,
-	drewFromEmptyLibrary: false,
+	stats: {
+		drawn: {
+			thisTurn: 0,
+			inDrawStep: 0,
+			fromEmptyLibrary: false,
+		},
+		attacks: {
+			attackedWithCreatures: 0,
+		},
+		lands: {
+			played: 0,
+		},
+	},
 	manaPool: { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 },
-	landsPlayed: 0,
 	lost: false,
 	won: false,
 	counters: {},
@@ -3997,7 +4012,7 @@ function buildPlayerView(
 			exile: player.exile.map((objectId) =>
 				nonbattlefieldSnapshot(objectId, "exile"),
 			),
-			landsPlayed: player.landsPlayed,
+			landsPlayed: player.stats.lands.played,
 			lost: player.lost,
 			won: player.won,
 		};
@@ -5087,7 +5102,7 @@ function checkStateBasedActionsIn(
 			//  704.5b. If a player attempted to draw a card from a library with no
 			// cards in it since the last time state-based actions were checked, that
 			// player loses the game.
-			if (!p.lost && !p.won && p.drewFromEmptyLibrary) {
+			if (!p.lost && !p.won && p.stats.drawn.fromEmptyLibrary) {
 				performIn(
 					engine,
 					state,
@@ -5100,7 +5115,7 @@ function checkStateBasedActionsIn(
 					newScope(),
 					0,
 				);
-				p.drewFromEmptyLibrary = false;
+				p.stats.drawn.fromEmptyLibrary = false;
 				if (p.lost) acted = true;
 			}
 			// 704.5c. If a player has ten or more poison counters, that player loses
@@ -5500,7 +5515,7 @@ function executeIn(
 			const top = p.library[p.library.length - 1];
 			if (top === undefined) {
 				// CR 704.5b: queue a state-based loss, don't resolve it here.
-				p.drewFromEmptyLibrary = true;
+				p.stats.drawn.fromEmptyLibrary = true;
 				log(
 					state,
 					`${"  ".repeat(depth)}P${ev.player} tried to draw from an empty library`,
@@ -5508,12 +5523,12 @@ function executeIn(
 				happened = false;
 				break;
 			}
-			p.drawnThisTurn++;
+			p.stats.drawn.thisTurn++;
 			if (
 				currentStepKind(state) === "draw" &&
 				activePlayer(state) === ev.player
 			)
-				p.drawnInDrawStep++;
+				p.stats.drawn.inDrawStep++;
 			// Drawing *is* a zone change, so zone-change replacements get a look too.
 			childResults.push(
 				performIn(
@@ -6490,7 +6505,9 @@ function triggerMatches(
 			// An `nth` condition fires once: only on the draw that brings
 			// the turn's count to exactly `nth`.
 			if (qualifier !== "except-first-in-draw-step")
-				return read.state.players[ev.player].drawnThisTurn === qualifier.nth;
+				return (
+					read.state.players[ev.player].stats.drawn.thisTurn === qualifier.nth
+				);
 			// `drawnInDrawStep` only counts a player's own draws during their
 			// own draw step — the same guard the increment uses — and it is stale
 			// outside that step, so a draw elsewhere on the turn (an opponent's
@@ -6500,7 +6517,7 @@ function triggerMatches(
 				activePlayer(read.state) !== ev.player
 			)
 				return true;
-			return read.state.players[ev.player].drawnInDrawStep > 1;
+			return read.state.players[ev.player].stats.drawn.inDrawStep > 1;
 		}
 
 		case "damage":
@@ -8339,8 +8356,6 @@ function castableSpells(
 ): CastAction[] {
 	const castable: CastAction[] = [];
 	for (const object of state.objects.values()) {
-		// CR 704.5d removes nonbattlefield tokens; they are never castable in the
-		// interval before the next state-based action check.
 		if (object.kind !== "card") continue;
 		if (canCast(object, state, read, player)) {
 			castable.push({ kind: "cast", card: object.id });
@@ -8396,7 +8411,7 @@ function canPlayOrdinaryLand(
 		player === activePlayer(state) &&
 		location?.kind === "mainPhase" &&
 		state.stack.length === 0 &&
-		state.players[player].landsPlayed < landPlayAllowance(read, player)
+		state.players[player].stats.lands.played < landPlayAllowance(read, player)
 	);
 }
 
@@ -9330,7 +9345,7 @@ function playLandIn(
 	}
 	const read = createReadContext(engine, state);
 	const allowance = landPlayAllowance(read, priorityPlayer);
-	if (state.players[priorityPlayer].landsPlayed >= allowance) {
+	if (state.players[priorityPlayer].stats.lands.played >= allowance) {
 		throw new IllegalLandPlayError(
 			`the ${allowance}-land-per-turn allowance is exhausted`,
 		);
@@ -9370,7 +9385,7 @@ function playLandIn(
 		newScope(),
 		0,
 	);
-	state.players[priorityPlayer].landsPlayed++;
+	state.players[priorityPlayer].stats.lands.played++;
 	state.revision++;
 }
 
@@ -9494,7 +9509,7 @@ function priority(
  * ------------------------------------------------------------------ */
 function performPreGameActions(
 	state: GameState,
-	choices: AnyChoiceController,
+	__choices: AnyChoiceController,
 	step: PreGameStepKind,
 ): void {
 	switch (step) {
@@ -9532,7 +9547,7 @@ function performTurnBasedActions(
 			);
 			break;
 		case "draw":
-			state.players[active].drawnInDrawStep = 0;
+			state.players[active].stats.drawn.inDrawStep = 0;
 			performIn(
 				engine,
 				state,
@@ -9926,10 +9941,10 @@ function advanceIn(
 				// The turn is now current even though no phase of it has begun,
 				// so "whose turn is it" already answers with its player.
 				scheduler.progress = { kind: "inTurn", turn, location: null };
-				state.players[turn.player].landsPlayed = 0;
+				state.players[turn.player].stats.lands.played = 0;
 				// A turn boundary closes every "...in a turn" draw count, for both
 				// players: an opponent can draw during your turn.
-				for (const p of state.players) p.drawnThisTurn = 0;
+				for (const p of state.players) p.stats.drawn.thisTurn = 0;
 				scheduler.remainingSteps = [];
 				scheduler.nextAction = { kind: "advancePhase", turn };
 				continue;

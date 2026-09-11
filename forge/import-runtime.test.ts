@@ -942,13 +942,13 @@ describe("forge-import runtime: statics and replacements", () => {
 		engine.spawnPermanent(state, "rt-exploration", ALICE);
 		const land = engine.spawnCard(state, "forest", ALICE, "hand");
 
-		state.players[ALICE].landsPlayed = 1;
+		state.players[ALICE].stats.lands.played = 1;
 		expect(engine.getObservableActions(state, ALICE)).toContainEqual({
 			kind: "play land",
 			card: land.id,
 		});
 
-		state.players[ALICE].landsPlayed = 2;
+		state.players[ALICE].stats.lands.played = 2;
 		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual({
 			kind: "play land",
 			card: land.id,

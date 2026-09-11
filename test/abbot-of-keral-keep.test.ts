@@ -178,7 +178,7 @@ describe("Abbot of Keral Keep", () => {
 		);
 
 		engine.executeLandAction(state, ALICE, landAction(exiled), passingAgents());
-		expect(state.players[ALICE].landsPlayed).toBe(1);
+		expect(state.players[ALICE].stats.lands.played).toBe(1);
 		const forest = state.battlefield
 			.map((id) => permanent(state, id))
 			.find(
