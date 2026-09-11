@@ -70,7 +70,7 @@ describe("Wrenn's Resolve", () => {
 			effects: [
 				{
 					kind: "exile-top",
-					player: "you",
+					subject: "you",
 					amount: 2,
 					resultSlot: "remembered-exile-cards",
 				},

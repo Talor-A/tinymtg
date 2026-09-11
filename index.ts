@@ -2102,6 +2102,11 @@ export interface TargetSlotRef {
 	targetSlot: string;
 }
 
+/** One player an effect identifies symbolically before resolution. */
+export type EffectPlayerSubject<Player extends TriggerEffectPlayer> =
+	| Player
+	| TargetSlotRef;
+
 export interface EffectResultObjectRef {
 	binding: "effect-result";
 	slot: string;
@@ -2137,23 +2142,35 @@ export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
 type ExileTopEffectDef<Player extends TriggerEffectPlayer> = {
 	kind: "exile-top";
 	/** A relative player, or the player bound to a target slot. */
-	player: Player | TargetSlotRef;
+	subject: EffectPlayerSubject<Player>;
 	amount: number;
 	/** Optionally bind the cards that actually reached exile, in order. */
 	resultSlot?: string;
 };
 
+type EachPlayerDrawEffectDef = {
+	kind: "draw";
+	subjects: "each-player";
+	amount: number;
+};
+
 export type EffectDef<Player extends TriggerEffectPlayer> =
 	| {
-			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
+			kind: "gain-life" | "lose-life" | "scry" | "surveil" | "mill";
 			/** A relative player, or the player bound to a target slot. */
-			player: Player | TargetSlotRef;
+			subject: EffectPlayerSubject<Player>;
 			amount: number;
 	  }
+	| {
+			kind: "draw";
+			subject: EffectPlayerSubject<Player>;
+			amount: number;
+	  }
+	| EachPlayerDrawEffectDef
 	| ExileTopEffectDef<Player>
 	| {
 			kind: "choose-from-top";
-			player: Player;
+			subject: Player;
 			amount: number;
 			keep: number;
 	  }
@@ -2161,7 +2178,7 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			kind: "discard";
 			selector: "any" | "random";
 			amount: number;
-			player: Player;
+			subject: Player;
 	  }
 	| {
 			kind: "damage";
@@ -2182,7 +2199,7 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 	| {
 			kind: "sacrifice";
 			/** A relative player, or the player bound to a target slot. */
-			player: Player | TargetSlotRef;
+			subject: EffectPlayerSubject<Player>;
 			predicate: ObjectPredicateDef;
 			amount: 1;
 	  }
@@ -2214,7 +2231,7 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 	  }
 	| {
 			kind: "add-mana";
-			player: "you";
+			subject: "you";
 			mana: ManaAmount;
 	  }
 	| {
@@ -7118,14 +7135,30 @@ function resolveEffects(
 				resolveEffects(engine, state, choices, item, effect.effects, scope);
 			continue;
 		}
+		if (effect.kind === "draw" && "subjects" in effect) {
+			assert(effect.subjects === "each-player");
+			const active = activePlayer(state);
+			assertDefined(active, "each-player draw must resolve during a turn");
+			for (const player of [active, (1 - active) as PlayerId]) {
+				performIn(
+					engine,
+					state,
+					{ kind: "draw cards", player, amount: effect.amount },
+					choices,
+					scope,
+					0,
+				);
+			}
+			continue;
+		}
 		let bound: EntityRef | null = null;
 		const damageTarget =
 			effect.kind === "damage" && "targetSlot" in effect.recipient
 				? effect.recipient
 				: null;
 		const sacrificeTarget =
-			effect.kind === "sacrifice" && typeof effect.player !== "string"
-				? effect.player
+			effect.kind === "sacrifice" && typeof effect.subject !== "string"
+				? effect.subject
 				: null;
 		const playerTarget =
 			(effect.kind === "gain-life" ||
@@ -7135,8 +7168,9 @@ function resolveEffects(
 				effect.kind === "surveil" ||
 				effect.kind === "mill" ||
 				effect.kind === "exile-top") &&
-			typeof effect.player !== "string"
-				? effect.player
+			"subject" in effect &&
+			typeof effect.subject !== "string"
+				? effect.subject
 				: null;
 		const mayPlayTargetSlot =
 			effect.kind === "may-play" && effect.object.binding === "target"
@@ -7185,8 +7219,8 @@ function resolveEffects(
 				"only sacrificing one permanent is implemented",
 			);
 			const sacrificingPlayer =
-				typeof effect.player === "string"
-					? relativeEffectPlayer(item, effect.player)
+				typeof effect.subject === "string"
+					? relativeEffectPlayer(item, effect.subject)
 					: (() => {
 							assert(
 								bound?.type === "player",
@@ -7445,7 +7479,10 @@ function effectToEvent(
 	engine: Engine,
 	state: GameState,
 	item: ResolutionSource,
-	effect: Exclude<EffectDef<TriggerEffectPlayer>, { kind: "may" }>,
+	effect: Exclude<
+		EffectDef<TriggerEffectPlayer>,
+		{ kind: "may" } | EachPlayerDrawEffectDef
+	>,
 	subject: EntityRef | null,
 ): GameEvent {
 	/**
@@ -7464,50 +7501,50 @@ function effectToEvent(
 		case "gain-life":
 			return {
 				kind: "gain life",
-				player: effectPlayer(effect.player),
+				player: effectPlayer(effect.subject),
 				amount: effect.amount,
 			};
 		case "lose-life":
 			return {
 				kind: "lose life",
-				player: effectPlayer(effect.player),
+				player: effectPlayer(effect.subject),
 				amount: effect.amount,
 			};
 		case "draw":
 			return {
 				kind: "draw cards",
-				player: effectPlayer(effect.player),
+				player: effectPlayer(effect.subject),
 				amount: effect.amount,
 			};
 		case "scry":
 			return {
 				kind: "scry",
-				player: effectPlayer(effect.player),
+				player: effectPlayer(effect.subject),
 				amount: effect.amount,
 			};
 		case "surveil":
 			return {
 				kind: "surveil",
-				player: effectPlayer(effect.player),
+				player: effectPlayer(effect.subject),
 				amount: effect.amount,
 			};
 		case "choose-from-top":
 			return {
 				kind: "choose from top",
-				player: relativeEffectPlayer(item, effect.player),
+				player: relativeEffectPlayer(item, effect.subject),
 				amount: effect.amount,
 				keep: effect.keep,
 			};
 		case "mill":
 			return {
 				kind: "mill",
-				player: effectPlayer(effect.player),
+				player: effectPlayer(effect.subject),
 				amount: effect.amount,
 			};
 		case "exile-top":
 			return {
 				kind: "exile top",
-				player: effectPlayer(effect.player),
+				player: effectPlayer(effect.subject),
 				amount: effect.amount,
 			};
 		case "create-token":
@@ -7529,7 +7566,7 @@ function effectToEvent(
 			if (effect.selector === "any") {
 				return {
 					kind: "discard",
-					player: relativeEffectPlayer(item, effect.player),
+					player: relativeEffectPlayer(item, effect.subject),
 					cards: { kind: "any" },
 				};
 			}
@@ -7659,7 +7696,7 @@ function effectToEvent(
 		case "add-mana":
 			return {
 				kind: "add mana",
-				player: relativeEffectPlayer(item, effect.player),
+				player: relativeEffectPlayer(item, effect.subject),
 				source: item.source,
 				mana: effect.mana,
 			};
@@ -7809,7 +7846,7 @@ function requiredTargetDefinition(
 			for (const inner of effect.effects) check(inner);
 			return;
 		}
-		if (effect.kind === "sacrifice" && typeof effect.player === "string") {
+		if (effect.kind === "sacrifice" && typeof effect.subject === "string") {
 			assert(
 				effect.amount === 1,
 				"only sacrificing one permanent is implemented",
@@ -7817,6 +7854,7 @@ function requiredTargetDefinition(
 			return;
 		}
 		if (effect.kind === "choose-from-top") return;
+		if (effect.kind === "draw" && "subjects" in effect) return;
 		if (
 			effect.kind === "change-zone" &&
 			effect.object !== "source" &&
@@ -7869,7 +7907,8 @@ function requiredTargetDefinition(
 				effect.kind === "surveil" ||
 				effect.kind === "mill" ||
 				effect.kind === "exile-top") &&
-			typeof effect.player === "string"
+			"subject" in effect &&
+			typeof effect.subject === "string"
 		)
 			return;
 		// An effect on its own source declares no target, so there is no slot to
@@ -7908,8 +7947,8 @@ function requiredTargetDefinition(
 		)
 			return;
 		const sacrificeTarget =
-			effect.kind === "sacrifice" && typeof effect.player !== "string"
-				? effect.player
+			effect.kind === "sacrifice" && typeof effect.subject !== "string"
+				? effect.subject
 				: null;
 		const playerTarget =
 			(effect.kind === "gain-life" ||
@@ -7919,8 +7958,9 @@ function requiredTargetDefinition(
 				effect.kind === "surveil" ||
 				effect.kind === "mill" ||
 				effect.kind === "exile-top") &&
-			typeof effect.player !== "string"
-				? effect.player
+			"subject" in effect &&
+			typeof effect.subject !== "string"
+				? effect.subject
 				: null;
 		const mayPlayTargetSlot =
 			effect.kind === "may-play" && effect.object.binding === "target"
@@ -8642,7 +8682,7 @@ function activateAbilityIn(
 					engine,
 					state,
 					context,
-					{ kind: "add-mana", player: "you", mana: { ...chosen } },
+					{ kind: "add-mana", subject: "you", mana: { ...chosen } },
 					null,
 				),
 			];

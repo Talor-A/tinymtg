@@ -27,7 +27,7 @@ export const CLUE_CARD = defineCard({
 				},
 			},
 			targets: [],
-			effects: [{ kind: "draw", player: "you", amount: 1 }],
+			effects: [{ kind: "draw", subject: "you", amount: 1 }],
 		},
 	],
 });

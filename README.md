@@ -232,6 +232,18 @@ and optional sacrifices are not implemented. A spell can have one additional
 cost that sacrifices a creature. Deck construction, opening hands, mulligans,
 and alternative activation costs are also not implemented yet.
 
+Effect definitions call the entity they act on a `subject`. A singular player
+subject can be relative (`you`, `opponent`, or `triggering-player`) or refer to
+a declared target slot. `target` remains a rules term: it describes how an
+ability chooses and binds an entity, not what an effect does to that entity.
+After resolution identifies a player, the concrete event records that player's
+ID in its `player` field.
+
+Plural effects use `subjects` and represent one game instruction. For example,
+Vision Skeins lowers to one draw effect with `subjects: "each-player"`. It does
+not lower to separate controller and opponent effects. The resolver applies
+that instruction in active-player, then nonactive-player order (CR 121.2c).
+
 ### Targeting
 
 Spells, activated abilities, and triggered abilities may each declare at most

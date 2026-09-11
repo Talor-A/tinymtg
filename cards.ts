@@ -106,7 +106,7 @@ export const ABBOT_OF_KERAL_KEEP = defineCard({
 			effects: [
 				{
 					kind: "exile-top",
-					player: "you",
+					subject: "you",
 					amount: 1,
 					resultSlot: "exiled-card",
 				},

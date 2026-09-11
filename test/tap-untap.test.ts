@@ -34,14 +34,14 @@ const TEST_CARD_1 = defineCard({
 			text: "Whenever Tap Observer becomes tapped, you gain 1 life.",
 			condition: { kind: "tap", predicate: { kind: "self" } },
 			targets: [],
-			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 		},
 		{
 			id: "untap-self",
 			text: "Whenever Tap Observer becomes untapped, you gain 2 life.",
 			condition: { kind: "untap", predicate: { kind: "self" } },
 			targets: [],
-			effects: [{ kind: "gain-life", player: "you", amount: 2 }],
+			effects: [{ kind: "gain-life", subject: "you", amount: 2 }],
 		},
 	],
 });
@@ -62,7 +62,7 @@ const TEST_CARD_2 = defineCard({
 				predicate: { kind: "color", color: "r" },
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 		},
 		{
 			id: "green-tapped",
@@ -72,7 +72,7 @@ const TEST_CARD_2 = defineCard({
 				predicate: { kind: "color", color: "g" },
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 		},
 	],
 });

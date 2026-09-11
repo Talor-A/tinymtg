@@ -44,7 +44,7 @@ const TEST_CARD_1 = defineCard({
 			effects: [
 				{
 					kind: "add-mana",
-					player: "you",
+					subject: "you",
 					mana: { w: 1, u: 0, b: 0, r: 0, g: 0 },
 				},
 			],
@@ -118,7 +118,7 @@ const TEST_CARD_4 = defineCard({
 				},
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 		},
 	],
 });
@@ -189,7 +189,7 @@ const TEST_CARD_9 = defineCard({
 				},
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 		},
 		{
 			id: "noncreature",
@@ -203,7 +203,7 @@ const TEST_CARD_9 = defineCard({
 				},
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 		},
 	],
 });

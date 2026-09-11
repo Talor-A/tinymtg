@@ -152,7 +152,7 @@ const TEST_CARD_4 = defineCard({
 			],
 			effects: [
 				{ kind: "destroy", object: { targetSlot: "target-1" } },
-				{ kind: "gain-life", player: "you", amount: 3 },
+				{ kind: "gain-life", subject: "you", amount: 3 },
 			],
 		},
 	],
@@ -724,7 +724,7 @@ describe("captured stack items", () => {
 		const definition = engine.getAbilityDefinition("activated", ability);
 		assertActivated(definition);
 		definition.targets.length = 0;
-		definition.effects.push({ kind: "gain-life", player: "you", amount: 10 });
+		definition.effects.push({ kind: "gain-life", subject: "you", amount: 10 });
 
 		const item = state.stack[0];
 		expect(item?.kind).toBe("activated ability");

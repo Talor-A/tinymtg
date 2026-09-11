@@ -32,7 +32,7 @@ const TEST_CARD_1 = defineCard({
 		id: "test-exile-top-one-spell",
 		text: "Exile the top card of your library.",
 		targets: [],
-		effects: [{ kind: "exile-top", player: "you", amount: 1 }],
+		effects: [{ kind: "exile-top", subject: "you", amount: 1 }],
 	},
 });
 
@@ -46,7 +46,7 @@ const TEST_CARD_2 = defineCard({
 		id: "test-exile-top-opponent-spell",
 		text: "Exile the top two cards of an opponent's library.",
 		targets: [],
-		effects: [{ kind: "exile-top", player: "opponent", amount: 2 }],
+		effects: [{ kind: "exile-top", subject: "opponent", amount: 2 }],
 	},
 });
 
@@ -63,7 +63,7 @@ const TEST_CARD_3 = defineCard({
 		effects: [
 			{
 				kind: "exile-top",
-				player: "you",
+				subject: "you",
 				amount: 2,
 				resultSlot: "exiled-cards",
 			},

@@ -76,7 +76,7 @@ const TEST_CARD_2 = defineCard({
 			id: "intrinsic-mana-b",
 			text: "Add {B}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [{ kind: "add-mana", player: "you", mana: { b: 1 } }],
+			effects: [{ kind: "add-mana", subject: "you", mana: { b: 1 } }],
 		},
 	],
 });

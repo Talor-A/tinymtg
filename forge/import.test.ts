@@ -74,7 +74,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						},
 					},
 					targets: [],
-					effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+					effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 				},
 			]);
 		},
@@ -114,7 +114,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "add-mana",
-						player: "you",
+						subject: "you",
 						mana: { w: 1, u: 1, b: 0, r: 0, g: 0, c: 0 },
 					},
 				],
@@ -135,7 +135,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "add-mana",
-						player: "you",
+						subject: "you",
 						mana: { w: 1, u: 1, b: 1, r: 1, g: 1, c: 0 },
 					},
 				],
@@ -156,7 +156,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "add-mana",
-						player: "you",
+						subject: "you",
 						mana: { w: 0, u: 0, b: 0, r: 0, g: 0, c: 1 },
 					},
 				],
@@ -169,7 +169,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		if (!result.ok) throw new Error("expected Temple of Epiphany to import");
 		expect(result.card.entersTapped).toBe(true);
 		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
-			{ kind: "scry", player: "you", amount: 1 },
+			{ kind: "scry", subject: "you", amount: 1 },
 		]);
 		expect(result.card.abilityDefinitions.activated).toEqual([
 			{
@@ -202,7 +202,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					effects: [
 						{
 							kind: "add-mana",
-							player: "you",
+							subject: "you",
 							mana: expect.objectContaining({ [color]: 1 }),
 						},
 					],
@@ -223,7 +223,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "add-mana",
-						player: "you",
+						subject: "you",
 						mana: expect.objectContaining({ g: 1 }),
 					},
 				],
@@ -505,20 +505,16 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		const result = importFixture("r/revitalize");
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "gain-life", player: "you", amount: 3 },
-			{ kind: "draw", player: "you", amount: 1 },
+			{ kind: "gain-life", subject: "you", amount: 3 },
+			{ kind: "draw", subject: "you", amount: 1 },
 		]);
 	});
 
-	test("Vision Skeins fans Defined$ Player out into one draw per player", () => {
+	test("Vision Skeins preserves Defined$ Player as one plural effect", () => {
 		const result = importFixture("v/vision_skeins");
 		if (!result.ok) throw new Error("expected ok");
-		// Forge's `Defined$ Player` names every player at once; the engine's
-		// player field holds one, so the lowering spells the instruction once
-		// for each side of the table.
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "draw", player: "you", amount: 2 },
-			{ kind: "draw", player: "opponent", amount: 2 },
+			{ kind: "draw", subjects: "each-player", amount: 2 },
 		]);
 	});
 
@@ -526,8 +522,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		const result = importFixture("p/preordain");
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "scry", player: "you", amount: 2 },
-			{ kind: "draw", player: "you", amount: 1 },
+			{ kind: "scry", subject: "you", amount: 2 },
+			{ kind: "draw", subject: "you", amount: 1 },
 		]);
 	});
 
@@ -569,7 +565,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			expect(result.card.spell?.effects).toEqual([
 				{
 					kind: "choose-from-top",
-					player: "you",
+					subject: "you",
 					amount: expected.amount,
 					keep: expected.keep,
 				},
@@ -594,7 +590,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			effects: [
 				{
 					kind: "exile-top",
-					player: "you",
+					subject: "you",
 					amount: 2,
 					resultSlot: "remembered-exile-cards",
 				},
@@ -775,7 +771,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(defaulted.ok).toBe(true);
 		if (!defaulted.ok) return;
 		expect(defaulted.card.spell?.effects).toEqual([
-			{ kind: "scry", player: "you", amount: 1 },
+			{ kind: "scry", subject: "you", amount: 1 },
 		]);
 
 		const dynamic = importText(
@@ -796,7 +792,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "surveil", player: "you", amount: 2 },
+			{ kind: "surveil", subject: "you", amount: 2 },
 		]);
 
 		const defaulted = importText(
@@ -805,7 +801,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(defaulted.ok).toBe(true);
 		if (!defaulted.ok) return;
 		expect(defaulted.card.spell?.effects).toEqual([
-			{ kind: "surveil", player: "you", amount: 1 },
+			{ kind: "surveil", subject: "you", amount: 1 },
 		]);
 	});
 
@@ -813,7 +809,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		const result = importFixture("f/flayed_one");
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
-			{ kind: "mill", player: "you", amount: 3 },
+			{ kind: "mill", subject: "you", amount: 3 },
 		]);
 
 		const defaulted = importText(
@@ -822,7 +818,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(defaulted.ok).toBe(true);
 		if (!defaulted.ok) return;
 		expect(defaulted.card.spell?.effects).toEqual([
-			{ kind: "mill", player: "opponent", amount: 1 },
+			{ kind: "mill", subject: "opponent", amount: 1 },
 		]);
 	});
 
@@ -842,8 +838,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				},
 				targets: [],
 				effects: [
-					{ kind: "mill", player: "you", amount: 2 },
-					{ kind: "gain-life", player: "you", amount: 2 },
+					{ kind: "mill", subject: "you", amount: 2 },
+					{ kind: "gain-life", subject: "you", amount: 2 },
 				],
 			},
 		]);
@@ -873,7 +869,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					predicate: { kind: "self" },
 				},
 				targets: [],
-				effects: [{ kind: "draw", player: "you", amount: 1 }],
+				effects: [{ kind: "draw", subject: "you", amount: 1 }],
 			},
 		]);
 	});
@@ -911,7 +907,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "lose-life",
-						player: { targetSlot: "target-1" },
+						subject: { targetSlot: "target-1" },
 						amount: 3,
 					},
 				],
@@ -943,8 +939,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				},
 				targets: [],
 				effects: [
-					{ kind: "lose-life", player: "opponent", amount: 2 },
-					{ kind: "gain-life", player: "you", amount: 2 },
+					{ kind: "lose-life", subject: "opponent", amount: 2 },
+					{ kind: "gain-life", subject: "you", amount: 2 },
 				],
 			},
 		]);
@@ -956,7 +952,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.spell?.targets).toHaveLength(1);
 		expect(result.card.spell?.effects).toEqual([
 			{ kind: "damage", recipient: { targetSlot: "target-1" }, amount: 2 },
-			{ kind: "gain-life", player: "you", amount: 2 },
+			{ kind: "gain-life", subject: "you", amount: 2 },
 		]);
 	});
 
@@ -1034,7 +1030,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					predicate: { kind: "self" },
 				},
 				targets: [],
-				effects: [{ kind: "gain-life", player: "you", amount: 3 }],
+				effects: [{ kind: "gain-life", subject: "you", amount: 3 }],
 			},
 		]);
 	});
@@ -1054,8 +1050,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				},
 				targets: [],
 				effects: [
-					{ kind: "gain-life", player: "you", amount: 1 },
-					{ kind: "draw", player: "you", amount: 1 },
+					{ kind: "gain-life", subject: "you", amount: 1 },
+					{ kind: "draw", subject: "you", amount: 1 },
 				],
 			},
 		]);
@@ -1088,7 +1084,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					{
 						kind: "may",
 						decider: "you",
-						effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+						effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 					},
 				],
 			},
@@ -1109,7 +1105,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						kind: "discard",
 						selector: "any",
 						amount: 1,
-						player: "triggering-player",
+						subject: "triggering-player",
 					},
 				],
 			},
@@ -1120,8 +1116,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		const result = importFixture("s/seizan_perverter_of_truth");
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
-			{ kind: "lose-life", player: "triggering-player", amount: 2 },
-			{ kind: "draw", player: "triggering-player", amount: 2 },
+			{ kind: "lose-life", subject: "triggering-player", amount: 2 },
+			{ kind: "draw", subject: "triggering-player", amount: 2 },
 		]);
 	});
 
@@ -1202,7 +1198,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				text: expect.any(String),
 				condition: { kind: "declare attackers", predicate: { kind: "self" } },
 				targets: [],
-				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
+				effects: [{ kind: "gain-life", subject: "you", amount: 2 }],
 			},
 		]);
 	});
@@ -1221,7 +1217,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					combat: true,
 				},
 				targets: [],
-				effects: [{ kind: "draw", player: "you", amount: 1 }],
+				effects: [{ kind: "draw", subject: "you", amount: 1 }],
 			},
 		]);
 	});
@@ -1245,7 +1241,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					predicate: { kind: "type", type: "creature" },
 				},
 				targets: [],
-				effects: [{ kind: "draw", player: "you", amount: 1 }],
+				effects: [{ kind: "draw", subject: "you", amount: 1 }],
 			},
 		]);
 	});
@@ -1352,7 +1348,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				},
 				targets: [],
-				effects: [{ kind: "gain-life", player: "you", amount: 2 }],
+				effects: [{ kind: "gain-life", subject: "you", amount: 2 }],
 			},
 		]);
 	});
@@ -1442,7 +1438,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					qualifier: "except-first-in-draw-step",
 				},
 				targets: [],
-				effects: [{ kind: "draw", player: "you", amount: 1 }],
+				effects: [{ kind: "draw", subject: "you", amount: 1 }],
 			},
 		]);
 	});
@@ -1497,8 +1493,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				},
 				targets: [],
 				effects: [
-					{ kind: "lose-life", player: "triggering-player", amount: 2 },
-					{ kind: "gain-life", player: "you", amount: 2 },
+					{ kind: "lose-life", subject: "triggering-player", amount: 2 },
+					{ kind: "gain-life", subject: "you", amount: 2 },
 				],
 			},
 		]);
@@ -1515,7 +1511,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				text: expect.any(String),
 				condition: { kind: "cast", player: "opponent" },
 				targets: [],
-				effects: [{ kind: "draw", player: "triggering-player", amount: 7 }],
+				effects: [{ kind: "draw", subject: "triggering-player", amount: 7 }],
 			},
 		]);
 	});
@@ -1557,7 +1553,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					predicate: { kind: "color", color: "b" },
 				},
 				targets: [],
-				effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+				effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 			},
 			{
 				id: "TrigGainLife",
@@ -1575,7 +1571,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				},
 				targets: [],
-				effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+				effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 			},
 		]);
 	});
@@ -1716,7 +1712,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					predicate: { kind: "self" },
 				},
 				targets: [],
-				effects: [{ kind: "draw", player: "you", amount: 1 }],
+				effects: [{ kind: "draw", subject: "you", amount: 1 }],
 			},
 		]);
 	});
@@ -1989,7 +1985,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					discard: { amount: 1 },
 				},
 				targets: [],
-				effects: [{ kind: "draw", player: "you", amount: 1 }],
+				effects: [{ kind: "draw", subject: "you", amount: 1 }],
 			},
 		]);
 	});
@@ -2043,7 +2039,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				sacrifice: { predicate: { kind: "self" }, amount: 1 },
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", player: "you", amount: 3 }],
+			effects: [{ kind: "gain-life", subject: "you", amount: 3 }],
 		});
 		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
 			{
@@ -2092,7 +2088,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				text: expect.any(String),
 				cost: { mana: "zero", tapSelf: true },
 				targets: [],
-				effects: [{ kind: "gain-life", player: "you", amount: 1 }],
+				effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
 			},
 		]);
 	});
@@ -2114,7 +2110,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				},
 				targets: [],
-				effects: [{ kind: "scry", player: "you", amount: 1 }],
+				effects: [{ kind: "scry", subject: "you", amount: 1 }],
 			},
 		]);
 	});
@@ -2380,8 +2376,8 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				cost: { mana: "zero", tapSelf: true },
 				targets: [],
 				effects: [
-					{ kind: "draw", player: "you", amount: 1 },
-					{ kind: "discard", selector: "any", amount: 1, player: "you" },
+					{ kind: "draw", subject: "you", amount: 1 },
+					{ kind: "discard", selector: "any", amount: 1, subject: "you" },
 				],
 			},
 		]);
@@ -2399,7 +2395,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				amount: 1,
 			},
 			targets: [],
-			effects: [{ kind: "draw", player: "you", amount: 2 }],
+			effects: [{ kind: "draw", subject: "you", amount: 2 }],
 		});
 	});
 
@@ -2420,7 +2416,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			effects: [
 				{
 					kind: "sacrifice",
-					player: { targetSlot: "target-1" },
+					subject: { targetSlot: "target-1" },
 					predicate: { kind: "type", type: "creature" },
 					amount: 1,
 				},
@@ -3067,8 +3063,8 @@ describe("lowerForgeCard: required negative mutations", () => {
 		// The head reads its operand from the ability's own ValidTgts$ and the
 		// continuation from Defined$ Targeted; both name the same slot.
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "draw", player: { targetSlot: "target-1" }, amount: 2 },
-			{ kind: "lose-life", player: { targetSlot: "target-1" }, amount: 2 },
+			{ kind: "draw", subject: { targetSlot: "target-1" }, amount: 2 },
+			{ kind: "lose-life", subject: { targetSlot: "target-1" }, amount: 2 },
 		]);
 	});
 
@@ -3078,7 +3074,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 		if (!result.ok) return;
 		expect(result.card.spell?.effects[0]).toEqual({
 			kind: "gain-life",
-			player: "you",
+			subject: "you",
 			amount: 3,
 		});
 	});
@@ -3311,7 +3307,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 			effects: [
 				{
 					kind: "add-mana",
-					player: "you",
+					subject: "you",
 					mana: { w: 0, u: 0, b: 0, r: 0, g: 1, c: 0 },
 				},
 			],
@@ -3593,7 +3589,7 @@ describe("lowerForgeCard: hardening regressions", () => {
 				effects: [
 					{
 						kind: "add-mana",
-						player: "you",
+						subject: "you",
 						mana: expect.objectContaining({ g: 2 }),
 					},
 				],
@@ -3603,7 +3599,7 @@ describe("lowerForgeCard: hardening regressions", () => {
 				effects: [
 					{
 						kind: "add-mana",
-						player: "you",
+						subject: "you",
 						mana: expect.objectContaining({ g: 1 }),
 					},
 				],
@@ -3697,8 +3693,8 @@ describe("lowerForgeCard: chain traversal", () => {
 				condition: { kind: "begin step", player: "you", step: "upkeep" },
 				targets: [],
 				effects: [
-					{ kind: "gain-life", player: "you", amount: 1 },
-					{ kind: "draw", player: "you", amount: 1 },
+					{ kind: "gain-life", subject: "you", amount: 1 },
+					{ kind: "draw", subject: "you", amount: 1 },
 				],
 			},
 			{
@@ -3712,8 +3708,8 @@ describe("lowerForgeCard: chain traversal", () => {
 				},
 				targets: [],
 				effects: [
-					{ kind: "gain-life", player: "you", amount: 2 },
-					{ kind: "draw", player: "you", amount: 1 },
+					{ kind: "gain-life", subject: "you", amount: 2 },
+					{ kind: "draw", subject: "you", amount: 1 },
 				],
 			},
 		]);

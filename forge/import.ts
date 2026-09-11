@@ -618,12 +618,13 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 				effect.kind === "scry" ||
 				effect.kind === "surveil" ||
 				effect.kind === "mill") &&
-			typeof effect.player !== "string"
-				? effect.player
+			"subject" in effect &&
+			typeof effect.subject !== "string"
+				? effect.subject
 				: null;
 		const sacrificeTarget =
-			effect.kind === "sacrifice" && typeof effect.player !== "string"
-				? effect.player
+			effect.kind === "sacrifice" && typeof effect.subject !== "string"
+				? effect.subject
 				: null;
 		if (
 			damageTarget === null &&
@@ -980,17 +981,6 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 		tokenAbilityHost,
 	);
 	if ("code" in effect) return effect;
-	// Forge's `Defined$ Player` names every player at once. The engine's
-	// `RelativeEffectPlayer` holds exactly one player, so the lowering fans a
-	// many-player instruction out into one effect per player -- the same
-	// instruction, spelled once for each side of the table.
-	if (effect.kind === "draw" && getForgeParam(params, "Defined") === "Player") {
-		assert(
-			effect.player === "you",
-			"Defined$ Player must lower to the controller's draw",
-		);
-		return [effect, { ...effect, player: "opponent" as Player }];
-	}
 	return [effect];
 }
 
@@ -1029,7 +1019,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				);
 			return {
 				kind: api === "gainlife" ? "gain-life" : "lose-life",
-				player: who,
+				subject: who,
 				amount,
 			};
 		}
@@ -1055,7 +1045,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported scry amount/player",
 					where,
 				);
-			return { kind: "scry", player: who, amount };
+			return { kind: "scry", subject: who, amount };
 		}
 		case "surveil": {
 			const badParams = consumeParams(
@@ -1079,7 +1069,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported surveil amount/player",
 					where,
 				);
-			return { kind: "surveil", player: who, amount };
+			return { kind: "surveil", subject: who, amount };
 		}
 		case "dig": {
 			const badParams = consumeParams(
@@ -1121,7 +1111,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				}
 				return {
 					kind: "exile-top",
-					player: who,
+					subject: who,
 					amount,
 					resultSlot: REMEMBERED_EXILE_SLOT,
 				};
@@ -1139,7 +1129,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					where,
 				);
 			}
-			return { kind: "choose-from-top", player: who, amount, keep };
+			return { kind: "choose-from-top", subject: who, amount, keep };
 		}
 		case "investigate": {
 			const badParams = consumeParams(
@@ -1173,21 +1163,15 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				where,
 			);
 			if (badParams) return badParams;
-			// `Defined$ Player` is Forge's every-player spelling. The player set
-			// lowers as the controller's side here; parseEffects fans it out into
-			// one draw per player.
-			const who =
-				getForgeParam(params, "Defined") === "Player"
-					? ("you" as Player)
-					: parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
-			if (!who || !amount)
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"unsupported draw amount/player",
-					where,
-				);
-			return { kind: "draw", player: who, amount };
+			if (!amount)
+				return issue("UNSUPPORTED_PARAMETER", "unsupported draw amount", where);
+			if (getForgeParam(params, "Defined") === "Player")
+				return { kind: "draw", subjects: "each-player", amount };
+			const who = parseEffectPlayer(params, parsePlayer);
+			if (!who)
+				return issue("UNSUPPORTED_PARAMETER", "unsupported draw player", where);
+			return { kind: "draw", subject: who, amount };
 		}
 		case "mill": {
 			const badParams = consumeParams(
@@ -1211,7 +1195,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported mill amount/player",
 					where,
 				);
-			return { kind: "mill", player: who, amount };
+			return { kind: "mill", subject: who, amount };
 		}
 		case "discard": {
 			const badParams = consumeParams(
@@ -1240,7 +1224,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"only discarding exactly one chosen card is supported",
 					where,
 				);
-			return { kind: "discard", selector: "any", amount: 1, player: who };
+			return { kind: "discard", selector: "any", amount: 1, subject: who };
 		}
 		case "sacrifice": {
 			const badParams = consumeParams(
@@ -1279,7 +1263,12 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"Sacrifice requires a supported player, selector, and an amount of one",
 					where,
 				);
-			return { kind: "sacrifice", player: who, predicate: selector, amount: 1 };
+			return {
+				kind: "sacrifice",
+				subject: who,
+				predicate: selector,
+				amount: 1,
+			};
 		}
 		case "dealdamage": {
 			const badParams = consumeParams(
@@ -3952,7 +3941,7 @@ export function lowerForgeCard(
 					getForgeParam(params, "SpellDescription") ??
 					`Add ${producedSymbols.map((symbol) => `{${symbol}}`).join("")}.`,
 				cost: activationCost,
-				effects: [{ kind: "add-mana", player: "you", mana }],
+				effects: [{ kind: "add-mana", subject: "you", mana }],
 			});
 			continue;
 		}
@@ -4151,7 +4140,7 @@ export function lowerForgeCard(
 				id: `intrinsic-mana-${color}`,
 				text: `Add {${color.toUpperCase()}}.`,
 				cost: { mana: "zero", tapSelf: true },
-				effects: [{ kind: "add-mana", player: "you", mana: fullMana(color) }],
+				effects: [{ kind: "add-mana", subject: "you", mana: fullMana(color) }],
 			});
 		}
 	}

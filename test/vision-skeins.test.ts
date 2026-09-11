@@ -30,7 +30,7 @@ const TEST_CARD_1 = defineCard({
 			effects: [
 				{
 					kind: "add-mana",
-					player: "you",
+					subject: "you",
 					mana: { w: 0, u: 1, b: 0, r: 0, g: 0 },
 				},
 			],
@@ -91,5 +91,28 @@ describe("Vision Skeins", () => {
 
 		// CR 608.2m: the spell itself goes to its owner's graveyard.
 		expect(state.players[ALICE].graveyard).toHaveLength(1);
+	});
+
+	test("the active player draws first when the nonactive player casts it", () => {
+		const state = setupMain(engine);
+		const skeins = engine.spawnCard(state, "vision-skeins", BOB, "hand");
+		const island = engine.spawnPermanent(state, "test-blue-source", BOB);
+		const forest = engine.spawnPermanent(state, "forest", BOB);
+		tapForMana(state, BOB, [
+			{ id: island.id, ability: blueMana },
+			{ id: forest.id, ability: forestMana },
+		]);
+
+		state.log.length = 0;
+		const caster = new ScriptedAgent([], [], [castAction(skeins.id)]);
+		engine.settlePriority(state, [new ScriptedAgent(), caster]);
+		expectScriptConsumed(caster);
+
+		// CR 121.2c: for an instruction that makes multiple players draw,
+		// the active player performs all of their draws before the next player.
+		expect(state.log.filter((line) => line.includes("> draw cards"))).toEqual([
+			"> draw cards(P0, 2)",
+			"> draw cards(P1, 2)",
+		]);
 	});
 });
