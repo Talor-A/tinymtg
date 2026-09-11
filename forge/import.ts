@@ -784,15 +784,17 @@ function parseTarget(
 						// outside the battlefield, where cards have no controller.
 						return { kind: "owner", player: predicate.player };
 					case "and":
-					case "or":
+					case "or": {
+						const [first, second, ...rest] = predicate.predicates;
 						return {
 							kind: predicate.kind,
-							predicates: predicate.predicates.map(ownership) as [
-								ObjectPredicateDef,
-								ObjectPredicateDef,
-								...ObjectPredicateDef[],
+							predicates: [
+								ownership(first),
+								ownership(second),
+								...rest.map(ownership),
 							],
 						};
+					}
 					case "not":
 						return {
 							kind: "not",
@@ -2293,7 +2295,7 @@ function lowerStatic(
 				source.zone === "battlefield" &&
 				objectMatchesPredicate(selector, view, {
 					controller: source.controller,
-					id: source.id,
+					source: source.id,
 				})
 			);
 		},
@@ -2384,7 +2386,7 @@ function lowerCopyEtbKeyword(
 						object.kind === "permanent" &&
 						objectMatchesPredicate(selector, object, {
 							controller: ctx.controller,
-							id: ctx.self?.id ?? null,
+							source: ctx.self?.id ?? null,
 						})
 					);
 				})
@@ -2519,7 +2521,7 @@ function lowerGraveyardExileReplacement(
 				getSnapshot(ctx.read, ev.object),
 				{
 					controller: ctx.controller,
-					id: ctx.self.id,
+					source: ctx.self.id,
 				},
 			);
 		},
@@ -2673,7 +2675,7 @@ function lowerReplacement(
 				ctx.read.engine.etbPreview(ctx.state, ev),
 				{
 					controller: ctx.controller,
-					id: ctx.self.id,
+					source: ctx.self.id,
 				},
 			);
 		},

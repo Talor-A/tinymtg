@@ -18,7 +18,12 @@ import {
 	type ObjectId,
 	type ObjectPredicateDef,
 	objectMatchesPredicate,
+	perform,
+	registerCard,
 	type SyncAgent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
 	type TargetBindings,
 	type TargetDef,
 	turnLocation,
@@ -84,7 +89,7 @@ describe("target predicates", () => {
 		const bears = engine.spawnPermanent(state, "grizzly-bears", 0);
 		const swamp = engine.spawnPermanent(state, "swamp", 1);
 		const ownedCard = engine.spawnCard(state, "grizzly-bears", 0, "graveyard");
-		const mine = { controller: 0 as const, id: bears.id };
+		const mine = { controller: 0 as const, source: bears.id };
 
 		const matches = (predicate: ObjectPredicateDef, id: ObjectId) => {
 			const snapshot = getSnapshot(engine.createReadContext(state), id);

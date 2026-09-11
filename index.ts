@@ -2425,18 +2425,18 @@ export interface PredicateContext {
 }
 
 /**
- * Whether one object satisfies a predicate. `source` carries the id the `self`
- * case compares against, or null where there is no source object.
+ * Whether one object satisfies a predicate. `context.source` is the id the
+ * `self` case compares against, or null where there is no source object.
  */
 export function objectMatchesPredicate(
 	predicate: ObjectPredicateDef,
 	object: DeepReadOnly<GameObjectSnapshot | ContinuousEffectEvaluation>,
-	source: { controller: PlayerId; id: ObjectId | null },
+	context: PredicateContext,
 ): boolean {
 	const characteristics = object.currentCharacteristics;
 	switch (predicate.kind) {
 		case "self":
-			return source.id !== null && object.objectId === source.id;
+			return context.source !== null && object.objectId === context.source;
 		case "type":
 			return characteristics.types.includes(predicate.type);
 		case "supertype":
@@ -2447,24 +2447,24 @@ export function objectMatchesPredicate(
 			return characteristics.colors.includes(predicate.color);
 		case "owner":
 			return predicate.player === "you"
-				? object.owner === source.controller
-				: object.owner !== source.controller;
+				? object.owner === context.controller
+				: object.owner !== context.controller;
 		case "controller":
 			// An object with no controller matches neither "you" nor "opponent".
 			if (object.controller === null) return false;
 			return predicate.player === "you"
-				? object.controller === source.controller
-				: object.controller !== source.controller;
+				? object.controller === context.controller
+				: object.controller !== context.controller;
 		case "and":
 			return predicate.predicates.every((part) =>
-				objectMatchesPredicate(part, object, source),
+				objectMatchesPredicate(part, object, context),
 			);
 		case "or":
 			return predicate.predicates.some((part) =>
-				objectMatchesPredicate(part, object, source),
+				objectMatchesPredicate(part, object, context),
 			);
 		case "not":
-			return !objectMatchesPredicate(predicate.predicate, object, source);
+			return !objectMatchesPredicate(predicate.predicate, object, context);
 	}
 }
 
@@ -6440,7 +6440,7 @@ function triggerSubjectsMatch(
 	return subjects.some((subject) =>
 		objectMatchesPredicate(predicate, getSnapshot(read, subject.id), {
 			controller,
-			id: source.id,
+			source: source.id,
 		}),
 	);
 }
@@ -8078,7 +8078,7 @@ function isLegalTarget(
 			(definition.legal.predicate === undefined ||
 				objectMatchesPredicate(definition.legal.predicate, snapshot, {
 					controller: ctx.controller,
-					id: ctx.source,
+					source: ctx.source,
 				}))
 		);
 	}
@@ -8101,7 +8101,7 @@ function isLegalTarget(
 		definition.legal.predicate === undefined ||
 		objectMatchesPredicate(definition.legal.predicate, snapshot, {
 			controller: ctx.controller,
-			id: ctx.source,
+			source: ctx.source,
 		})
 	);
 }
@@ -8147,7 +8147,7 @@ function legalSacrifices(
 			snapshot.controller === player &&
 			objectMatchesPredicate(predicate, snapshot, {
 				controller: context.controller,
-				id: context.source,
+				source: context.source,
 			})
 		);
 	});

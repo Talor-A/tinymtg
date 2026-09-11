@@ -955,10 +955,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			return objectMatchesPredicate(
 				input.predicate.definition,
 				getSnapshot(read, id),
-				{
-					controller: input.predicate.context.controller,
-					id: input.predicate.context.source,
-				},
+				input.predicate.context,
 			);
 		});
 		if (objects.length === 0) {

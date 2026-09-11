@@ -64,7 +64,7 @@ caller supplies the registry id explicitly; the bridge never guesses identity
 from a card's display name.
 
 `CardDef` is a runtime registry object whose statics/replacements close over
-validated, normalized data (selectors, constants) rather than the source AST
+validated, normalized data (predicates, constants) rather than the source AST
 or a live game object — see `test/forge-import.test.ts` for a callback
 independence check. It is not a serializable persistence format: reconstruct
 the same registry when restoring a game, and preserve card ids, definition
