@@ -514,7 +514,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		const result = importFixture("v/vision_skeins");
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "draw", subjects: "each-player", amount: 2 },
+			{ kind: "each player draw", subjects: "each-player", amount: 2 },
 		]);
 	});
 

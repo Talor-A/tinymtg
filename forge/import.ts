@@ -1167,7 +1167,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			if (!amount)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported draw amount", where);
 			if (getForgeParam(params, "Defined") === "Player")
-				return { kind: "draw", subjects: "each-player", amount };
+				return { kind: "each player draw", subjects: "each-player", amount };
 			const who = parseEffectPlayer(params, parsePlayer);
 			if (!who)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported draw player", where);

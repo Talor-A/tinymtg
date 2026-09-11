@@ -717,15 +717,6 @@ interface TokenZoneChangeEvent extends ZoneChangeEventBase {
 
 type ZoneChangeEvent = ObjectZoneChangeEvent | TokenZoneChangeEvent;
 
-/**
- * A zone change that is putting its object onto the battlefield, which is the
- * only shape whose destination parameters exist. Checking
- * `ev.destination.zone === "battlefield"` narrows to this.
- */
-export type BattlefieldEntryEvent = ZoneChangeEvent & {
-	destination: BattlefieldDestination;
-};
-
 type MoveCause =
 	| "cast"
 	| "draw"
@@ -2149,7 +2140,7 @@ type ExileTopEffectDef<Player extends TriggerEffectPlayer> = {
 };
 
 type EachPlayerDrawEffectDef = {
-	kind: "draw";
+	kind: "each player draw";
 	subjects: "each-player";
 	amount: number;
 };
@@ -7117,16 +7108,14 @@ function resolveEffects(
 	effects: EffectDef<TriggerEffectPlayer>[],
 	scope: Scope,
 ): void {
+	// iterate effects
 	for (const [effectIndex, effect] of effects.entries()) {
 		if (effect.kind === "may") {
 			const decider =
 				effect.decider === "you"
 					? item.controller
 					: ((1 - item.controller) as PlayerId);
-			// chooseOptional puts the whole stack item in its choice request, so
-			// only an ability can ask this today. No spell the compiler accepts
-			// has an optional effect, making this unreachable rather than a
-			// missing feature.
+			// TODO: seems trivial to fix.
 			assertDefined(
 				item.ability,
 				"optional effects on a resolving spell are not implemented",
@@ -7135,7 +7124,7 @@ function resolveEffects(
 				resolveEffects(engine, state, choices, item, effect.effects, scope);
 			continue;
 		}
-		if (effect.kind === "draw" && "subjects" in effect) {
+		if (effect.kind === "each player draw") {
 			assert(effect.subjects === "each-player");
 			const active = activePlayer(state);
 			assertDefined(active, "each-player draw must resolve during a turn");
@@ -7429,7 +7418,9 @@ function resolveEffects(
 				const object = maybeObject(state, subject.id);
 				// A preceding instruction can move a subject before permission is
 				// created. In that case this instruction does nothing for that object.
-				if (object?.kind !== "card" || object.zone !== effect.from) continue;
+				assertDefined(object);
+				assert(object.kind === "card");
+				assert(object.zone === effect.from);
 				addTemporaryEffect(
 					state,
 					item.controller,
