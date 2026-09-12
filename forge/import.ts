@@ -92,6 +92,26 @@ import {
 } from "./ast.ts";
 import { forgeTokenScript } from "./token-corpus.ts";
 
+interface Ok<T> {
+	ok: true;
+	value: T;
+}
+
+function ok<T>(value: T): Ok<T> {
+	return { ok: true, value };
+}
+
+function err<E>(error: E): Err<E> {
+	return { ok: false, error };
+}
+
+interface Err<E> {
+	ok: false;
+	error: E;
+}
+
+type Result<T, E> = Ok<T> | Err<E>;
+
 export interface ImportIssue {
 	code: string;
 	message: string;
@@ -108,11 +128,15 @@ function issue(
 	code: string,
 	message: string,
 	extra: { nodeId?: string; line?: number; paramId?: string } = {},
-): ImportIssue {
-	return { code, message, ...extra };
+): Err<ImportIssue> {
+	return err({ code, message, ...extra });
 }
 
-function reject(i: ImportIssue): { ok: false; diagnostics: [ImportIssue] } {
+function reject(i: ImportIssue | Err<ImportIssue>): {
+	ok: false;
+	diagnostics: [ImportIssue];
+} {
+	if ("ok" in i) return { ok: false, diagnostics: [i.error] };
 	return { ok: false, diagnostics: [i] };
 }
 
@@ -242,7 +266,7 @@ function consumeParams(
 	params: ForgeParamList,
 	allowedLower: ReadonlySet<string>,
 	where: { nodeId?: string; line?: number },
-): ImportIssue | null {
+): Result<null, ImportIssue> {
 	const counts = new Map<string, number>();
 	for (const entry of params.entries) {
 		if (entry.malformed) {
@@ -275,7 +299,7 @@ function consumeParams(
 			);
 		}
 	}
-	return null;
+	return ok(null);
 }
 
 function positiveInteger(
@@ -601,7 +625,7 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 	effects: EffectDef<Player>[],
 	targets: TargetDef[],
 	where: { nodeId?: string; line?: number },
-): ImportIssue | null {
+): Err<ImportIssue> | null {
 	for (const effect of effects) {
 		if (effect.kind === "may") {
 			const inner = checkEffectTargetSlots(effect.effects, targets, where);
@@ -764,32 +788,33 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
  * restrictions at all.
  */
 function parseTarget(
-	value: string | undefined,
+	validTgts: string | undefined,
 	targetType?: string,
 	cardZone?: "graveyard" | "exile",
 ): TargetDef[] | null {
-	if (value === undefined) return [];
+	if (validTgts === undefined) return [];
+
 	let legal: TargetDef["legal"];
 	if (targetType === "Spell") {
-		if (value === "Card") legal = { kind: "spell" };
+		if (validTgts === "Card") legal = { kind: "spell" };
 		else {
 			// On the battlefield, `Permanent` is the whole established domain. On
 			// the stack it means only a permanent spell, so the domain-free selector
 			// parser cannot lower that base without broadening it to every spell.
-			const hasPermanentBase = value.split(",").some((choice) => {
+			const hasPermanentBase = validTgts.split(",").some((choice) => {
 				const base = choice.trim().split(/[.+]/, 1)[0];
 				return base === "Permanent";
 			});
 			if (hasPermanentBase) return null;
-			const predicate = parseSelector(value);
+			const predicate = parseSelector(validTgts);
 			if (!predicate) return null;
 			legal = { kind: "spell", predicate };
 		}
 	} else if (targetType !== undefined) return null;
 	else if (cardZone !== undefined) {
-		if (value === "Card") legal = { kind: "card", zone: cardZone };
+		if (validTgts === "Card") legal = { kind: "card", zone: cardZone };
 		else {
-			const parsed = parseSelector(value);
+			const parsed = parseSelector(validTgts);
 			if (!parsed) return null;
 			const ownership = (predicate: ObjectPredicateDef): ObjectPredicateDef => {
 				switch (predicate.kind) {
@@ -820,12 +845,13 @@ function parseTarget(
 			};
 			legal = { kind: "card", zone: cardZone, predicate: ownership(parsed) };
 		}
-	} else if (value === "Any") legal = { kind: "any-target" };
-	else if (value === "Player") legal = { kind: "player", player: "either" };
-	else if (value === "Opponent") legal = { kind: "player", player: "opponent" };
-	else if (value === "Permanent") legal = { kind: "permanent" };
+	} else if (validTgts === "Any") legal = { kind: "any-target" };
+	else if (validTgts === "Player") legal = { kind: "player", player: "either" };
+	else if (validTgts === "Opponent")
+		legal = { kind: "player", player: "opponent" };
+	else if (validTgts === "Permanent") legal = { kind: "permanent" };
 	else {
-		const selector = parseSelector(value);
+		const selector = parseSelector(validTgts);
 		if (!selector) return null;
 		legal = { kind: "permanent", predicate: selector };
 	}
@@ -863,7 +889,7 @@ function consumeAbilitySVar(
 	name: string,
 	reference: string,
 	where: { nodeId?: string; line?: number },
-): ForgeAbilitySVarRecord | ImportIssue {
+): Result<ForgeAbilitySVarRecord, ImportIssue> {
 	const normalized = name.trim().toLowerCase();
 	const bucket = resolver.face.svarIndex.get(normalized);
 	if (!bucket || bucket.length === 0)
@@ -887,14 +913,14 @@ function consumeAbilitySVar(
 			where,
 		);
 	resolver.consumed.add(normalized);
-	return svar as ForgeAbilitySVarRecord;
+	return ok(svar as ForgeAbilitySVarRecord);
 }
 
 function fixedTokenCharacteristics(
 	scriptId: string,
 	where: { nodeId?: string; line?: number },
 	host: TokenAbilityHost,
-): CharacteristicsSnapshot | ImportIssue {
+): Result<CharacteristicsSnapshot, ImportIssue> {
 	if (!/^[A-Za-z0-9_]+$/.test(scriptId))
 		return issue(
 			"UNSUPPORTED_PARAMETER",
@@ -956,7 +982,7 @@ function fixedTokenCharacteristics(
 			return abilityId("activated", host.cardId, hostIndex);
 		},
 	);
-	return characteristics;
+	return ok(characteristics);
 }
 
 /**
@@ -985,7 +1011,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
 	tokenAbilityHost: TokenAbilityHost,
-): Exclude<EffectDef<Player>, { kind: "may" }>[] | ImportIssue {
+): Result<Exclude<EffectDef<Player>, { kind: "may" }>[], ImportIssue> {
 	const effect = parseOneEffect(
 		params,
 		discriminatorLower,
@@ -995,8 +1021,8 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 		allowSourceObject,
 		tokenAbilityHost,
 	);
-	if ("code" in effect) return effect;
-	return [effect];
+	if (!effect.ok) return effect;
+	return { ok: true, value: [effect.value] };
 }
 
 function parseOneEffect<Player extends TriggerEffectPlayer>(
@@ -1007,7 +1033,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
 	tokenAbilityHost: TokenAbilityHost,
-): Exclude<EffectDef<Player>, { kind: "may" }> | ImportIssue {
+): Result<Exclude<EffectDef<Player>, { kind: "may" }>, ImportIssue> {
 	switch (api) {
 		case "gainlife":
 		case "loselife": {
@@ -1023,7 +1049,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "LifeAmount"));
 			if (!who || !amount)
@@ -1032,11 +1058,11 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					`unsupported or missing LifeAmount$/player for ${api}`,
 					where,
 				);
-			return {
+			return ok({
 				kind: api === "gainlife" ? "gain-life" : "lose-life",
 				subject: who,
 				amount,
-			};
+			});
 		}
 		case "scry": {
 			const badParams = consumeParams(
@@ -1051,7 +1077,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "ScryNum"), 1);
 			if (!who || !amount)
@@ -1060,7 +1086,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported scry amount/player",
 					where,
 				);
-			return { kind: "scry", subject: who, amount };
+			return ok({ kind: "scry", subject: who, amount });
 		}
 		case "surveil": {
 			const badParams = consumeParams(
@@ -1075,7 +1101,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "Amount"), 1);
 			if (!who || !amount)
@@ -1084,7 +1110,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported surveil amount/player",
 					where,
 				);
-			return { kind: "surveil", subject: who, amount };
+			return ok({ kind: "surveil", subject: who, amount });
 		}
 		case "dig": {
 			const badParams = consumeParams(
@@ -1101,7 +1127,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "DigNum"));
 			const changeNum = getForgeParam(params, "ChangeNum");
@@ -1125,12 +1151,12 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 						where,
 					);
 				}
-				return {
+				return ok({
 					kind: "exile-top",
 					subject: who,
 					amount,
 					resultSlot: REMEMBERED_EXILE_SLOT,
-				};
+				});
 			}
 			if (
 				who?.kind !== "relative-player" ||
@@ -1146,7 +1172,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					where,
 				);
 			}
-			return { kind: "choose-from-top", subject: who.player, amount, keep };
+			return ok({ kind: "choose-from-top", subject: who.player, amount, keep });
 		}
 		case "investigate": {
 			const badParams = consumeParams(
@@ -1154,17 +1180,17 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				new Set([discriminatorLower, ...COMMON_EFFECT_PARAMS]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			// With no Defined$ or Num$, Forge's Investigate API means its
 			// controller investigates once. Explicit variants reject above.
 			const controller = parsePlayer(undefined);
 			assert(controller !== null, "default effect player must be supported");
-			return {
+			return ok({
 				kind: "create-token",
 				controller,
 				characteristics: cloneCharacteristics(CLUE_TOKEN),
 				amount: 1,
-			};
+			});
 		}
 		case "draw": {
 			const badParams = consumeParams(
@@ -1179,16 +1205,20 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!amount)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported draw amount", where);
 			if (getForgeParam(params, "Defined") === "Player")
-				return { kind: "each player draw", subjects: "each-player", amount };
+				return ok({
+					kind: "each player draw",
+					subjects: "each-player",
+					amount,
+				});
 			const who = parseEffectPlayer(params, parsePlayer);
 			if (!who)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported draw player", where);
-			return { kind: "draw", subject: who, amount };
+			return ok({ kind: "draw", subject: who, amount });
 		}
 		case "mill": {
 			const badParams = consumeParams(
@@ -1203,7 +1233,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!who || !amount)
@@ -1212,7 +1242,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported mill amount/player",
 					where,
 				);
-			return { kind: "mill", subject: who, amount };
+			return ok({ kind: "mill", subject: who, amount });
 		}
 		case "discard": {
 			const badParams = consumeParams(
@@ -1226,7 +1256,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			if (getForgeParam(params, "Mode") !== "TgtChoose")
 				return issue(
 					"UNSUPPORTED_EFFECT",
@@ -1241,7 +1271,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"only discarding exactly one chosen card is supported",
 					where,
 				);
-			return { kind: "discard", selector: "any", amount: 1, subject: who };
+			return ok({ kind: "discard", selector: "any", amount: 1, subject: who });
 		}
 		case "sacrifice": {
 			const badParams = consumeParams(
@@ -1257,7 +1287,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const defined = getForgeParam(params, "Defined");
 			const validTargets = getForgeParam(params, "ValidTgts");
 			if (
@@ -1280,12 +1310,12 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"Sacrifice requires a supported player, selector, and an amount of one",
 					where,
 				);
-			return {
+			return ok({
 				kind: "sacrifice",
 				subject: who,
 				predicate: selector,
 				amount: 1,
-			};
+			});
 		}
 		case "dealdamage": {
 			const badParams = consumeParams(
@@ -1300,17 +1330,17 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const amount = positiveInteger(getForgeParam(params, "NumDmg"));
 			if (!amount)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported NumDmg", where);
 			const defined = getForgeParam(params, "Defined");
 			if (defined === undefined)
-				return {
+				return ok({
 					kind: "damage",
 					subject: { kind: "target", slot: TARGET_SLOT },
 					amount,
-				};
+				});
 			const player = parsePlayer(defined);
 			if (!player)
 				return issue(
@@ -1318,11 +1348,11 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported Defined$ damage recipient",
 					where,
 				);
-			return {
+			return ok({
 				kind: "damage",
 				subject: { kind: "relative-player", player },
 				amount,
-			};
+			});
 		}
 		case "destroy": {
 			const badParams = consumeParams(
@@ -1335,11 +1365,11 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
-			return {
+			if (!badParams.ok) return badParams;
+			return ok({
 				kind: "destroy",
 				subject: { kind: "target", slot: TARGET_SLOT },
-			};
+			});
 		}
 		case "tap":
 		case "untap": {
@@ -1353,11 +1383,11 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
-			return {
+			if (!badParams.ok) return badParams;
+			return ok({
 				kind: api,
 				subject: { kind: "target", slot: TARGET_SLOT },
-			};
+			});
 		}
 		case "counter": {
 			const badParams = consumeParams(
@@ -1371,11 +1401,11 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
-			return {
+			if (!badParams.ok) return badParams;
+			return ok({
 				kind: "counter",
 				subject: { kind: "target", slot: TARGET_SLOT },
-			};
+			});
 		}
 		case "changezone": {
 			const badParams = consumeParams(
@@ -1399,7 +1429,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const originText = getForgeParam(params, "Origin");
 			const origin: PublicObjectZone | null =
 				originText === "Battlefield"
@@ -1563,7 +1593,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 							"ChangeZone origin and destination must differ",
 							where,
 						);
-					return {
+					return ok({
 						kind: "change-zone",
 						subject,
 						from: origin,
@@ -1571,7 +1601,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 						...(rememberTargets === "True"
 							? { resultSlot: REMEMBERED_ZONE_CHANGE_SLOT }
 							: {}),
-					};
+					});
 				case "graveyard":
 					if (destination.zone === "graveyard")
 						return issue(
@@ -1579,7 +1609,12 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 							"ChangeZone origin and destination must differ",
 							where,
 						);
-					return { kind: "change-zone", subject, from: origin, destination };
+					return ok({
+						kind: "change-zone",
+						subject,
+						from: origin,
+						destination,
+					});
 				case "exile":
 					if (destination.zone === "exile")
 						return issue(
@@ -1587,7 +1622,12 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 							"ChangeZone origin and destination must differ",
 							where,
 						);
-					return { kind: "change-zone", subject, from: origin, destination };
+					return ok({
+						kind: "change-zone",
+						subject,
+						from: origin,
+						destination,
+					});
 			}
 			throw new Error("unreachable ChangeZone origin");
 		}
@@ -1605,7 +1645,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const counter = COUNTER_NAMES.get(
 				getForgeParam(params, "CounterType") ?? "",
 			);
@@ -1625,12 +1665,12 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 						"targeted PutCounter cannot also use Defined$",
 						where,
 					);
-				return {
+				return ok({
 					kind: "add counters",
 					subject: { kind: "target", slot: TARGET_SLOT },
 					counter,
 					amount,
-				};
+				});
 			}
 			// Forge defaults an omitted Defined$ to the source object when the
 			// ability declares no targets. Only permanent abilities can use that
@@ -1641,12 +1681,12 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported non-targeted PutCounter subject",
 					where,
 				);
-			return {
+			return ok({
 				kind: "add counters",
 				subject: { kind: "source" },
 				counter,
 				amount,
-			};
+			});
 		}
 		case "token": {
 			const badParams = consumeParams(
@@ -1660,7 +1700,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const scriptId = getForgeParam(params, "TokenScript");
 			if (!scriptId)
 				return issue(
@@ -1694,13 +1734,13 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				where,
 				tokenAbilityHost,
 			);
-			if ("code" in characteristics) return characteristics;
-			return {
+			if (!characteristics.ok) return characteristics;
+			return ok({
 				kind: "create-token",
 				controller,
-				characteristics,
+				characteristics: characteristics.value,
 				amount,
-			};
+			});
 		}
 		case "pump": {
 			const badParams = consumeParams(
@@ -1717,7 +1757,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const powerText = getForgeParam(params, "NumAtt");
 			const toughnessText = getForgeParam(params, "NumDef");
 			const keywordText = getForgeParam(params, "KW");
@@ -1751,39 +1791,39 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			const validTargets = getForgeParam(params, "ValidTgts");
 			if (defined === "Self" && validTargets === undefined) {
 				if (keywordText === "Indestructible") {
-					return {
+					return ok({
 						kind: "grant-keyword",
 						subject: { kind: "source" },
 						keyword: "indestructible",
 						duration: "until-end-of-turn",
-					};
+					});
 				}
 				assert(power !== null && toughness !== null);
-				return {
+				return ok({
 					kind: "modify-pt",
 					subject: { kind: "source" },
 					power,
 					toughness,
 					duration: "until-end-of-turn",
-				};
+				});
 			}
 			if (defined === undefined && validTargets !== undefined) {
 				if (keywordText === "Indestructible") {
-					return {
+					return ok({
 						kind: "grant-keyword",
 						subject: { kind: "target", slot: TARGET_SLOT },
 						keyword: "indestructible",
 						duration: "until-end-of-turn",
-					};
+					});
 				}
 				assert(power !== null && toughness !== null);
-				return {
+				return ok({
 					kind: "modify-pt",
 					subject: { kind: "target", slot: TARGET_SLOT },
 					power,
 					toughness,
 					duration: "until-end-of-turn",
-				};
+				});
 			}
 			return issue(
 				"UNSUPPORTED_PARAMETER",
@@ -1805,9 +1845,10 @@ const ABILITY_DISCRIMINATOR_TOKENS = ["AB", "SP", "ST", "DB"] as const;
 function discriminator(
 	params: ForgeParamList,
 	where: { nodeId?: string; line?: number },
-):
-	| { token: (typeof ABILITY_DISCRIMINATOR_TOKENS)[number]; api: string }
-	| ImportIssue {
+): Result<
+	{ token: (typeof ABILITY_DISCRIMINATOR_TOKENS)[number]; api: string },
+	ImportIssue
+> {
 	const normalized = forgeAbilityDiscriminator(params);
 	if (normalized === null) {
 		const present = ABILITY_DISCRIMINATOR_TOKENS.filter((token) =>
@@ -1821,7 +1862,7 @@ function discriminator(
 			where,
 		);
 	}
-	return normalized;
+	return ok(normalized);
 }
 
 const CHAIN_FORBIDDEN = [
@@ -1848,7 +1889,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
 	tokenAbilityHost: TokenAbilityHost,
-): EffectDef<Player>[] | ImportIssue {
+): Result<EffectDef<Player>[], ImportIssue> {
 	const effects: EffectDef<Player>[] = [];
 	let current = rootParams;
 	let where = rootWhere;
@@ -1873,9 +1914,10 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				}
 			}
 		}
-		const disc = discriminator(current, where);
-		if ("code" in disc) return disc;
+		const _disc = discriminator(current, where);
+		if (!_disc.ok) return _disc;
 		const allowedHere = depth === 0 ? rootTokens : (["DB"] as const);
+		const disc = _disc.value;
 		if (!(allowedHere as readonly string[]).includes(disc.token)) {
 			return issue(
 				"UNSUPPORTED_EFFECT",
@@ -1923,7 +1965,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badReturnParams) return badReturnParams;
+			if (!badReturnParams.ok) return badReturnParams;
 			const cleanupName = getForgeParam(current, "SubAbility");
 			// The remembered object is the card the previous effect just moved to
 			// exile, and nothing can move it before this sub-ability resolves, so
@@ -1950,28 +1992,30 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			}
 
 			if (cleanupName) {
-				const cleanupSVar = consumeAbilitySVar(
+				const _cleanupSVar = consumeAbilitySVar(
 					resolver,
 					cleanupName,
 					"SubAbility",
 					where,
 				);
-				if ("code" in cleanupSVar) return cleanupSVar;
+				if (!_cleanupSVar.ok) return _cleanupSVar;
+				const cleanupSVar = _cleanupSVar.value;
 				const cleanupWhere = {
 					nodeId: cleanupSVar.source.nodeId,
 					line: cleanupSVar.source.line,
 				};
-				const cleanupDisc = discriminator(
+				const _cleanupDisc = discriminator(
 					cleanupSVar.parsed.params,
 					cleanupWhere,
 				);
-				if ("code" in cleanupDisc) return cleanupDisc;
+				if (!_cleanupDisc.ok) return _cleanupDisc;
+				const cleanupDisc = _cleanupDisc.value;
 				const badCleanupParams = consumeParams(
 					cleanupSVar.parsed.params,
 					new Set(["db", "clearremembered"]),
 					cleanupWhere,
 				);
-				if (badCleanupParams) return badCleanupParams;
+				if (!badCleanupParams.ok) return badCleanupParams;
 				if (
 					cleanupDisc.token !== "DB" ||
 					cleanupDisc.api !== "cleanup" ||
@@ -1996,7 +2040,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				from: "exile",
 				destination: { zone: "battlefield", controller },
 			});
-			return effects;
+			return ok(effects);
 		}
 		if (disc.api === "effect") {
 			const rememberedDig = effects.at(-1);
@@ -2023,7 +2067,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				]),
 				where,
 			);
-			if (badEffectParams) return badEffectParams;
+			if (!badEffectParams.ok) return badEffectParams;
 			const staticName = getForgeParam(current, "StaticAbilities");
 			const cleanupName = getForgeParam(current, "SubAbility");
 			if (
@@ -2071,7 +2115,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				new Set(["mode", "mayplay", "affected", "affectedzone", "description"]),
 				staticWhere,
 			);
-			if (badStaticParams) return badStaticParams;
+			if (!badStaticParams.ok) return badStaticParams;
 			if (
 				getForgeParam(staticSVar.parsed.params, "Mode") !== "Continuous" ||
 				getForgeParam(staticSVar.parsed.params, "MayPlay") !== "True" ||
@@ -2112,17 +2156,19 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				nodeId: cleanupSVar.source.nodeId,
 				line: cleanupSVar.source.line,
 			};
-			const cleanupDisc = discriminator(
+			const _cleanupDisc = discriminator(
 				cleanupSVar.parsed.params,
 				cleanupWhere,
 			);
-			if ("code" in cleanupDisc) return cleanupDisc;
+			if (!_cleanupDisc.ok) return _cleanupDisc;
+			const cleanupDisc = _cleanupDisc.value;
+
 			const badCleanupParams = consumeParams(
 				cleanupSVar.parsed.params,
 				new Set(["db", "clearremembered"]),
 				cleanupWhere,
 			);
-			if (badCleanupParams) return badCleanupParams;
+			if (!badCleanupParams.ok) return badCleanupParams;
 			if (
 				cleanupDisc.token !== "DB" ||
 				cleanupDisc.api !== "cleanup" ||
@@ -2151,9 +2197,9 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			});
 			resolver.consumed.add(staticName.toLowerCase());
 			resolver.consumed.add(cleanupName.toLowerCase());
-			return effects;
+			return ok(effects);
 		}
-		const lowered = parseEffects(
+		const _lowered = parseEffects(
 			current,
 			disc.token.toLowerCase(),
 			disc.api,
@@ -2162,7 +2208,8 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			allowSourceObject,
 			tokenAbilityHost,
 		);
-		if ("code" in lowered) return lowered;
+		if (!_lowered.ok) return _lowered;
+		const lowered = _lowered.value;
 		const targetIssue = checkEffectTargetSlots(lowered, targets, where);
 		if (targetIssue) return targetIssue;
 		effects.push(...lowered);
@@ -2190,7 +2237,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 					where,
 				);
 			}
-			return effects;
+			return ok(effects);
 		}
 		const nextLower = next.trim().toLowerCase();
 		if (seen.has(nextLower))
@@ -2200,8 +2247,9 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				where,
 			);
 		seen.add(nextLower);
-		const svar = consumeAbilitySVar(resolver, next, "SubAbility", where);
-		if ("code" in svar) return svar;
+		const _svar = consumeAbilitySVar(resolver, next, "SubAbility", where);
+		if (!_svar.ok) return _svar;
+		const svar = _svar.value;
 		current = svar.parsed.params;
 		where = { nodeId: svar.source.nodeId, line: svar.source.line };
 		depth += 1;
@@ -2222,7 +2270,7 @@ function lowerStatic(
 	record:
 		| ForgeAbilityRecord
 		| { params: ForgeParamList; source: { nodeId: string; line: number } },
-): StaticAbilityDefinition | ImportIssue {
+): Result<StaticAbilityDefinition, ImportIssue> {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
 	const badParams = consumeParams(
@@ -2238,7 +2286,7 @@ function lowerStatic(
 		]),
 		where,
 	);
-	if (badParams) return badParams;
+	if (!badParams.ok) return badParams;
 	const mode = getForgeParam(params, "Mode");
 	const description = getForgeParam(params, "Description");
 	if (mode === "CantBlock") {
@@ -2255,7 +2303,7 @@ function lowerStatic(
 				"only unconditional CantBlock for Card.Self is supported",
 				where,
 			);
-		return { kind: "cant-block-self", text: description };
+		return ok({ kind: "cant-block-self", text: description });
 	}
 	if (mode !== "Continuous")
 		return issue(
@@ -2280,12 +2328,12 @@ function lowerStatic(
 				"only finite positive AdjustLandPlays effects affecting You are supported",
 				where,
 			);
-		return {
+		return ok({
 			kind: "adjust-land-plays",
 			text: description,
 			affects: "you",
 			amount,
-		};
+		});
 	}
 	const selector = affected ? parseSelector(affected) : null;
 	const addPower = signedInteger(getForgeParam(params, "AddPower"));
@@ -2302,7 +2350,7 @@ function lowerStatic(
 			"unsupported static ability shape",
 			where,
 		);
-	return {
+	return ok({
 		layer: "7c-modify-power-toughness",
 		text: description,
 		applies(view, _state, source) {
@@ -2319,7 +2367,7 @@ function lowerStatic(
 			view.power += addPower;
 			view.toughness += addToughness;
 		},
-	};
+	});
 }
 
 function predicateContainsSelf(predicate: ObjectPredicateDef): boolean {
@@ -2343,7 +2391,7 @@ type ReplacementLowering =
 function lowerCopyEtbKeyword(
 	resolver: SVarResolver,
 	record: ForgeKeywordRecord,
-): ReplacementEffectDefinition | ImportIssue {
+): Result<ReplacementEffectDefinition, ImportIssue> {
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
 	if (
 		record.segments.length !== 4 ||
@@ -2358,15 +2406,16 @@ function lowerCopyEtbKeyword(
 	}
 	const svarName = record.segments[2];
 	assert(svarName !== undefined);
-	const body = consumeAbilitySVar(resolver, svarName, "ETBReplacement", where);
-	if ("code" in body) return body;
+	const _body = consumeAbilitySVar(resolver, svarName, "ETBReplacement", where);
+	if (!_body.ok) return _body;
+	const body = _body.value;
 	const bodyWhere = { nodeId: body.source.nodeId, line: body.source.line };
 	const badParams = consumeParams(
 		body.parsed.params,
 		new Set(["addtypes", "db", "choices", "spelldescription"]),
 		bodyWhere,
 	);
-	if (badParams) return badParams;
+	if (!badParams.ok) return badParams;
 	const text = getForgeParam(body.parsed.params, "SpellDescription");
 	const choices = getForgeParam(body.parsed.params, "Choices");
 	const selector = choices ? parseCopySelector(choices) : null;
@@ -2443,7 +2492,7 @@ function lowerCopyEtbKeyword(
 			];
 		},
 	};
-	return def;
+	return ok(def);
 }
 
 /**
@@ -2460,7 +2509,7 @@ function lowerGraveyardExileReplacement(
 	resolver: SVarResolver,
 	params: ForgeParamList,
 	where: { nodeId: string; line: number },
-): ReplacementLowering | ImportIssue {
+): Result<ReplacementLowering, ImportIssue> {
 	if (
 		getForgeParam(params, "Origin") !== "Battlefield" ||
 		getForgeParam(params, "ActiveZones") !== "Battlefield" ||
@@ -2481,13 +2530,15 @@ function lowerGraveyardExileReplacement(
 	const replaceWith = getForgeParam(params, "ReplaceWith");
 	if (replaceWith === undefined)
 		return issue("UNSUPPORTED_REFERENCE", "missing ReplaceWith$", where);
-	const effectSVar = consumeAbilitySVar(
+	const _effectSVar = consumeAbilitySVar(
 		resolver,
 		replaceWith,
 		"ReplaceWith",
 		where,
 	);
-	if ("code" in effectSVar) return effectSVar;
+	if (!_effectSVar.ok) return _effectSVar;
+	const effectSVar = _effectSVar.value;
+
 	const effectParams = effectSVar.parsed.params;
 	const effectWhere = {
 		nodeId: effectSVar.source.nodeId,
@@ -2498,7 +2549,7 @@ function lowerGraveyardExileReplacement(
 		new Set(["db", "origin", "destination", "defined"]),
 		effectWhere,
 	);
-	if (effectBad) return effectBad;
+	if (!effectBad.ok) return effectBad;
 	if (
 		getForgeParam(effectParams, "DB") !== "ChangeZone" ||
 		getForgeParam(effectParams, "Origin") !== "Battlefield" ||
@@ -2549,7 +2600,7 @@ function lowerGraveyardExileReplacement(
 				? [{ ...ev, destination: { zone: "exile" } }]
 				: [ev],
 	};
-	return { kind: "global", def };
+	return ok({ kind: "global", def });
 }
 
 /**
@@ -2574,7 +2625,7 @@ function lowerReplacement(
 	record:
 		| ForgeAbilityRecord
 		| { params: ForgeParamList; source: { nodeId: string; line: number } },
-): ReplacementLowering | ImportIssue {
+): Result<ReplacementLowering, ImportIssue> {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
 	const badParams = consumeParams(
@@ -2591,7 +2642,7 @@ function lowerReplacement(
 		]),
 		where,
 	);
-	if (badParams) return badParams;
+	if (!badParams.ok) return badParams;
 	if (getForgeParam(params, "Event") !== "Moved")
 		return issue("UNSUPPORTED_EFFECT", "unsupported replacement shape", where);
 	// The two families split on where the replaced movement was headed: into
@@ -2616,18 +2667,18 @@ function lowerReplacement(
 		"ReplaceWith",
 		where,
 	);
-	if ("code" in effectSVar) return effectSVar;
-	const effectParams = effectSVar.parsed.params;
+	if (!effectSVar.ok) return effectSVar;
+	const effectParams = effectSVar.value.parsed.params;
 	const effectWhere = {
-		nodeId: effectSVar.source.nodeId,
-		line: effectSVar.source.line,
+		nodeId: effectSVar.value.source.nodeId,
+		line: effectSVar.value.source.line,
 	};
 	const effectBad = consumeParams(
 		effectParams,
 		new Set(["db", "etb", "defined"]),
 		effectWhere,
 	);
-	if (effectBad) return effectBad;
+	if (!effectBad.ok) return effectBad;
 	if (
 		getForgeParam(effectParams, "DB") !== "Tap" ||
 		getForgeParam(effectParams, "ETB") !== "True"
@@ -2649,7 +2700,7 @@ function lowerReplacement(
 				"unsupported self ReplaceWith effect body",
 				effectWhere,
 			);
-		return { kind: "self-entry" };
+		return ok({ kind: "self-entry" });
 	}
 
 	if (activeZones !== "Battlefield")
@@ -2699,7 +2750,7 @@ function lowerReplacement(
 				? [{ ...ev, destination: { ...ev.destination, tapped: true } }]
 				: [ev],
 	};
-	return { kind: "global", def };
+	return ok({ kind: "global", def });
 }
 
 /* ------------------------------------------------------------------------- */
@@ -2710,7 +2761,7 @@ function lowerTrigger(
 	resolver: SVarResolver,
 	record: { params: ForgeParamList; source: { nodeId: string; line: number } },
 	tokenAbilityHost: TokenAbilityHost,
-): TriggeredAbilityDefinition | ImportIssue {
+): Result<TriggeredAbilityDefinition, ImportIssue> {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
 	const mode = getForgeParam(params, "Mode");
@@ -2723,8 +2774,9 @@ function lowerTrigger(
 			where,
 		);
 
-	const executeSVar = consumeAbilitySVar(resolver, execute, "Execute", where);
-	if ("code" in executeSVar) return executeSVar;
+	const _executeSVar = consumeAbilitySVar(resolver, execute, "Execute", where);
+	if (!_executeSVar.ok) return _executeSVar;
+	const executeSVar = _executeSVar.value;
 
 	const optionalDecider = getForgeParam(params, "OptionalDecider");
 	if (optionalDecider !== undefined && optionalDecider !== "You")
@@ -2769,16 +2821,16 @@ function lowerTrigger(
 		true,
 		tokenAbilityHost,
 	);
-	if ("code" in chain) return chain;
+	if (!chain.ok) return chain;
 	const effects = optionalDecider
 		? [
 				{
 					kind: "may" as const,
 					decider: "you" as const,
-					effects: chain,
+					effects: chain.value,
 				},
 			]
-		: chain;
+		: chain.value;
 
 	switch (mode) {
 		case "SpellCast": {
@@ -2795,7 +2847,7 @@ function lowerTrigger(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			if (getForgeParam(params, "TriggerZones") !== "Battlefield")
 				return issue(
 					"UNSUPPORTED_EFFECT",
@@ -2829,7 +2881,7 @@ function lowerTrigger(
 				selector = parsed;
 			}
 
-			return {
+			return ok({
 				id: execute,
 				text,
 				condition:
@@ -2838,7 +2890,7 @@ function lowerTrigger(
 						: { kind: "cast", player: castPlayer, predicate: selector },
 				targets,
 				effects,
-			};
+			});
 		}
 		case "ChangesZone": {
 			const badParams = consumeParams(
@@ -2856,7 +2908,7 @@ function lowerTrigger(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const triggerZones = getForgeParam(params, "TriggerZones");
 			const secondary = getForgeParam(params, "Secondary");
 			const origin = getForgeParam(params, "Origin");
@@ -2896,7 +2948,7 @@ function lowerTrigger(
 					"only Card.Self dies triggers are supported",
 					where,
 				);
-			return {
+			return ok({
 				id: execute,
 				text,
 				condition: dies
@@ -2914,7 +2966,7 @@ function lowerTrigger(
 						},
 				targets,
 				effects,
-			};
+			});
 		}
 		case "Phase": {
 			const badParams = consumeParams(
@@ -2930,7 +2982,7 @@ function lowerTrigger(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			if (
 				getForgeParam(params, "Phase") !== "Upkeep" ||
 				getForgeParam(params, "TriggerZones") !== "Battlefield"
@@ -2954,13 +3006,13 @@ function lowerTrigger(
 					`unsupported ValidPlayer$ ${rawPlayer}`,
 					where,
 				);
-			return {
+			return ok({
 				id: execute,
 				text,
 				condition: { kind: "begin step", player, step: "upkeep" },
 				targets,
 				effects,
-			};
+			});
 		}
 		case "Drawn": {
 			const badParams = consumeParams(
@@ -2977,7 +3029,7 @@ function lowerTrigger(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			// Sneaky Snacker is the first graveyard-sourced Drawn trigger: it
 			// functions from its owner's graveyard, so only that single zone (or
 			// the default battlefield) is accepted, not a comma-separated list.
@@ -3060,7 +3112,7 @@ function lowerTrigger(
 						where,
 					);
 			}
-			return {
+			return ok({
 				id: execute,
 				text,
 				condition: {
@@ -3073,7 +3125,7 @@ function lowerTrigger(
 				...(triggerZones === "Graveyard"
 					? { functionsFrom: ["graveyard"] }
 					: {}),
-			};
+			});
 		}
 		case "Attacks": {
 			const badParams = consumeParams(
@@ -3081,20 +3133,20 @@ function lowerTrigger(
 				new Set(["mode", "validcard", "execute", "triggerdescription"]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			if (getForgeParam(params, "ValidCard") !== "Card.Self")
 				return issue(
 					"UNSUPPORTED_EFFECT",
 					"unsupported Attacks trigger shape",
 					where,
 				);
-			return {
+			return ok({
 				id: execute,
 				text,
 				condition: { kind: "declare attackers", predicate: { kind: "self" } },
 				targets,
 				effects,
-			};
+			});
 		}
 		case "DamageDone": {
 			const badParams = consumeParams(
@@ -3111,7 +3163,7 @@ function lowerTrigger(
 				]),
 				where,
 			);
-			if (badParams) return badParams;
+			if (!badParams.ok) return badParams;
 			const triggerZones = getForgeParam(params, "TriggerZones");
 			if (
 				getForgeParam(params, "ValidSource") !== "Card.Self" ||
@@ -3124,7 +3176,7 @@ function lowerTrigger(
 					"unsupported DamageDone trigger shape",
 					where,
 				);
-			return {
+			return ok({
 				id: execute,
 				text,
 				condition: {
@@ -3135,7 +3187,7 @@ function lowerTrigger(
 				},
 				targets,
 				effects,
-			};
+			});
 		}
 		default:
 			return issue(
@@ -3191,7 +3243,7 @@ function parseManaCost(text: string): CardDefInput["manaCost"] | null {
 function parseActivationCost(
 	text: string | undefined,
 	where: { nodeId?: string; line?: number },
-): ActivationCost | ImportIssue {
+): Result<ActivationCost, ImportIssue> {
 	if (text === undefined || text === "") {
 		return issue(
 			"UNSUPPORTED_COST",
@@ -3376,12 +3428,12 @@ function parseActivationCost(
 		);
 	}
 
-	return {
+	return ok({
 		mana: sawMana ? mana : "zero",
 		tapSelf,
 		...(sacrifice ? { sacrifice } : {}),
 		...(discard ? { discard } : {}),
-	};
+	});
 }
 
 /**
@@ -3690,8 +3742,8 @@ export function lowerForgeCard(
 		const where = { nodeId: record.source.nodeId, line: record.source.line };
 		if (record.keyword === "ETBReplacement") {
 			const lowered = lowerCopyEtbKeyword(resolver, record);
-			if ("code" in lowered) return reject(lowered);
-			keywordReplacements.push(lowered);
+			if (!lowered.ok) return reject(lowered);
+			keywordReplacements.push(lowered.value);
 			continue;
 		}
 		if (record.keyword === "etbCounter") {
@@ -3767,16 +3819,16 @@ export function lowerForgeCard(
 	const statics: StaticAbilityDefinition[] = [];
 	for (const record of face.statics) {
 		const lowered = lowerStatic(record);
-		if ("code" in lowered) return reject(lowered);
-		statics.push(lowered);
+		if (!lowered.ok) return reject(lowered);
+		statics.push(lowered.value);
 	}
 
 	const replacements: ReplacementEffectDefinition[] = [...keywordReplacements];
 	let entersTappedFromReplacement = false;
 	for (const record of face.replacements) {
 		const lowered = lowerReplacement(resolver, record);
-		if ("code" in lowered) return reject(lowered);
-		if (lowered.kind === "self-entry") {
+		if (!lowered.ok) return reject(lowered);
+		if (lowered.value.kind === "self-entry") {
 			if (entersTappedFromReplacement) {
 				return reject(
 					issue("UNSUPPORTED_KEYWORD", "duplicate enters-tapped rule", {
@@ -3787,7 +3839,7 @@ export function lowerForgeCard(
 			}
 			entersTappedFromReplacement = true;
 		} else {
-			replacements.push(lowered.def);
+			replacements.push(lowered.value.def);
 		}
 	}
 
@@ -3800,8 +3852,8 @@ export function lowerForgeCard(
 	const triggers: TriggeredAbilityDefinition[] = [];
 	for (const record of face.triggers) {
 		const lowered = lowerTrigger(resolver, record, tokenAbilityHost);
-		if ("code" in lowered) return reject(lowered);
-		triggers.push(lowered);
+		if (!lowered.ok) return reject(lowered);
+		triggers.push(lowered.value);
 	}
 
 	let spell: SpellAbilityDef | undefined;
@@ -3810,8 +3862,9 @@ export function lowerForgeCard(
 	for (const record of face.abilities) {
 		const where = { nodeId: record.source.nodeId, line: record.source.line };
 		const params = record.params;
-		const disc = discriminator(params, where);
-		if ("code" in disc) return reject(disc);
+		const _disc = discriminator(params, where);
+		if (!_disc.ok) return reject(_disc);
+		const disc = _disc.value;
 		if (disc.token !== "AB" && disc.token !== "SP") {
 			return reject(
 				issue(
@@ -3822,12 +3875,14 @@ export function lowerForgeCard(
 			);
 		}
 
-		const activationCost =
-			disc.token === "AB"
-				? parseActivationCost(getForgeParam(params, "Cost"), where)
-				: undefined;
-		if (activationCost && "code" in activationCost) {
-			return reject(activationCost);
+		let activationCost: ActivationCost | undefined;
+		if (disc.token === "AB") {
+			const parsedCost = parseActivationCost(
+				getForgeParam(params, "Cost"),
+				where,
+			);
+			if (!parsedCost.ok) return reject(parsedCost);
+			activationCost = parsedCost.value;
 		}
 
 		if (disc.token === "AB" && disc.api === "mana") {
@@ -3836,8 +3891,8 @@ export function lowerForgeCard(
 				new Set(["ab", "cost", "produced", "amount", "spelldescription"]),
 				where,
 			);
-			if (badParams) return reject(badParams);
-			assert(activationCost !== undefined && !("code" in activationCost));
+			if (!badParams.ok) return reject(badParams);
+			assert(activationCost !== undefined);
 			const produced = getForgeParam(params, "Produced");
 			const anyColor = produced === "Any";
 			const modal = anyColor || (produced?.startsWith("Combo ") ?? false);
@@ -4003,10 +4058,14 @@ export function lowerForgeCard(
 		if (disc.token === "SP") {
 			const costText = getForgeParam(params, "Cost");
 			if (costText !== undefined) {
-				const parsed = parseActivationCost(costText, where);
-				if ("code" in parsed) return reject(parsed);
-				const restated = restatesManaCost(parsed.mana, manaCost);
-				if (parsed.tapSelf || !restated || !parsed.sacrifice) {
+				const parsedCost = parseActivationCost(costText, where);
+				if (!parsedCost.ok) return reject(parsedCost);
+				const restated = restatesManaCost(parsedCost.value.mana, manaCost);
+				if (
+					parsedCost.value.tapSelf ||
+					!restated ||
+					!parsedCost.value.sacrifice
+				) {
 					return reject(
 						issue(
 							"UNSUPPORTED_COST",
@@ -4018,7 +4077,7 @@ export function lowerForgeCard(
 				// The engine models exactly one additional cost: sacrifice one
 				// creature you control. A narrower or wider selector (Sac<1/Goblin>,
 				// Sac<1/Permanent>) would change which permanents pay it.
-				const selector = parsed.sacrifice.predicate;
+				const selector = parsedCost.value.sacrifice.predicate;
 				if (!(selector.kind === "type" && selector.type === "creature")) {
 					return reject(
 						issue(
@@ -4074,7 +4133,7 @@ export function lowerForgeCard(
 			disc.token === "AB",
 			tokenAbilityHost,
 		);
-		if ("code" in chain) return reject(chain);
+		if (!chain.ok) return reject(chain);
 		const description = getForgeParam(params, "SpellDescription");
 		if (!description)
 			return reject(
@@ -4097,10 +4156,10 @@ export function lowerForgeCard(
 				text: description,
 				...(additionalCost ? { additionalCost } : {}),
 				targets,
-				effects: chain,
+				effects: chain.value,
 			};
 		} else {
-			assert(activationCost !== undefined && !("code" in activationCost));
+			assert(activationCost !== undefined);
 			activatedCount += 1;
 			activatedAbilities.push({
 				kind: "activated",
@@ -4109,7 +4168,7 @@ export function lowerForgeCard(
 				cost: activationCost,
 				...(functionsFrom ? { functionsFrom } : {}),
 				targets,
-				effects: chain,
+				effects: chain.value,
 			});
 		}
 	}
