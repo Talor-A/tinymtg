@@ -1107,6 +1107,14 @@ function parseEffectPlayer<Player extends TriggerEffectPlayer>(
 	return player === null ? null : { kind: "relative-player", player };
 }
 
+/**
+ * Lowers one Forge ability record's instruction. Most APIs lower to a single
+ * engine effect, but an instruction the engine spells with several does not:
+ * `Pump | NumAtt$ +3 | NumDef$ +3 | KW$ Flying` (Angelic Blessing) is one
+ * record and one printed sentence, and lowers to a P/T modification plus one
+ * keyword grant. The expansion belongs to the branch that read the parameters,
+ * so the arity is the API's, not a caller's.
+ */
 function parseEffects<Player extends TriggerEffectPlayer>(
 	params: ForgeParamList,
 	discriminatorLower: string,
@@ -1116,28 +1124,6 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 	allowSourceObject: boolean,
 	tokenAbilityHost: TokenAbilityHost,
 ): Result<Exclude<EffectDef<Player>, { kind: "may" }>[], ImportIssue> {
-	const effect = parseOneEffect(
-		params,
-		discriminatorLower,
-		api,
-		where,
-		parsePlayer,
-		allowSourceObject,
-		tokenAbilityHost,
-	);
-	if (!effect.ok) return effect;
-	return { ok: true, value: [effect.value] };
-}
-
-function parseOneEffect<Player extends TriggerEffectPlayer>(
-	params: ForgeParamList,
-	discriminatorLower: string,
-	api: string,
-	where: { nodeId?: string; line?: number },
-	parsePlayer: (value: string | undefined) => Player | null,
-	allowSourceObject: boolean,
-	tokenAbilityHost: TokenAbilityHost,
-): Result<Exclude<EffectDef<Player>, { kind: "may" }>, ImportIssue> {
 	// Every branch claims this record's whole parameter list, and every branch's
 	// list opens with its own discriminator and closes with the keys common to
 	// all effects. `claim` supplies those invariant ends, so a branch states
@@ -1170,7 +1156,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			);
 			if (!who || !amount)
 				return issue("UNSUPPORTED_PARAMETER", shape.message, where);
-			return ok({ kind: shape.kind, subject: who, amount });
+			return ok([{ kind: shape.kind, subject: who, amount }]);
 		}
 		case "dig": {
 			const badParams = claim(
@@ -1205,12 +1191,14 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 						where,
 					);
 				}
-				return ok({
-					kind: "exile-top",
-					subject: who,
-					amount,
-					resultSlot: REMEMBERED_EXILE_SLOT,
-				});
+				return ok([
+					{
+						kind: "exile-top",
+						subject: who,
+						amount,
+						resultSlot: REMEMBERED_EXILE_SLOT,
+					},
+				]);
 			}
 			if (
 				who?.kind !== "relative-player" ||
@@ -1226,7 +1214,9 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					where,
 				);
 			}
-			return ok({ kind: "choose-from-top", subject: who.player, amount, keep });
+			return ok([
+				{ kind: "choose-from-top", subject: who.player, amount, keep },
+			]);
 		}
 		case "investigate": {
 			const badParams = claim();
@@ -1235,12 +1225,14 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			// controller investigates once. Explicit variants reject above.
 			const controller = parsePlayer(undefined);
 			assert(controller !== null, "default effect player must be supported");
-			return ok({
-				kind: "create-token",
-				controller,
-				characteristics: cloneCharacteristics(CLUE_TOKEN),
-				amount: 1,
-			});
+			return ok([
+				{
+					kind: "create-token",
+					controller,
+					characteristics: cloneCharacteristics(CLUE_TOKEN),
+					amount: 1,
+				},
+			]);
 		}
 		case "draw": {
 			const badParams = claim("defined", "validtgts", "tgtprompt", "numcards");
@@ -1249,15 +1241,17 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			if (!amount)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported draw amount", where);
 			if (getForgeParam(params, "Defined") === "Player")
-				return ok({
-					kind: "each player draw",
-					subjects: "each-player",
-					amount,
-				});
+				return ok([
+					{
+						kind: "each player draw",
+						subjects: "each-player",
+						amount,
+					},
+				]);
 			const who = parseEffectPlayer(params, parsePlayer);
 			if (!who)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported draw player", where);
-			return ok({ kind: "draw", subject: who, amount });
+			return ok([{ kind: "draw", subject: who, amount }]);
 		}
 		case "discard": {
 			const badParams = claim("defined", "mode", "numcards");
@@ -1276,7 +1270,9 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"only discarding exactly one chosen card is supported",
 					where,
 				);
-			return ok({ kind: "discard", selector: "any", amount: 1, subject: who });
+			return ok([
+				{ kind: "discard", selector: "any", amount: 1, subject: who },
+			]);
 		}
 		case "sacrifice": {
 			const badParams = claim(
@@ -1309,12 +1305,14 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"Sacrifice requires a supported player, selector, and an amount of one",
 					where,
 				);
-			return ok({
-				kind: "sacrifice",
-				subject: who,
-				predicate: selector,
-				amount: 1,
-			});
+			return ok([
+				{
+					kind: "sacrifice",
+					subject: who,
+					predicate: selector,
+					amount: 1,
+				},
+			]);
 		}
 		case "dealdamage": {
 			const badParams = claim("validtgts", "tgtprompt", "defined", "numdmg");
@@ -1324,11 +1322,13 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				return issue("UNSUPPORTED_PARAMETER", "unsupported NumDmg", where);
 			const defined = getForgeParam(params, "Defined");
 			if (defined === undefined)
-				return ok({
-					kind: "damage",
-					subject: { kind: "target", slot: TARGET_SLOT },
-					amount,
-				});
+				return ok([
+					{
+						kind: "damage",
+						subject: { kind: "target", slot: TARGET_SLOT },
+						amount,
+					},
+				]);
 			const player = parsePlayer(defined);
 			if (!player)
 				return issue(
@@ -1336,36 +1336,44 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported Defined$ damage recipient",
 					where,
 				);
-			return ok({
-				kind: "damage",
-				subject: { kind: "relative-player", player },
-				amount,
-			});
+			return ok([
+				{
+					kind: "damage",
+					subject: { kind: "relative-player", player },
+					amount,
+				},
+			]);
 		}
 		case "destroy": {
 			const badParams = claim("validtgts", "tgtprompt");
 			if (!badParams.ok) return badParams;
-			return ok({
-				kind: "destroy",
-				subject: { kind: "target", slot: TARGET_SLOT },
-			});
+			return ok([
+				{
+					kind: "destroy",
+					subject: { kind: "target", slot: TARGET_SLOT },
+				},
+			]);
 		}
 		case "tap":
 		case "untap": {
 			const badParams = claim("validtgts", "tgtprompt");
 			if (!badParams.ok) return badParams;
-			return ok({
-				kind: api,
-				subject: { kind: "target", slot: TARGET_SLOT },
-			});
+			return ok([
+				{
+					kind: api,
+					subject: { kind: "target", slot: TARGET_SLOT },
+				},
+			]);
 		}
 		case "counter": {
 			const badParams = claim("validtgts", "tgtprompt", "targettype");
 			if (!badParams.ok) return badParams;
-			return ok({
-				kind: "counter",
-				subject: { kind: "target", slot: TARGET_SLOT },
-			});
+			return ok([
+				{
+					kind: "counter",
+					subject: { kind: "target", slot: TARGET_SLOT },
+				},
+			]);
 		}
 		case "changezone": {
 			const badParams = claim(
@@ -1417,19 +1425,21 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				}
 				const chooser = parsePlayer("You");
 				assert(chooser !== null, "ability controller must be supported");
-				return ok({
-					kind: "change-zone",
-					subject: {
-						kind: "chosen-permanent",
-						player: chooser,
-						predicate: selector,
-						prompt:
-							getForgeParam(params, "SpellDescription") ??
-							"Choose a permanent to return to its owner's hand.",
+				return ok([
+					{
+						kind: "change-zone",
+						subject: {
+							kind: "chosen-permanent",
+							player: chooser,
+							predicate: selector,
+							prompt:
+								getForgeParam(params, "SpellDescription") ??
+								"Choose a permanent to return to its owner's hand.",
+						},
+						from: "battlefield",
+						destination: { zone: "hand" },
 					},
-					from: "battlefield",
-					destination: { zone: "hand" },
-				});
+				]);
 			}
 			const origin =
 				originText === undefined ? undefined : PUBLIC_ZONES.get(originText);
@@ -1592,31 +1602,37 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			switch (origin) {
 				case "battlefield":
 					assert(destination.zone !== "battlefield");
-					return ok({
-						kind: "change-zone",
-						subject,
-						from: origin,
-						destination,
-						...(rememberTargets === "True"
-							? { resultSlot: REMEMBERED_ZONE_CHANGE_SLOT }
-							: {}),
-					});
+					return ok([
+						{
+							kind: "change-zone",
+							subject,
+							from: origin,
+							destination,
+							...(rememberTargets === "True"
+								? { resultSlot: REMEMBERED_ZONE_CHANGE_SLOT }
+								: {}),
+						},
+					]);
 				case "graveyard":
 					assert(destination.zone !== "graveyard");
-					return ok({
-						kind: "change-zone",
-						subject,
-						from: origin,
-						destination,
-					});
+					return ok([
+						{
+							kind: "change-zone",
+							subject,
+							from: origin,
+							destination,
+						},
+					]);
 				case "exile":
 					assert(destination.zone !== "exile");
-					return ok({
-						kind: "change-zone",
-						subject,
-						from: origin,
-						destination,
-					});
+					return ok([
+						{
+							kind: "change-zone",
+							subject,
+							from: origin,
+							destination,
+						},
+					]);
 			}
 			throw new Error("unreachable ChangeZone origin");
 		}
@@ -1648,12 +1664,14 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 						"targeted PutCounter cannot also use Defined$",
 						where,
 					);
-				return ok({
-					kind: "add counters",
-					subject: { kind: "target", slot: TARGET_SLOT },
-					counter,
-					amount,
-				});
+				return ok([
+					{
+						kind: "add counters",
+						subject: { kind: "target", slot: TARGET_SLOT },
+						counter,
+						amount,
+					},
+				]);
 			}
 			// Forge defaults an omitted Defined$ to the source object when the
 			// ability declares no targets. Only permanent abilities can use that
@@ -1664,12 +1682,14 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"unsupported non-targeted PutCounter subject",
 					where,
 				);
-			return ok({
-				kind: "add counters",
-				subject: { kind: "source" },
-				counter,
-				amount,
-			});
+			return ok([
+				{
+					kind: "add counters",
+					subject: { kind: "source" },
+					counter,
+					amount,
+				},
+			]);
 		}
 		case "token": {
 			const badParams = claim("tokenscript", "tokenowner", "tokenamount");
@@ -1708,12 +1728,14 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				tokenAbilityHost,
 			);
 			if (!characteristics.ok) return characteristics;
-			return ok({
-				kind: "create-token",
-				controller,
-				characteristics: characteristics.value,
-				amount,
-			});
+			return ok([
+				{
+					kind: "create-token",
+					controller,
+					characteristics: characteristics.value,
+					amount,
+				},
+			]);
 		}
 		case "pump": {
 			const badParams = claim(
@@ -1771,21 +1793,25 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			if (keywordText !== undefined) {
 				const keyword = BARE_KEYWORDS.get(keywordText);
 				assertDefined(keyword);
-				return ok({
-					kind: "grant-keyword",
-					subject,
-					keyword,
-					duration: "until-end-of-turn",
-				});
+				return ok([
+					{
+						kind: "grant-keyword",
+						subject,
+						keyword,
+						duration: "until-end-of-turn",
+					},
+				]);
 			}
 			assert(power !== null && toughness !== null);
-			return ok({
-				kind: "modify-pt",
-				subject,
-				power,
-				toughness,
-				duration: "until-end-of-turn",
-			});
+			return ok([
+				{
+					kind: "modify-pt",
+					subject,
+					power,
+					toughness,
+					duration: "until-end-of-turn",
+				},
+			]);
 		}
 		default:
 			return issue(
