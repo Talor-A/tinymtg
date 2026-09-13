@@ -2825,6 +2825,36 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		});
 	});
 
+	test("Bull Rush lowers NumAtt$ alone as +2/+0", () => {
+		// Forge leaves out the side that doesn't change. A missing NumDef$ is a
+		// toughness delta of zero, not a reason to drop the P/T change.
+		const result = importFixture("b/bull_rush");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.spell?.effects).toEqual([
+			{
+				kind: "modify-pt",
+				subject: { kind: "target", slot: "target-1" },
+				power: 2,
+				toughness: 0,
+				duration: "until-end-of-turn",
+			},
+		]);
+	});
+
+	test("Honor Guard lowers NumDef$ alone as +0/+1", () => {
+		const result = importFixture("h/honor_guard");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated[0]?.effects).toEqual([
+			{
+				kind: "modify-pt",
+				subject: { kind: "source" },
+				power: 0,
+				toughness: 1,
+				duration: "until-end-of-turn",
+			},
+		]);
+	});
+
 	test("Selfless Savior lowers its self-sacrifice and temporary indestructible grant", () => {
 		const result = importFixture("s/selfless_savior");
 		if (!result.ok) throw new Error("expected ok");

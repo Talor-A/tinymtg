@@ -1786,13 +1786,16 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				pumpEffect.keywords.push(keyword);
 			}
 
-			if (powerText && toughnessText) {
-				const power = signedInteger(powerText);
-				const toughness = signedInteger(toughnessText);
+			// Forge omits the side that doesn't change: `NumAtt$ +2` alone is
+			// +2/+0. Only a side that is present must parse as a fixed integer.
+			if (powerText !== undefined || toughnessText !== undefined) {
+				const power = powerText === undefined ? 0 : signedInteger(powerText);
+				const toughness =
+					toughnessText === undefined ? 0 : signedInteger(toughnessText);
 				if (power === null || toughness === null) {
 					return issue(
 						"UNSUPPORTED_PARAMETER",
-						"Pump requires fixed NumAtt and NumDef values, or a supported KW$",
+						"Pump requires fixed NumAtt$/NumDef$ values, or a supported KW$",
 						where,
 					);
 				}
@@ -1830,7 +1833,8 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				});
 			}
 
-			if (pumpEffect.p) {
+			// `p` and `t` are set together, and either may legitimately be 0.
+			if (pumpEffect.p !== null) {
 				assertDefined(pumpEffect.t);
 				effectList.push({
 					kind: "modify-pt",
