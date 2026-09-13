@@ -101,6 +101,7 @@ const RUNTIME_CARDS = [
 	loadRuntimeFixture("c/charcoal_diamond", "rt-charcoal-diamond"),
 	loadRuntimeFixture("t/timeless_lotus", "rt-timeless-lotus"),
 	loadRuntimeFixture("t/temple_of_epiphany", "rt-temple-of-epiphany"),
+	loadRuntimeFixture("g/golgari_rot_farm", "rt-golgari-rot-farm"),
 	loadRuntimeFixture("c/clone", "rt-clone"),
 	loadRuntimeFixture("c/copy_artifact", "rt-copy-artifact"),
 	loadRuntimeFixture("b/blood_pact", "rt-blood-pact"),
@@ -1987,6 +1988,64 @@ describe("forge-import runtime: activated abilities", () => {
 			expect(state.stack).toHaveLength(0);
 		});
 	}
+
+	test("Golgari Rot Farm enters tapped, returns a chosen land, and taps for {B}{G}", () => {
+		const state = engine.newGame();
+		const forest = engine.spawnPermanent(state, "forest", ALICE);
+		const offered: ObjectId[][] = [];
+		const alice = new ScriptedAgent();
+		const chooseForest: SyncAgent = {
+			choose(view, request) {
+				if (
+					request.kind === "object" &&
+					request.context.reason.kind === "select"
+				) {
+					offered.push([...request.context.objects]);
+					return { optionId: String(forest.id) };
+				}
+				return alice.choose(view, request);
+			},
+		};
+		const agents: SyncAgents = [chooseForest, new ScriptedAgent()];
+		beginFirstTurn(engine, state, agents);
+
+		const farm = enterFromHand(state, "rt-golgari-rot-farm", ALICE, agents);
+		expect(permanent(state, farm).tapped).toBe(true);
+		expect(state.pendingTriggers).toHaveLength(1);
+
+		engine.settlePriority(state, agents);
+		expect(offered).toEqual([[forest.id, farm]]);
+		expect(state.battlefield).not.toContain(forest.id);
+		expect(state.objects.has(forest.id)).toBe(false);
+		expect(
+			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+		).toContain("Forest");
+		expect(permanent(state, farm).tapped).toBe(true);
+
+		engine.perform(
+			state,
+			{ kind: "untap", ref: { kind: "object", object: farm } },
+			agents,
+		);
+		engine.executeAbilityAction(
+			state,
+			ALICE,
+			{
+				kind: "activate ability",
+				source: farm,
+				ability: abilityId("activated", "rt-golgari-rot-farm", 0),
+			},
+			agents,
+		);
+		expect(state.players[ALICE].manaPool).toEqual({
+			w: 0,
+			u: 0,
+			b: 1,
+			r: 0,
+			g: 1,
+			c: 0,
+		});
+	});
 
 	test("Black Lotus offers three of each colour, sacrifices itself, and pays out only the chosen colour", () => {
 		const state = setupMain(engine);

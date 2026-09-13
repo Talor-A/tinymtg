@@ -2109,6 +2109,14 @@ export interface EffectResultObjectRef {
 	slot: string;
 }
 
+/** A non-targeted permanent chosen as an instruction resolves. */
+export interface ChosenPermanentEffectRef<Player extends TriggerEffectPlayer> {
+	kind: "chosen-permanent";
+	player: Player;
+	predicate: ObjectPredicateDef;
+	prompt: string;
+}
+
 export type MayPlaySubjectRef = TargetEffectRef | EffectResultObjectRef;
 
 export type EffectPlayerSubject<Player extends TriggerEffectPlayer> =
@@ -2127,7 +2135,7 @@ export type ZoneChangeEffectDestination<Player extends TriggerEffectPlayer> =
 			tapped?: boolean;
 	  };
 
-export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
+type BoundZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
 	[Origin in PublicObjectZone]: {
 		kind: "change-zone";
 		subject: SourceEffectRef | TargetEffectRef | EffectResultObjectRef;
@@ -2137,6 +2145,21 @@ export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
 		resultSlot?: string;
 	};
 }[PublicObjectZone];
+
+type ChosenPermanentZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
+	kind: "change-zone";
+	subject: ChosenPermanentEffectRef<Player>;
+	from: "battlefield";
+	destination: Exclude<
+		ZoneChangeEffectDestination<Player>,
+		{ zone: "battlefield" }
+	>;
+	resultSlot?: never;
+};
+
+export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> =
+	| BoundZoneChangeEffectDef<Player>
+	| ChosenPermanentZoneChangeEffectDef<Player>;
 
 type ExileTopEffectDef<Player extends TriggerEffectPlayer> = {
 	kind: "exile-top";
@@ -7299,7 +7322,37 @@ function resolveEffects(
 			let ref: EntityRef | null;
 			if (effect.subject.kind === "source") ref = null;
 			else if (effect.subject.kind === "target") ref = bound;
-			else {
+			else if (effect.subject.kind === "chosen-permanent") {
+				assert(
+					effect.from === "battlefield",
+					"a chosen permanent must come from the battlefield",
+				);
+				const chooser = relativeEffectPlayer(item, effect.subject.player);
+				const predicate = {
+					definition: effect.subject.predicate,
+					context: { controller: item.controller, source: item.source },
+				};
+				const read = createReadContext(engine, state);
+				const candidates = state.battlefield.filter((id) =>
+					objectMatchesPredicate(
+						predicate.definition,
+						getSnapshot(read, id),
+						predicate.context,
+					),
+				);
+				// An instruction requiring an impossible choice does nothing.
+				if (candidates.length === 0) continue;
+				const chosen = choices.chooseObject(state, chooser, {
+					reason: {
+						kind: "select",
+						prompt: effect.subject.prompt,
+						source: item.source,
+					},
+					objects: candidates,
+					predicate,
+				});
+				ref = { type: "permanent", id: chosen };
+			} else {
 				const results = scope.bindings.get(effect.subject.slot) ?? [];
 				assert(
 					results.length <= 1,
@@ -7950,6 +8003,11 @@ function requiredTargetDefinition(
 		if (
 			effect.kind === "change-zone" &&
 			effect.subject.kind === "effect-result"
+		)
+			return;
+		if (
+			effect.kind === "change-zone" &&
+			effect.subject.kind === "chosen-permanent"
 		)
 			return;
 		if (

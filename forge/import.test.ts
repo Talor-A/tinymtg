@@ -195,6 +195,64 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Golgari Rot Farm lowers its mandatory non-targeted land return", () => {
+		const result = importFixture("g/golgari_rot_farm");
+		if (!result.ok) throw new Error("expected Golgari Rot Farm to import");
+		expect(result.card).toMatchObject({
+			name: "Golgari Rot Farm",
+			types: ["land"],
+			manaCost: "none",
+			entersTapped: true,
+		});
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigReturn",
+				text: "When CARDNAME enters, return a land you control to its owner's hand.",
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "battlefield",
+					predicate: { kind: "self" },
+				},
+				targets: [],
+				effects: [
+					{
+						kind: "change-zone",
+						subject: {
+							kind: "chosen-permanent",
+							player: "you",
+							predicate: {
+								kind: "and",
+								predicates: [
+									{ kind: "type", type: "land" },
+									{ kind: "controller", player: "you" },
+								],
+							},
+							prompt: "Return a land you control to its owner's hand.",
+						},
+						from: "battlefield",
+						destination: { zone: "hand" },
+					},
+				],
+			},
+		]);
+		expect(result.card.abilityDefinitions.activated).toEqual([
+			{
+				kind: "mana",
+				id: "activated-1",
+				text: "Add {B}{G}.",
+				cost: { mana: "zero", tapSelf: true },
+				effects: [
+					{
+						kind: "add-mana",
+						subject: "you",
+						mana: { w: 0, u: 0, b: 1, r: 0, g: 1, c: 0 },
+					},
+				],
+			},
+		]);
+	});
+
 	test("Forest and Swamp synthesize their basic-land mana ability", () => {
 		for (const [fixture, color] of [
 			["f/forest", "g"],

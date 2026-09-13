@@ -15,7 +15,8 @@
  * the concrete subset documented in the acceptance matrix in README.md lowers.
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
- * `ChangeZone` searches, hidden Hand/Library origins, Stack origins, and
+ * `ChangeZone` searches other than a mandatory single choice from the public
+ * battlefield, hidden Hand/Library origins, Stack origins, and
  * multi-object movement; random or multi-card discard; alternate spell costs,
  * additional spell costs other than one permanent sacrifice, and activation
  * costs other than fixed generic/coloured mana,
@@ -688,6 +689,11 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 		if (
 			effect.kind === "change-zone" &&
 			effect.subject.kind === "effect-result"
+		)
+			continue;
+		if (
+			effect.kind === "change-zone" &&
+			effect.subject.kind === "chosen-permanent"
 		)
 			continue;
 		const counterTarget = effect.kind === "counter" ? effect.subject : null;
@@ -1426,12 +1432,58 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"activationzone",
 					"remembertargets",
 					"forgetothertargets",
+					"hidden",
+					"mandatory",
+					"changetype",
 					...COMMON_EFFECT_PARAMS,
 				]),
 				where,
 			);
 			if (!badParams.ok) return badParams;
 			const originText = getForgeParam(params, "Origin");
+			const changeType = getForgeParam(params, "ChangeType");
+			if (changeType !== undefined) {
+				const selector = parseSelector(changeType);
+				const amount = positiveInteger(getForgeParam(params, "ChangeNum"), 1);
+				if (
+					selector === null ||
+					amount !== 1 ||
+					(originText !== undefined && originText !== "Battlefield") ||
+					getForgeParam(params, "Destination") !== "Hand" ||
+					getForgeParam(params, "Hidden") !== "True" ||
+					getForgeParam(params, "Mandatory") !== "True" ||
+					getForgeParam(params, "Defined") !== undefined ||
+					getForgeParam(params, "ValidTgts") !== undefined ||
+					getForgeParam(params, "TgtZone") !== undefined ||
+					getForgeParam(params, "GainControl") !== undefined ||
+					getForgeParam(params, "Tapped") !== undefined ||
+					getForgeParam(params, "LibraryPosition") !== undefined ||
+					getForgeParam(params, "ActivationZone") !== undefined ||
+					getForgeParam(params, "RememberTargets") !== undefined ||
+					getForgeParam(params, "ForgetOtherTargets") !== undefined
+				) {
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"unsupported non-targeted ChangeZone choice",
+						where,
+					);
+				}
+				const chooser = parsePlayer("You");
+				assert(chooser !== null, "ability controller must be supported");
+				return ok({
+					kind: "change-zone",
+					subject: {
+						kind: "chosen-permanent",
+						player: chooser,
+						predicate: selector,
+						prompt:
+							getForgeParam(params, "SpellDescription") ??
+							"Choose a permanent to return to its owner's hand.",
+					},
+					from: "battlefield",
+					destination: { zone: "hand" },
+				});
+			}
 			const origin: PublicObjectZone | null =
 				originText === "Battlefield"
 					? "battlefield"
