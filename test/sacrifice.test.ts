@@ -26,7 +26,13 @@ const TEST_CARD_1 = defineCard({
 				},
 			},
 			targets: [],
-			effects: [{ kind: "scry", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "scry",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		},
 	],
 });
@@ -74,7 +80,13 @@ const TEST_CARD_3 = defineCard({
 				sacrifice: { predicate: { kind: "self" }, amount: 1 },
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		},
 	],
 });
@@ -102,7 +114,7 @@ const TEST_CARD_4 = defineCard({
 			effects: [
 				{
 					kind: "sacrifice",
-					subject: { targetSlot: "player" },
+					subject: { kind: "target-player", slot: "player" },
 					predicate: { kind: "type", type: "creature" },
 					amount: 1,
 				},
@@ -117,7 +129,7 @@ const TEST_CARD_4 = defineCard({
 			effects: [
 				{
 					kind: "sacrifice",
-					subject: "you",
+					subject: { kind: "relative-player", player: "you" },
 					predicate: { kind: "type", type: "creature" },
 					amount: 1,
 				},
@@ -145,7 +157,13 @@ const TEST_CARD_5 = defineCard({
 				predicate: { kind: "type", type: "creature" },
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		},
 	],
 });

@@ -88,7 +88,7 @@ const TEST_CARD_3 = defineCard({
 		effects: [
 			{
 				kind: "may-play",
-				subject: { binding: "target", slot: "target-1" },
+				subject: { kind: "target", slot: "target-1" },
 				from: "exile",
 				duration: "until-end-of-turn",
 			},
@@ -118,7 +118,13 @@ const TEST_CARD_4 = defineCard({
 				},
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		},
 	],
 });
@@ -189,7 +195,13 @@ const TEST_CARD_9 = defineCard({
 				},
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		},
 		{
 			id: "noncreature",
@@ -203,7 +215,13 @@ const TEST_CARD_9 = defineCard({
 				},
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		},
 	],
 });

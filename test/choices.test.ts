@@ -415,7 +415,13 @@ describe("choice transcripts", () => {
 					{
 						kind: "may",
 						decider: "you",
-						effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+						effects: [
+							{
+								kind: "gain-life",
+								subject: { kind: "relative-player", player: "you" },
+								amount: 1,
+							},
+						],
 					},
 				],
 			});
@@ -492,7 +498,13 @@ describe("choice transcripts", () => {
 					{
 						kind: "may",
 						decider: "you",
-						effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+						effects: [
+							{
+								kind: "gain-life",
+								subject: { kind: "relative-player", player: "you" },
+								amount: 1,
+							},
+						],
 					},
 				],
 			}),

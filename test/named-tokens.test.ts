@@ -42,7 +42,13 @@ describe("named artifact tokens", () => {
 				sacrifice: { predicate: { kind: "self" }, amount: 1 },
 			},
 			targets: [],
-			effects: [{ kind: "draw", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "draw",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		});
 	});
 

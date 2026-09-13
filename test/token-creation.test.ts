@@ -47,7 +47,13 @@ const TEST_CARD_1 = defineCard({
 				predicate: { kind: "self" },
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", subject: "you", amount: 3 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 3,
+				},
+			],
 		},
 	],
 });

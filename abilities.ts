@@ -62,7 +62,7 @@ export function printedKeywordTriggers(
 				effects: [
 					{
 						kind: "modify-pt",
-						subject: "source",
+						subject: { kind: "source" },
 						power: 1,
 						toughness: 1,
 						duration: "until-end-of-turn",
@@ -93,7 +93,7 @@ export function printedKeywordTriggers(
 				effects: [
 					{
 						kind: "modify-pt",
-						subject: "source",
+						subject: { kind: "source" },
 						power: amount,
 						toughness: amount,
 						duration: "until-end-of-turn",

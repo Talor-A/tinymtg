@@ -225,6 +225,72 @@ describe("Counterspell", () => {
 	});
 });
 
+describe("Negate", () => {
+	test("is unavailable when the only spell is a creature", () => {
+		const { state } = putGrizzlyBearsOnStack();
+		const negate = engine.spawnCard(state, "negate", ALICE, "hand");
+		twoIslandsTappedFor(state, ALICE);
+
+		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual({
+			kind: "cast",
+			card: negate.id,
+		});
+	});
+
+	test("rejects a creature spell and counters a noncreature spell", () => {
+		const { state, spell: creatureSpell } = putGrizzlyBearsOnStack();
+		const counterspell = engine.spawnCard(state, "counterspell", BOB, "hand");
+		const moved = engine.perform(
+			state,
+			{
+				kind: "change zone",
+				object: counterspell.id,
+				from: "hand",
+				destination: { zone: "stack", controller: BOB, targets: [] },
+				cause: "cast",
+			},
+			passingAgents(),
+		);
+		const noncreatureSpell = moved.created[0];
+		if (noncreatureSpell === undefined)
+			throw new Error("expected a noncreature spell object");
+
+		const negate = engine.spawnCard(state, "negate", ALICE, "hand");
+		twoIslandsTappedFor(state, ALICE);
+		expect(engine.getObservableActions(state, ALICE)).toContainEqual({
+			kind: "cast",
+			card: negate.id,
+		});
+
+		const illegal = new ScriptedAgent();
+		illegal.targetChoices.push({ type: "spell", id: creatureSpell });
+		expect(() =>
+			engine.executeCastAction(
+				state,
+				ALICE,
+				{ kind: "cast", card: negate.id },
+				[illegal, new ScriptedAgent()],
+			),
+		).toThrow("legal options");
+		expect(state.players[ALICE].hand).toContain(negate.id);
+		expect(state.players[ALICE].manaPool.u).toBe(2);
+
+		const legal = new ScriptedAgent();
+		legal.targetChoices.push({ type: "spell", id: noncreatureSpell });
+		engine.executeCastAction(state, ALICE, { kind: "cast", card: negate.id }, [
+			legal,
+			new ScriptedAgent(),
+		]);
+		engine.settlePriority(state, passingAgents());
+
+		expect(state.stack).toEqual([]);
+		expect(state.players[BOB].graveyard).toHaveLength(1);
+		expect(state.players[ALICE].graveyard).toHaveLength(1);
+		// The two Islands remain and the original creature spell resolves.
+		expect(state.battlefield).toHaveLength(3);
+	});
+});
+
 describe("Ertai, Wizard Adept", () => {
 	test("counters a spell from an activated ability", () => {
 		const { state, spell } = putGrizzlyBearsOnStack();

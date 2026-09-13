@@ -50,7 +50,13 @@ const TEST_CARD_1 = defineCard({
 				predicate: { kind: "self" },
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", subject: "you", amount: 3 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 3,
+				},
+			],
 		},
 	],
 });
@@ -101,7 +107,7 @@ const TEST_CARD_3 = defineCard({
 		effects: [
 			{
 				kind: "may-play",
-				subject: { binding: "target", slot: "target-1" },
+				subject: { kind: "target", slot: "target-1" },
 				from: "exile",
 				duration: "until-end-of-turn",
 			},
@@ -148,7 +154,13 @@ function occupyStack(state: GameState): void {
 		targets: [],
 		sourceLastKnown: null,
 		text: "At the beginning of your upkeep, you may gain 1 life.",
-		effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+		effects: [
+			{
+				kind: "gain-life",
+				subject: { kind: "relative-player", player: "you" },
+				amount: 1,
+			},
+		],
 	});
 }
 

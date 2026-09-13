@@ -52,7 +52,11 @@ const TEST_CARD_1 = defineCard({
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
 			effects: [
-				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
+				{
+					kind: "damage",
+					subject: { kind: "target", slot: "target-1" },
+					amount: 2,
+				},
 			],
 		},
 	],

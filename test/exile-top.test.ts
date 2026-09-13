@@ -32,7 +32,13 @@ const TEST_CARD_1 = defineCard({
 		id: "test-exile-top-one-spell",
 		text: "Exile the top card of your library.",
 		targets: [],
-		effects: [{ kind: "exile-top", subject: "you", amount: 1 }],
+		effects: [
+			{
+				kind: "exile-top",
+				subject: { kind: "relative-player", player: "you" },
+				amount: 1,
+			},
+		],
 	},
 });
 
@@ -46,7 +52,13 @@ const TEST_CARD_2 = defineCard({
 		id: "test-exile-top-opponent-spell",
 		text: "Exile the top two cards of an opponent's library.",
 		targets: [],
-		effects: [{ kind: "exile-top", subject: "opponent", amount: 2 }],
+		effects: [
+			{
+				kind: "exile-top",
+				subject: { kind: "relative-player", player: "opponent" },
+				amount: 2,
+			},
+		],
 	},
 });
 
@@ -63,13 +75,13 @@ const TEST_CARD_3 = defineCard({
 		effects: [
 			{
 				kind: "exile-top",
-				subject: "you",
+				subject: { kind: "relative-player", player: "you" },
 				amount: 2,
 				resultSlot: "exiled-cards",
 			},
 			{
 				kind: "may-play",
-				subject: { binding: "effect-result", slot: "exiled-cards" },
+				subject: { kind: "effect-result", slot: "exiled-cards" },
 				from: "exile",
 				duration: "until-end-of-turn",
 			},
@@ -288,5 +300,107 @@ describe("exile top as a spell effect", () => {
 			]),
 		);
 		expect(state.temporaryEffects).toHaveLength(2);
+	});
+});
+
+describe("effect-result definition validation", () => {
+	const card = (
+		effects: NonNullable<Parameters<typeof defineCard>[0]["spell"]>["effects"],
+	) => ({
+		id: "test-effect-result-validation",
+		name: "Test Effect Result Validation",
+		types: ["sorcery" as const],
+		colors: [],
+		manaCost: "zero" as const,
+		spell: {
+			id: "spell",
+			text: "Test effect-result validation.",
+			targets: [],
+			effects,
+		},
+	});
+
+	test("rejects an effect-result consumer with no preceding producer", () => {
+		expect(() =>
+			defineCard(
+				card([
+					{
+						kind: "may-play",
+						subject: { kind: "effect-result", slot: "missing" },
+						from: "exile",
+						duration: "until-end-of-turn",
+					},
+				]),
+			),
+		).toThrow("unavailable effect result missing");
+	});
+
+	test("rejects duplicate result slots", () => {
+		expect(() =>
+			defineCard(
+				card([
+					{
+						kind: "exile-top",
+						subject: { kind: "relative-player", player: "you" },
+						amount: 1,
+						resultSlot: "cards",
+					},
+					{
+						kind: "exile-top",
+						subject: { kind: "relative-player", player: "you" },
+						amount: 1,
+						resultSlot: "cards",
+					},
+				]),
+			),
+		).toThrow("duplicate effect result slot cards");
+	});
+
+	test("rejects a consumer whose origin disagrees with the produced zone", () => {
+		expect(() =>
+			defineCard(
+				card([
+					{
+						kind: "exile-top",
+						subject: { kind: "relative-player", player: "you" },
+						amount: 1,
+						resultSlot: "cards",
+					},
+					{
+						kind: "change-zone",
+						subject: { kind: "effect-result", slot: "cards" },
+						from: "graveyard",
+						destination: { zone: "hand" },
+					},
+				]),
+			),
+		).toThrow("unavailable graveyard effect result cards");
+	});
+
+	test("does not expose a result from an optional branch to later effects", () => {
+		expect(() =>
+			defineCard(
+				card([
+					{
+						kind: "may",
+						decider: "you",
+						effects: [
+							{
+								kind: "exile-top",
+								subject: { kind: "relative-player", player: "you" },
+								amount: 1,
+								resultSlot: "optional-cards",
+							},
+						],
+					},
+					{
+						kind: "may-play",
+						subject: { kind: "effect-result", slot: "optional-cards" },
+						from: "exile",
+						duration: "until-end-of-turn",
+					},
+				]),
+			),
+		).toThrow("unavailable effect result optional-cards");
 	});
 });

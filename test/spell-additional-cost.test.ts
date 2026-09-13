@@ -58,7 +58,7 @@ const TEST_CARD_1 = defineCard({
 		effects: [
 			{
 				kind: "destroy",
-				subject: { targetSlot: "target-creature" },
+				subject: { kind: "target", slot: "target-creature" },
 			},
 		],
 	},

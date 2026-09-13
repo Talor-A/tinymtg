@@ -46,7 +46,13 @@ const COMMUNAL_INSTRUCTION = defineCard({
 			text: "{T}: Draw a card.",
 			cost: { mana: "zero", tapSelf: true },
 			targets: [],
-			effects: [{ kind: "draw", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "draw",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		},
 	],
 	triggers: [
@@ -60,7 +66,13 @@ const COMMUNAL_INSTRUCTION = defineCard({
 				predicate: { kind: "self" },
 			},
 			targets: [],
-			effects: [{ kind: "gain-life", subject: "you", amount: 3 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 3,
+				},
+			],
 		},
 	],
 	statics: [
@@ -191,7 +203,13 @@ describe("derived game views", () => {
 						text: "{T}: Draw a card.",
 						cost: { mana: "zero", tapSelf: true },
 						targets: [],
-						effects: [{ kind: "draw", subject: "you", amount: 1 }],
+						effects: [
+							{
+								kind: "draw",
+								subject: { kind: "relative-player", player: "you" },
+								amount: 1,
+							},
+						],
 					},
 				],
 			},

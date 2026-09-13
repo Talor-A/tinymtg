@@ -77,7 +77,11 @@ const TEST_CARD_1 = defineCard({
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
 			effects: [
-				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
+				{
+					kind: "damage",
+					subject: { kind: "target", slot: "target-1" },
+					amount: 2,
+				},
 			],
 		},
 	],
@@ -151,8 +155,12 @@ const TEST_CARD_4 = defineCard({
 				},
 			],
 			effects: [
-				{ kind: "destroy", subject: { targetSlot: "target-1" } },
-				{ kind: "gain-life", subject: "you", amount: 3 },
+				{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 3,
+				},
 			],
 		},
 	],
@@ -179,8 +187,12 @@ const TEST_CARD_5 = defineCard({
 			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
 			effects: [
-				{ kind: "destroy", subject: { targetSlot: "target-1" } },
-				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
+				{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+				{
+					kind: "damage",
+					subject: { kind: "target", slot: "target-1" },
+					amount: 2,
+				},
 			],
 		},
 	],
@@ -219,7 +231,9 @@ const TEST_CARD_6 = defineCard({
 					},
 				},
 			],
-			effects: [{ kind: "destroy", subject: { targetSlot: "target-1" } }],
+			effects: [
+				{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+			],
 		},
 	],
 });
@@ -294,7 +308,11 @@ const TEST_CARD_9 = defineCard({
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
 			effects: [
-				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
+				{
+					kind: "damage",
+					subject: { kind: "target", slot: "target-1" },
+					amount: 2,
+				},
 			],
 		},
 	],
@@ -318,7 +336,11 @@ const TEST_CARD_10 = defineCard({
 			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
 			effects: [
-				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 1 },
+				{
+					kind: "damage",
+					subject: { kind: "target", slot: "target-1" },
+					amount: 1,
+				},
 			],
 		},
 	],
@@ -724,14 +746,22 @@ describe("captured stack items", () => {
 		const definition = engine.getAbilityDefinition("activated", ability);
 		assertActivated(definition);
 		definition.targets.length = 0;
-		definition.effects.push({ kind: "gain-life", subject: "you", amount: 10 });
+		definition.effects.push({
+			kind: "gain-life",
+			subject: { kind: "relative-player", player: "you" },
+			amount: 10,
+		});
 
 		const item = state.stack[0];
 		expect(item?.kind).toBe("activated ability");
 		if (item?.kind !== "activated ability") throw new Error("expected ability");
 		expect(item.targetDefinitions).toHaveLength(1);
 		expect(item.effects).toEqual([
-			{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 2 },
+			{
+				kind: "damage",
+				subject: { kind: "target", slot: "target-1" },
+				amount: 2,
+			},
 		]);
 
 		// A clone carries the same detached instructions, and resolving it runs

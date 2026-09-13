@@ -121,7 +121,9 @@ default for a nontargeted permanent ability), and one-object zone changes from
 battlefield, graveyard, or exile to hand, graveyard, exile, the top or bottom
 of a library, or the battlefield; spells,
 activated abilities, and triggered abilities with at most one required target
-(`Any`, `Player`, `Opponent`, a spell (`ValidTgts$ Card | TargetType$ Spell`), or a
+(`Any`, `Player`, `Opponent`, a spell (`TargetType$ Spell`) optionally narrowed
+by a supported `ValidTgts$` selector other than the domain-sensitive
+`Permanent` base, or a
 public graveyard/exile card, or a `ValidTgts$` selector whose base is a card
 type, a subtype, `Card`, or `Permanent`, followed by `YouCtrl`, `OppCtrl`,
 `YouOwn`, `OppOwn`, or a color, card type, or
@@ -149,7 +151,7 @@ domain: for example, `not creature` over permanents can match a land, but it
 cannot introduce a player, spell, or card in another zone.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 3,333 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 3,370 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
@@ -252,7 +254,7 @@ established domain that matches a predicate built from card type, supertype,
 subtype, color, controller, and the source itself, combined with
 `and`/`or`/`not`. `any-target` accepts a player, a creature, or a planeswalker.
 Predicates are always evaluated against current characteristics, so a permanent
-that changes color, type, or controller can stop being a legal target.
+or spell that changes color, type, or controller can stop being a legal target.
 
 A spell or activated ability with no legal target is absent from the priority
 options, and executing one directly is rejected. The agent answers a separate

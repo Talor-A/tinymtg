@@ -137,7 +137,13 @@ describe("player views", () => {
 			targets: [],
 			sourceLastKnown: null,
 			text: "gain 1 life",
-			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		});
 		state.revision++;
 
@@ -238,7 +244,13 @@ describe("player views", () => {
 			targets: [],
 			sourceLastKnown: null,
 			text: "gain 1 life",
-			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		});
 		state.revision++;
 

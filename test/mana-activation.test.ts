@@ -83,7 +83,11 @@ const TEST_CARD_3 = defineCard({
 				{ id: "target-1", min: 1, max: 1, legal: { kind: "any-target" } },
 			],
 			effects: [
-				{ kind: "damage", subject: { targetSlot: "target-1" }, amount: 1 },
+				{
+					kind: "damage",
+					subject: { kind: "target", slot: "target-1" },
+					amount: 1,
+				},
 			],
 		},
 		{
@@ -92,7 +96,13 @@ const TEST_CARD_3 = defineCard({
 			text: "{G}, {T}: You gain 1 life.",
 			cost: { mana: { g: 1 }, tapSelf: true },
 			targets: [],
-			effects: [{ kind: "gain-life", subject: "you", amount: 1 }],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		},
 		{
 			kind: "mana",

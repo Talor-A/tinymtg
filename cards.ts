@@ -50,6 +50,7 @@ const CORPUS_CARDS = [
 	loadCardFixture("b/bartolome_del_presidio"),
 	loadCardFixture("a/acolyte_of_aclazotz"),
 	loadCardFixture("c/counterspell"),
+	loadCardFixture("n/negate"),
 	loadCardFixture("b/beast_whisperer"),
 	loadCardFixture("s/staff_of_the_death_magus"),
 	loadCardFixture("s/student_of_ojutai"),
@@ -106,13 +107,13 @@ export const ABBOT_OF_KERAL_KEEP = defineCard({
 			effects: [
 				{
 					kind: "exile-top",
-					subject: "you",
+					subject: { kind: "relative-player", player: "you" },
 					amount: 1,
 					resultSlot: "exiled-card",
 				},
 				{
 					kind: "may-play",
-					subject: { binding: "effect-result", slot: "exiled-card" },
+					subject: { kind: "effect-result", slot: "exiled-card" },
 					from: "exile",
 					duration: "until-end-of-turn",
 				},
