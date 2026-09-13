@@ -77,6 +77,7 @@ import {
 	MANA_COST_TYPES,
 	objectMatchesPredicate,
 } from "../index.ts";
+import { assertDefined } from "../lib/assert.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
 import type {
 	ForgeAbilityRecord,
@@ -1823,7 +1824,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"Pump cannot combine KW$ with NumAtt$ or NumDef$",
 					where,
 				);
-			if (keywordText !== undefined && keywordText !== "Indestructible")
+			if (keywordText !== undefined && !BARE_KEYWORDS.has(keywordText))
 				return issue(
 					"UNSUPPORTED_PARAMETER",
 					`unsupported temporary keyword ${keywordText}`,
@@ -1834,7 +1835,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			if (keywordText === undefined && (power === null || toughness === null))
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"Pump requires fixed NumAtt and NumDef values, or KW$ Indestructible",
+					"Pump requires fixed NumAtt and NumDef values, or a supported KW$",
 					where,
 				);
 			// `Defined$ Self` pumps the ability's own source ("it gets +1/+1");
@@ -1843,11 +1844,13 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			const defined = getForgeParam(params, "Defined");
 			const validTargets = getForgeParam(params, "ValidTgts");
 			if (defined === "Self" && validTargets === undefined) {
-				if (keywordText === "Indestructible") {
+				if (keywordText !== undefined && BARE_KEYWORDS.has(keywordText)) {
+					const keyword = BARE_KEYWORDS.get(keywordText);
+					assertDefined(keyword);
 					return ok({
 						kind: "grant-keyword",
 						subject: { kind: "source" },
-						keyword: "indestructible",
+						keyword,
 						duration: "until-end-of-turn",
 					});
 				}
@@ -1861,11 +1864,13 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				});
 			}
 			if (defined === undefined && validTargets !== undefined) {
-				if (keywordText === "Indestructible") {
+				if (keywordText !== undefined && BARE_KEYWORDS.has(keywordText)) {
+					const keyword = BARE_KEYWORDS.get(keywordText);
+					assertDefined(keyword);
 					return ok({
 						kind: "grant-keyword",
 						subject: { kind: "target", slot: TARGET_SLOT },
-						keyword: "indestructible",
+						keyword: keyword,
 						duration: "until-end-of-turn",
 					});
 				}

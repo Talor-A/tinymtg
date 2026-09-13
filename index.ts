@@ -2234,8 +2234,7 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 	  }
 	| {
 			kind: "grant-keyword";
-			/** The first supported temporary keyword grant is indestructible. */
-			keyword: "indestructible";
+			keyword: Keyword;
 			subject: SourceEffectRef | TargetEffectRef;
 			duration: TemporaryEffectDuration;
 	  }

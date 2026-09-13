@@ -2867,22 +2867,6 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			},
 		]);
 	});
-
-	test("temporary Pump keywords remain limited to indestructible without a simultaneous P/T change", () => {
-		const selflessSavior = cardText("s/selfless_savior");
-		for (const text of [
-			selflessSavior.replace("KW$ Indestructible", "KW$ Flying"),
-			selflessSavior.replace(
-				"KW$ Indestructible",
-				"KW$ Indestructible | NumAtt$ 1 | NumDef$ 1",
-			),
-		]) {
-			const result = importForgeCard(text, { id: "unsupported-pump-keyword" });
-			expect(result.ok).toBe(false);
-			if (result.ok) continue;
-			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
-		}
-	});
 });
 
 describe("lowerForgeCard: one-object ChangeZone", () => {
