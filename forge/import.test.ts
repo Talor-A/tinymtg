@@ -2658,6 +2658,30 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		});
 	});
 
+	test("additional sacrifice costs retain their full permanent predicate", () => {
+		const deadlyDispute = importFixture("d/deadly_dispute");
+		if (!deadlyDispute.ok) throw new Error("expected Deadly Dispute to import");
+		expect(deadlyDispute.card.spell?.additionalCost).toEqual({
+			kind: "sacrifice",
+			predicate: {
+				kind: "or",
+				predicates: [
+					{ kind: "type", type: "artifact" },
+					{ kind: "type", type: "creature" },
+				],
+			},
+			amount: 1,
+		});
+
+		const abjure = importFixture("a/abjure");
+		if (!abjure.ok) throw new Error("expected Abjure to import");
+		expect(abjure.card.spell?.additionalCost).toEqual({
+			kind: "sacrifice",
+			predicate: { kind: "color", color: "u" },
+			amount: 1,
+		});
+	});
+
 	test("Diabolic Edict lowers its sacrifice instruction as serializable data", () => {
 		const result = importFixture("d/diabolic_edict");
 		if (!result.ok) throw new Error("expected Diabolic Edict to import");

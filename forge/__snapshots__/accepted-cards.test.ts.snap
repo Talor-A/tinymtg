@@ -19,6 +19,7 @@ A.I.M. Synthoids
 Aardvark Sloth
 Abandoned Outpost
 Abbey Griffin
+Abjure
 Abraded Bluffs
 Absorb
 Abzan Banner
@@ -168,6 +169,7 @@ Army Ants
 Arrogant Vampire
 Artifact Blast
 Artifact Unknown Shores
+Artillerize
 Artisan's Sorrow
 Arvad the Cursed
 Ascendant Evincar
@@ -569,6 +571,7 @@ Corroding Dragonstorm
 Corrupt Eunuchs
 Corrupted Conviction
 Corsair Captain
+Costly Plunder
 Council of Advisors
 Counsel of the Soratami
 Counterspell
@@ -670,6 +673,7 @@ Dazzling Ramparts
 Deadapult
 Deadeye Duelist
 Deadly Derision
+Deadly Dispute
 Deadly Recluse
 Deadly Visit
 Death Cultist
@@ -869,6 +873,7 @@ Elvish Warrior
 Ember Hauler
 Ember Shot
 Embraal Gear-Smasher
+Embrace Oblivion
 Emerge from the Cocoon
 Emergency Medical Hologram
 Emergency Weld
@@ -995,7 +1000,9 @@ Filigree Crawler
 Filigree Familiar
 Filigree Sages
 Final Death
+Final Flare
 Final Reward
+Final Vengeance
 Finishing Blow
 Fire Ambush
 Fire Diamond
@@ -1176,6 +1183,7 @@ Goblin Firebomb
 Goblin Gang Leader
 Goblin Gardener
 Goblin Glider
+Goblin Grenade
 Goblin Hero
 Goblin Instigator
 Goblin Masons
@@ -1322,6 +1330,7 @@ Healing Hands
 Heap Doll
 Heart Warden
 Heart of Ramos
+Heartfire
 Heavy Infantry
 Hecteyes
 Hedge Maze
@@ -1436,6 +1445,7 @@ Implements of Sacrifice
 Implode
 Imposing Sovereign
 Improbable Alliance
+Improvised Club
 Improvised Weaponry
 Impulse
 Incurable Ogre
@@ -1621,6 +1631,7 @@ Krenko's Command
 Kris Mage
 Krovikan Scoundrel
 Kujar Seedsculptor
+Kuldotha Rebirth
 Kykar, Wind's Fury
 Kyoshi Village
 Kyoshi Warrior Guard
@@ -1725,6 +1736,7 @@ Mad Prophet
 Mad Ratter
 Magic Pot
 Magma Jet
+Magma Rift
 Magmaw
 Magnifying Glass
 Magnigoth Sentry
@@ -1787,6 +1799,7 @@ Mental Note
 Merchant of Many Hats
 Merchant of Secrets
 Merciless Enforcers
+Merciless Resolve
 Merfolk Coralsmith
 Merfolk Looter
 Merfolk Mesmerist
@@ -2123,6 +2136,7 @@ Possessed Skaab
 Potion of Healing
 Pouncing Cheetah
 Power Word Kill
+Powerstone Fracture
 Prakhata Club Security
 Precision Bolt
 Predatory Nightstalker
@@ -2230,6 +2244,7 @@ Ravenous Harpy
 Ravenous Lindwurm
 Ray of Dissolution
 Ray of Ruin
+Raze
 Razorfield Thresher
 Razorfin Hunter
 Razortide Bridge
@@ -2514,6 +2529,7 @@ Shadowy Backstreet
 Shaman of Spring
 Shamble Back
 Shambling Ghoul
+Shard Volley
 Sharlayan, Nation of Scholars
 Sharuum the Hegemon
 Shatter
@@ -2538,6 +2554,7 @@ Shore Keeper
 Shore Lurker
 Shorecomber Crab
 Show of Valor
+Shrapnel Blast
 Shrine Keeper
 Shu Elite Infantry
 Shu Foot Soldiers
@@ -3015,6 +3032,7 @@ Tramway Station
 Tranquil Cove
 Tranquil Expanse
 Transdimensional Bovine
+Trash for Treasure
 Traveling Philosopher
 Treasure Hunter
 Treasure Trove
@@ -3373,4 +3391,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3370`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3388`;

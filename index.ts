@@ -2499,7 +2499,7 @@ export interface SpellAbilityDef {
 /** The one required additional spell cost currently supported. */
 export type SpellAdditionalCostDef = {
 	kind: "sacrifice";
-	predicate: { kind: "type"; type: "creature" };
+	predicate: ObjectPredicateDef;
 	amount: 1;
 };
 
@@ -9124,7 +9124,7 @@ function castSpellIn(
 			}).length === 0
 		) {
 			throw new IllegalCastError(
-				`${characteristics.name} has no creature that can pay its additional cost`,
+				`${characteristics.name} has no permanent that can pay its additional cost`,
 			);
 		}
 	}
@@ -9229,7 +9229,7 @@ function castSpellIn(
 			);
 			if (candidates.length === 0) {
 				throw new IllegalCastError(
-					`${characteristics.name} has no creature that can pay its additional cost`,
+					`${characteristics.name} has no permanent that can pay its additional cost`,
 				);
 			}
 			sacrificePayment = choices.chooseObject(state, priorityPlayer, {

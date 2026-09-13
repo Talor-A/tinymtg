@@ -16,8 +16,9 @@
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
  * `ChangeZone` searches, hidden Hand/Library origins, Stack origins, and
- * multi-object movement; random or multi-card discard; alternate/additional
- * costs on spells, and activation costs other than fixed generic/coloured mana,
+ * multi-object movement; random or multi-card discard; alternate spell costs,
+ * additional spell costs other than one permanent sacrifice, and activation
+ * costs other than fixed generic/coloured mana,
  * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
  * and dynamic amounts; `Investigate` with an explicit count or player;
  * more than one target slot,
@@ -4075,21 +4076,10 @@ export function lowerForgeCard(
 					);
 				}
 				// The engine models exactly one additional cost: sacrifice one
-				// creature you control. A narrower or wider selector (Sac<1/Goblin>,
-				// Sac<1/Permanent>) would change which permanents pay it.
-				const selector = parsedCost.value.sacrifice.predicate;
-				if (!(selector.kind === "type" && selector.type === "creature")) {
-					return reject(
-						issue(
-							"UNSUPPORTED_COST",
-							`unsupported additional sacrifice cost ${costText}`,
-							where,
-						),
-					);
-				}
+				// permanent you control matching the Forge selector.
 				additionalCost = {
 					kind: "sacrifice",
-					predicate: { kind: "type", type: "creature" },
+					predicate: parsedCost.value.sacrifice.predicate,
 					amount: 1,
 				};
 			}

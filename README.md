@@ -231,8 +231,8 @@ The allowance starts at one and includes finite positive additions from battlefi
 
 Sacrifice effects and costs currently support one permanent at a time. Multiple
 and optional sacrifices are not implemented. A spell can have one additional
-cost that sacrifices a creature. Deck construction, opening hands, mulligans,
-and alternative activation costs are also not implemented yet.
+cost that sacrifices one matching permanent. Deck construction, opening hands,
+mulligans, and alternative activation costs are also not implemented yet.
 
 Effect definitions call the entity they act on a `subject`. A singular player
 subject can be relative (`you`, `opponent`, or `triggering-player`) or refer to

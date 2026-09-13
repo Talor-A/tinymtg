@@ -82,6 +82,7 @@ const RUNTIME_CARDS = [
 	loadRuntimeFixture("r/reclaim", "rt-reclaim"),
 	loadRuntimeFixture("h/hymn_of_rebirth", "rt-hymn-of-rebirth"),
 	loadRuntimeFixture("v/village_rites", "rt-village-rites"),
+	loadRuntimeFixture("d/deadly_dispute", "rt-deadly-dispute"),
 	loadRuntimeFixture("d/diabolic_edict", "rt-diabolic-edict"),
 	loadRuntimeFixture("d/dredge", "rt-dredge"),
 	loadRuntimeFixture("l/llanowar_elves", "rt-llanowar-elves"),
@@ -1413,6 +1414,60 @@ describe("forge-import runtime: spell effects", () => {
 			.getObservableActions(state, ALICE)
 			.some((action) => action.kind === "cast" && action.card === spell.id);
 		expect(castable).toBe(false);
+	});
+
+	test("Deadly Dispute sacrifices an artifact, draws two, and creates a working Treasure", () => {
+		const state = setupMain(engine);
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "darksteel-relic", ALICE, "library");
+		const artifact = engine.spawnPermanent(state, "darksteel-relic", ALICE).id;
+		const spell = engine.spawnCard(state, "rt-deadly-dispute", ALICE, "hand");
+		state.players[ALICE].manaPool.c = 1;
+		state.players[ALICE].manaPool.b = 1;
+		const agents = passingAgents();
+		agents[ALICE].sacrificeChoices.push(artifact);
+
+		engine.executeCastAction(
+			state,
+			ALICE,
+			{ kind: "cast", card: spell.id },
+			agents,
+		);
+		expect(
+			state.objects.has(artifact),
+			"the additional cost is paid before resolution",
+		).toBe(false);
+
+		engine.settlePriority(state, agents);
+		expect(
+			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+		).toEqual(expect.arrayContaining(["Forest", "Darksteel Relic"]));
+		const treasure = state.battlefield.find(
+			(id) => permanent(state, id).representation.kind === "token",
+		);
+		if (treasure === undefined)
+			throw new Error("Deadly Dispute created no token");
+		const treasureMana = abilityId("activated", "rt-deadly-dispute", 0);
+		engine.executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: treasure, ability: treasureMana },
+			agents,
+		);
+		expect(state.objects.has(treasure)).toBe(false);
+		expect(state.players[ALICE].manaPool.w).toBe(1);
+	});
+
+	test("Deadly Dispute is not castable without an artifact or creature", () => {
+		const state = setupMain(engine);
+		const spell = engine.spawnCard(state, "rt-deadly-dispute", ALICE, "hand");
+		state.players[ALICE].manaPool.c = 1;
+		state.players[ALICE].manaPool.b = 1;
+		expect(
+			engine
+				.getObservableActions(state, ALICE)
+				.some((action) => action.kind === "cast" && action.card === spell.id),
+		).toBe(false);
 	});
 
 	test("Diabolic Edict's targeted player chooses the creature sacrificed on resolution", () => {
