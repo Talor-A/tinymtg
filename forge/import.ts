@@ -38,6 +38,7 @@
 
 import assert from "node:assert/strict";
 import type {
+	ActivatedEffectDef,
 	ActivationCost,
 	AnyActivatedAbilityDefinition,
 	CardDef,
@@ -4253,7 +4254,7 @@ export function lowerForgeCard(
 					(() => {
 						const mana = (
 							ability.effects[0] as Extract<
-								EffectDef<RelativeEffectPlayer>,
+								ActivatedEffectDef,
 								{ kind: "add-mana" }
 							>
 						).mana;

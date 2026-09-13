@@ -1567,7 +1567,7 @@ export interface PendingTrigger {
 	readonly triggeringEvent: DeepReadOnly<GameEvent>;
 	/** Copied off the trigger definition, which outlives it. */
 	targetDefinitions: TargetDef[];
-	effects: EffectDef<TriggerEffectPlayer>[];
+	effects: TriggeredEffectDef[];
 	sourceLastKnown: SourceLastKnown | null;
 }
 
@@ -1628,14 +1628,14 @@ export type PriorityAction =
  * instructions. CR 113.7a lets the source leave in the meantime, so none of it
  * is read back off the source object or the card registry.
  */
-interface AbilityStackItemBase<Player extends TriggerEffectPlayer> {
+interface AbilityStackItemBase<AllowedPlayer extends TriggerEffectPlayer> {
 	id: StackItemId;
 	source: ObjectId;
 	controller: PlayerId;
 	text: string;
 	targetDefinitions: TargetDef[];
 	targets: TargetBindings;
-	effects: EffectDef<Player>[];
+	effects: EffectDef<AllowedPlayer>[];
 	sourceLastKnown: SourceLastKnown | null;
 }
 
@@ -2119,28 +2119,33 @@ export interface ChosenPermanentEffectRef<Player extends TriggerEffectPlayer> {
 
 export type MayPlaySubjectRef = TargetEffectRef | EffectResultObjectRef;
 
-export type EffectPlayerSubject<Player extends TriggerEffectPlayer> =
-	| { kind: "relative-player"; player: Player }
+export type EffectPlayerSubject<AllowedPlayer extends TriggerEffectPlayer> =
+	| { kind: "relative-player"; player: AllowedPlayer }
 	| { kind: "target-player"; slot: string };
 
 /** A destination resolved only when a one-object zone change executes. */
-export type ZoneChangeEffectDestination<Player extends TriggerEffectPlayer> =
+export type ZoneChangeEffectDestination<
+	AllowedPlayer extends TriggerEffectPlayer,
+> =
 	| { zone: "hand" }
 	| { zone: "graveyard" }
 	| { zone: "exile" }
 	| { zone: "library"; position: "top" | "bottom" }
 	| {
 			zone: "battlefield";
-			controller: "owner" | Player;
+			controller: "owner" | AllowedPlayer;
 			tapped?: boolean;
 	  };
 
-type BoundZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
+type BoundZoneChangeEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
 	[Origin in PublicObjectZone]: {
 		kind: "change-zone";
 		subject: SourceEffectRef | TargetEffectRef | EffectResultObjectRef;
 		from: Origin;
-		destination: Exclude<ZoneChangeEffectDestination<Player>, { zone: Origin }>;
+		destination: Exclude<
+			ZoneChangeEffectDestination<AllowedPlayer>,
+			{ zone: Origin }
+		>;
 		/** Optionally bind the new object that reaches the declared destination. */
 		resultSlot?: string;
 	};
@@ -2161,10 +2166,10 @@ export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> =
 	| BoundZoneChangeEffectDef<Player>
 	| ChosenPermanentZoneChangeEffectDef<Player>;
 
-type ExileTopEffectDef<Player extends TriggerEffectPlayer> = {
+type ExileTopEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
 	kind: "exile-top";
 	/** A relative player, or the player bound to a target slot. */
-	subject: EffectPlayerSubject<Player>;
+	subject: EffectPlayerSubject<AllowedPlayer>;
 	amount: number;
 	/** Optionally bind the cards that actually reached exile, in order. */
 	resultSlot?: string;
@@ -2176,18 +2181,18 @@ type EachPlayerDrawEffectDef = {
 	amount: number;
 };
 
-export type EffectDef<Player extends TriggerEffectPlayer> =
+export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	| {
 			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
 			/** A relative player, or the player bound to a target slot. */
-			subject: EffectPlayerSubject<Player>;
+			subject: EffectPlayerSubject<AllowedPlayer>;
 			amount: number;
 	  }
 	| EachPlayerDrawEffectDef
-	| ExileTopEffectDef<Player>
+	| ExileTopEffectDef<AllowedPlayer>
 	| {
 			kind: "choose-from-top";
-			subject: Player;
+			subject: AllowedPlayer;
 			amount: number;
 			keep: number;
 	  }
@@ -2195,11 +2200,13 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			kind: "discard";
 			selector: "any" | "random";
 			amount: number;
-			subject: Player;
+			subject: AllowedPlayer;
 	  }
 	| {
 			kind: "damage";
-			subject: { kind: "relative-player"; player: Player } | TargetEffectRef;
+			subject:
+				| { kind: "relative-player"; player: AllowedPlayer }
+				| TargetEffectRef;
 			amount: number;
 	  }
 	| { kind: "destroy"; subject: TargetEffectRef }
@@ -2212,11 +2219,11 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			counter: PermanentCounter;
 			amount: number;
 	  }
-	| ZoneChangeEffectDef<Player>
+	| ZoneChangeEffectDef<AllowedPlayer>
 	| {
 			kind: "sacrifice";
 			/** A relative player, or the player bound to a target slot. */
-			subject: EffectPlayerSubject<Player>;
+			subject: EffectPlayerSubject<AllowedPlayer>;
 			predicate: ObjectPredicateDef;
 			amount: 1;
 	  }
@@ -2252,14 +2259,14 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 	  }
 	| {
 			kind: "create-token";
-			controller: Player;
+			controller: AllowedPlayer;
 			characteristics: CharacteristicsSnapshot;
 			amount: number;
 	  }
 	| {
 			kind: "may";
 			decider: RelativeEffectPlayer;
-			effects: EffectDef<Player>[];
+			effects: EffectDef<AllowedPlayer>[];
 	  };
 
 /** Effects on a triggered ability may refer to the player that triggered it. */
@@ -2270,7 +2277,6 @@ export type SpellEffectDef = EffectDef<RelativeEffectPlayer>;
 
 /** Activated effects can refer only to players relative to the ability's controller. */
 export type ActivatedEffectDef = EffectDef<RelativeEffectPlayer>;
-
 /* ------------------------------------------------------------------ *
  * Triggers
  *
@@ -2382,7 +2388,7 @@ export interface TriggeredAbilityDefinition {
 	functionsFrom?: [Zone];
 	/** Chosen when the ability is put on the stack, not when it triggers. */
 	targets: TargetDef[];
-	effects: EffectDef<TriggerEffectPlayer>[];
+	effects: TriggeredEffectDef[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -2515,7 +2521,7 @@ export interface SpellAbilityDef {
 	text: string;
 	additionalCost?: SpellAdditionalCostDef;
 	targets: TargetDef[];
-	effects: EffectDef<RelativeEffectPlayer>[];
+	effects: SpellEffectDef[];
 }
 
 /** The one required additional spell cost currently supported. */
@@ -2551,13 +2557,13 @@ export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
 	/** Defaults to the battlefield. Hidden zones cannot be activation origins. */
 	functionsFrom?: [PublicObjectZone];
 	targets: TargetDef[];
-	effects: EffectDef<RelativeEffectPlayer>[];
+	effects: ActivatedEffectDef[];
 }
 
 /** A mana ability whose instructions always produce the same mana. */
 export interface FixedManaAbilityDef extends ActivatedAbilityDefBase {
 	kind: "mana";
-	effects: EffectDef<RelativeEffectPlayer>[];
+	effects: ActivatedEffectDef[];
 	manaOptions?: never;
 }
 
