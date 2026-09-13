@@ -3477,6 +3477,14 @@ describe("lowerForgeCard: required negative mutations", () => {
 				"Cost$ 0 U",
 				"malformed activation cost: 0 cannot be combined with other mana terms",
 			],
+			[
+				"Cost$ U 0",
+				"malformed activation cost: 0 cannot be combined with other mana terms",
+			],
+			[
+				"Cost$ 0 0",
+				"malformed activation cost: 0 cannot be combined with other mana terms",
+			],
 		] as const) {
 			const cost = costParameter === "" ? "" : `${costParameter} | `;
 			const result = importText(

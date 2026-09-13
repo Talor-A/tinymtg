@@ -149,16 +149,33 @@ function reject(i: ImportIssue | Err<ImportIssue>): {
 /* is data that the lowering rules reject explicitly.                        */
 /* ------------------------------------------------------------------------- */
 
-const CARD_TYPES = new Set<CardType>([
-	"artifact",
-	"creature",
-	"enchantment",
-	"instant",
-	"land",
-	"planeswalker",
-	"sorcery",
+// Keyed by the lower-cased word a card script writes, so a lookup both tests
+// membership and produces the engine's value. `Map`, not a plain object, for
+// the same prototype reason as COLOR_WORDS below.
+const CARD_TYPES = new Map<string, CardType>([
+	["artifact", "artifact"],
+	["creature", "creature"],
+	["enchantment", "enchantment"],
+	["instant", "instant"],
+	["land", "land"],
+	["planeswalker", "planeswalker"],
+	["sorcery", "sorcery"],
 ]);
-const SUPERTYPES = new Set<Supertype>(["basic", "legendary", "snow"]);
+const SUPERTYPES = new Map<string, Supertype>([
+	["basic", "basic"],
+	["legendary", "legendary"],
+	["snow", "snow"],
+]);
+/**
+ * The public zones an object can be moved out of, activated from, or targeted
+ * in. Hidden zones (`Hand`, `Library`) and `Stack` are deliberately absent:
+ * a lookup that misses is a rejection.
+ */
+const PUBLIC_ZONES = new Map<string, PublicObjectZone>([
+	["Battlefield", "battlefield"],
+	["Graveyard", "graveyard"],
+	["Exile", "exile"],
+]);
 // `Map`, not a plain object: an object literal's lookups fall through to
 // `Object.prototype` (`obj["constructor"]` resolves to `Function`), and every
 // key here comes straight from untrusted card text.
@@ -434,8 +451,8 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	const inner = negated ? modifier.slice(3) : modifier;
 	const word = inner.toLowerCase();
 	const color = COLOR_WORDS.get(word);
-	const type = [...CARD_TYPES].find((candidate) => candidate === word);
-	const supertype = [...SUPERTYPES].find((candidate) => candidate === word);
+	const type = CARD_TYPES.get(word);
+	const supertype = SUPERTYPES.get(word);
 	let predicate: ObjectPredicateDef | null = null;
 	if (color) predicate = { kind: "color", color };
 	else if (type) predicate = { kind: "type", type };
@@ -553,9 +570,7 @@ function parseSelectorPart(value: string): ObjectPredicateDef | null {
 	const pieces = segments[0]?.split(".") ?? [];
 	const base = pieces.shift();
 	const parts: ObjectPredicateDef[] = [];
-	const type = base
-		? ([...CARD_TYPES].find((t) => t === base.toLowerCase()) ?? null)
-		: null;
+	const type = base ? (CARD_TYPES.get(base.toLowerCase()) ?? null) : null;
 	if (type) parts.push({ kind: "type", type });
 	else if (base === "Player" || base === "Any") return null;
 	else if (base && base !== "Card" && base !== "Permanent")
@@ -584,21 +599,27 @@ function parseSelector(value: string): ObjectPredicateDef | null {
 		: null;
 }
 
+/**
+ * One choice of a selector that may carry Forge's `.Other` suffix, which
+ * excludes the source object itself from an otherwise matching set.
+ */
+function parseSelectorChoice(value: string): ObjectPredicateDef | null {
+	const trimmed = value.trim();
+	const excludesSelf = trimmed.endsWith(".Other");
+	const selector = parseSelectorPart(
+		excludesSelf ? trimmed.slice(0, -".Other".length) : trimmed,
+	);
+	if (!selector) return null;
+	return excludesSelf
+		? combinePredicates("and", [
+				selector,
+				{ kind: "not", predicate: { kind: "self" } },
+			])
+		: selector;
+}
+
 function parseCopySelector(value: string): ObjectPredicateDef | null {
-	const choices = value.split(",").map((part) => {
-		const trimmed = part.trim();
-		const other = trimmed.endsWith(".Other");
-		const selector = parseSelectorPart(
-			other ? trimmed.slice(0, -".Other".length) : trimmed,
-		);
-		if (!selector) return null;
-		return other
-			? combinePredicates("and", [
-					selector,
-					{ kind: "not", predicate: { kind: "self" } },
-				])
-			: selector;
-	});
+	const choices = value.split(",").map(parseSelectorChoice);
 	return choices.every(
 		(choice): choice is ObjectPredicateDef => choice !== null,
 	)
@@ -622,6 +643,135 @@ const REMEMBERED_EXILE_SLOT = "remembered-exile-cards";
 const REMEMBERED_ZONE_CHANGE_SLOT = "remembered-zone-change-object";
 
 /**
+ * What one effect requires of the target slot it names. `any` is the damage
+ * case: every legal target kind can take damage, so the declared slot needs no
+ * further agreement.
+ */
+type RequiredTarget =
+	| { kind: "any" }
+	| { kind: "player" | "permanent" | "spell"; message: string }
+	| { kind: "card"; zone: "graveyard" | "exile"; message: string };
+
+/**
+ * The target slot one effect names, or null when it names none: the same
+ * effect kinds also resolve against their own source, a remembered object, or
+ * a player relative to the controller, and those declare nothing to check.
+ */
+function effectTargetUse<Player extends TriggerEffectPlayer>(
+	effect: Exclude<EffectDef<Player>, { kind: "may" }>,
+): { slot: string; required: RequiredTarget } | null {
+	switch (effect.kind) {
+		case "damage":
+			return effect.subject.kind === "target"
+				? {
+						slot: effect.subject.slot,
+						required: { kind: "any" },
+					}
+				: null;
+		case "gain-life":
+		case "lose-life":
+		case "draw":
+		case "scry":
+		case "surveil":
+		case "mill":
+			return effect.subject.kind === "target-player"
+				? {
+						slot: effect.subject.slot,
+						required: {
+							kind: "player",
+							message: "a targeted player effect requires a player target",
+						},
+					}
+				: null;
+		case "sacrifice":
+			return effect.subject.kind === "target-player"
+				? {
+						slot: effect.subject.slot,
+						required: {
+							kind: "player",
+							message: "Sacrifice requires a player target",
+						},
+					}
+				: null;
+		case "destroy":
+			return {
+				slot: effect.subject.slot,
+				required: {
+					kind: "permanent",
+					message: "Destroy requires a permanent target",
+				},
+			};
+		case "tap":
+		case "untap":
+			return {
+				slot: effect.subject.slot,
+				required: {
+					kind: "permanent",
+					message: `${effect.kind === "tap" ? "Tap" : "Untap"} requires a permanent target`,
+				},
+			};
+		case "counter":
+			return {
+				slot: effect.subject.slot,
+				required: { kind: "spell", message: "Counter requires a spell target" },
+			};
+		case "modify-pt":
+			return effect.subject.kind === "target"
+				? {
+						slot: effect.subject.slot,
+						required: {
+							kind: "permanent",
+							message: "Pump requires a permanent target",
+						},
+					}
+				: null;
+		case "grant-keyword":
+			return effect.subject.kind === "target"
+				? {
+						slot: effect.subject.slot,
+						required: {
+							kind: "permanent",
+							message: "keyword grants require a permanent target",
+						},
+					}
+				: null;
+		case "add counters":
+			return effect.subject.kind === "target"
+				? {
+						slot: effect.subject.slot,
+						required: {
+							kind: "permanent",
+							message: "PutCounter requires a permanent target",
+						},
+					}
+				: null;
+		case "change-zone":
+			// A battlefield origin targets the permanent itself; every other
+			// origin targets a card sitting in that same public zone.
+			return effect.subject.kind === "target"
+				? {
+						slot: effect.subject.slot,
+						required:
+							effect.from === "battlefield"
+								? {
+										kind: "permanent",
+										message:
+											"ChangeZone target kind and zone must match Origin$",
+									}
+								: {
+										kind: "card",
+										zone: effect.from,
+										message:
+											"ChangeZone target kind and zone must match Origin$",
+									},
+					}
+				: null;
+		default:
+			return null;
+	}
+}
+
+/**
  * A targeting effect and its ability's `ValidTgts$` have to agree, or the
  * engine would resolve an effect against a target nobody checked.
  */
@@ -636,158 +786,43 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			if (inner) return inner;
 			continue;
 		}
-		const damageTarget =
-			effect.kind === "damage" && effect.subject.kind === "target"
-				? effect.subject
-				: null;
-		const playerTarget =
-			(effect.kind === "gain-life" ||
-				effect.kind === "lose-life" ||
-				effect.kind === "draw" ||
-				effect.kind === "scry" ||
-				effect.kind === "surveil" ||
-				effect.kind === "mill") &&
-			effect.subject.kind === "target-player"
-				? effect.subject
-				: null;
-		const sacrificeTarget =
-			effect.kind === "sacrifice" && effect.subject.kind === "target-player"
-				? effect.subject
-				: null;
-		if (
-			damageTarget === null &&
-			playerTarget === null &&
-			sacrificeTarget === null &&
-			effect.kind !== "destroy" &&
-			effect.kind !== "tap" &&
-			effect.kind !== "untap" &&
-			effect.kind !== "counter" &&
-			effect.kind !== "change-zone" &&
-			effect.kind !== "modify-pt" &&
-			effect.kind !== "grant-keyword" &&
-			effect.kind !== "add counters"
-		)
-			continue;
-		const objectTarget =
-			(effect.kind === "destroy" ||
-				effect.kind === "tap" ||
-				effect.kind === "untap" ||
-				effect.kind === "change-zone" ||
-				effect.kind === "modify-pt" ||
-				effect.kind === "grant-keyword" ||
-				effect.kind === "add counters") &&
-			effect.subject.kind === "target"
-				? effect.subject
-				: null;
-		// An effect on its own source declares no target to check.
-		if (
-			(effect.kind === "change-zone" ||
-				effect.kind === "modify-pt" ||
-				effect.kind === "grant-keyword" ||
-				effect.kind === "add counters") &&
-			effect.subject.kind === "source"
-		)
-			continue;
-		if (
-			effect.kind === "change-zone" &&
-			effect.subject.kind === "effect-result"
-		)
-			continue;
-		if (
-			effect.kind === "change-zone" &&
-			effect.subject.kind === "chosen-permanent"
-		)
-			continue;
-		const counterTarget = effect.kind === "counter" ? effect.subject : null;
-		const effectSlot =
-			damageTarget?.slot ??
-			playerTarget?.slot ??
-			sacrificeTarget?.slot ??
-			objectTarget?.slot ??
-			counterTarget?.slot;
-		assert(effectSlot !== undefined);
+		const use = effectTargetUse(effect);
+		if (use === null) continue;
 		const target = targets[0];
-		if (targets.length !== 1 || !target || effectSlot !== target.id) {
+		if (targets.length !== 1 || !target || use.slot !== target.id) {
 			return issue(
 				"UNSUPPORTED_TARGET",
 				"targeted effects must reference the declared target slot",
 				where,
 			);
 		}
-		if (playerTarget !== null && target.legal.kind !== "player") {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				"a targeted player effect requires a player target",
-				where,
-			);
-		}
-		if (sacrificeTarget !== null && target.legal.kind !== "player") {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				"Sacrifice requires a player target",
-				where,
-			);
-		}
-		if (effect.kind === "destroy" && target.legal.kind !== "permanent") {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				"Destroy requires a permanent target",
-				where,
-			);
-		}
-		if (
-			(effect.kind === "tap" || effect.kind === "untap") &&
-			target.legal.kind !== "permanent"
-		) {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				`${effect.kind === "tap" ? "Tap" : "Untap"} requires a permanent target`,
-				where,
-			);
-		}
-		if (effect.kind === "counter" && target.legal.kind !== "spell") {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				"Counter requires a spell target",
-				where,
-			);
-		}
-		if (effect.kind === "change-zone") {
-			if (
-				(effect.from === "battlefield" && target.legal.kind !== "permanent") ||
-				(effect.from !== "battlefield" &&
-					(target.legal.kind !== "card" || target.legal.zone !== effect.from))
-			) {
-				return issue(
-					"UNSUPPORTED_TARGET",
-					"ChangeZone target kind and zone must match Origin$",
-					where,
-				);
-			}
-		}
-		if (effect.kind === "modify-pt" && target.legal.kind !== "permanent") {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				"Pump requires a permanent target",
-				where,
-			);
-		}
-		if (effect.kind === "grant-keyword" && target.legal.kind !== "permanent") {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				"keyword grants require a permanent target",
-				where,
-			);
-		}
-		if (effect.kind === "add counters" && target.legal.kind !== "permanent") {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				"PutCounter requires a permanent target",
-				where,
-			);
-		}
+		if (use.required.kind === "any") continue;
+		const agrees =
+			use.required.kind === "card"
+				? target.legal.kind === "card" &&
+					target.legal.zone === use.required.zone
+				: target.legal.kind === use.required.kind;
+		if (!agrees)
+			return issue("UNSUPPORTED_TARGET", use.required.message, where);
 	}
 	return null;
+}
+
+/**
+ * The public card zone a `ChangeZone` record's targets sit in, for the
+ * `ValidTgts$` parse. Only a graveyard or exile origin targets a card; a
+ * battlefield origin targets the permanent, which `parseTarget` reads from the
+ * selector alone.
+ */
+function changeZoneTargetZone(
+	params: ForgeParamList,
+	isChangeZone: boolean,
+): "graveyard" | "exile" | undefined {
+	if (!isChangeZone) return undefined;
+	const originText = getForgeParam(params, "Origin");
+	const origin =
+		originText === undefined ? undefined : PUBLIC_ZONES.get(originText);
+	return origin === "graveyard" || origin === "exile" ? origin : undefined;
 }
 
 /**
@@ -995,6 +1030,66 @@ function fixedTokenCharacteristics(
 }
 
 /**
+ * Effects that move one player's single fixed count. Only the Forge parameter
+ * holding the count, its default when that parameter is omitted, and the
+ * engine's effect kind differ between them; an absent default means the count
+ * has to be written out.
+ */
+const SUBJECT_AMOUNT_EFFECTS = new Map<
+	string,
+	{
+		kind: "gain-life" | "lose-life" | "scry" | "surveil" | "mill";
+		amountParam: string;
+		defaultAmount?: number;
+		message: string;
+	}
+>([
+	[
+		"gainlife",
+		{
+			kind: "gain-life",
+			amountParam: "LifeAmount",
+			message: "unsupported or missing LifeAmount$/player for gainlife",
+		},
+	],
+	[
+		"loselife",
+		{
+			kind: "lose-life",
+			amountParam: "LifeAmount",
+			message: "unsupported or missing LifeAmount$/player for loselife",
+		},
+	],
+	[
+		"scry",
+		{
+			kind: "scry",
+			amountParam: "ScryNum",
+			defaultAmount: 1,
+			message: "unsupported scry amount/player",
+		},
+	],
+	[
+		"surveil",
+		{
+			kind: "surveil",
+			amountParam: "Amount",
+			defaultAmount: 1,
+			message: "unsupported surveil amount/player",
+		},
+	],
+	[
+		"mill",
+		{
+			kind: "mill",
+			amountParam: "NumCards",
+			defaultAmount: 1,
+			message: "unsupported mill amount/player",
+		},
+	],
+]);
+
+/**
  * Forge's player operand. `Defined$ Targeted`, and an omitted `Defined$` on an
  * ability that declares `ValidTgts$`, both name the player this ability
  * targets; every other spelling is relative to the source's controller.
@@ -1043,98 +1138,48 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 	allowSourceObject: boolean,
 	tokenAbilityHost: TokenAbilityHost,
 ): Result<Exclude<EffectDef<Player>, { kind: "may" }>, ImportIssue> {
+	// Every branch claims this record's whole parameter list, and every branch's
+	// list opens with its own discriminator and closes with the keys common to
+	// all effects. `claim` supplies those invariant ends, so a branch states
+	// exactly the vocabulary that is its own.
+	const claim = (...keys: string[]) =>
+		consumeParams(
+			params,
+			new Set([discriminatorLower, ...keys, ...COMMON_EFFECT_PARAMS]),
+			where,
+		);
 	switch (api) {
 		case "gainlife":
-		case "loselife": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"validtgts",
-					"tgtprompt",
-					"lifeamount",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
+		case "loselife":
+		case "scry":
+		case "surveil":
+		case "mill": {
+			const shape = SUBJECT_AMOUNT_EFFECTS.get(api);
+			assertDefined(shape);
+			const badParams = claim(
+				"defined",
+				"validtgts",
+				"tgtprompt",
+				shape.amountParam.toLowerCase(),
 			);
 			if (!badParams.ok) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
-			const amount = positiveInteger(getForgeParam(params, "LifeAmount"));
-			if (!who || !amount)
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					`unsupported or missing LifeAmount$/player for ${api}`,
-					where,
-				);
-			return ok({
-				kind: api === "gainlife" ? "gain-life" : "lose-life",
-				subject: who,
-				amount,
-			});
-		}
-		case "scry": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"validtgts",
-					"tgtprompt",
-					"scrynum",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
+			const amount = positiveInteger(
+				getForgeParam(params, shape.amountParam),
+				shape.defaultAmount,
 			);
-			if (!badParams.ok) return badParams;
-			const who = parseEffectPlayer(params, parsePlayer);
-			const amount = positiveInteger(getForgeParam(params, "ScryNum"), 1);
 			if (!who || !amount)
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"unsupported scry amount/player",
-					where,
-				);
-			return ok({ kind: "scry", subject: who, amount });
-		}
-		case "surveil": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"validtgts",
-					"tgtprompt",
-					"amount",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
-			);
-			if (!badParams.ok) return badParams;
-			const who = parseEffectPlayer(params, parsePlayer);
-			const amount = positiveInteger(getForgeParam(params, "Amount"), 1);
-			if (!who || !amount)
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"unsupported surveil amount/player",
-					where,
-				);
-			return ok({ kind: "surveil", subject: who, amount });
+				return issue("UNSUPPORTED_PARAMETER", shape.message, where);
+			return ok({ kind: shape.kind, subject: who, amount });
 		}
 		case "dig": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"dignum",
-					"changenum",
-					"noreveal",
-					"destinationzone",
-					"rememberchanged",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
+			const badParams = claim(
+				"defined",
+				"dignum",
+				"changenum",
+				"noreveal",
+				"destinationzone",
+				"rememberchanged",
 			);
 			if (!badParams.ok) return badParams;
 			const who = parseEffectPlayer(params, parsePlayer);
@@ -1184,11 +1229,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return ok({ kind: "choose-from-top", subject: who.player, amount, keep });
 		}
 		case "investigate": {
-			const badParams = consumeParams(
-				params,
-				new Set([discriminatorLower, ...COMMON_EFFECT_PARAMS]),
-				where,
-			);
+			const badParams = claim();
 			if (!badParams.ok) return badParams;
 			// With no Defined$ or Num$, Forge's Investigate API means its
 			// controller investigates once. Explicit variants reject above.
@@ -1202,18 +1243,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			});
 		}
 		case "draw": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"validtgts",
-					"tgtprompt",
-					"numcards",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
-			);
+			const badParams = claim("defined", "validtgts", "tgtprompt", "numcards");
 			if (!badParams.ok) return badParams;
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!amount)
@@ -1229,42 +1259,8 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 				return issue("UNSUPPORTED_PARAMETER", "unsupported draw player", where);
 			return ok({ kind: "draw", subject: who, amount });
 		}
-		case "mill": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"validtgts",
-					"tgtprompt",
-					"numcards",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
-			);
-			if (!badParams.ok) return badParams;
-			const who = parseEffectPlayer(params, parsePlayer);
-			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
-			if (!who || !amount)
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"unsupported mill amount/player",
-					where,
-				);
-			return ok({ kind: "mill", subject: who, amount });
-		}
 		case "discard": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"mode",
-					"numcards",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
-			);
+			const badParams = claim("defined", "mode", "numcards");
 			if (!badParams.ok) return badParams;
 			if (getForgeParam(params, "Mode") !== "TgtChoose")
 				return issue(
@@ -1283,18 +1279,12 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			return ok({ kind: "discard", selector: "any", amount: 1, subject: who });
 		}
 		case "sacrifice": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"validtgts",
-					"tgtprompt",
-					"sacvalid",
-					"amount",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
+			const badParams = claim(
+				"defined",
+				"validtgts",
+				"tgtprompt",
+				"sacvalid",
+				"amount",
 			);
 			if (!badParams.ok) return badParams;
 			const defined = getForgeParam(params, "Defined");
@@ -1327,18 +1317,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			});
 		}
 		case "dealdamage": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"validtgts",
-					"tgtprompt",
-					"defined",
-					"numdmg",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
-			);
+			const badParams = claim("validtgts", "tgtprompt", "defined", "numdmg");
 			if (!badParams.ok) return badParams;
 			const amount = positiveInteger(getForgeParam(params, "NumDmg"));
 			if (!amount)
@@ -1364,16 +1343,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			});
 		}
 		case "destroy": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"validtgts",
-					"tgtprompt",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
-			);
+			const badParams = claim("validtgts", "tgtprompt");
 			if (!badParams.ok) return badParams;
 			return ok({
 				kind: "destroy",
@@ -1382,16 +1352,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 		}
 		case "tap":
 		case "untap": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"validtgts",
-					"tgtprompt",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
-			);
+			const badParams = claim("validtgts", "tgtprompt");
 			if (!badParams.ok) return badParams;
 			return ok({
 				kind: api,
@@ -1399,17 +1360,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			});
 		}
 		case "counter": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"validtgts",
-					"tgtprompt",
-					"targettype",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
-			);
+			const badParams = claim("validtgts", "tgtprompt", "targettype");
 			if (!badParams.ok) return badParams;
 			return ok({
 				kind: "counter",
@@ -1417,29 +1368,23 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			});
 		}
 		case "changezone": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"origin",
-					"destination",
-					"defined",
-					"validtgts",
-					"tgtprompt",
-					"tgtzone",
-					"changenum",
-					"gaincontrol",
-					"tapped",
-					"libraryposition",
-					"activationzone",
-					"remembertargets",
-					"forgetothertargets",
-					"hidden",
-					"mandatory",
-					"changetype",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
+			const badParams = claim(
+				"origin",
+				"destination",
+				"defined",
+				"validtgts",
+				"tgtprompt",
+				"tgtzone",
+				"changenum",
+				"gaincontrol",
+				"tapped",
+				"libraryposition",
+				"activationzone",
+				"remembertargets",
+				"forgetothertargets",
+				"hidden",
+				"mandatory",
+				"changetype",
 			);
 			if (!badParams.ok) return badParams;
 			const originText = getForgeParam(params, "Origin");
@@ -1486,14 +1431,8 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					destination: { zone: "hand" },
 				});
 			}
-			const origin: PublicObjectZone | null =
-				originText === "Battlefield"
-					? "battlefield"
-					: originText === "Graveyard"
-						? "graveyard"
-						: originText === "Exile"
-							? "exile"
-							: null;
+			const origin =
+				originText === undefined ? undefined : PUBLIC_ZONES.get(originText);
 			if (!origin) {
 				return issue(
 					"UNSUPPORTED_PARAMETER",
@@ -1640,14 +1579,19 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 					"remembered ChangeZone requires one targeted battlefield object moving to exile",
 					where,
 				);
+			if (destination.zone === origin)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"ChangeZone origin and destination must differ",
+					where,
+				);
+			// The engine's type pairs each origin with the destinations that are not
+			// that same zone, so each arm re-states, for its one origin, the
+			// comparison made above. Only the battlefield-to-exile remembered chain
+			// reaches here with RememberTargets$ True.
 			switch (origin) {
 				case "battlefield":
-					if (destination.zone === "battlefield")
-						return issue(
-							"UNSUPPORTED_PARAMETER",
-							"ChangeZone origin and destination must differ",
-							where,
-						);
+					assert(destination.zone !== "battlefield");
 					return ok({
 						kind: "change-zone",
 						subject,
@@ -1658,12 +1602,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 							: {}),
 					});
 				case "graveyard":
-					if (destination.zone === "graveyard")
-						return issue(
-							"UNSUPPORTED_PARAMETER",
-							"ChangeZone origin and destination must differ",
-							where,
-						);
+					assert(destination.zone !== "graveyard");
 					return ok({
 						kind: "change-zone",
 						subject,
@@ -1671,12 +1610,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 						destination,
 					});
 				case "exile":
-					if (destination.zone === "exile")
-						return issue(
-							"UNSUPPORTED_PARAMETER",
-							"ChangeZone origin and destination must differ",
-							where,
-						);
+					assert(destination.zone !== "exile");
 					return ok({
 						kind: "change-zone",
 						subject,
@@ -1687,18 +1621,12 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			throw new Error("unreachable ChangeZone origin");
 		}
 		case "putcounter": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"validtgts",
-					"tgtprompt",
-					"countertype",
-					"counternum",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
+			const badParams = claim(
+				"defined",
+				"validtgts",
+				"tgtprompt",
+				"countertype",
+				"counternum",
 			);
 			if (!badParams.ok) return badParams;
 			const counter = COUNTER_NAMES.get(
@@ -1744,17 +1672,7 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			});
 		}
 		case "token": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"tokenscript",
-					"tokenowner",
-					"tokenamount",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
-			);
+			const badParams = claim("tokenscript", "tokenowner", "tokenamount");
 			if (!badParams.ok) return badParams;
 			const scriptId = getForgeParam(params, "TokenScript");
 			if (!scriptId)
@@ -1798,19 +1716,13 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			});
 		}
 		case "pump": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					discriminatorLower,
-					"defined",
-					"validtgts",
-					"tgtprompt",
-					"numatt",
-					"numdef",
-					"kw",
-					...COMMON_EFFECT_PARAMS,
-				]),
-				where,
+			const badParams = claim(
+				"defined",
+				"validtgts",
+				"tgtprompt",
+				"numatt",
+				"numdef",
+				"kw",
 			);
 			if (!badParams.ok) return badParams;
 			const powerText = getForgeParam(params, "NumAtt");
@@ -1844,51 +1756,36 @@ function parseOneEffect<Player extends TriggerEffectPlayer>(
 			// or another Defined -- is outside the supported subset.
 			const defined = getForgeParam(params, "Defined");
 			const validTargets = getForgeParam(params, "ValidTgts");
-			if (defined === "Self" && validTargets === undefined) {
-				if (keywordText !== undefined && BARE_KEYWORDS.has(keywordText)) {
-					const keyword = BARE_KEYWORDS.get(keywordText);
-					assertDefined(keyword);
-					return ok({
-						kind: "grant-keyword",
-						subject: { kind: "source" },
-						keyword,
-						duration: "until-end-of-turn",
-					});
-				}
-				assert(power !== null && toughness !== null);
+			const subject: { kind: "source" } | TargetEffectRef | null =
+				defined === "Self" && validTargets === undefined
+					? { kind: "source" }
+					: defined === undefined && validTargets !== undefined
+						? { kind: "target", slot: TARGET_SLOT }
+						: null;
+			if (subject === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"Pump must either define Self or declare targets",
+					where,
+				);
+			if (keywordText !== undefined) {
+				const keyword = BARE_KEYWORDS.get(keywordText);
+				assertDefined(keyword);
 				return ok({
-					kind: "modify-pt",
-					subject: { kind: "source" },
-					power,
-					toughness,
+					kind: "grant-keyword",
+					subject,
+					keyword,
 					duration: "until-end-of-turn",
 				});
 			}
-			if (defined === undefined && validTargets !== undefined) {
-				if (keywordText !== undefined && BARE_KEYWORDS.has(keywordText)) {
-					const keyword = BARE_KEYWORDS.get(keywordText);
-					assertDefined(keyword);
-					return ok({
-						kind: "grant-keyword",
-						subject: { kind: "target", slot: TARGET_SLOT },
-						keyword: keyword,
-						duration: "until-end-of-turn",
-					});
-				}
-				assert(power !== null && toughness !== null);
-				return ok({
-					kind: "modify-pt",
-					subject: { kind: "target", slot: TARGET_SLOT },
-					power,
-					toughness,
-					duration: "until-end-of-turn",
-				});
-			}
-			return issue(
-				"UNSUPPORTED_PARAMETER",
-				"Pump must either define Self or declare targets",
-				where,
-			);
+			assert(power !== null && toughness !== null);
+			return ok({
+				kind: "modify-pt",
+				subject,
+				power,
+				toughness,
+				duration: "until-end-of-turn",
+			});
 		}
 		default:
 			return issue(
@@ -1922,6 +1819,42 @@ function discriminator(
 		);
 	}
 	return ok(normalized);
+}
+
+/**
+ * The `DB$ Cleanup | ClearRemembered$ True` sub-ability that closes a
+ * remembered chain. It lowers to nothing — the engine consumes a remembered
+ * binding inside the resolution that creates it — so this only proves the
+ * script says exactly that and says nothing more.
+ */
+function checkRememberedCleanup(
+	resolver: SVarResolver,
+	name: string,
+	where: { nodeId?: string; line?: number },
+	message: string,
+): Err<ImportIssue> | null {
+	const _cleanupSVar = consumeAbilitySVar(resolver, name, "SubAbility", where);
+	if (!_cleanupSVar.ok) return _cleanupSVar;
+	const cleanupSVar = _cleanupSVar.value;
+	const cleanupWhere = {
+		nodeId: cleanupSVar.source.nodeId,
+		line: cleanupSVar.source.line,
+	};
+	const _cleanupDisc = discriminator(cleanupSVar.parsed.params, cleanupWhere);
+	if (!_cleanupDisc.ok) return _cleanupDisc;
+	const badCleanupParams = consumeParams(
+		cleanupSVar.parsed.params,
+		new Set(["db", "clearremembered"]),
+		cleanupWhere,
+	);
+	if (!badCleanupParams.ok) return badCleanupParams;
+	if (
+		_cleanupDisc.value.token !== "DB" ||
+		_cleanupDisc.value.api !== "cleanup" ||
+		getForgeParam(cleanupSVar.parsed.params, "ClearRemembered") !== "True"
+	)
+		return issue("UNSUPPORTED_PARAMETER", message, cleanupWhere);
+	return null;
 }
 
 const CHAIN_FORBIDDEN = [
@@ -2051,41 +1984,13 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			}
 
 			if (cleanupName) {
-				const _cleanupSVar = consumeAbilitySVar(
+				const badCleanup = checkRememberedCleanup(
 					resolver,
 					cleanupName,
-					"SubAbility",
 					where,
+					"remembered ChangeZone cleanup requires DB$ Cleanup and ClearRemembered$ True",
 				);
-				if (!_cleanupSVar.ok) return _cleanupSVar;
-				const cleanupSVar = _cleanupSVar.value;
-				const cleanupWhere = {
-					nodeId: cleanupSVar.source.nodeId,
-					line: cleanupSVar.source.line,
-				};
-				const _cleanupDisc = discriminator(
-					cleanupSVar.parsed.params,
-					cleanupWhere,
-				);
-				if (!_cleanupDisc.ok) return _cleanupDisc;
-				const cleanupDisc = _cleanupDisc.value;
-				const badCleanupParams = consumeParams(
-					cleanupSVar.parsed.params,
-					new Set(["db", "clearremembered"]),
-					cleanupWhere,
-				);
-				if (!badCleanupParams.ok) return badCleanupParams;
-				if (
-					cleanupDisc.token !== "DB" ||
-					cleanupDisc.api !== "cleanup" ||
-					getForgeParam(cleanupSVar.parsed.params, "ClearRemembered") !== "True"
-				) {
-					return issue(
-						"UNSUPPORTED_PARAMETER",
-						"remembered ChangeZone cleanup requires DB$ Cleanup and ClearRemembered$ True",
-						cleanupWhere,
-					);
-				}
+				if (badCleanup) return badCleanup;
 			}
 
 			const controller = parsePlayer("You");
@@ -2143,28 +2048,14 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				);
 			}
 
-			const staticBucket = resolver.face.svarIndex.get(
-				staticName.toLowerCase(),
+			const _staticSVar = consumeAbilitySVar(
+				resolver,
+				staticName,
+				"StaticAbilities",
+				where,
 			);
-			if (!staticBucket || staticBucket.length === 0)
-				return issue(
-					"UNSUPPORTED_REFERENCE",
-					`unresolved StaticAbilities ${staticName}`,
-					where,
-				);
-			if (staticBucket.length > 1)
-				return issue(
-					"UNSUPPORTED_REFERENCE",
-					`ambiguous duplicate SVar ${staticName}`,
-					where,
-				);
-			const staticSVar = staticBucket[0] as ForgeSVarRecord;
-			if (staticSVar.parsed.kind !== "params")
-				return issue(
-					"UNSUPPORTED_REFERENCE",
-					`StaticAbilities ${staticName} is not an ability body`,
-					where,
-				);
+			if (!_staticSVar.ok) return _staticSVar;
+			const staticSVar = _staticSVar.value;
 			const staticWhere = {
 				nodeId: staticSVar.source.nodeId,
 				line: staticSVar.source.line,
@@ -2189,56 +2080,13 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				);
 			}
 
-			const cleanupBucket = resolver.face.svarIndex.get(
-				cleanupName.toLowerCase(),
+			const badCleanup = checkRememberedCleanup(
+				resolver,
+				cleanupName,
+				where,
+				"remembered-card Effect cleanup requires DB$ Cleanup and ClearRemembered$ True",
 			);
-			if (!cleanupBucket || cleanupBucket.length === 0)
-				return issue(
-					"UNSUPPORTED_REFERENCE",
-					`unresolved SubAbility ${cleanupName}`,
-					where,
-				);
-			if (cleanupBucket.length > 1)
-				return issue(
-					"UNSUPPORTED_REFERENCE",
-					`ambiguous duplicate SVar ${cleanupName}`,
-					where,
-				);
-			const cleanupSVar = cleanupBucket[0] as ForgeSVarRecord;
-			if (cleanupSVar.parsed.kind !== "params")
-				return issue(
-					"UNSUPPORTED_REFERENCE",
-					`SubAbility ${cleanupName} is not an ability body`,
-					where,
-				);
-			const cleanupWhere = {
-				nodeId: cleanupSVar.source.nodeId,
-				line: cleanupSVar.source.line,
-			};
-			const _cleanupDisc = discriminator(
-				cleanupSVar.parsed.params,
-				cleanupWhere,
-			);
-			if (!_cleanupDisc.ok) return _cleanupDisc;
-			const cleanupDisc = _cleanupDisc.value;
-
-			const badCleanupParams = consumeParams(
-				cleanupSVar.parsed.params,
-				new Set(["db", "clearremembered"]),
-				cleanupWhere,
-			);
-			if (!badCleanupParams.ok) return badCleanupParams;
-			if (
-				cleanupDisc.token !== "DB" ||
-				cleanupDisc.api !== "cleanup" ||
-				getForgeParam(cleanupSVar.parsed.params, "ClearRemembered") !== "True"
-			) {
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"remembered-card Effect cleanup requires DB$ Cleanup and ClearRemembered$ True",
-					cleanupWhere,
-				);
-			}
+			if (badCleanup) return badCleanup;
 
 			assert.equal(
 				rememberedDig.resultSlot,
@@ -2254,8 +2102,6 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				from: "exile",
 				duration: "until-end-of-your-next-turn",
 			});
-			resolver.consumed.add(staticName.toLowerCase());
-			resolver.consumed.add(cleanupName.toLowerCase());
 			return ok(effects);
 		}
 		const _lowered = parseEffects(
@@ -2836,6 +2682,7 @@ function lowerTrigger(
 	const _executeSVar = consumeAbilitySVar(resolver, execute, "Execute", where);
 	if (!_executeSVar.ok) return _executeSVar;
 	const executeSVar = _executeSVar.value;
+	const executeParams = executeSVar.parsed.params;
 
 	const optionalDecider = getForgeParam(params, "OptionalDecider");
 	if (optionalDecider !== undefined && optionalDecider !== "You")
@@ -2853,21 +2700,18 @@ function lowerTrigger(
 	// The trigger declares targets on its executed ability. Parse them before
 	// effects so every effect is checked as it is constructed.
 	const targets = parseTarget(
-		getForgeParam(executeSVar.parsed.params, "ValidTgts"),
+		getForgeParam(executeParams, "ValidTgts"),
 		undefined,
-		getForgeParam(executeSVar.parsed.params, "DB") === "ChangeZone" &&
-			getForgeParam(executeSVar.parsed.params, "Origin") === "Graveyard"
-			? "graveyard"
-			: getForgeParam(executeSVar.parsed.params, "DB") === "ChangeZone" &&
-					getForgeParam(executeSVar.parsed.params, "Origin") === "Exile"
-				? "exile"
-				: undefined,
+		changeZoneTargetZone(
+			executeParams,
+			getForgeParam(executeParams, "DB") === "ChangeZone",
+		),
 	);
 	if (!targets)
 		return issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where);
 	const chain = lowerEffectChain(
 		resolver,
-		executeSVar.parsed.params,
+		executeParams,
 		{ nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
 		targets,
 		true,
@@ -2891,20 +2735,23 @@ function lowerTrigger(
 			]
 		: chain.value;
 
+	// Each mode claims the trigger record's whole parameter list. Mode$,
+	// Execute$, and TriggerDescription$ are required of every trigger and were
+	// read above, so a mode states only the keys that are its own — including
+	// the ones it deliberately omits, such as Attacks rejecting TriggerZones$.
+	const claim = (...keys: string[]) =>
+		consumeParams(
+			params,
+			new Set(["mode", "execute", "triggerdescription", ...keys]),
+			where,
+		);
 	switch (mode) {
 		case "SpellCast": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					"mode",
-					"validcard",
-					"validactivatingplayer",
-					"triggerzones",
-					"execute",
-					"optionaldecider",
-					"triggerdescription",
-				]),
-				where,
+			const badParams = claim(
+				"validcard",
+				"validactivatingplayer",
+				"triggerzones",
+				"optionaldecider",
 			);
 			if (!badParams.ok) return badParams;
 			if (getForgeParam(params, "TriggerZones") !== "Battlefield")
@@ -2952,20 +2799,13 @@ function lowerTrigger(
 			});
 		}
 		case "ChangesZone": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					"mode",
-					"origin",
-					"destination",
-					"validcard",
-					"triggerzones",
-					"secondary",
-					"execute",
-					"optionaldecider",
-					"triggerdescription",
-				]),
-				where,
+			const badParams = claim(
+				"origin",
+				"destination",
+				"validcard",
+				"triggerzones",
+				"secondary",
+				"optionaldecider",
 			);
 			if (!badParams.ok) return badParams;
 			const triggerZones = getForgeParam(params, "TriggerZones");
@@ -3028,18 +2868,11 @@ function lowerTrigger(
 			});
 		}
 		case "Phase": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					"mode",
-					"phase",
-					"validplayer",
-					"triggerzones",
-					"execute",
-					"optionaldecider",
-					"triggerdescription",
-				]),
-				where,
+			const badParams = claim(
+				"phase",
+				"validplayer",
+				"triggerzones",
+				"optionaldecider",
 			);
 			if (!badParams.ok) return badParams;
 			if (
@@ -3074,19 +2907,12 @@ function lowerTrigger(
 			});
 		}
 		case "Drawn": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					"mode",
-					"validcard",
-					"number",
-					"firstcardindrawstep",
-					"triggerzones",
-					"execute",
-					"optionaldecider",
-					"triggerdescription",
-				]),
-				where,
+			const badParams = claim(
+				"validcard",
+				"number",
+				"firstcardindrawstep",
+				"triggerzones",
+				"optionaldecider",
 			);
 			if (!badParams.ok) return badParams;
 			// Sneaky Snacker is the first graveyard-sourced Drawn trigger: it
@@ -3187,11 +3013,7 @@ function lowerTrigger(
 			});
 		}
 		case "Attacks": {
-			const badParams = consumeParams(
-				params,
-				new Set(["mode", "validcard", "execute", "triggerdescription"]),
-				where,
-			);
+			const badParams = claim("validcard");
 			if (!badParams.ok) return badParams;
 			if (getForgeParam(params, "ValidCard") !== "Card.Self")
 				return issue(
@@ -3208,19 +3030,12 @@ function lowerTrigger(
 			});
 		}
 		case "DamageDone": {
-			const badParams = consumeParams(
-				params,
-				new Set([
-					"mode",
-					"validsource",
-					"validtarget",
-					"combatdamage",
-					"triggerzones",
-					"execute",
-					"optionaldecider",
-					"triggerdescription",
-				]),
-				where,
+			const badParams = claim(
+				"validsource",
+				"validtarget",
+				"combatdamage",
+				"triggerzones",
+				"optionaldecider",
 			);
 			if (!badParams.ok) return badParams;
 			const triggerZones = getForgeParam(params, "TriggerZones");
@@ -3330,7 +3145,10 @@ function parseActivationCost(
 	let tapSelf = false;
 	let sacrifice: ActivationCost["sacrifice"];
 	let discard: ActivationCost["discard"];
-	let sawZero = false;
+	// `0` is the whole mana cost when it appears, so a term of it may be written
+	// once and never beside another mana term. The terms are counted here and
+	// judged together once the list has been read.
+	let zeroTerms = 0;
 	let sawMana = false;
 	for (const term of terms) {
 		if (term === "") {
@@ -3358,13 +3176,6 @@ function parseActivationCost(
 			term === "R" ||
 			term === "G"
 		) {
-			if (sawZero) {
-				return issue(
-					"UNSUPPORTED_COST",
-					"malformed activation cost: 0 cannot be combined with other mana terms",
-					where,
-				);
-			}
 			const type = term.toLowerCase() as "w" | "u" | "b" | "r" | "g";
 			mana[type] = (mana[type] ?? 0) + 1;
 			sawMana = true;
@@ -3387,10 +3198,7 @@ function parseActivationCost(
 					selectorChoices.push({ kind: "self" });
 					continue;
 				}
-				const excludesSelf = choice.endsWith(".Other");
-				const parsed = parseSelectorPart(
-					excludesSelf ? choice.slice(0, -".Other".length) : choice,
-				);
+				const parsed = parseSelectorChoice(choice);
 				if (!parsed) {
 					return issue(
 						"UNSUPPORTED_COST",
@@ -3398,14 +3206,7 @@ function parseActivationCost(
 						where,
 					);
 				}
-				selectorChoices.push(
-					excludesSelf
-						? combinePredicates("and", [
-								parsed,
-								{ kind: "not", predicate: { kind: "self" } },
-							])
-						: parsed,
-				);
+				selectorChoices.push(parsed);
 			}
 			sacrifice = {
 				predicate: combinePredicates("or", selectorChoices),
@@ -3451,22 +3252,8 @@ function parseActivationCost(
 				);
 			}
 			if (amount === 0) {
-				if (sawZero || sawMana) {
-					return issue(
-						"UNSUPPORTED_COST",
-						"malformed activation cost: 0 cannot be combined with other mana terms",
-						where,
-					);
-				}
-				sawZero = true;
+				zeroTerms += 1;
 				continue;
-			}
-			if (sawZero) {
-				return issue(
-					"UNSUPPORTED_COST",
-					"malformed activation cost: 0 cannot be combined with other mana terms",
-					where,
-				);
 			}
 			const generic = (mana.n ?? 0) + amount;
 			if (!Number.isSafeInteger(generic)) {
@@ -3483,6 +3270,14 @@ function parseActivationCost(
 		return issue(
 			"UNSUPPORTED_COST",
 			`unsupported activation cost term ${term}`,
+			where,
+		);
+	}
+
+	if (zeroTerms > 0 && (sawMana || zeroTerms > 1)) {
+		return issue(
+			"UNSUPPORTED_COST",
+			"malformed activation cost: 0 cannot be combined with other mana terms",
 			where,
 		);
 	}
@@ -3686,15 +3481,15 @@ export function lowerForgeCard(
 	let sawSubtype = false;
 	for (const [index, raw] of words.entries()) {
 		const word = raw.toLowerCase();
-		if ((SUPERTYPES as ReadonlySet<string>).has(word)) {
-			const supertype = word as Supertype;
+		const supertype = SUPERTYPES.get(word);
+		if (supertype) {
 			if (lastType >= 0 || sawSubtype || supertypes.includes(supertype))
 				return invalidTypesLine();
 			supertypes.push(supertype);
 			continue;
 		}
-		if ((CARD_TYPES as ReadonlySet<string>).has(word)) {
-			const type = word as CardType;
+		const type = CARD_TYPES.get(word);
+		if (type) {
 			if (types.includes(type) || sawSubtype) return invalidTypesLine();
 			types.push(type);
 			lastType = index;
@@ -4090,14 +3885,7 @@ export function lowerForgeCard(
 		if (disc.token === "AB") {
 			const activationZone = getForgeParam(params, "ActivationZone");
 			if (activationZone !== undefined) {
-				const zone: PublicObjectZone | null =
-					activationZone === "Battlefield"
-						? "battlefield"
-						: activationZone === "Graveyard"
-							? "graveyard"
-							: activationZone === "Exile"
-								? "exile"
-								: null;
+				const zone = PUBLIC_ZONES.get(activationZone);
 				if (!zone)
 					return reject(
 						issue(
@@ -4158,13 +3946,7 @@ export function lowerForgeCard(
 		const targets = parseTarget(
 			getForgeParam(params, "ValidTgts"),
 			getForgeParam(params, "TargetType"),
-			disc.api === "changezone" &&
-				getForgeParam(params, "Origin") === "Graveyard"
-				? "graveyard"
-				: disc.api === "changezone" &&
-						getForgeParam(params, "Origin") === "Exile"
-					? "exile"
-					: undefined,
+			changeZoneTargetZone(params, disc.api === "changezone"),
 		);
 		if (!targets)
 			return reject(
