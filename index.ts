@@ -2240,6 +2240,15 @@ export type EffectDef<Player extends TriggerEffectPlayer> =
 			effects: EffectDef<Player>[];
 	  };
 
+/** Effects on a triggered ability may refer to the player that triggered it. */
+export type TriggeredEffectDef = EffectDef<TriggerEffectPlayer>;
+
+/** Spell effects can refer only to players relative to the spell's controller. */
+export type SpellEffectDef = EffectDef<RelativeEffectPlayer>;
+
+/** Activated effects can refer only to players relative to the ability's controller. */
+export type ActivatedEffectDef = EffectDef<RelativeEffectPlayer>;
+
 /* ------------------------------------------------------------------ *
  * Triggers
  *
