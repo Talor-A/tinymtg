@@ -1985,7 +1985,7 @@ export type TemporaryEffectSource =
 	| {
 			origin: "ability-effect";
 			category: "triggered" | "activated";
-			abilityId: string;
+			abilityId: AbilityId<"triggered" | "activated">;
 			effectIndex: number;
 	  }
 	| { origin: "builtin"; builtin: BuiltinTemporaryEffect };
@@ -2071,7 +2071,7 @@ function temporaryEffectDefinition(
 		const ability = abilityDefinition(
 			engine,
 			source.category,
-			source.abilityId as AbilityId<"triggered" | "activated">,
+			source.abilityId,
 		);
 		// Mana abilities declare `effects?: never`, so they cannot be the source
 		// of a temporary effect.
