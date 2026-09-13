@@ -1107,14 +1107,11 @@ function parseEffectPlayer<Player extends TriggerEffectPlayer>(
 	return player === null ? null : { kind: "relative-player", player };
 }
 
-/**
- * Lowers one Forge ability record's instruction. Most APIs lower to a single
- * engine effect, but an instruction the engine spells with several does not:
- * `Pump | NumAtt$ +3 | NumDef$ +3 | KW$ Flying` (Angelic Blessing) is one
- * record and one printed sentence, and lowers to a P/T modification plus one
- * keyword grant. The expansion belongs to the branch that read the parameters,
- * so the arity is the API's, not a caller's.
- */
+type NonMayEffect<Player extends TriggerEffectPlayer> = Exclude<
+	EffectDef<Player>,
+	{ kind: "may" }
+>;
+
 function parseEffects<Player extends TriggerEffectPlayer>(
 	params: ForgeParamList,
 	discriminatorLower: string,
@@ -1123,7 +1120,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
 	tokenAbilityHost: TokenAbilityHost,
-): Result<Exclude<EffectDef<Player>, { kind: "may" }>[], ImportIssue> {
+): Result<NonMayEffect<Player>[], ImportIssue> {
 	// Every branch claims this record's whole parameter list, and every branch's
 	// list opens with its own discriminator and closes with the keys common to
 	// all effects. `claim` supplies those invariant ends, so a branch states
@@ -1747,71 +1744,109 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				"kw",
 			);
 			if (!badParams.ok) return badParams;
+
+			const pumpEffect: {
+				p: number | null;
+				t: number | null;
+				keywords: Keyword[] | null;
+				subject: { kind: "source" } | TargetEffectRef | null;
+			} = { p: null, t: null, keywords: null, subject: null };
+
 			const powerText = getForgeParam(params, "NumAtt");
 			const toughnessText = getForgeParam(params, "NumDef");
-			const keywordText = getForgeParam(params, "KW");
+			const rawKwList = getForgeParam(params, "KW")
+				?.split("&")
+				.map((str) => str.trim());
+
 			if (
-				keywordText !== undefined &&
-				(powerText !== undefined || toughnessText !== undefined)
+				rawKwList === undefined &&
+				powerText === undefined &&
+				toughnessText === undefined
 			)
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"Pump cannot combine KW$ with NumAtt$ or NumDef$",
+					"Pump effect didn't apply a keyword, power, or toughness",
 					where,
 				);
-			if (keywordText !== undefined && !BARE_KEYWORDS.has(keywordText))
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					`unsupported temporary keyword ${keywordText}`,
-					where,
-				);
-			const power = signedInteger(powerText);
-			const toughness = signedInteger(toughnessText);
-			if (keywordText === undefined && (power === null || toughness === null))
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"Pump requires fixed NumAtt and NumDef values, or a supported KW$",
-					where,
-				);
+
+			for (const rawKw of rawKwList ?? []) {
+				if (!BARE_KEYWORDS.has(rawKw)) {
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						`unsupported temporary keyword ${rawKwList}`,
+
+						where,
+					);
+				}
+				const keyword = BARE_KEYWORDS.get(rawKw);
+				assertDefined(keyword);
+
+				pumpEffect.keywords ??= [];
+
+				pumpEffect.keywords.push(keyword);
+			}
+
+			if (powerText && toughnessText) {
+				const power = signedInteger(powerText);
+				const toughness = signedInteger(toughnessText);
+				if (power === null || toughness === null) {
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"Pump requires fixed NumAtt and NumDef values, or a supported KW$",
+						where,
+					);
+				}
+
+				pumpEffect.p = power;
+				pumpEffect.t = toughness;
+			}
+
 			// `Defined$ Self` pumps the ability's own source ("it gets +1/+1");
 			// `ValidTgts$` pumps a chosen target. Anything else -- both, neither,
 			// or another Defined -- is outside the supported subset.
 			const defined = getForgeParam(params, "Defined");
 			const validTargets = getForgeParam(params, "ValidTgts");
-			const subject: { kind: "source" } | TargetEffectRef | null =
-				defined === "Self" && validTargets === undefined
-					? { kind: "source" }
-					: defined === undefined && validTargets !== undefined
-						? { kind: "target", slot: TARGET_SLOT }
-						: null;
-			if (subject === null)
+
+			if (defined === "Self" && validTargets === undefined) {
+				pumpEffect.subject = { kind: "source" };
+			} else if (defined === undefined && validTargets !== undefined) {
+				pumpEffect.subject = { kind: "target", slot: TARGET_SLOT };
+			}
+
+			if (pumpEffect.subject === null)
 				return issue(
 					"UNSUPPORTED_PARAMETER",
 					"Pump must either define Self or declare targets",
 					where,
 				);
-			if (keywordText !== undefined) {
-				const keyword = BARE_KEYWORDS.get(keywordText);
-				assertDefined(keyword);
-				return ok([
-					{
-						kind: "grant-keyword",
-						subject,
-						keyword,
-						duration: "until-end-of-turn",
-					},
-				]);
-			}
-			assert(power !== null && toughness !== null);
-			return ok([
-				{
-					kind: "modify-pt",
-					subject,
-					power,
-					toughness,
+
+			const effectList: NonMayEffect<Player>[] = [];
+			for (const keyword of pumpEffect.keywords ?? []) {
+				effectList.push({
+					kind: "grant-keyword",
+					subject: pumpEffect.subject,
+					keyword,
 					duration: "until-end-of-turn",
-				},
-			]);
+				});
+			}
+
+			if (pumpEffect.p) {
+				assertDefined(pumpEffect.t);
+				effectList.push({
+					kind: "modify-pt",
+					subject: pumpEffect.subject,
+					power: pumpEffect.p,
+					toughness: pumpEffect.t,
+					duration: "until-end-of-turn",
+				});
+			}
+
+			if (effectList.length) return ok(effectList);
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				`no parseable effects for Pump`,
+				where,
+			);
 		}
 		default:
 			return issue(
