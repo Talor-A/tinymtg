@@ -396,8 +396,9 @@ function combinePredicates(
  * One `.`-separated restriction following the base, such as the `nonBlack` of
  * `Creature.nonBlack`. Colors, card types, and supertypes lower exactly,
  * and `NEGATABLE_SUBTYPES` extends the vocabulary to negated subtypes. Every
- * other Forge restriction (zone, combat state, counters, subtype-as-modifier
- * without `non`) rejects the card rather than being approximated.
+ * `attacking` and `blocking` are the supported combat-state restrictions.
+ * Every other Forge restriction (zone, counters, subtype-as-modifier without
+ * `non`) rejects the card rather than being approximated.
  */
 /**
  * `ValidPlayer$` -> the engine's relative-player vocabulary.
@@ -444,6 +445,7 @@ function parseDrawnPlayer(value: string | undefined): ValidPlayer | null {
 function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	if (modifier === "Other") return { kind: "not", predicate: { kind: "self" } };
 	if (modifier === "attacking") return { kind: "attacking" };
+	if (modifier === "blocking") return { kind: "blocking" };
 	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
 	if (modifier === "YouOwn") return { kind: "owner", player: "you" };

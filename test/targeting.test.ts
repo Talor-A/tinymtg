@@ -84,8 +84,10 @@ describe("target predicates", () => {
 		const state = engine.newGame();
 		const bears = engine.spawnPermanent(state, "grizzly-bears", 0);
 		const swamp = engine.spawnPermanent(state, "swamp", 1);
+		const blocker = engine.spawnPermanent(state, "grizzly-bears", 1);
 		const ownedCard = engine.spawnCard(state, "grizzly-bears", 0, "graveyard");
 		permanent(state, bears.id).attacking = true;
+		permanent(state, blocker.id).blocking = true;
 		const mine = { controller: 0 as const, source: bears.id };
 
 		const matches = (predicate: ObjectPredicateDef, id: ObjectId) => {
@@ -97,6 +99,8 @@ describe("target predicates", () => {
 		expect(matches({ kind: "self" }, swamp.id)).toBe(false);
 		expect(matches({ kind: "attacking" }, bears.id)).toBe(true);
 		expect(matches({ kind: "attacking" }, swamp.id)).toBe(false);
+		expect(matches({ kind: "blocking" }, blocker.id)).toBe(true);
+		expect(matches({ kind: "blocking" }, bears.id)).toBe(false);
 		expect(matches({ kind: "type", type: "creature" }, bears.id)).toBe(true);
 		expect(matches({ kind: "type", type: "creature" }, swamp.id)).toBe(false);
 		expect(matches({ kind: "subtype", subtype: "Bear" }, bears.id)).toBe(true);

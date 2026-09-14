@@ -2429,6 +2429,7 @@ export type Keyword =
 export type ObjectPredicateDef =
 	| { kind: "self" }
 	| { kind: "attacking" }
+	| { kind: "blocking" }
 	| { kind: "type"; type: CardType }
 	| { kind: "supertype"; supertype: Supertype }
 	| { kind: "subtype"; subtype: string }
@@ -2488,6 +2489,8 @@ export function objectMatchesPredicate(
 			return context.source !== null && object.objectId === context.source;
 		case "attacking":
 			return "attacking" in object && object.attacking;
+		case "blocking":
+			return "blocking" in object && object.blocking;
 		case "type":
 			return characteristics.types.includes(predicate.type);
 		case "supertype":
@@ -4114,6 +4117,7 @@ export interface ContinuousEffectEvaluation {
 	readonly controller: PlayerId | null;
 	readonly zone: Zone;
 	readonly attacking: boolean;
+	readonly blocking: boolean;
 	readonly currentCharacteristics: DeepReadOnly<CharacteristicsSnapshot>;
 }
 
@@ -4129,6 +4133,7 @@ function continuousEffectEvaluation(
 		controller: controllerOf(object),
 		zone: object.zone,
 		attacking: object.kind === "permanent" && object.attacking,
+		blocking: object.kind === "permanent" && object.blocking,
 		currentCharacteristics: characteristics,
 	};
 }

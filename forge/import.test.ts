@@ -1471,6 +1471,41 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Wanderer's Intervention targets attacking or blocking creatures", () => {
+		const result = importFixture("w/wanderers_intervention");
+		if (!result.ok)
+			throw new Error("expected Wanderer's Intervention to import");
+		expect(result.card.spell?.targets).toEqual([
+			{
+				id: "target-1",
+				min: 1,
+				max: 1,
+				legal: {
+					kind: "permanent",
+					predicate: {
+						kind: "or",
+						predicates: [
+							{
+								kind: "and",
+								predicates: [
+									{ kind: "type", type: "creature" },
+									{ kind: "attacking" },
+								],
+							},
+							{
+								kind: "and",
+								predicates: [
+									{ kind: "type", type: "creature" },
+									{ kind: "blocking" },
+								],
+							},
+						],
+					},
+				},
+			},
+		]);
+	});
+
 	test("Stealer of Secrets keeps its self combat-damage trigger", () => {
 		const result = importFixture("s/stealer_of_secrets");
 		if (!result.ok) throw new Error("expected ok");
