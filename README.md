@@ -101,7 +101,10 @@ chosen (`Produced$ Any | Amount$ 3`, e.g. Black Lotus — a `Combo` amount above
 one instead mixes its symbols, and rejects); token scripts with supported activated
 abilities, mana (Treasure) or not (Food, Blood), are rehosted on the importing card
 so created tokens retain executable abilities without mutating the registry
-during import; activated abilities whose
+during import; predicate-selected `PumpAll` effects with fixed power,
+toughness, and supported keyword changes through end of turn; `DamageAll`
+effects with a fixed positive amount for supported creature predicates and/or
+players, applied through one simultaneous event window; activated abilities whose
 costs contain fixed generic/WUBRG mana,
 optional tap-self (`Cost$ 3 T`, e.g. Rod of Ruin), an optional discard of one
 card of any kind (`Discard<1/Card>`, e.g. Rummaging Goblin and the Blood

@@ -475,6 +475,62 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		});
 	});
 
+	test("DamageAll lowers creature sets and player sets without targets", () => {
+		const suns = importFixture("s/sweltering_suns");
+		if (!suns.ok) throw new Error("expected Sweltering Suns to import");
+		expect(suns.card.spell?.effects).toEqual([
+			{
+				kind: "damage-all",
+				recipients: [
+					{
+						kind: "matching-permanents",
+						predicate: { kind: "type", type: "creature" },
+					},
+				],
+				amount: 3,
+			},
+		]);
+
+		const rift = importFixture("f/flame_rift");
+		if (!rift.ok) throw new Error("expected Flame Rift to import");
+		expect(rift.card.spell?.effects).toEqual([
+			{
+				kind: "damage-all",
+				recipients: [{ kind: "each-player" }],
+				amount: 4,
+			},
+		]);
+	});
+
+	test("DamageAll lowers an opponent set relative to its source", () => {
+		const result = importFixture("v/vindictive_vampire");
+		if (!result.ok) throw new Error("expected Vindictive Vampire to import");
+		expect(result.card.abilityDefinitions.triggered[0]?.effects[0]).toEqual({
+			kind: "damage-all",
+			recipients: [{ kind: "relative-player", player: "opponent" }],
+			amount: 1,
+		});
+	});
+
+	test("DamageAll rejects dynamic damage and noncreature permanent sets", () => {
+		const definition = cardText("s/sweltering_suns");
+		for (const [name, mutated] of [
+			["dynamic", definition.replace("NumDmg$ 3", "NumDmg$ X")],
+			[
+				"noncreature",
+				definition.replace("ValidCards$ Creature", "ValidCards$ Land"),
+			],
+			["missing", definition.replace(" | ValidCards$ Creature", "")],
+			[
+				"remembered",
+				definition.replace("NumDmg$ 3", "NumDmg$ 3 | RememberDamaged$ True"),
+			],
+		] as const) {
+			const result = importForgeCard(mutated, { id: `damage-all-${name}` });
+			expect(result.ok, name).toBe(false);
+		}
+	});
+
 	test("Arcanis lowers its nontargeted self-bounce ability", () => {
 		const result = importFixture("a/arcanis_the_omnipotent");
 		if (!result.ok) throw new Error("expected ok");

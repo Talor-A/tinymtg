@@ -407,6 +407,7 @@ Blasted Landscape
 Blaster Mage
 Blazing Crescendo
 Blazing Hellhound
+Blazing Volley
 Blessed Light
 Blessed Orator
 Blessed Spirits
@@ -442,7 +443,9 @@ Blood Servitor
 Blood Vassal
 Bloodbriar
 Bloodfell Caves
+Bloodfire Colossus
 Bloodfire Expert
+Bloodfire Kavu
 Bloodfire Mentor
 Bloodflow Connoisseur
 Bloodgift Demon
@@ -524,6 +527,7 @@ Brazen Wolves
 Breaching Hippocamp
 Break Asunder
 Breakneck Berserker
+Breath Weapon
 Breath of Fire
 Breath of Life
 Breath of Malfegor
@@ -872,6 +876,7 @@ Cyclopean Snare
 Cyclops of One-Eyed Pass
 Cylian Elf
 D'Avenant Archer
+Dagger Caster
 Daggerback Basilisk
 Daggerclaw Imp
 Daggerdrome Imp
@@ -879,6 +884,7 @@ Daily Bugle Newspaper
 Dakmor Bat
 Dakmor Ghoul
 Dakmor Lancer
+Dakmor Plague
 Dakmor Scorpion
 Damnation
 Dampening Pulse
@@ -980,6 +986,7 @@ Deranged Outcast
 Desecration Plague
 Desert Cerodon
 Desert Drake
+Desert Sandstorm
 Desert Twister
 Desert of the Fervent
 Desert of the Glorified
@@ -998,6 +1005,7 @@ Despondent Killbot
 Despotic Scepter
 Destructive Digger
 Destructor Dragon
+Devastate
 Devastation
 Devilthorn Fox
 Devkarin Dissident
@@ -1127,6 +1135,7 @@ Druid Lyrist
 Druid of the Anima
 Druid of the Cowl
 Drunau Corpse Trawler
+Dry Spell
 Dryad Arbor
 Dukhara Peafowl
 Dune Beetle
@@ -1272,6 +1281,7 @@ Ethereal Guidance
 Etherium Astrolabe
 Etherium Spinner
 Eumidian Terrabotanist
+Evaporate
 Eviscerate
 Evolving Wilds
 Excavated Wall
@@ -1325,6 +1335,7 @@ Fallow Earth
 False Defeat
 False Mourning
 False Summoning
+Famine
 Fan Bearer
 Fanatical Fever
 Fanatical Firebrand
@@ -1368,6 +1379,7 @@ Ferocious Zheng
 Ferrous Lake
 Ferrovore
 Festergloom
+Festering Evil
 Festering Gulch
 Festering Thicket
 Festival Crasher
@@ -1378,6 +1390,7 @@ Field Creeper
 Field of Souls
 Fields of Strife
 Fierce Witchstalker
+Fiery Cannonade
 Fiery Conclusion
 Fiery Finish
 Fiery Hellhound
@@ -1401,6 +1414,7 @@ Fire Nation Soldier
 Fire Nation's Conquest
 Fire Snake
 Fire Sprites
+Fire Tempest
 Fire Urchin
 Fire-Omen Crane
 Firebrand Archer
@@ -1414,6 +1428,7 @@ Fisk Tower
 Fissure
 Fists of the Anvil
 Flame Lash
+Flame Rift
 Flame Slash
 Flame Spirit
 Flame-Kin Zealot
@@ -1521,6 +1536,7 @@ Frostling
 Frostwind Invoker
 Frozen Aether
 Frozen Shade
+Fuel the Flames
 Fugitive Wizard
 Funeral Rites
 Furnace Spirit
@@ -1705,6 +1721,7 @@ Granulate
 Grappler Spider
 Grappling Sundew
 Grasping Longneck
+Grasping Thrull
 Grasslands
 Gravedigger
 Gravel-Hide Goblin
@@ -1785,6 +1802,7 @@ Hag of Death's Legion
 Hag of Syphoned Breath
 Hag of Twisted Visions
 Hagra Crocodile
+Hail Storm
 Hajar, Loyal Bodyguard
 Hall
 Hall of Heliod's Generosity
@@ -1978,6 +1996,7 @@ Igneous Cur
 Igneous Golem
 Iguana Parrot
 Il Mheg Pixie
+Ill-Gotten Inheritance
 Illegitimate Business
 Illness in the Ranks
 Illusory Demon
@@ -2007,6 +2026,8 @@ Improvised Club
 Improvised Weaponry
 Impulse
 In Oketra's Name
+Incandescent Aria
+Incendiary Sabotage
 Incubator Drone
 Incurable Ogre
 Indatha Crystal
@@ -2021,6 +2042,7 @@ Infectious Host
 Infernal Grasp
 Infernal Idol
 Infernal Tribute
+Inferno
 Inferno Jet
 Infest
 Infestation Sage
@@ -2149,6 +2171,7 @@ Jwar Isle Refuge
 Jwari Scuttler
 Kabira Crossroads
 Kabuto Moth
+Kaervek's Hex
 Kaervek, the Spiteful
 Kalakscion, Hunger Tyrant
 Kalastria Healer
@@ -2401,7 +2424,9 @@ Mad Prophet
 Mad Ratter
 Mage's Guile
 Magic Pot
+Magma Giant
 Magma Jet
+Magma Phoenix
 Magma Rift
 Magmaw
 Magnetic Flux
@@ -2777,6 +2802,7 @@ Offer Immortality
 Oggyar Battle-Seer
 Ogre Arsonist
 Ogre Berserker
+Ogre Painbringer
 Ogre Resister
 Ogre Sentry
 Ogre Taskmaster
@@ -2897,6 +2923,7 @@ Perimeter Patrol
 Perish
 Persistent Specimen
 Pest Control
+Pestilence Demon
 Pestilent Wolf
 Petrified Field
 Phalanx Tactics
@@ -2946,6 +2973,7 @@ Pitiless Plunderer
 Pitiless Pontiff
 Pixie Queen
 Plague Dogs
+Plague Spitter
 Plains
 Planar Cleansing
 Planar Portal
@@ -3036,6 +3064,7 @@ Pyre Hound
 Pyre Spawn
 Pyrite Spellbomb
 Pyroceratops
+Pyroclasm
 Pyroclastic Elemental
 Pyromantic Pilgrim
 Python
@@ -3072,6 +3101,8 @@ Raging Kavu
 Raging Minotaur
 Raging Poltergeist
 Raging Regisaur
+Rain of Blades
+Rain of Embers
 Rain of Revelation
 Rain of Tears
 Rain-Slicked Copse
@@ -3342,6 +3373,7 @@ Sandbar Serpent
 Sandblast
 Sandsteppe Citadel
 Sandstone Bridge
+Sandstorm
 Sanguinary Mage
 Sanguinary Priest
 Sanguine Syphoner
@@ -3395,6 +3427,7 @@ Scoria Elemental
 Scour from Existence
 Scoured Barrens
 Scourge of the Undercity
+Scouring Sands
 Scrap
 Scrap Compactor
 Scrapheap
@@ -3487,6 +3520,7 @@ Serpentine Kavu
 Serra Advocate
 Serra Angel
 Serra Sphinx
+Serrated Scorpion
 Serum Powder
 Serum Visionary
 Serum Visions
@@ -3658,7 +3692,9 @@ Slay
 Slayers' Stronghold
 Sledding Otter-Penguin
 Sleight of Hand
+Slice and Dice
 Slice in Twain
+Slimefoot, the Stowaway
 Sling-Gang Lieutenant
 Slingshot Goblin
 Slinking Skirge
@@ -3740,6 +3776,7 @@ Sparring Construct
 Sparring Mummy
 Spawning Bed
 Spawning Breath
+Spear Spewer
 Spectacle Summit
 Specter of the Fens
 Spectral Hunt-Caller
@@ -3772,6 +3809,7 @@ Spiteful Bully
 Spitfire Lagac
 Spock, Logical Choice
 Spoils of Victory
+Spontaneous Combustion
 Spore Crawler
 Spore Swarm
 Sporecap Spider
@@ -3816,6 +3854,7 @@ Steadfast Paladin
 Steadfast Sentry
 Steadfastness
 Stealer of Secrets
+Steam Blast
 Steamclaw
 Steel Wall
 Steelgaze Griffin
@@ -3929,6 +3968,7 @@ Supply-Line Cranes
 Supreme Phantom
 Surge of Righteousness
 Surgical Skullbomb
+Surtland Frostpyre
 Surveillance Room
 Survey the Wreckage
 Survive the Night
@@ -3938,6 +3978,7 @@ Swab Goblin
 Swamp
 Swarm of Bloodflies
 Sweettooth Witch
+Sweltering Suns
 Swift Spinner
 Swift Warden
 Swiftwater Cliffs
@@ -3995,6 +4036,7 @@ Tattered Apparition
 Tattered Mummy
 Tatyova, Benthic Druid
 Team Transmitter
+Tectonic Hazard
 Teeming Dragonstorm
 Teetering Peaks
 Teeterpeak Ambusher
@@ -4087,6 +4129,7 @@ Thraben Valiant
 Thragtusk
 Thran Dynamo
 Thrashing Brontodon
+Thrashing Wumpus
 Thraxodemon
 Three Tree Rootweaver
 Three Visits
@@ -4328,6 +4371,7 @@ Vampire Sovereign
 Vampire Spawn
 Vampire of the Dire Moon
 Vampire's Kiss
+Vampires' Vengeance
 Vampiric Feast
 Vampiric Rites
 Vampiric Spirit
@@ -4389,6 +4433,7 @@ Vile Entomber
 Vile Rebirth
 Village Rites
 Vindicate
+Vindictive Vampire
 Vine Trellis
 Vinelasher Kudzu
 Vinereap Mentor
@@ -4537,6 +4582,7 @@ Western Paladin
 Westfold Rider
 Wetland Sambar
 Whip Sergeant
+Whipflare
 Whiptail Moloch
 Whiptail Wurm
 Whiptongue Frog
@@ -4685,4 +4731,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4682`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4728`;

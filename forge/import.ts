@@ -48,6 +48,7 @@ import type {
 	CardType,
 	CharacteristicsSnapshot,
 	Color,
+	DamageAllRecipientDef,
 	EffectDef,
 	EffectPlayerSubject,
 	GameEvent,
@@ -1303,6 +1304,64 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 					amount,
 				},
 			]);
+		}
+		case "damageall": {
+			const badParams = claim(
+				"validcards",
+				"validplayers",
+				"validdescription",
+				"numdmg",
+			);
+			if (!badParams.ok) return badParams;
+			const amount = positiveInteger(getForgeParam(params, "NumDmg"));
+			if (!amount)
+				return issue("UNSUPPORTED_PARAMETER", "unsupported NumDmg", where);
+
+			const recipients: DamageAllRecipientDef<Player>[] = [];
+			const validCards = getForgeParam(params, "ValidCards");
+			if (validCards !== undefined) {
+				const onlyCreatures = validCards.split(",").every((part) => {
+					const selector = part.trim();
+					return (
+						selector === "Creature" ||
+						selector.startsWith("Creature.") ||
+						selector.startsWith("Creature+")
+					);
+				});
+				const predicate = onlyCreatures ? parseSelector(validCards) : null;
+				if (!predicate)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"DamageAll ValidCards$ must be a supported creature predicate",
+						where,
+					);
+				recipients.push({ kind: "matching-permanents", predicate });
+			}
+
+			const validPlayers = getForgeParam(params, "ValidPlayers");
+			if (validPlayers === "Player") {
+				recipients.push({ kind: "each-player" });
+			} else if (validPlayers !== undefined) {
+				const relative =
+					validPlayers === "Player.Opponent"
+						? parsePlayer("Opponent")
+						: parsePlayer(validPlayers);
+				if (!relative)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"unsupported DamageAll ValidPlayers$ selector",
+						where,
+					);
+				recipients.push({ kind: "relative-player", player: relative });
+			}
+
+			if (recipients.length === 0)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"DamageAll requires ValidCards$ or ValidPlayers$ recipients",
+					where,
+				);
+			return ok([{ kind: "damage-all", recipients, amount }]);
 		}
 		case "destroy": {
 			const badParams = claim("validtgts", "tgtprompt", "noregen");

@@ -2181,6 +2181,11 @@ export interface MatchingPermanentSubjects {
 	predicate: ObjectPredicateDef;
 }
 
+export type DamageAllRecipientDef<AllowedPlayer extends TriggerEffectPlayer> =
+	| MatchingPermanentSubjects
+	| { kind: "relative-player"; player: AllowedPlayer }
+	| { kind: "each-player" };
+
 type DestroyEffectDef =
 	| {
 			kind: "destroy";
@@ -2348,6 +2353,11 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 			subject:
 				| { kind: "relative-player"; player: AllowedPlayer }
 				| TargetEffectRef;
+			amount: number;
+	  }
+	| {
+			kind: "damage-all";
+			recipients: DamageAllRecipientDef<AllowedPlayer>[];
 			amount: number;
 	  }
 	| DestroyEffectDef
@@ -2752,6 +2762,7 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 		case "destroy-all":
 		case "tap-all":
 		case "pump-all":
+		case "damage-all":
 			return [];
 		case "counter":
 			return [
@@ -6037,7 +6048,7 @@ function perform(
 	);
 }
 
-type SimultaneousRootEvent = DestroyEvent | ObjectZoneChangeEvent;
+type SimultaneousRootEvent = DamageEvent | DestroyEvent | ObjectZoneChangeEvent;
 
 interface PreparedSimultaneousOutcome {
 	finals: GameEvent[];
@@ -6050,8 +6061,8 @@ interface PreparedSimultaneousOutcome {
  * window, then mutate state only after every outcome is known.
  *
  * This is deliberately narrower than a native multi-object event. Every root
- * affects one permanent, but abilities, prohibitions, and LKI all come from the
- * battlefield before any root happens.
+ * affects one object or player, but abilities, prohibitions, and LKI all come
+ * from the battlefield before any root happens.
  */
 function performSimultaneousIn(
 	engine: Engine,
@@ -8120,6 +8131,81 @@ function resolveEffects(
 			}
 			continue;
 		}
+		if (effect.kind === "damage-all") {
+			assert(effect.recipients.length > 0, "damage-all requires recipients");
+			assert(
+				Number.isSafeInteger(effect.amount) && effect.amount > 0,
+				"damage-all amount must be a positive safe integer",
+			);
+			const read = createReadContext(engine, state);
+			const recipients: DamageRecipientRef[] = [];
+			for (const recipient of effect.recipients) {
+				switch (recipient.kind) {
+					case "matching-permanents":
+						for (const id of state.battlefield) {
+							const object = getSnapshot(read, id);
+							assert(object.kind === "permanent");
+							if (
+								!objectMatchesPredicate(recipient.predicate, object, {
+									controller: item.controller,
+									source: item.source,
+								})
+							)
+								continue;
+							assert(
+								object.currentCharacteristics.kind === "creature",
+								"set-based damage can affect only creatures",
+							);
+							recipients.push({ type: "permanent", id });
+						}
+						break;
+					case "relative-player":
+						recipients.push({
+							type: "player",
+							player: relativeEffectPlayer(item, recipient.player),
+						});
+						break;
+					case "each-player":
+						for (const player of playersInTurnOrder(state, "damage"))
+							recipients.push({ type: "player", player });
+						break;
+					default:
+						assertNever(recipient);
+				}
+			}
+			const recipientKeys = recipients.map((recipient) =>
+				recipient.type === "player"
+					? `player:${recipient.player}`
+					: `permanent:${recipient.id}`,
+			);
+			assert(
+				new Set(recipientKeys).size === recipientKeys.length,
+				"damage-all contains duplicate recipients",
+			);
+			const source = sourceInformation(engine, state, item);
+			performSimultaneousIn(
+				engine,
+				state,
+				recipients.map(
+					(recipient): DamageEvent => ({
+						kind: "damage",
+						source: item.source,
+						sourceController: source.controller,
+						sourceColors: source.colors,
+						recipient,
+						amount: effect.amount,
+						combat: false,
+						deathtouch: source.deathtouch,
+						lifelink: source.lifelink,
+						unpreventable: false,
+					}),
+				),
+				choices,
+				scope,
+				0,
+			);
+			continue;
+		}
 		if (effect.kind === "create-delayed-trigger") {
 			// Capture the source now. The delayed ability can trigger and resolve
 			// after the original object has left every zone where it functioned.
@@ -8701,6 +8787,8 @@ function effectToEvent(
 				unpreventable: false,
 			};
 		}
+		case "damage-all":
+			throw new Error("set-based damage resolves as simultaneous events");
 		case "destroy":
 			assert(
 				subject !== null && subject.type === "permanent",
@@ -9935,6 +10023,7 @@ function activateAbilityIn(
 				effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||
 				effect.kind === "damage" ||
+				effect.kind === "damage-all" ||
 				effect.kind === "destroy" ||
 				effect.kind === "destroy-all" ||
 				effect.kind === "tap" ||
@@ -10796,8 +10885,7 @@ function performTurnBasedActions(
 					),
 				);
 			}
-			for (const ev of events)
-				performIn(engine, state, ev, choices, newScope(), 0);
+			performSimultaneousIn(engine, state, events, choices, newScope(), 0);
 			break;
 		}
 		case "upkeep":
