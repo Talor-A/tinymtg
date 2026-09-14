@@ -5,6 +5,7 @@ import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
 import type {
 	CardDef,
+	CharacteristicsSnapshot,
 	ChoiceSource,
 	GameState,
 	ObjectId,
@@ -128,6 +129,7 @@ const RUNTIME_CARDS = [
 	loadRuntimeFixture("g/giant_caterpillar", "rt-giant-caterpillar"),
 	loadRuntimeFixture("p/pain_101", "rt-pain-101"),
 	loadRuntimeFixture("v/verdant_rebirth", "rt-verdant-rebirth"),
+	loadRuntimeFixture("j/judith_the_scourge_diva", "rt-judith"),
 ];
 
 const SELF_COUNTER = (() => {
@@ -220,6 +222,27 @@ Oracle:
 		throw new Error("expected synthetic optional-targeted fixture to import");
 	return result.card;
 })();
+
+/** A vanilla 2/2 to spawn with `spawnToken`, for the nontoken predicates. */
+const ZOMBIE_TOKEN: CharacteristicsSnapshot = {
+	kind: "creature",
+	name: "Zombie Token",
+	manaCost: "none",
+	colors: ["b"],
+	supertypes: [],
+	types: ["creature"],
+	subtypes: ["Zombie"],
+	keywords: [],
+	abilities: {
+		static: [],
+		activated: [],
+		triggered: [],
+		replacement: [],
+		prohibition: [],
+	},
+	power: 2,
+	toughness: 2,
+};
 
 const engine = createEngine([
 	...CARDS,
@@ -515,6 +538,62 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(state.pendingTriggers[0]).toMatchObject({
 			source: watcher.id,
+			controller: ALICE,
+		});
+	});
+
+	test("Judith's imported dies trigger ignores tokens and her anthem spares herself", () => {
+		const state = engine.newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		const judith = engine.spawnPermanent(state, "rt-judith", ALICE);
+		const bears = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const token = engine.spawnToken(state, ALICE, ZOMBIE_TOKEN);
+
+		// `Affected$ Creature.Other+YouCtrl | AddPower$ 1`: the other creature
+		// gains power only, and Judith is not her own anthem's subject.
+		const read = engine.createReadContext(state);
+		expect(getSnapshot(read, bears.id).currentCharacteristics).toMatchObject({
+			power: 3,
+			toughness: 2,
+		});
+		expect(getSnapshot(read, judith.id).currentCharacteristics).toMatchObject({
+			power: 2,
+			toughness: 2,
+		});
+		expect(getSnapshot(read, token.id).currentCharacteristics).toMatchObject({
+			power: 3,
+			toughness: 2,
+		});
+
+		// A token dying does not match `ValidCard$ Creature.YouCtrl+!token`.
+		engine.perform(
+			state,
+			{
+				kind: "change zone",
+				object: token.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "destroy",
+			},
+			agents,
+		);
+		expect(state.pendingTriggers).toHaveLength(0);
+
+		// The nontoken creature does.
+		engine.perform(
+			state,
+			{
+				kind: "change zone",
+				object: bears.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "destroy",
+			},
+			agents,
+		);
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(state.pendingTriggers[0]).toMatchObject({
+			source: judith.id,
 			controller: ALICE,
 		});
 	});

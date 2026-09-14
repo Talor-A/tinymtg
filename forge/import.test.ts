@@ -3439,6 +3439,61 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 		expect(result.diagnostics[0]).toMatchObject({ code: "UNSUPPORTED_TARGET" });
 	});
 
+	test("`!token` restricts a dies trigger to nontoken creatures", () => {
+		const result = importFixture("j/judith_the_scourge_diva");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.triggered[0]).toMatchObject({
+			condition: {
+				kind: "change zone",
+				from: "battlefield",
+				to: "graveyard",
+				predicate: {
+					kind: "and",
+					predicates: [
+						{ kind: "type", type: "creature" },
+						{ kind: "controller", player: "you" },
+						{ kind: "not", predicate: { kind: "token" } },
+					],
+				},
+			},
+		});
+	});
+
+	test("an unnegated `token` restricts to tokens", () => {
+		// Dogged Hunter targets `Creature.token`: the same property without
+		// Forge's `!`.
+		const result = importFixture("d/dogged_hunter");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated[0]).toMatchObject({
+			targets: [
+				{
+					legal: {
+						kind: "permanent",
+						predicate: {
+							kind: "and",
+							predicates: [
+								{ kind: "type", type: "creature" },
+								{ kind: "token" },
+							],
+						},
+					},
+				},
+			],
+		});
+	});
+
+	test("`!` on a modifier other than token rejects", () => {
+		// `!` is Forge's general negation prefix, but only `!token` was
+		// surveyed; the rest stay out of the vocabulary.
+		const result = importForgeCard(
+			hostile.replaceAll("%TARGET%", "Creature.!attacking"),
+			{ id: "hostile-witness" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({ code: "UNSUPPORTED_TARGET" });
+	});
+
 	test("ForgetOtherTargets without the RememberTargets chain rejects", () => {
 		// Restoration Angel's script minus its RememberTargets: the remaining
 		// ForgetOtherTargets would clear a cross-ability remembered set the

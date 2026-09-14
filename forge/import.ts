@@ -451,6 +451,13 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
 	if (modifier === "YouOwn") return { kind: "owner", player: "you" };
 	if (modifier === "OppOwn") return { kind: "owner", player: "opponent" };
+	// Forge writes tokenness as `token`, negated with its `!` prefix: the
+	// `Creature.YouCtrl+!token` of a nontoken dies trigger. Both spellings of
+	// the word appear in the corpus and mean the same property; `!` on any
+	// other modifier still rejects, since only this one was surveyed.
+	if (modifier === "token" || modifier === "Token") return { kind: "token" };
+	if (modifier === "!token" || modifier === "!Token")
+		return { kind: "not", predicate: { kind: "token" } };
 	const negated = modifier.startsWith("non");
 	const inner = negated ? modifier.slice(3) : modifier;
 	const word = inner.toLowerCase();
