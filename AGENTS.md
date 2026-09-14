@@ -21,6 +21,9 @@ absolute correctness. Coding standards:
 - use asserts to prove invariants.
 - do not obscure logic behind helper functions.
 - types should exactly represent their use case.
+- use discriminated unions for variants. Do not distinguish variants with
+  property-existence checks such as `"subject" in effect`; keep switches
+  exhaustive so TypeScript checks every case.
 
 ## Engine Implementation
 

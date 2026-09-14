@@ -1970,6 +1970,13 @@ export interface BoundProhibition {
 	label: string;
 }
 
+/** Rules information held fixed while simultaneous events are prepared. */
+interface FrozenEventWindow {
+	read: ReadContext;
+	replacements: BoundReplacement[];
+	prohibitions: BoundProhibition[];
+}
+
 /* ------------------------------------------------------------------ *
  * Temporary continuous effects
  *
@@ -2160,6 +2167,20 @@ export interface MatchingPermanentSubjects {
 	predicate: ObjectPredicateDef;
 }
 
+type DestroyEffectDef =
+	| {
+			kind: "destroy";
+			subject: TargetEffectRef;
+			/** Present only when regeneration cannot replace this destruction. */
+			noRegen?: true;
+	  }
+	| {
+			kind: "destroy-all";
+			subjects: MatchingPermanentSubjects;
+			/** Present only when regeneration cannot replace these destructions. */
+			noRegen?: true;
+	  };
+
 export type MayPlaySubjectRef = TargetEffectRef | EffectResultObjectRef;
 
 export type EffectPlayerSubject<AllowedPlayer extends TriggerEffectPlayer> =
@@ -2315,9 +2336,9 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 				| TargetEffectRef;
 			amount: number;
 	  }
-	| { kind: "destroy"; subject: TargetEffectRef }
+	| DestroyEffectDef
 	| { kind: "tap" | "untap"; subject: TargetEffectRef }
-	| { kind: "tap" | "untap"; subjects: MatchingPermanentSubjects }
+	| { kind: "tap-all"; subjects: MatchingPermanentSubjects }
 	| { kind: "counter"; subject: TargetEffectRef }
 	| {
 			kind: "add counters";
@@ -2697,32 +2718,39 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 					]
 				: [];
 		case "destroy":
+			return [
+				{
+					slot: effect.subject.slot,
+					required: {
+						kind: "permanent",
+						message: "destroy requires a permanent target",
+					},
+				},
+			];
+		case "destroy-all":
+		case "tap-all":
+			return [];
 		case "counter":
 			return [
 				{
 					slot: effect.subject.slot,
 					required: {
-						kind: effect.kind === "counter" ? "spell" : "permanent",
-						message:
-							effect.kind === "counter"
-								? "counter requires a spell target"
-								: `${effect.kind} requires a permanent target`,
+						kind: "spell",
+						message: "counter requires a spell target",
 					},
 				},
 			];
 		case "tap":
 		case "untap":
-			return "subject" in effect
-				? [
-						{
-							slot: effect.subject.slot,
-							required: {
-								kind: "permanent",
-								message: `${effect.kind} requires a permanent target`,
-							},
-						},
-					]
-				: [];
+			return [
+				{
+					slot: effect.subject.slot,
+					required: {
+						kind: "permanent",
+						message: `${effect.kind} requires a permanent target`,
+					},
+				},
+			];
 		case "modify-pt":
 		case "grant-keyword":
 		case "grant-triggered":
@@ -5145,7 +5173,7 @@ function applyCtxFor(
 	return { ...ctxFor(read, r, run), choices };
 }
 
-function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
+function collectProhibitions(read: ReadContext): BoundProhibition[] {
 	const out: BoundProhibition[] = [];
 	for (const object of read.state.objects.values()) {
 		const snapshot = getSnapshot(read, object.id);
@@ -5158,10 +5186,6 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 		for (const def of definitions) {
 			if (!functionsHere(def.functionsFrom, object.zone)) continue;
 			const controller = controllerOf(object) ?? object.owner;
-			if (
-				!def.applies(ev, { state: read.state, read, self: object, controller })
-			)
-				continue;
 			out.push({
 				id: `${object.id}:${def.label}` as EffectId,
 				def,
@@ -5174,12 +5198,38 @@ function prohibitionsFor(read: ReadContext, ev: GameEvent): BoundProhibition[] {
 	return out;
 }
 
+function prohibitionsFor(
+	read: ReadContext,
+	ev: GameEvent,
+	candidates = collectProhibitions(read),
+): BoundProhibition[] {
+	return candidates.filter(({ def, source, controller }) =>
+		def.applies(ev, { state: read.state, read, self: source, controller }),
+	);
+}
+
+function freezeEventWindow(
+	engine: Engine,
+	state: GameState,
+): FrozenEventWindow {
+	prepareEffectData(engine, state);
+	const read = createReadContext(engine, state);
+	// Materialize the view while the state is known to match this window.
+	read.view;
+	return {
+		read,
+		replacements: collectReplacements(engine, state),
+		prohibitions: collectProhibitions(read),
+	};
+}
+
 function applicable(
 	read: ReadContext,
 	ev: GameEvent,
 	run: ReplacementRun,
+	candidates = collectReplacements(read.engine, read.state, ev),
 ): BoundReplacement[] {
-	return collectReplacements(read.engine, read.state, ev).filter((r) => {
+	return candidates.filter((r) => {
 		// CR 614.5 — a replacement effect applies at most once to a given event.
 		if (run.applied.has(r.id)) return false;
 		/**
@@ -5213,6 +5263,7 @@ function resolveReplacements(
 	event: GameEvent,
 	choices: AnyChoiceController,
 	run: ReplacementRun = newRun(),
+	frozen?: FrozenEventWindow,
 ): GameEvent[] {
 	if (run.depth > MAX_REPLACEMENT_EFFECT_RECURSION_DEPTH) {
 		throw new Error(
@@ -5223,7 +5274,7 @@ function resolveReplacements(
 	let current = event;
 
 	for (let iter = 0; iter < MAX_REPLACEMENT_EFFECT_CHOICES; iter++) {
-		const allCandidates = applicable(read, current, run);
+		const allCandidates = applicable(read, current, run, frozen?.replacements);
 		const selfCandidates = allCandidates.filter(
 			(candidate) => candidate.def.layer === "self",
 		);
@@ -5238,7 +5289,7 @@ function resolveReplacements(
 		 * first and restart the loop; only when none applies do we ask whether the
 		 * resulting event can happen.
 		 */
-		const prohibitions = prohibitionsFor(read, current);
+		const prohibitions = prohibitionsFor(read, current, frozen?.prohibitions);
 		if (selfCandidates.length === 0 && prohibitions.length > 0) {
 			for (const prohibition of prohibitions) {
 				log(read.state as GameState, `  [prohibit] ${prohibition.label}`);
@@ -5302,17 +5353,23 @@ function resolveReplacements(
 		// Zero, several, or a different kind: each resulting event re-enters the
 		// pipeline, inheriting the applied-set (CR 614.5 across the chain).
 		return produced.flatMap((e) =>
-			resolveReplacements(read, e, choices, {
-				/**
-				 * the applied-set is *inherited* by events produced from a
-				 * replacement. That's what makes Chains of Mephistopheles terminate:
-				 * the draw that Chains hands back can't be replaced by Chains again.
-				 *
-				 * TODO: is there a more clear example to use than chains?
-				 */
-				applied: new Set(run.applied),
-				depth: run.depth + 1,
-			}),
+			resolveReplacements(
+				read,
+				e,
+				choices,
+				{
+					/**
+					 * the applied-set is *inherited* by events produced from a
+					 * replacement. That's what makes Chains of Mephistopheles terminate:
+					 * the draw that Chains hands back can't be replaced by Chains again.
+					 *
+					 * TODO: is there a more clear example to use than chains?
+					 */
+					applied: new Set(run.applied),
+					depth: run.depth + 1,
+				},
+				frozen,
+			),
 		);
 	}
 
@@ -5784,7 +5841,7 @@ function checkStateBasedActionsIn(
 		}
 
 		const sbaRead = createReadContext(engine, state);
-		const simultaneousView = sbaRead.view;
+		const sbaView = sbaRead.view;
 		const zeroToughness: { id: ObjectId; toughness: number }[] = [];
 		const lethalDamageIds: ObjectId[] = [];
 		const counterCancellations: { id: ObjectId; amount: number }[] = [];
@@ -5813,62 +5870,56 @@ function checkStateBasedActionsIn(
 		}
 
 		// CR 704.3: determine every applicable SBA from one derived view before
-		// performing any of them. Passing that same view into each departure also
-		// gives dies triggers the correct last-known set of watching abilities.
+		// performing any of them. The simultaneous event window below keeps that
+		// same view authoritative for replacements, prohibitions, and LKI.
+		const simultaneousEvents: SimultaneousRootEvent[] = [];
 		for (const { id, toughness } of zeroToughness) {
-			if (!maybePermanent(state, id)) continue;
 			// 704.5f. Regeneration cannot replace a nonpositive-toughness death.
 			log(
 				state,
 				`  SBA: ${name(engine, state, id)} has toughness ${toughness}`,
 			);
-			performIn(
-				engine,
-				state,
-				{
-					kind: "change zone",
-					object: id,
-					from: "battlefield",
-					destination: { zone: "graveyard" },
-					cause: "sba",
-				},
-				choices,
-				newScope(),
-				0,
-				simultaneousView,
-			);
-			acted = true;
+			simultaneousEvents.push({
+				kind: "change zone",
+				object: id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "sba",
+			});
 		}
 
 		for (const id of lethalDamageIds) {
-			if (!maybePermanent(state, id)) continue;
 			// 704.5g. If a creature has toughness greater than 0, it has damage marked
 			// on it, and the total damage marked on it is greater than or equal to its
 			// toughness, that creature has been dealt lethal damage and is destroyed.
 			// Regeneration can replace this event.
-			const destroy: DestroyEvent = {
+			simultaneousEvents.push({
 				kind: "destroy",
 				object: id,
 				noRegen: false,
-			};
-			// Always use the replacement pipeline here. Under CR 614.17c, even an
-			// otherwise prohibited event must first get a chance to be changed by a
-			// self-replacement effect. Only count the SBA as acting if something
-			// actually happened, so an indestructible creature doesn't keep the SBA
-			// loop running forever.
-			const objectName = name(engine, state, id);
-			const result = performIn(
-				engine,
-				state,
-				destroy,
-				choices,
-				newScope(),
-				0,
-				simultaneousView,
-			);
-			if (result.executed.length > 0) {
-				log(state, `  SBA: ${objectName} has lethal damage`);
-				acted = true;
+			});
+		}
+		const simultaneousResult = performSimultaneousIn(
+			engine,
+			state,
+			simultaneousEvents,
+			choices,
+			newScope(),
+			0,
+		);
+		if (simultaneousResult.executed.length > 0) acted = true;
+		for (const id of lethalDamageIds) {
+			if (
+				simultaneousResult.executed.some(
+					(event) => event.kind === "destroy" && event.object === id,
+				)
+			) {
+				const snapshot = sbaView.objects.get(id);
+				assertDefined(snapshot);
+				log(
+					state,
+					`  SBA: ${snapshot.currentCharacteristics.name} has lethal damage`,
+				);
 			}
 		}
 
@@ -5959,6 +6010,125 @@ function perform(
 		newScope(),
 		0,
 	);
+}
+
+type SimultaneousRootEvent = DestroyEvent | ObjectZoneChangeEvent;
+
+interface PreparedSimultaneousOutcome {
+	finals: GameEvent[];
+	/** A destroy reports success only if its prepared graveyard move executes. */
+	destroy?: DestroyEvent;
+}
+
+/**
+ * Resolve independently replaceable simultaneous events against one rules
+ * window, then mutate state only after every outcome is known.
+ *
+ * This is deliberately narrower than a native multi-object event. Every root
+ * affects one permanent, but abilities, prohibitions, and LKI all come from the
+ * battlefield before any root happens.
+ */
+function performSimultaneousIn(
+	engine: Engine,
+	state: GameState,
+	roots: SimultaneousRootEvent[],
+	choices: AnyChoiceController,
+	scope: Scope,
+	depth: number,
+): PerformResult {
+	if (roots.length === 0) return { executed: [], created: [] };
+	const window = freezeEventWindow(engine, state);
+	const simultaneousView = window.read.view;
+	const active = activePlayer(state) ?? 0;
+	const playerOrder: PlayerId[] = [active, (1 - active) as PlayerId];
+	const orderedRoots = playerOrder.flatMap((player) =>
+		roots.filter(
+			(event) => affectedPlayer(window.read.state, event) === player,
+		),
+	);
+	assert(orderedRoots.length === roots.length);
+
+	const prepared: PreparedSimultaneousOutcome[] = [];
+	for (const root of orderedRoots) {
+		log(state, `${"  ".repeat(depth)}> ${describeEvent(engine, state, root)}`);
+		const finals = resolveReplacements(
+			window.read,
+			root,
+			choices,
+			newRun(),
+			window,
+		);
+		for (const final of finals) {
+			if (final.kind !== "destroy") {
+				prepared.push({ finals: [final] });
+				continue;
+			}
+			const object = maybePermanent(window.read.state, final.object);
+			if (object?.zone !== "battlefield") continue;
+			const movement: ObjectZoneChangeEvent = {
+				kind: "change zone",
+				object: object.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "destroy",
+			};
+			const movementFinals = resolveReplacements(
+				window.read,
+				movement,
+				choices,
+				newRun(),
+				window,
+			);
+			assert(
+				movementFinals.every(
+					(event) =>
+						event.kind !== "change zone" ||
+						event.destination.zone !== "battlefield",
+				),
+				"simultaneous departures cannot be replaced with battlefield arrivals",
+			);
+			prepared.push({ finals: movementFinals, destroy: final });
+		}
+	}
+
+	const executed: GameEvent[] = [];
+	const created: ObjectId[] = [];
+	for (const outcome of prepared) {
+		const outcomeExecuted: GameEvent[] = [];
+		for (const final of outcome.finals) {
+			log(
+				state,
+				`${"  ".repeat(depth + 1)}> ${describeEvent(engine, state, final)}`,
+			);
+			const result = executeIn(
+				engine,
+				state,
+				createReadContext(engine, state),
+				final,
+				choices,
+				scope,
+				depth + 2,
+				simultaneousView,
+			);
+			outcomeExecuted.push(...result.executed);
+			created.push(...result.created);
+		}
+		executed.push(...outcomeExecuted);
+		if (
+			outcome.destroy &&
+			outcomeExecuted.some(
+				(event) =>
+					event.kind === "change zone" &&
+					event.object === outcome.destroy?.object &&
+					event.from === "battlefield" &&
+					event.destination.zone === "graveyard" &&
+					event.cause === "destroy",
+			)
+		) {
+			executed.push(outcome.destroy);
+		}
+	}
+	return { executed, created };
 }
 
 /** Applies event replacements and delegates to `executeIn` to apply changes. */
@@ -7849,10 +8019,7 @@ function resolveEffects(
 			}
 			continue;
 		}
-		if (
-			(effect.kind === "tap" || effect.kind === "untap") &&
-			"subjects" in effect
-		) {
+		if (effect.kind === "tap-all") {
 			assert(effect.subjects.kind === "matching-permanents");
 			const read = createReadContext(engine, state);
 			const subjects = state.battlefield.filter((id) => {
@@ -7867,12 +8034,40 @@ function resolveEffects(
 				performIn(
 					engine,
 					state,
-					{ kind: effect.kind, objects: subjects },
+					{ kind: "tap", objects: subjects },
 					choices,
 					scope,
 					0,
 				);
 			}
+			continue;
+		}
+		if (effect.kind === "destroy-all") {
+			assert(effect.subjects.kind === "matching-permanents");
+			const read = createReadContext(engine, state);
+			const subjects = state.battlefield.filter((id) => {
+				const object = getSnapshot(read, id);
+				assert(object.kind === "permanent");
+				return objectMatchesPredicate(effect.subjects.predicate, object, {
+					controller: item.controller,
+					source: item.source,
+				});
+			});
+			performSimultaneousIn(
+				engine,
+				state,
+				subjects.map(
+					(object): DestroyEvent => ({
+						kind: "destroy",
+						object,
+						source: item.source,
+						noRegen: effect.noRegen ?? false,
+					}),
+				),
+				choices,
+				scope,
+				0,
+			);
 			continue;
 		}
 		if (effect.kind === "create-delayed-trigger") {
@@ -8325,7 +8520,7 @@ function effectToEvent(
 	item: ResolutionSource,
 	effect: Exclude<
 		EffectDef<TriggerEffectPlayer>,
-		{ kind: "may" } | CreateDelayedTriggerEffectDef
+		{ kind: "may" | "destroy-all" | "tap-all" } | CreateDelayedTriggerEffectDef
 	>,
 	subject: EntityRef | null,
 ): GameEvent {
@@ -8465,11 +8660,10 @@ function effectToEvent(
 				kind: "destroy",
 				object: subject.id,
 				source: item.source,
-				noRegen: false,
+				noRegen: effect.noRegen ?? false,
 			};
 		case "tap":
 		case "untap":
-			assert("subject" in effect, `${effect.kind} set resolves directly`);
 			assert(
 				subject !== null && subject.type === "permanent",
 				`${effect.kind} requires a bound permanent target`,
@@ -9688,7 +9882,9 @@ function activateAbilityIn(
 				effect.kind === "lose-life" ||
 				effect.kind === "damage" ||
 				effect.kind === "destroy" ||
+				effect.kind === "destroy-all" ||
 				effect.kind === "tap" ||
+				effect.kind === "tap-all" ||
 				effect.kind === "untap" ||
 				effect.kind === "counter" ||
 				effect.kind === "change-zone" ||

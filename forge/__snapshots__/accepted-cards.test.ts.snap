@@ -34,6 +34,7 @@ Academy Ruins
 Accelerate
 Accursed Centaur
 Accursed Horde
+Acid Rain
 Acid Web Spider
 Acidic Slime
 Acolyte of Aclazotz
@@ -82,6 +83,7 @@ Akoum Hellhound
 Akoum Refuge
 Akroan Jailer
 Akroan Mastiff
+Akroma's Vengeance
 Al Bhed Salvagers
 Alabaster Host Sanctifier
 Alabaster Kirin
@@ -122,6 +124,7 @@ Amphin Cutthroat
 Amugaba
 An-Havva Township
 Anaba Shaman
+Anarchy
 Ancestral Recall
 Ancestral Reminiscence
 Ancestral Statue
@@ -150,6 +153,7 @@ Angler Drake
 Anguished Unmaking
 Animal Sanctuary
 Ankle Biter
+Annihilate
 Annul
 Anodet Lurker
 Anointed Chorister
@@ -194,6 +198,7 @@ Argothian Enchantress
 Argothian Swine
 Arid Mesa
 Ark of Blight
+Armageddon
 Armor of Shadows
 Armored Cancrix
 Armored Griffin
@@ -281,6 +286,7 @@ Azorius Signet
 Azure Drake
 Azure Mage
 Azusa, Lost but Seeking
+Back to Nature
 Bad River
 Badlands
 Baffling End
@@ -346,6 +352,7 @@ Beast-Kin Ranger
 Bedevil
 Bee Sting
 Beetleback Chief
+Befoul
 Belligerent Guest
 Bellowing Crier
 Bellows Lizard
@@ -445,7 +452,9 @@ Bogardan Rager
 Boggart Cursecrafter
 Bogstomper
 Bogwater Lumaret
+Boil
 Boiling Rock Prison
+Boiling Seas
 Bojuka Brigand
 Bold Impaler
 Bolt of Keranos
@@ -639,6 +648,7 @@ Chase Inspiration
 Chasm Drake
 Checkpoint Officer
 Chief of the Foundry
+Child of Alara
 Child of Night
 Child of Thorns
 Chill to the Bone
@@ -659,6 +669,8 @@ Civic Guildmage
 Clarion Cathars
 Clattering Augur
 Clay Revenant
+Cleanfall
+Cleanse
 Cleansing Screech
 Clear
 Clever Impersonator
@@ -722,6 +734,7 @@ Conscripted Infantry
 Conservatory
 Consider
 Consulate Skygate
+Consume the Meek
 Contaminated Aquifer
 Contaminated Landscape
 Contemplation
@@ -769,6 +782,7 @@ Craven Giant
 Craven Knight
 Craw Wurm
 Crazed Skirge
+Creeping Corrosion
 Creeping Mold
 Cremate
 Crenellated Wall
@@ -803,6 +817,7 @@ Crystal Ball
 Crystal Grotto
 Crystal Quarry
 Crystal Vein
+Culling Sun
 Cult Guildmage
 Cumber Stone
 Cunning Breezedancer
@@ -827,14 +842,17 @@ Dakmor Bat
 Dakmor Ghoul
 Dakmor Lancer
 Dakmor Scorpion
+Damnation
 Dampening Pulse
 Dancing Scimitar
 Darigaaz's Attendant
 Daring Demolition
 Daring Mechanic
 Daring Thunder-Thief
+Dark Banishing
 Dark Betrayal
 Dark Deed
+Dark Hatchling
 Dark Heart of the Wood
 Dark Nourishment
 Dark Offering
@@ -864,6 +882,7 @@ Dawning Angel
 Dawnstrike Paladin
 Dawntreader Elk
 Day of Destiny
+Day of Judgment
 Daybreak Chaplain
 Daybreak Charger
 Daybreak Combatants
@@ -887,6 +906,7 @@ Deathgreeter
 Deathgrip
 Deathless Angel
 Deathmark
+Deathmark Prelate
 Deathsprout
 Deceptive Landscape
 Dedicated Martyr
@@ -931,8 +951,10 @@ Despark
 Desperate Bloodseeker
 Desperate Lunge
 Despondent Killbot
+Despotic Scepter
 Destructive Digger
 Destructor Dragon
+Devastation
 Devilthorn Fox
 Devkarin Dissident
 Devoted Hero
@@ -1207,6 +1229,7 @@ Excavation Mole
 Exclude
 Exclusion Mage
 Excommunicate
+Execute
 Executioner's Capsule
 Exiled Boggart
 Exocomp
@@ -1220,7 +1243,9 @@ Explosive Apparatus
 Explosive Impact
 Explosive Shot
 Expose to Daylight
+Expunge
 Extinguish
+Extinguish All Hope
 Exultant Cultist
 Exultant Skymarcher
 Eye of Nowhere
@@ -1332,6 +1357,7 @@ Firescreamer
 Firespitter Whelp
 Firewing Phoenix
 Fisk Tower
+Fissure
 Fists of the Anvil
 Flame Lash
 Flame Slash
@@ -1344,6 +1370,7 @@ Flamekin Spitfire
 Flametongue Kavu
 Flaming Fist Officer
 Flash Counter
+Flashfires
 Flashfreeze
 Flayed One
 Fledgling Djinn
@@ -1354,6 +1381,7 @@ Fleetfoot Panther
 Fleeting Image
 Fleeting Memories
 Flesh Burrower
+Flesh to Dust
 Fleshtaker
 Flick a Coin
 Flood Plain
@@ -1608,6 +1636,7 @@ Gorn Captain
 Graceful Cat
 Graf Mole
 Granite Gargoyle
+Granulate
 Grappler Spider
 Grappling Sundew
 Grasping Longneck
@@ -1849,6 +1878,7 @@ Hunted Witness
 Hunting Drake
 Hurler Cyclops
 Hurloon Minotaur
+Hush
 Hussar Patrol
 Hyalopterous Lemure
 Hyena Pack
@@ -2007,6 +2037,7 @@ Jhovall Rider
 Jibbirik Omnivore
 Johnny, Combo Player
 Join the Ranks
+Jokulhaups
 Joraga Visionary
 Joust Through
 Joven
@@ -2281,6 +2312,7 @@ Magmaw
 Magnifying Glass
 Magnigoth Sentry
 Magus of the Bridge
+Magus of the Disk
 Mahamoti Djinn
 Maja, Bretagard Protector
 Makeshift Munitions
@@ -2323,6 +2355,7 @@ Markov Dreadknight
 Markov Patrician
 Marsh Flats
 Martyr of Dusk
+Mass Calcify
 Mass Production
 Mass of Ghouls
 Massive Might
@@ -2514,6 +2547,7 @@ Natural Spring
 Natural State
 Naturalize
 Nature's Lore
+Nature's Ruin
 Nature's Spiral
 Naya Battlemage
 Naya Panorama
@@ -2547,6 +2581,7 @@ Network Disruptor
 Neurok Commando
 Neurok Replica
 Neutralize
+Nevinyrral's Disk
 New Benalia
 Nexus Wardens
 Nezumi Bone-Reader
@@ -2586,7 +2621,9 @@ Norwood Archers
 Norwood Ranger
 Not on My Watch
 Notion Rain
+Notorious Assassin
 Nourish
+Nova Cleric
 Novice Dissector
 Novice Inspector
 Novice Occultist
@@ -2699,6 +2736,7 @@ Owl Familiar
 Owlbear
 Oxidda Daredevil
 Oxidda Scrapmelter
+Oxidize
 Oyobi, Who Split the Heavens
 Pacification Array
 Pactdoll Terror
@@ -2742,7 +2780,9 @@ Penumbra Wurm
 Perilous Landscape
 Perilous Myr
 Perimeter Patrol
+Perish
 Persistent Specimen
+Pest Control
 Pestilent Wolf
 Petrified Field
 Phalanx Vanguard
@@ -2756,6 +2796,7 @@ Phyrexia's Core
 Phyrexian Altar
 Phyrexian Archivist
 Phyrexian Arena
+Phyrexian Bloodstock
 Phyrexian Broodlings
 Phyrexian Gargantua
 Phyrexian Hulk
@@ -2773,6 +2814,7 @@ Pierce Strider
 Piercing Light
 Piggy Bank
 Pilfered Plans
+Pillage
 Pillardrop Rescuer
 Pillardrop Warden
 Pillarfield Ox
@@ -2787,6 +2829,7 @@ Pitiless Plunderer
 Pitiless Pontiff
 Pixie Queen
 Plains
+Planar Cleansing
 Planar Portal
 Planetary Patrol
 Plateau
@@ -2862,7 +2905,10 @@ Psychic Corrosion
 Pulse Tracker
 Pulse of Murasa
 Puppet Conjurer
+Purge
+Purify
 Purple-Crystal Crab
+Putrefy
 Pygmy Razorback
 Pym Technologies
 Pyre Charger
@@ -2935,6 +2981,7 @@ Raucous Theater
 Raugrin Crystal
 Raugrin Triome
 Ravaged Highlands
+Ravages of War
 Ravaging Horde
 Ravenhill Flock
 Ravenous Baboons
@@ -3062,6 +3109,7 @@ Rite of the Dragoncaller
 Rith's Attendant
 Ritual of Rejuvenation
 Ritual of Restoration
+Ritual of Soot
 Riven Turnbull
 Riven Turnbull and Princess Lucrezia
 River Hoopoe
@@ -3108,8 +3156,10 @@ Rubblebelt Boar
 Rugged Highlands
 Ruin Crab
 Ruin Rat
+Ruination
 Ruination Wurm
 Ruinous Gremlin
+Ruinous Ultimatum
 Ruins of Trokair
 Rumble Arena
 Rumbling Baloth
@@ -3243,6 +3293,7 @@ Seacoast Drake
 Seafloor Debris
 Seagraf Skaab
 Seal of Cleansing
+Seal of Doom
 Seal of Fire
 Seal of Primordium
 Seal of Removal
@@ -3291,6 +3342,8 @@ Seraph Sanctuary
 Seraph of Dawn
 Seraph of the Suns
 Serendib Efreet
+Serene Heart
+Serenity
 Serpent Assassin
 Serpent Warrior
 Serpent's Gift
@@ -3328,6 +3381,7 @@ Shatter
 Shattered Angel
 Shattered Landscape
 Shatterskull Giant
+Shatterstorm
 Shauku's Minion
 She-Hulk, Jennifer Walters
 Shell Skulkin
@@ -3459,6 +3513,7 @@ Slagwoods Bridge
 Slash of Talons
 Slash, Reptile Rampager
 Slaughter Specialist
+Slay
 Slayers' Stronghold
 Sledding Otter-Penguin
 Sleight of Hand
@@ -3481,6 +3536,7 @@ Smelt
 Smoldering Crater
 Smoldering Efreet
 Smoldering Tar
+Smother
 Snake Pit
 Snapping Creeper
 Snapping Drake
@@ -3525,6 +3581,7 @@ Souldrinker
 Soulknife Spy
 Soulmender
 Soulreaper of Mogis
+Soulscour
 Soulsworn Jury
 Soured Springs
 Southern Elephant
@@ -3794,6 +3851,7 @@ Tel-Jilad Justice
 Tel-Jilad Stylus
 Tempered Steel
 Tempest Drake
+Tempest of Light
 Temple Acolyte
 Temple Bell
 Temple of Abandon
@@ -3815,6 +3873,7 @@ Tenement Crasher
 Tenth District Guard
 Tenth District Veteran
 Terminal Moraine
+Terminate
 Teroh's Faithful
 Terrain Elemental
 Terramorphic Expanse
@@ -3823,6 +3882,7 @@ Territorial Baloth
 Territorial Hammerskull
 Territorial Roc
 Territorial Scythecat
+Terror
 Terror of the Fairgrounds
 Teyo's Lightshield
 Thallid Soothsayer
@@ -3842,6 +3902,7 @@ The Surgical Bay
 The Terror of Serpent's Pass
 The Underworld Cookbook
 The Unspeakable
+Their Name Is Death
 Thermal Navigator
 They Went This Way
 Think Tank
@@ -3889,6 +3950,7 @@ Timber Gorge
 Timberland Guide
 Timberland Ruins
 Time Ebb
+Time Wipe
 Timeless Lotus
 Timetwister
 Timid Drake
@@ -3904,6 +3966,7 @@ Titania, Protector of Argoth
 Titanic Growth
 Titanic Pelagosaur
 Tithebearer Giant
+Tivadar's Crusade
 Tobias Andrion
 Tocasia's Dig Site
 Tolarian Scholar
@@ -3948,9 +4011,12 @@ Trained Jackal
 Trained Orgg
 Tramway Station
 Tranquil Cove
+Tranquil Domain
 Tranquil Expanse
 Tranquil Landscape
+Tranquil Path
 Tranquil Thicket
+Tranquility
 Transdimensional Bovine
 Transluminant
 Transmogrant Altar
@@ -3986,12 +4052,14 @@ Tropical Island
 Trostani's Summoner
 True Love's Kiss
 Trusty Packbeast
+Tsunami
 Tukatongue Thallid
 Tuknir Deathlock
 Tuktuk Grunts
 Tuktuk the Explorer
 Tundra
 Tundra Wall
+Tunnel
 Tunnel Rats
 Tunnel Surveyor
 Tunneling Geopede
@@ -4163,9 +4231,11 @@ Viridian Acolyte
 Viridian Revel
 Viridian Shaman
 Viridian Zealot
+Virtue's Ruin
 Virulent Emissary
 Virulent Plague
 Virus Beetle
+Visara the Dreadful
 Viscera Seer
 Vision Skeins
 Vithian Renegades
@@ -4378,6 +4448,7 @@ Worn Powerstone
 Worry Beads
 Worthy Cost
 Wose Pathfinder
+Wrath of God
 Wreckage Wickerfolk
 Wrecking Ball
 Wrecking Crew
@@ -4439,4 +4510,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4436`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4507`;

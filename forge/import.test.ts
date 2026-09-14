@@ -669,7 +669,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			targets: [],
 			effects: [
 				{
-					kind: "tap",
+					kind: "tap-all",
 					subjects: {
 						kind: "matching-permanents",
 						predicate: { kind: "type", type: "artifact" },
@@ -699,6 +699,44 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			],
 		] as const) {
 			const result = importForgeCard(mutated, { id: `tap-all-${name}` });
+			expect(result.ok, name).toBe(false);
+		}
+	});
+
+	test("Wrath of God lowers a nonregenerating mass destruction", () => {
+		const result = importFixture("w/wrath_of_god");
+		if (!result.ok) throw new Error("expected Wrath of God to import");
+		expect(result.card.spell).toEqual({
+			id: "spell-1",
+			text: "Destroy all creatures. They can't be regenerated.",
+			targets: [],
+			effects: [
+				{
+					kind: "destroy-all",
+					subjects: {
+						kind: "matching-permanents",
+						predicate: { kind: "type", type: "creature" },
+					},
+					noRegen: true,
+				},
+			],
+		});
+	});
+
+	test("DestroyAll validates its selector and NoRegen spelling", () => {
+		const definition = cardText("w/wrath_of_god");
+		for (const [name, mutated] of [
+			["missing-selector", definition.replace(" | ValidCards$ Creature", "")],
+			[
+				"unsupported-selector",
+				definition.replace(
+					"ValidCards$ Creature",
+					"ValidCards$ Creature.cmcLEX",
+				),
+			],
+			["false-no-regen", definition.replace("NoRegen$ True", "NoRegen$ False")],
+		] as const) {
+			const result = importForgeCard(mutated, { id: `destroy-all-${name}` });
 			expect(result.ok, name).toBe(false);
 		}
 	});

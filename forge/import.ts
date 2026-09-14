@@ -1305,12 +1305,46 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			]);
 		}
 		case "destroy": {
-			const badParams = claim("validtgts", "tgtprompt");
+			const badParams = claim("validtgts", "tgtprompt", "noregen");
 			if (!badParams.ok) return badParams;
+			const noRegen = getForgeParam(params, "NoRegen");
+			if (noRegen !== undefined && noRegen !== "True")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"NoRegen must be True when present",
+					where,
+				);
 			return ok([
 				{
 					kind: "destroy",
 					subject: { kind: "target", slot: TARGET_SLOT },
+					...(noRegen === "True" ? { noRegen: true as const } : {}),
+				},
+			]);
+		}
+		case "destroyall": {
+			const badParams = claim("validcards", "noregen");
+			if (!badParams.ok) return badParams;
+			const validCards = getForgeParam(params, "ValidCards");
+			const predicate = validCards ? parseSelector(validCards) : null;
+			if (!predicate)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"DestroyAll requires a supported ValidCards$ predicate",
+					where,
+				);
+			const noRegen = getForgeParam(params, "NoRegen");
+			if (noRegen !== undefined && noRegen !== "True")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"NoRegen must be True when present",
+					where,
+				);
+			return ok([
+				{
+					kind: "destroy-all",
+					subjects: { kind: "matching-permanents", predicate },
+					...(noRegen === "True" ? { noRegen: true as const } : {}),
 				},
 			]);
 		}
@@ -1338,7 +1372,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				);
 			return ok([
 				{
-					kind: "tap",
+					kind: "tap-all",
 					subjects: { kind: "matching-permanents", predicate },
 				},
 			]);
