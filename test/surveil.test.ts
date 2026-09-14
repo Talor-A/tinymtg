@@ -32,25 +32,32 @@ describe("surveil choices", () => {
 		const agent: SyncAgent = {
 			choose(_view, request) {
 				requestSeen = request;
-				return { top: [String(b)], bottom: [String(c), String(a)] };
+				return { groups: [[String(b)], [String(c), String(a)]] };
 			},
 		};
 		const recorder = ChoiceController.record(engine, [agent, agent]);
 
-		expect(recorder.chooseSurveil(state, 0, [c, b, a])).toEqual({
-			top: [b],
-			bottom: [c, a],
-		});
-		expect(requestSeen?.kind).toBe("surveil");
+		expect(
+			recorder.choosePartition(state, 0, [c, b, a], "surveil", [
+				{ label: "top" },
+				{ label: "graveyard" },
+			]),
+		).toEqual({ groups: [[b], [c, a]] });
+		expect(requestSeen?.kind).toBe("partition");
+		if (requestSeen?.kind === "partition") {
+			expect(requestSeen.context.reason).toBe("surveil");
+		}
 
 		const replay = ChoiceController.replay(
 			engine,
 			JSON.parse(JSON.stringify(recorder.transcript())),
 		);
-		expect(replay.chooseSurveil(state, 0, [c, b, a])).toEqual({
-			top: [b],
-			bottom: [c, a],
-		});
+		expect(
+			replay.choosePartition(state, 0, [c, b, a], "surveil", [
+				{ label: "top" },
+				{ label: "graveyard" },
+			]),
+		).toEqual({ groups: [[b], [c, a]] });
 		replay.assertComplete();
 	});
 });
@@ -66,11 +73,14 @@ describe("surveil events", () => {
 		let seen: ObjectId[] | undefined;
 		const agent: SyncAgent = {
 			choose(_view, request): ChoiceAnswer {
-				if (request.kind !== "surveil") {
-					throw new Error("expected surveil choice");
+				if (
+					request.kind !== "partition" ||
+					request.context.reason !== "surveil"
+				) {
+					throw new Error("expected surveil partition");
 				}
 				seen = request.context.cards;
-				return { top: [String(b)], bottom: [String(c), String(a)] };
+				return { groups: [[String(b)], [String(c), String(a)]] };
 			},
 		};
 
@@ -115,9 +125,11 @@ describe("surveil events", () => {
 			new ScriptedAgent(),
 			new ScriptedAgent(),
 		]);
-		expect(choices.chooseSurveil(state, 0, [a])).toEqual({
-			top: [a],
-			bottom: [],
-		});
+		expect(
+			choices.choosePartition(state, 0, [a], "surveil", [
+				{ label: "top" },
+				{ label: "graveyard" },
+			]),
+		).toEqual({ groups: [[a], []] });
 	});
 });

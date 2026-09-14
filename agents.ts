@@ -131,37 +131,49 @@ export class ScriptedAgent implements SyncAgent {
 				};
 			}
 
-			case "scry": {
-				const arrangement = this.scryChoices.shift() ?? {
-					top: request.context.cards,
-					bottom: [],
-				};
-				return {
-					top: arrangement.top.map(String),
-					bottom: arrangement.bottom.map(String),
-				};
-			}
-
-			case "surveil": {
-				const arrangement = this.surveilChoices.shift() ?? {
-					top: request.context.cards,
-					bottom: [],
-				};
-				return {
-					top: arrangement.top.map(String),
-					bottom: arrangement.bottom.map(String),
-				};
-			}
-
-			case "chooseFromTop": {
-				const arrangement = this.chooseFromTopChoices.shift() ?? {
-					kept: request.context.cards.slice(0, request.context.keep),
-					bottom: request.context.cards.slice(request.context.keep),
-				};
-				return {
-					kept: arrangement.kept.map(String),
-					bottom: arrangement.bottom.map(String),
-				};
+			case "partition": {
+				switch (request.context.reason) {
+					case "scry": {
+						const arrangement = this.scryChoices.shift() ?? {
+							top: request.context.cards,
+							bottom: [],
+						};
+						return {
+							groups: [
+								arrangement.top.map(String),
+								arrangement.bottom.map(String),
+							],
+						};
+					}
+					case "surveil": {
+						const arrangement = this.surveilChoices.shift() ?? {
+							top: request.context.cards,
+							bottom: [],
+						};
+						return {
+							groups: [
+								arrangement.top.map(String),
+								arrangement.bottom.map(String),
+							],
+						};
+					}
+					case "choose-from-top": {
+						const keep = request.context.groups[0].exactSize;
+						assertDefined(keep);
+						const arrangement = this.chooseFromTopChoices.shift() ?? {
+							kept: request.context.cards.slice(0, keep),
+							bottom: request.context.cards.slice(keep),
+						};
+						return {
+							groups: [
+								arrangement.kept.map(String),
+								arrangement.bottom.map(String),
+							],
+						};
+					}
+					default:
+						return assertNever(request.context.reason);
+				}
 			}
 
 			default:
@@ -187,26 +199,20 @@ export class RandomAgent implements SyncAgent {
 						.sort((left, right) => left.order - right.order)
 						.map(({ option }) => option.id),
 				};
-			case "scry":
-			case "surveil": {
+			case "partition": {
 				const shuffled = request.options
 					.map((option) => ({ option, order: Math.random() }))
 					.sort((left, right) => left.order - right.order)
 					.map(({ option }) => option.id);
-				const topCount = Math.floor(Math.random() * (shuffled.length + 1));
+				const firstExact = request.context.groups[0].exactSize;
+				const secondExact = request.context.groups[1].exactSize;
+				const firstCount =
+					firstExact ??
+					(secondExact === undefined
+						? Math.floor(Math.random() * (shuffled.length + 1))
+						: shuffled.length - secondExact);
 				return {
-					top: shuffled.slice(0, topCount),
-					bottom: shuffled.slice(topCount),
-				};
-			}
-			case "chooseFromTop": {
-				const shuffled = request.options
-					.map((option) => ({ option, order: Math.random() }))
-					.sort((left, right) => left.order - right.order)
-					.map(({ option }) => option.id);
-				return {
-					kept: shuffled.slice(0, request.context.keep),
-					bottom: shuffled.slice(request.context.keep),
+					groups: [shuffled.slice(0, firstCount), shuffled.slice(firstCount)],
 				};
 			}
 			case "replacement":
@@ -282,11 +288,8 @@ export class KeyboardAgent implements SyncAgent {
 				return this.chooseAttackers(request);
 			case "declareBlockers":
 				return this.chooseBlockers(request);
-			case "scry":
-			case "surveil":
-				return this.chooseScry(request);
-			case "chooseFromTop":
-				return this.chooseFromTop(request);
+			case "partition":
+				return this.choosePartition(request);
 			default:
 				return assertNever(request);
 		}
@@ -338,61 +341,23 @@ export class KeyboardAgent implements SyncAgent {
 		}
 	}
 
-	private chooseFromTop(
-		request: Extract<ChoiceRequest, { kind: "chooseFromTop" }>,
+	private choosePartition(
+		request: Extract<ChoiceRequest, { kind: "partition" }>,
 	): ChoiceAnswer {
+		const [firstDefinition, secondDefinition] = request.context.groups;
 		console.log(
-			`\n[Player ${request.player}: choose ${request.context.keep} card(s) for hand and order the rest on the bottom]`,
+			`\n[Player ${request.player}: ${request.context.reason}; partition cards into ${firstDefinition.label} and ${secondDefinition.label}]`,
 		);
 		for (let i = 0; i < request.options.length; i++) {
 			console.log(`  ${i + 1}. ${request.options[i]?.label}`);
 		}
 		while (true) {
 			const input = prompt(
-				"Hand cards first, then bottom cards in order (comma-separated numbers): ",
-			);
-			const parts = input.split(",").map((part) => part.trim());
-			const indices = parts.map((part) => Number.parseInt(part, 10) - 1);
-			if (
-				parts.some((part) => !/^\d+$/.test(part)) ||
-				indices.length !== request.options.length ||
-				new Set(indices).size !== indices.length ||
-				indices.some((index) => !request.options[index])
-			) {
-				console.log("Enter every card exactly once.");
-				continue;
-			}
-			return {
-				kept: indices.slice(0, request.context.keep).map((index) => {
-					const option = request.options[index];
-					assertDefined(option);
-					return option.id;
-				}),
-				bottom: indices.slice(request.context.keep).map((index) => {
-					const option = request.options[index];
-					assertDefined(option);
-					return option.id;
-				}),
-			};
-		}
-	}
-
-	private chooseScry(
-		request: Extract<ChoiceRequest, { kind: "scry" | "surveil" }>,
-	): ChoiceAnswer {
-		console.log(
-			`\n[Player ${request.player}: arrange cards while ${request.kind === "scry" ? "scrying" : "surveilling"}]`,
-		);
-		for (let i = 0; i < request.options.length; i++) {
-			console.log(`  ${i + 1}. ${request.options[i]?.label}`);
-		}
-		while (true) {
-			const input = prompt(
-				"Top, then bottom in draw order (for example 2,1 / 3): ",
+				`${firstDefinition.label}, then ${secondDefinition.label} (for example 2,1 / 3): `,
 			);
 			const sides = input.split("/");
 			if (sides.length !== 2) {
-				console.log("Separate the top and bottom lists with /.");
+				console.log("Separate the two groups with /.");
 				continue;
 			}
 			const parse = (side: string | undefined): number[] | null => {
@@ -402,24 +367,32 @@ export class KeyboardAgent implements SyncAgent {
 				if (parts.some((part) => !/^\d+$/.test(part))) return null;
 				return parts.map((part) => Number.parseInt(part, 10) - 1);
 			};
-			const top = parse(sides[0]);
-			const bottom = parse(sides[1]);
-			if (!top || !bottom) {
+			const first = parse(sides[0]);
+			const second = parse(sides[1]);
+			if (!first || !second) {
 				console.log("Invalid input, try again.");
 				continue;
 			}
-			const indices = [...top, ...bottom];
+			const indices = [...first, ...second];
 			if (
 				indices.length !== request.options.length ||
 				new Set(indices).size !== indices.length ||
-				indices.some((index) => !request.options[index])
+				indices.some((index) => !request.options[index]) ||
+				(firstDefinition.exactSize !== undefined &&
+					first.length !== firstDefinition.exactSize) ||
+				(secondDefinition.exactSize !== undefined &&
+					second.length !== secondDefinition.exactSize)
 			) {
-				console.log("Enter every card exactly once.");
+				console.log(
+					"Enter every card exactly once with the required group sizes.",
+				);
 				continue;
 			}
 			return {
-				top: top.map((index) => request.options[index]?.id ?? ""),
-				bottom: bottom.map((index) => request.options[index]?.id ?? ""),
+				groups: [
+					first.map((index) => request.options[index]?.id ?? ""),
+					second.map((index) => request.options[index]?.id ?? ""),
+				],
 			};
 		}
 	}

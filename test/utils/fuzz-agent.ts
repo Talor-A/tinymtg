@@ -57,15 +57,20 @@ export class FuzzAgent implements SyncAgent {
 					.map((option) => option.id),
 			};
 		}
-		if (request.kind === "scry" || request.kind === "surveil") {
+		if (request.kind === "partition") {
 			const shuffled = request.options
 				.map((option) => ({ option, order: this.rng() }))
 				.sort((left, right) => left.order - right.order)
 				.map(({ option }) => option.id);
-			const topCount = Math.floor(this.rng() * (shuffled.length + 1));
+			const firstExact = request.context.groups[0].exactSize;
+			const secondExact = request.context.groups[1].exactSize;
+			const firstCount =
+				firstExact ??
+				(secondExact === undefined
+					? Math.floor(this.rng() * (shuffled.length + 1))
+					: shuffled.length - secondExact);
 			return {
-				top: shuffled.slice(0, topCount),
-				bottom: shuffled.slice(topCount),
+				groups: [shuffled.slice(0, firstCount), shuffled.slice(firstCount)],
 			};
 		}
 		const option =

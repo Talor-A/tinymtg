@@ -36,30 +36,37 @@ describe("choose-from-top choices", () => {
 			choose(_view, request) {
 				requestSeen = request;
 				return {
-					kept: [String(b), String(a)],
-					bottom: [String(c)],
+					groups: [[String(b), String(a)], [String(c)]],
 				};
 			},
 		};
 		const recorder = ChoiceController.record(engine, [agent, agent]);
 
-		expect(recorder.chooseFromTop(state, 0, [c, b, a], 2)).toEqual({
-			kept: [b, a],
-			bottom: [c],
-		});
-		expect(requestSeen?.kind).toBe("chooseFromTop");
-		if (requestSeen?.kind === "chooseFromTop") {
-			expect(requestSeen.context).toEqual({ cards: [c, b, a], keep: 2 });
+		expect(
+			recorder.choosePartition(state, 0, [c, b, a], "choose-from-top", [
+				{ label: "hand", exactSize: 2 },
+				{ label: "bottom" },
+			]),
+		).toEqual({ groups: [[b, a], [c]] });
+		expect(requestSeen?.kind).toBe("partition");
+		if (requestSeen?.kind === "partition") {
+			expect(requestSeen.context).toEqual({
+				reason: "choose-from-top",
+				cards: [c, b, a],
+				groups: [{ label: "hand", exactSize: 2 }, { label: "bottom" }],
+			});
 		}
 
 		const replay = ChoiceController.replay(
 			engine,
 			JSON.parse(JSON.stringify(recorder.transcript())),
 		);
-		expect(replay.chooseFromTop(state, 0, [c, b, a], 2)).toEqual({
-			kept: [b, a],
-			bottom: [c],
-		});
+		expect(
+			replay.choosePartition(state, 0, [c, b, a], "choose-from-top", [
+				{ label: "hand", exactSize: 2 },
+				{ label: "bottom" },
+			]),
+		).toEqual({ groups: [[b, a], [c]] });
 		replay.assertComplete();
 	});
 
@@ -76,7 +83,10 @@ describe("choose-from-top choices", () => {
 
 		let pending: ChoicePendingError | undefined;
 		try {
-			choices.chooseFromTop(state, 0, [b, a], 1);
+			choices.choosePartition(state, 0, [b, a], "choose-from-top", [
+				{ label: "hand", exactSize: 1 },
+				{ label: "bottom" },
+			]);
 		} catch (error) {
 			if (!(error instanceof ChoicePendingError)) throw error;
 			pending = error;
@@ -84,13 +94,15 @@ describe("choose-from-top choices", () => {
 		if (!pending || !resolveAnswer) throw new Error("expected pending choice");
 		expect(choices.transcript().choices).toHaveLength(0);
 
-		resolveAnswer({ kept: [String(a)], bottom: [String(b)] });
+		resolveAnswer({ groups: [[String(a)], [String(b)]] });
 		choices.recordAnswer(pending.request, await pending.answer);
 		choices.rewind();
-		expect(choices.chooseFromTop(state, 0, [b, a], 1)).toEqual({
-			kept: [a],
-			bottom: [b],
-		});
+		expect(
+			choices.choosePartition(state, 0, [b, a], "choose-from-top", [
+				{ label: "hand", exactSize: 1 },
+				{ label: "bottom" },
+			]),
+		).toEqual({ groups: [[a], [b]] });
 		choices.assertComplete();
 	});
 
@@ -102,17 +114,20 @@ describe("choose-from-top choices", () => {
 		}
 		const answers: ChoiceAnswer[] = [
 			{ optionId: String(a) },
-			{ kept: [String(a)], bottom: [String(b), String(c)] },
-			{ kept: [String(a), String(b)], bottom: [] },
-			{ kept: [String(a), String(b)], bottom: [String(a)] },
-			{ kept: [String(a), "not-a-card"], bottom: [String(c)] },
+			{ groups: [[String(a)], [String(b), String(c)]] },
+			{ groups: [[String(a), String(b)], []] },
+			{ groups: [[String(a), String(b)], [String(a)]] },
+			{ groups: [[String(a), "not-a-card"], [String(c)]] },
 		];
 		for (const answer of answers) {
 			expect(() =>
 				ChoiceController.record(engine, [
 					{ choose: () => answer },
 					new ScriptedAgent(),
-				]).chooseFromTop(state, 0, [a, b, c], 2),
+				]).choosePartition(state, 0, [a, b, c], "choose-from-top", [
+					{ label: "hand", exactSize: 2 },
+					{ label: "bottom" },
+				]),
 			).toThrow(InvalidChoiceAnswerError);
 		}
 	});
@@ -129,16 +144,25 @@ describe("choose-from-top events", () => {
 		const e = engine.spawnCard(state, "monastery-swiftspear", 0, "library").id;
 		const agent: SyncAgent = {
 			choose(_view, request) {
-				if (request.kind !== "chooseFromTop") {
-					throw new Error("expected choose-from-top choice");
+				if (
+					request.kind !== "partition" ||
+					request.context.reason !== "choose-from-top"
+				) {
+					throw new Error("expected choose-from-top partition");
 				}
 				expect(request.context).toEqual({
+					reason: "choose-from-top",
 					cards: [e, d, c, b, a],
-					keep: 2,
+					groups: [
+						{ label: "hand", exactSize: 2 },
+						{ label: "bottom of library" },
+					],
 				});
 				return {
-					kept: [String(c), String(e)],
-					bottom: [String(a), String(d), String(b)],
+					groups: [
+						[String(c), String(e)],
+						[String(a), String(d), String(b)],
+					],
 				};
 			},
 		};

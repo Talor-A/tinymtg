@@ -38,17 +38,20 @@ describe("scry choices", () => {
 		const agent: SyncAgent = {
 			choose(_view, request) {
 				requestSeen = request;
-				return { top: [String(b), String(c)], bottom: [String(a)] };
+				return { groups: [[String(b), String(c)], [String(a)]] };
 			},
 		};
 		const recorder = ChoiceController.record(engine, [agent, agent]);
 
-		expect(recorder.chooseScry(state, 0, [c, b, a])).toEqual({
-			top: [b, c],
-			bottom: [a],
-		});
-		expect(requestSeen?.kind).toBe("scry");
-		if (requestSeen?.kind === "scry") {
+		expect(
+			recorder.choosePartition(state, 0, [c, b, a], "scry", [
+				{ label: "top" },
+				{ label: "bottom" },
+			]),
+		).toEqual({ groups: [[b, c], [a]] });
+		expect(requestSeen?.kind).toBe("partition");
+		if (requestSeen?.kind === "partition") {
+			expect(requestSeen.context.reason).toBe("scry");
 			expect(requestSeen.context.cards).toEqual([c, b, a]);
 		}
 
@@ -56,10 +59,12 @@ describe("scry choices", () => {
 			engine,
 			JSON.parse(JSON.stringify(recorder.transcript())),
 		);
-		expect(replay.chooseScry(state, 0, [c, b, a])).toEqual({
-			top: [b, c],
-			bottom: [a],
-		});
+		expect(
+			replay.choosePartition(state, 0, [c, b, a], "scry", [
+				{ label: "top" },
+				{ label: "bottom" },
+			]),
+		).toEqual({ groups: [[b, c], [a]] });
 		replay.assertComplete();
 	});
 
@@ -70,10 +75,13 @@ describe("scry choices", () => {
 			throw new Error("expected three cards");
 		}
 		const agent: SyncAgent = {
-			choose: () => ({ top: [String(b), String(c)], bottom: [String(a)] }),
+			choose: () => ({ groups: [[String(b), String(c)], [String(a)]] }),
 		};
 		const recorder = ChoiceController.record(engine, [agent, agent]);
-		recorder.chooseScry(state, 0, [c, b, a]);
+		recorder.choosePartition(state, 0, [c, b, a], "scry", [
+			{ label: "top" },
+			{ label: "bottom" },
+		]);
 
 		// A transcript that no longer describes a legal answer is a broken
 		// transcript, whichever choice recorded it.
@@ -82,14 +90,16 @@ describe("scry choices", () => {
 		) as ChoiceTranscript;
 		const recorded = transcript.choices[0];
 		if (!recorded) throw new Error("expected a recorded choice");
-		recorded.answer = { top: [String(b)], bottom: [String(a)] };
+		recorded.answer = { groups: [[String(b)], [String(a)]] };
 
 		expect(() =>
-			ChoiceController.replay(engine, transcript).chooseScry(state, 0, [
-				c,
-				b,
-				a,
-			]),
+			ChoiceController.replay(engine, transcript).choosePartition(
+				state,
+				0,
+				[c, b, a],
+				"scry",
+				[{ label: "top" }, { label: "bottom" }],
+			),
 		).toThrow(ChoiceReplayMismatchError);
 	});
 
@@ -99,16 +109,19 @@ describe("scry choices", () => {
 		if (a === undefined || b === undefined) throw new Error("expected cards");
 		const answers: ChoiceAnswer[] = [
 			{ optionIds: [String(a), String(b)] },
-			{ top: [String(a)], bottom: [] },
-			{ top: [String(a), String(a)], bottom: [String(b)] },
-			{ top: [String(a), String(b)], bottom: ["not-a-card"] },
+			{ groups: [[String(a)], []] },
+			{ groups: [[String(a), String(a)], [String(b)]] },
+			{ groups: [[String(a), String(b)], ["not-a-card"]] },
 		];
 		for (const answer of answers) {
 			expect(() =>
 				ChoiceController.record(engine, [
 					{ choose: () => answer },
 					new ScriptedAgent(),
-				]).chooseScry(state, 0, [a, b]),
+				]).choosePartition(state, 0, [a, b], "scry", [
+					{ label: "top" },
+					{ label: "bottom" },
+				]),
 			).toThrow(InvalidChoiceAnswerError);
 		}
 	});
@@ -126,7 +139,10 @@ describe("scry choices", () => {
 
 		let pending: ChoicePendingError | undefined;
 		try {
-			choices.chooseScry(state, 0, [b, a]);
+			choices.choosePartition(state, 0, [b, a], "scry", [
+				{ label: "top" },
+				{ label: "bottom" },
+			]);
 		} catch (error) {
 			if (!(error instanceof ChoicePendingError)) throw error;
 			pending = error;
@@ -134,13 +150,15 @@ describe("scry choices", () => {
 		if (!pending || !resolveAnswer) throw new Error("expected pending choice");
 		expect(choices.transcript().choices).toHaveLength(0);
 
-		resolveAnswer({ top: [String(a)], bottom: [String(b)] });
+		resolveAnswer({ groups: [[String(a)], [String(b)]] });
 		choices.recordAnswer(pending.request, await pending.answer);
 		choices.rewind();
-		expect(choices.chooseScry(state, 0, [b, a])).toEqual({
-			top: [a],
-			bottom: [b],
-		});
+		expect(
+			choices.choosePartition(state, 0, [b, a], "scry", [
+				{ label: "top" },
+				{ label: "bottom" },
+			]),
+		).toEqual({ groups: [[a], [b]] });
 		choices.assertComplete();
 	});
 });
@@ -156,9 +174,10 @@ describe("scry events", () => {
 		let seen: ObjectId[] | undefined;
 		const agent: SyncAgent = {
 			choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
-				if (request.kind !== "scry") throw new Error("expected scry choice");
+				if (request.kind !== "partition" || request.context.reason !== "scry")
+					throw new Error("expected scry partition");
 				seen = request.context.cards;
-				return { top: [String(b), String(c)], bottom: [String(a)] };
+				return { groups: [[String(b), String(c)], [String(a)]] };
 			},
 		};
 
@@ -205,9 +224,10 @@ describe("scry events", () => {
 		let seen: ObjectId[] | undefined;
 		const agent: SyncAgent = {
 			choose(_view, request) {
-				if (request.kind !== "scry") throw new Error("expected scry choice");
+				if (request.kind !== "partition" || request.context.reason !== "scry")
+					throw new Error("expected scry partition");
 				seen = request.context.cards;
-				return { top: [], bottom: [String(only)] };
+				return { groups: [[], [String(only)]] };
 			},
 		};
 

@@ -193,32 +193,23 @@ export interface DeclareBlockersChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
-export interface ScryChoiceRequest extends ChoiceRequestBase {
-	kind: "scry";
-	player: PlayerId;
-	context: {
-		/** The looked-at cards in current top-to-bottom order. */
-		cards: ObjectId[];
-	};
+export type PartitionChoiceReason = "scry" | "surveil" | "choose-from-top";
+
+export interface PartitionChoiceGroup {
+	label: string;
+	/** When present, this group must contain exactly this many cards. */
+	exactSize?: number;
 }
 
-export interface SurveilChoiceRequest extends ChoiceRequestBase {
-	kind: "surveil";
+export interface PartitionChoiceRequest extends ChoiceRequestBase {
+	kind: "partition";
 	player: PlayerId;
 	context: {
+		reason: PartitionChoiceReason;
 		/** The looked-at cards in current top-to-bottom order. */
 		cards: ObjectId[];
-	};
-}
-
-export interface ChooseFromTopChoiceRequest extends ChoiceRequestBase {
-	kind: "chooseFromTop";
-	player: PlayerId;
-	context: {
-		/** The looked-at cards in current top-to-bottom order. */
-		cards: ObjectId[];
-		/** The exact number of cards to put into hand. */
-		keep: number;
+		/** The two ordered destinations for the looked-at cards. */
+		groups: [PartitionChoiceGroup, PartitionChoiceGroup];
 	};
 }
 
@@ -248,54 +239,23 @@ export type ChoiceRequest =
 	| TriggerOrderChoiceRequest
 	| DeclareAttackersChoiceRequest
 	| DeclareBlockersChoiceRequest
-	| ScryChoiceRequest
-	| SurveilChoiceRequest
-	| ChooseFromTopChoiceRequest
+	| PartitionChoiceRequest
 	| SearchLibraryChoiceRequest;
 
-export interface ScryChoiceAnswer {
-	/**
-	 * Both arrays are ordered from the top of the resulting library
-	 * toward the bottom—the earlier card will be drawn first.
-	 */
-	top: string[];
-	bottom: string[];
+export interface PartitionChoiceAnswer {
+	/** Each group is ordered nearest its destination first. */
+	groups: [string[], string[]];
 }
 
-export interface ScryResult {
-	/** Both arrays are ordered in future draw order. */
-	top: ObjectId[];
-	bottom: ObjectId[];
-}
-
-/** Surveil uses the same ordered partition answer shape as scry. */
-export interface SurveilChoiceAnswer {
-	top: string[];
-	bottom: string[];
-}
-
-export interface SurveilResult {
-	top: ObjectId[];
-	bottom: ObjectId[];
-}
-
-export interface ChooseFromTopChoiceAnswer {
-	kept: string[];
-	/** Ordered from nearest the top toward the bottom of the bottom group. */
-	bottom: string[];
-}
-
-export interface ChooseFromTopResult {
-	kept: ObjectId[];
-	/** Ordered from nearest the top toward the bottom of the bottom group. */
-	bottom: ObjectId[];
+export interface PartitionResult {
+	/** Each group is ordered nearest its destination first. */
+	groups: [ObjectId[], ObjectId[]];
 }
 
 export type ChoiceAnswer =
 	| { optionId: string }
 	| { optionIds: string[] }
-	| ScryChoiceAnswer
-	| ChooseFromTopChoiceAnswer;
+	| PartitionChoiceAnswer;
 
 export interface SyncAgent {
 	choose(view: PlayerView, request: ChoiceRequest): ChoiceAnswer;
@@ -376,14 +336,9 @@ type RequestInput =
 			DeclareBlockersChoiceRequest,
 			"version" | "id" | "ordinal" | "fingerprint"
 	  >
-	| Omit<ScryChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
-	| Omit<SurveilChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
+	| Omit<PartitionChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<
 			SearchLibraryChoiceRequest,
-			"version" | "id" | "ordinal" | "fingerprint"
-	  >
-	| Omit<
-			ChooseFromTopChoiceRequest,
 			"version" | "id" | "ordinal" | "fingerprint"
 	  >;
 
@@ -456,91 +411,64 @@ function normalizeAnswer(
 	if (request.kind === "triggerOrder") {
 		return normalizeOrderedAnswer(request, answer);
 	}
-	if (request.kind === "scry" || request.kind === "surveil") {
-		return normalizeScryAnswer(request, answer);
-	}
-	if (request.kind === "chooseFromTop") {
-		return normalizeChooseFromTopAnswer(request, answer);
+	if (request.kind === "partition") {
+		return normalizePartitionAnswer(request, answer);
 	}
 	return normalizeSingleAnswer(request, answer);
 }
 
-function normalizeChooseFromTopAnswer(
-	request: ChooseFromTopChoiceRequest,
+function normalizePartitionAnswer(
+	request: PartitionChoiceRequest,
 	answer: ChoiceAnswer,
-): ChooseFromTopChoiceAnswer {
-	const kept = (answer as { kept?: unknown })?.kept;
-	const bottom = (answer as { bottom?: unknown })?.bottom;
-	if (!Array.isArray(kept) || !Array.isArray(bottom)) {
+): PartitionChoiceAnswer {
+	const groups = (answer as { groups?: unknown })?.groups;
+	if (
+		!Array.isArray(groups) ||
+		groups.length !== 2 ||
+		!groups.every(Array.isArray)
+	) {
 		throw new InvalidChoiceAnswerError(
 			`agent returned an invalid answer for choice ${request.id}`,
 		);
 	}
-	if (kept.length !== request.context.keep) {
-		throw new InvalidChoiceAnswerError(
-			`agent must keep exactly ${request.context.keep} cards for choice ${request.id}`,
-		);
-	}
+	const partitionGroups = groups as [unknown[], unknown[]];
 
 	const legalIds = new Set(request.options.map((option) => option.id));
 	const seen = new Set<string>();
-	for (const id of [...kept, ...bottom]) {
-		if (typeof id !== "string" || !legalIds.has(id) || seen.has(id)) {
+	for (let groupIndex = 0; groupIndex < partitionGroups.length; groupIndex++) {
+		const group = partitionGroups[groupIndex];
+		const definition = request.context.groups[groupIndex];
+		assertDefined(group);
+		assertDefined(definition);
+		if (
+			definition.exactSize !== undefined &&
+			group.length !== definition.exactSize
+		) {
 			throw new InvalidChoiceAnswerError(
-				`agent returned an invalid card arrangement for choice ${request.id}`,
+				`agent must put exactly ${definition.exactSize} cards in ${definition.label} for choice ${request.id}`,
 			);
 		}
-		seen.add(id);
+		for (const id of group) {
+			if (typeof id !== "string" || !legalIds.has(id) || seen.has(id)) {
+				throw new InvalidChoiceAnswerError(
+					`agent returned an invalid card partition for choice ${request.id}`,
+				);
+			}
+			seen.add(id);
+		}
 	}
 	if (seen.size !== legalIds.size) {
 		throw new InvalidChoiceAnswerError(
 			`agent must place all ${legalIds.size} cards for choice ${request.id}`,
 		);
 	}
+	const first = partitionGroups[0];
+	const second = partitionGroups[1];
+	assertDefined(first);
+	assertDefined(second);
 	return {
-		kept: [...kept] as string[],
-		bottom: [...bottom] as string[],
+		groups: [[...first] as string[], [...second] as string[]],
 	};
-}
-
-function normalizeScryAnswer(
-	request: ScryChoiceRequest | SurveilChoiceRequest,
-	answer: ChoiceAnswer,
-): ScryChoiceAnswer | SurveilChoiceAnswer {
-	const top = (answer as { top?: unknown })?.top;
-	const bottom = (answer as { bottom?: unknown })?.bottom;
-	if (!Array.isArray(top) || !Array.isArray(bottom)) {
-		throw new InvalidChoiceAnswerError(
-			`agent returned an invalid answer for choice ${request.id}`,
-		);
-	}
-
-	const legalIds = new Set(request.options.map((option) => option.id));
-	const seen = new Set<string>();
-	for (const id of [...top, ...bottom]) {
-		if (typeof id !== "string") {
-			throw new InvalidChoiceAnswerError(
-				`agent returned an invalid answer for choice ${request.id}`,
-			);
-		}
-		if (!legalIds.has(id)) {
-			throw new InvalidChoiceAnswerError(
-				`agent selected ${id} for choice ${request.id}; legal options: ${[...legalIds].join(", ")}`,
-			);
-		}
-		if (seen.has(id)) {
-			throw new InvalidChoiceAnswerError(
-				`agent selected duplicate option ${id} for choice ${request.id}`,
-			);
-		}
-		seen.add(id);
-	}
-	if (seen.size !== legalIds.size) {
-		throw new InvalidChoiceAnswerError(
-			`agent must place all ${legalIds.size} cards for choice ${request.id}`,
-		);
-	}
-	return { top: [...top] as string[], bottom: [...bottom] as string[] };
 }
 
 function normalizeOrderedAnswer(
@@ -1237,98 +1165,66 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		return this.chooseMulti(state, request, candidates);
 	}
 
-	/**
-	 * One replayable ordered partition of the looked-at cards. `cards` and both
-	 * result arrays are top-to-bottom: an earlier card will be drawn first.
-	 */
-	chooseScry(
+	/** Partition looked-at cards into two ordered destination groups. */
+	choosePartition(
 		state: GameState,
 		player: PlayerId,
 		cards: ObjectId[],
-	): ScryResult {
-		if (cards.length === 0) return { top: [], bottom: [] };
+		reason: PartitionChoiceReason,
+		groups: [PartitionChoiceGroup, PartitionChoiceGroup],
+	): PartitionResult {
 		assert(
 			new Set(cards).size === cards.length,
-			"scry candidates contain duplicate object ids",
+			"partition candidates contain duplicate object ids",
 		);
+		assert(
+			groups.every((group) => group.label.length > 0),
+			"partition groups must have labels",
+		);
+		assert(
+			groups[0].label !== groups[1].label,
+			"partition group labels must be distinct",
+		);
+		for (const group of groups) {
+			if (group.exactSize === undefined) continue;
+			assert(
+				Number.isSafeInteger(group.exactSize) &&
+					group.exactSize >= 0 &&
+					group.exactSize <= cards.length,
+				`partition group ${group.label} has invalid exact size ${group.exactSize}`,
+			);
+		}
+		if (
+			groups[0].exactSize !== undefined &&
+			groups[1].exactSize !== undefined
+		) {
+			assert(
+				groups[0].exactSize + groups[1].exactSize === cards.length,
+				"exact partition group sizes must place every card",
+			);
+		}
+		if (cards.length === 0) return { groups: [[], []] };
+		if (groups[0].exactSize === cards.length || groups[1].exactSize === 0) {
+			return { groups: [[...cards], []] };
+		}
+		if (groups[1].exactSize === cards.length || groups[0].exactSize === 0) {
+			return { groups: [[], [...cards]] };
+		}
 		const request = this.request({
-			kind: "scry",
+			kind: "partition",
 			player,
-			context: { cards: [...cards] },
+			context: { reason, cards: [...cards], groups },
 			options: this.cardOptions(state, cards),
 		});
 		const { answer, invalid } = this.ask(state, request);
-		if (!("top" in answer)) {
-			throw invalid(`choice ${request.id} requires a scry answer`);
+		if (!("groups" in answer)) {
+			throw invalid(`choice ${request.id} requires a partition answer`);
 		}
 		return {
-			top: answer.top.map(objectForCardOption),
-			bottom: answer.bottom.map(objectForCardOption),
-		};
-	}
-
-	/**
-	 * Choose exactly `keep` looked-at cards and order every other card for the
-	 * bottom of the library. Cards are presented top-to-bottom, and `bottom` is
-	 * returned nearest-to-top first within that bottom group.
-	 */
-	chooseFromTop(
-		state: GameState,
-		player: PlayerId,
-		cards: ObjectId[],
-		keep: number,
-	): ChooseFromTopResult {
-		assert(
-			Number.isSafeInteger(keep) && keep >= 1,
-			`choose-from-top keep count must be a positive integer, got ${keep}`,
-		);
-		assert(
-			new Set(cards).size === cards.length,
-			"choose-from-top candidates contain duplicate object ids",
-		);
-		if (cards.length <= keep) return { kept: [...cards], bottom: [] };
-
-		const request = this.request({
-			kind: "chooseFromTop",
-			player,
-			// The early return above leaves more cards than the keep count.
-			context: { cards: [...cards], keep },
-			options: this.cardOptions(state, cards),
-		});
-		const { answer, invalid } = this.ask(state, request);
-		if (!("kept" in answer)) {
-			throw invalid(`choice ${request.id} requires a choose-from-top answer`);
-		}
-		return {
-			kept: answer.kept.map(objectForCardOption),
-			bottom: answer.bottom.map(objectForCardOption),
-		};
-	}
-
-	/** Surveil has exactly the same replayable ordered partition as scry. */
-	chooseSurveil(
-		state: GameState,
-		player: PlayerId,
-		cards: ObjectId[],
-	): SurveilResult {
-		if (cards.length === 0) return { top: [], bottom: [] };
-		assert(
-			new Set(cards).size === cards.length,
-			"surveil candidates contain duplicate object ids",
-		);
-		const request = this.request({
-			kind: "surveil",
-			player,
-			context: { cards: [...cards] },
-			options: this.cardOptions(state, cards),
-		});
-		const { answer, invalid } = this.ask(state, request);
-		if (!("top" in answer)) {
-			throw invalid(`choice ${request.id} requires a surveil answer`);
-		}
-		return {
-			top: answer.top.map(objectForCardOption),
-			bottom: answer.bottom.map(objectForCardOption),
+			groups: [
+				answer.groups[0].map(objectForCardOption),
+				answer.groups[1].map(objectForCardOption),
+			],
 		};
 	}
 

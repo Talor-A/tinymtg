@@ -23,19 +23,18 @@ export {
 	type ChoiceRequest,
 	type ChoiceSource,
 	type ChoiceTranscript,
-	type ChooseFromTopChoiceAnswer,
-	type ChooseFromTopResult,
 	InvalidChoiceAnswerError,
 	type ObjectChoiceReason,
 	type ObjectChoiceRequest,
 	type OptionalObjectChoiceInput,
+	type PartitionChoiceAnswer,
+	type PartitionChoiceGroup,
+	type PartitionChoiceReason,
+	type PartitionChoiceRequest,
+	type PartitionResult,
 	type RecordedChoice,
 	type RequiredObjectChoiceInput,
-	type ScryChoiceAnswer,
-	type ScryResult,
 	type SearchLibraryChoiceRequest,
-	type SurveilChoiceAnswer,
-	type SurveilResult,
 	type SyncAgent,
 	type SyncAgentPair,
 } from "./choices.ts";
@@ -6166,7 +6165,15 @@ function executeIn(
 			const library = state.players[ev.player].library;
 			const count = Math.min(ev.amount, library.length);
 			const seen = library.slice(library.length - count).reverse();
-			const arrangement = choices.chooseScry(state, ev.player, seen);
+			const partition = choices.choosePartition(
+				state,
+				ev.player,
+				seen,
+				"scry",
+				[{ label: "top of library" }, { label: "bottom of library" }],
+			);
+			const [top, bottom] = partition.groups;
+			const arrangement = { top, bottom };
 			const arranged = [...arrangement.top, ...arrangement.bottom];
 			assert(arranged.length === seen.length, "scry changed the card count");
 			assert(
@@ -6197,7 +6204,15 @@ function executeIn(
 			const library = state.players[ev.player].library;
 			const count = Math.min(ev.amount, library.length);
 			const seen = library.slice(library.length - count).reverse();
-			const arrangement = choices.chooseSurveil(state, ev.player, seen);
+			const partition = choices.choosePartition(
+				state,
+				ev.player,
+				seen,
+				"surveil",
+				[{ label: "top of library" }, { label: "graveyard" }],
+			);
+			const [top, bottom] = partition.groups;
+			const arrangement = { top, bottom };
 			const arranged = [...arrangement.top, ...arrangement.bottom];
 			assert(arranged.length === seen.length, "surveil changed the card count");
 			assert(
@@ -6252,8 +6267,19 @@ function executeIn(
 			const library = state.players[ev.player].library;
 			const count = Math.min(ev.amount, library.length);
 			const seen = library.slice(library.length - count).reverse();
-			const choice = choices.chooseFromTop(state, ev.player, seen, ev.keep);
 			const actualKeep = Math.min(ev.keep, seen.length);
+			const partition = choices.choosePartition(
+				state,
+				ev.player,
+				seen,
+				"choose-from-top",
+				[
+					{ label: "hand", exactSize: actualKeep },
+					{ label: "bottom of library" },
+				],
+			);
+			const [kept, bottom] = partition.groups;
+			const choice = { kept, bottom };
 			assert(
 				choice.kept.length === actualKeep,
 				`choose-from-top must keep exactly ${actualKeep} cards`,
