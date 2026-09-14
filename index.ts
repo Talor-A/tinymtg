@@ -2428,6 +2428,13 @@ interface CastTriggerCondition {
 	predicate?: ObjectPredicateDef;
 }
 
+/** Matches a player cycling a card with the declared characteristics. */
+interface CycleTriggerCondition {
+	kind: "cycle";
+	player: ValidPlayer;
+	predicate: ObjectPredicateDef;
+}
+
 /** Matches the player declaring attackers and/or each matching attacker. */
 interface DeclareAttackersTriggerCondition {
 	kind: "declare attackers";
@@ -2474,6 +2481,7 @@ type TriggerCondition =
 	| DrawTriggerCondition
 	| DealsCombatDamageTriggerCondition
 	| CastTriggerCondition
+	| CycleTriggerCondition
 	| DeclareAttackersTriggerCondition
 	| DeclareBlockersTriggerCondition
 	| BeginStepTriggerCondition
@@ -6744,6 +6752,15 @@ function triggerMatches(
 			const spell = maybeObject(read.state, ev.spell);
 			assert(spell?.kind === "spell", "cast event subject is not a spell");
 			return triggerSubjectsMatch(read, source, [spell], condition.predicate);
+		}
+
+		case "cycle": {
+			assert(ev.kind === "cycle");
+			if (!relativePlayerMatches(ev.player, condition.player, source))
+				return false;
+			const card = maybeObject(read.state, ev.card);
+			assert(card?.kind === "card", "cycle trigger subject is not a card");
+			return triggerSubjectsMatch(read, source, [card], condition.predicate);
 		}
 
 		case "gain life":

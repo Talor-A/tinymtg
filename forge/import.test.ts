@@ -3503,6 +3503,51 @@ describe("lowerForgeCard: cycling", () => {
 			expect(result.ok).toBe(false);
 		}
 	});
+
+	test("lowers ownership-based Cycled triggers from their declared zones", () => {
+		const watcher = importFixture("d/drannith_healer");
+		if (!watcher.ok) throw new Error("expected Drannith Healer to import");
+		expect(watcher.card.abilityDefinitions.triggered[0]).toMatchObject({
+			functionsFrom: ["battlefield"],
+			condition: {
+				kind: "cycle",
+				player: "either",
+				predicate: {
+					kind: "and",
+					predicates: [
+						{ kind: "not", predicate: { kind: "self" } },
+						{ kind: "owner", player: "you" },
+					],
+				},
+			},
+		});
+
+		const self = importFixture("r/renewed_faith");
+		if (!self.ok) throw new Error("expected Renewed Faith to import");
+		expect(self.card.abilityDefinitions.triggered[0]).toMatchObject({
+			functionsFrom: ["graveyard"],
+			condition: {
+				kind: "cycle",
+				player: "either",
+				predicate: { kind: "self" },
+			},
+			effects: [{ kind: "may" }],
+		});
+	});
+
+	test("does not treat controller selectors as ownership selectors in nonbattlefield zones", () => {
+		const result = importForgeCard(
+			cardText("d/drannith_healer").replace("YouOwn", "YouCtrl"),
+			{ id: "mutated-drannith-healer" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_PARAMETER",
+			message:
+				"Cycled requires a supported ownership-based ValidCard$ selector",
+		});
+	});
 });
 
 describe("lowerForgeCard: `+` selector combination and negated subtypes", () => {

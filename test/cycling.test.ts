@@ -6,11 +6,17 @@ import {
 	createEngine,
 	IllegalAbilityActivationError,
 } from "../index.ts";
-import { ALICE, passingAgents, setupMain } from "./utils/engine-helpers.ts";
+import {
+	ALICE,
+	BOB,
+	passingAgents,
+	setupMain,
+} from "./utils/engine-helpers.ts";
 
 const engine = createEngine(CARDS);
 const boonCycling = abilityId("activated", "boon-of-the-wish-giver", 0);
 const moorCycling = abilityId("activated", "barren-moor", 0);
+const faithCycling = abilityId("activated", "renewed-faith", 0);
 
 describe("cycling", () => {
 	test("discards the source card, uses the stack, and draws on resolution", () => {
@@ -83,5 +89,46 @@ describe("cycling", () => {
 				[new ScriptedAgent(), new ScriptedAgent()],
 			),
 		).toThrow(IllegalAbilityActivationError);
+	});
+
+	test("battlefield permanents trigger when their controller cycles another card", () => {
+		const state = setupMain(engine);
+		engine.spawnPermanent(state, "drannith-healer", ALICE);
+		engine.spawnPermanent(state, "drannith-stinger", ALICE);
+		const boon = engine.spawnCard(
+			state,
+			"boon-of-the-wish-giver",
+			ALICE,
+			"hand",
+		);
+		state.players[ALICE].manaPool.c = 1;
+
+		engine.executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: boon.id, ability: boonCycling },
+			passingAgents(),
+		);
+		engine.settlePriority(state, passingAgents());
+
+		expect(state.players[ALICE].life).toBe(21);
+		expect(state.players[BOB].life).toBe(19);
+	});
+
+	test("a cycled card can trigger from its new graveyard object", () => {
+		const state = setupMain(engine);
+		const faith = engine.spawnCard(state, "renewed-faith", ALICE, "hand");
+		state.players[ALICE].manaPool.c = 1;
+		state.players[ALICE].manaPool.w = 1;
+
+		engine.executeAbilityAction(
+			state,
+			ALICE,
+			{ kind: "activate ability", source: faith.id, ability: faithCycling },
+			passingAgents(),
+		);
+		engine.settlePriority(state, passingAgents());
+
+		expect(state.players[ALICE].life).toBe(22);
 	});
 });

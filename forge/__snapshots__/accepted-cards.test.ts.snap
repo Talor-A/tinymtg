@@ -291,6 +291,7 @@ Banishing Betrayal
 Banishment Decree
 Bant Battlemage
 Bant Panorama
+Bant Sojourners
 Barbarian Horde
 Barbarian Lunatic
 Barbarian Riftcutter
@@ -846,6 +847,7 @@ Deathsprout
 Deceptive Landscape
 Dedicated Martyr
 Deduce
+Deem Worthy
 Deeproot Champion
 Deeproot Elite
 Deepwood Drummer
@@ -968,6 +970,8 @@ Drake-Skull Cameo
 Drakewing Krasis
 Dramatic Rescue
 Drana's Emissary
+Drannith Healer
+Drannith Stinger
 Dread Drone
 Dread Reaper
 Dread Shade
@@ -1285,6 +1289,7 @@ Flesh Burrower
 Flick a Coin
 Flood Plain
 Floodhound
+Flourishing Fox
 Flowstone Channeler
 Flowstone Charger
 Flowstone Crusher
@@ -1339,6 +1344,7 @@ Foundry of the Consuls
 Fountain of Renewal
 Fountain of Youth
 Fracture
+Fractured Sanity
 Frazzle
 Frenzied Devils
 Frenzied Raptor
@@ -1556,6 +1562,7 @@ Griptide
 Grisly Ritual
 Gristle Grinner
 Grixis Panorama
+Grixis Sojourners
 Grizzled Leotau
 Grizzled Outrider
 Grizzly Bears
@@ -1904,6 +1911,7 @@ Jumbo Cactuar
 Jump
 Jund Battlemage
 Jund Panorama
+Jund Sojourners
 Jungle Barrier
 Jungle Creeper
 Jungle Delver
@@ -2379,6 +2387,7 @@ Nature's Lore
 Nature's Spiral
 Naya Battlemage
 Naya Panorama
+Naya Sojourners
 Nebelgast Beguiler
 Nebelgast Herald
 Nebula Dragon
@@ -2669,6 +2678,7 @@ Pride of the Perfect
 Prideful Parent
 Priest of Ancient Lore
 Priest of Iroas
+Primal Boost
 Primeval Bounty
 Primoc Escapee
 Primordial Pachyderm
@@ -2832,6 +2842,7 @@ Rend Flesh
 Renegade Demon
 Renegade Troops
 Renegade's Getaway
+Renewed Faith
 Renowned Weaver
 Repel
 Repulse
@@ -2843,6 +2854,8 @@ Rescuer Chwinga
 Research Assistant
 Resolute Reinforcements
 Resolute Watchdog
+Resounding Roar
+Resounding Thunder
 Restoration Angel
 Restoration Gearsmith
 Restore
@@ -3290,6 +3303,7 @@ Snake Pit
 Snapping Creeper
 Snapping Drake
 Snapping Gnarlid
+Snare Tactician
 Snare Thopter
 Snare the Skies
 Sneaky Snacker
@@ -3308,6 +3322,7 @@ Social Climber
 Sokka's Sword Training
 Sokka, Wolf Cove's Protector
 Sol Ring
+Solar Blast
 Soldier Replica
 Soldier of the Grey Host
 Solemn Offering
@@ -3424,6 +3439,7 @@ Stern Proctor
 Steward of Valeron
 Stimulus Package
 Stinging Barrier
+Stir the Sands
 Stitcher's Apprentice
 Stitcher's Supplier
 Stock Up
@@ -3936,6 +3952,7 @@ Vision Skeins
 Vithian Renegades
 Vitu-Ghazi, the City-Tree
 Vivisection
+Vizier of Tumbling Sands
 Vizzerdrix
 Vodalian Merchant
 Vodalian Soldiers
@@ -4082,6 +4099,7 @@ Wind Dancer
 Wind Drake
 Wind Strider
 Wind-Scarred Crag
+Windcaller Aven
 Windgrace Acolyte
 Windrider Eel
 Windrider Patrol
@@ -4183,4 +4201,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4180`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4198`;

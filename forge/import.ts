@@ -3336,6 +3336,67 @@ function lowerTrigger(
 				effects,
 			});
 		}
+		case "Cycled": {
+			const badParams = claim(
+				"validcard",
+				"validplayer",
+				"triggerzones",
+				"secondary",
+				"optionaldecider",
+			);
+			if (!badParams.ok) return badParams;
+			const rawSelector = getForgeParam(params, "ValidCard");
+			const selector = rawSelector ? parseSelector(rawSelector) : null;
+			if (
+				selector === null ||
+				rawSelector?.includes("YouCtrl") ||
+				rawSelector?.includes("OppCtrl")
+			)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"Cycled requires a supported ownership-based ValidCard$ selector",
+					where,
+				);
+			const rawPlayer = getForgeParam(params, "ValidPlayer");
+			const cyclingPlayer =
+				rawPlayer === undefined ? "either" : parseValidPlayer(rawPlayer);
+			if (cyclingPlayer === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					`unsupported ValidPlayer$ ${rawPlayer}`,
+					where,
+				);
+			const secondary = getForgeParam(params, "Secondary");
+			if (secondary !== undefined && secondary !== "True")
+				return issue("UNSUPPORTED_PARAMETER", "Secondary$ must be True", where);
+			const triggerZone = getForgeParam(params, "TriggerZones");
+			let functionsFrom: ["battlefield" | "graveyard"];
+			if (triggerZone === "Battlefield") functionsFrom = ["battlefield"];
+			else if (triggerZone === "Graveyard") functionsFrom = ["graveyard"];
+			else if (
+				triggerZone === undefined &&
+				(rawSelector === "Card.Self" || rawSelector === "Self")
+			)
+				functionsFrom = ["graveyard"];
+			else
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"Cycled triggers must function from an explicit supported zone or from the cycled card's graveyard object",
+					where,
+				);
+			return ok({
+				id: execute,
+				text,
+				condition: {
+					kind: "cycle",
+					player: cyclingPlayer,
+					predicate: selector,
+				},
+				functionsFrom,
+				targets,
+				effects,
+			});
+		}
 		case "ChangesZone": {
 			const badParams = claim(
 				"origin",
