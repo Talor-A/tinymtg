@@ -4015,11 +4015,7 @@ export function lowerForgeCard(
 			if (sorcerySpeed !== undefined) {
 				if (sorcerySpeed !== "True") {
 					return reject(
-						issue(
-							"UNSUPPORTED_PARAMETER",
-							"SorcerySpeed$ must be True",
-							where,
-						),
+						issue("UNSUPPORTED_PARAMETER", "SorcerySpeed$ must be True", where),
 					);
 				}
 				restrictions = { asSorcery: true };
