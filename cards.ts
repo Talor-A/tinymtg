@@ -72,6 +72,8 @@ const CORPUS_CARDS = [
 	loadCardFixture("g/gilded_goose"),
 	loadCardFixture("s/sweettooth_witch"),
 	loadCardFixture("b/blood_servitor"),
+	loadCardFixture("b/barren_moor"),
+	loadCardFixture("b/boon_of_the_wish_giver"),
 	loadCardFixture("s/samurai_of_the_pale_curtain"),
 	loadCardFixture("v/vision_skeins"),
 	loadCardFixture("f/forced_fruition"),

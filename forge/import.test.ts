@@ -3456,6 +3456,55 @@ describe("lowerForgeCard: shuffle cards into libraries", () => {
 	});
 });
 
+describe("lowerForgeCard: cycling", () => {
+	test("lowers fixed cycling costs into exact hand abilities", () => {
+		const generic = importFixture("b/boon_of_the_wish_giver");
+		if (!generic.ok) throw new Error("expected Boon to import");
+		expect(generic.card.abilityDefinitions.activated[0]).toEqual({
+			kind: "cycling",
+			id: "activated-1",
+			text: "Cycling.",
+			functionsFrom: ["hand"],
+			cost: {
+				mana: { n: 1 },
+				tapSelf: false,
+				discard: { amount: 1, subject: "source" },
+			},
+			targets: [],
+			effects: [
+				{
+					kind: "draw",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
+		});
+
+		const colored = importFixture("h/hieroglyphic_illumination");
+		if (!colored.ok) throw new Error("expected Illumination to import");
+		expect(colored.card.abilityDefinitions.activated[0]).toMatchObject({
+			kind: "cycling",
+			cost: { mana: { u: 1 } },
+		});
+	});
+
+	test("keeps cycling separate from a land's mana ability", () => {
+		const result = importFixture("b/barren_moor");
+		if (!result.ok) throw new Error("expected Barren Moor to import");
+		expect(result.card.abilityDefinitions.activated).toMatchObject([
+			{ kind: "cycling", functionsFrom: ["hand"] },
+			{ kind: "mana", cost: { tapSelf: true } },
+		]);
+	});
+
+	test("rejects cycling costs outside fixed generic and colored mana", () => {
+		for (const fixture of ["s/street_wraith", "a/architects_of_will"]) {
+			const result = importFixture(fixture);
+			expect(result.ok).toBe(false);
+		}
+	});
+});
+
 describe("lowerForgeCard: `+` selector combination and negated subtypes", () => {
 	test("Restoration Angel targets a non-Angel creature its controller owns", () => {
 		const result = importFixture("r/restoration_angel");

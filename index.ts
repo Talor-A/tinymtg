@@ -510,6 +510,14 @@ interface DrawEvent extends EventCommon {
 	player: PlayerId;
 }
 
+/** A card was discarded to pay its own cycling ability's cost. */
+interface CycleEvent extends EventCommon {
+	kind: "cycle";
+	player: PlayerId;
+	/** The new card object created by the discard zone change. */
+	card: ObjectId;
+}
+
 /** A spell has finished being cast and is now on the stack. */
 interface CastEvent extends EventCommon {
 	kind: "cast";
@@ -852,6 +860,7 @@ export type GameEvent =
 	| CastEvent
 	| DrawCardsEvent
 	| DrawEvent
+	| CycleEvent
 	| MillEvent
 	| ExileTopEvent
 	| ScryEvent
@@ -2657,6 +2666,8 @@ export interface SacrificeActivationCost {
  */
 export interface DiscardActivationCost {
 	amount: 1;
+	/** Cycling discards its source; omitted means the player chooses a card. */
+	subject?: "source";
 }
 
 interface ActivatedAbilityDefBase {
@@ -2667,13 +2678,33 @@ interface ActivatedAbilityDefBase {
 
 export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
 	kind: "activated";
-	/** Defaults to the battlefield. Hidden zones cannot be activation origins. */
-	functionsFrom?: [PublicObjectZone];
+	/** Defaults to the battlefield. Hand is supported for cycling abilities. */
+	functionsFrom?: [PublicObjectZone | "hand"];
 	targets: TargetDef[];
 	effects: ActivatedEffectDef[];
 	restrictions?: {
 		asSorcery: true;
 	};
+}
+
+/** The exact keyword ability defined by CR 702.29a. */
+export interface CyclingAbilityDef extends ActivatedAbilityDefBase {
+	kind: "cycling";
+	functionsFrom: ["hand"];
+	cost: {
+		mana: PayableActivationManaCost;
+		tapSelf: false;
+		sacrifice?: never;
+		discard: { amount: 1; subject: "source" };
+	};
+	targets: [];
+	effects: [
+		{
+			kind: "draw";
+			subject: { kind: "relative-player"; player: "you" };
+			amount: 1;
+		},
+	];
 }
 
 /** A mana ability whose instructions always produce the same mana. */
@@ -2699,6 +2730,7 @@ export type ManaAbilityDef = FixedManaAbilityDef | ModalManaAbilityDef;
 /** Every ability definition possessed through an activated-ability reference. */
 export type AnyActivatedAbilityDefinition =
 	| ActivatedAbilityDef
+	| CyclingAbilityDef
 	| ManaAbilityDef;
 
 /** A finite fixed mana cost. Omitted symbols require zero mana. */
@@ -4697,6 +4729,7 @@ export function affectedPlayer(
 ): PlayerId {
 	switch (ev.kind) {
 		case "cast":
+		case "cycle":
 		case "draw":
 		case "draw cards":
 		case "mill":
@@ -5113,6 +5146,8 @@ function describeEvent(
 			return `draw cards(P${ev.player}, ${ev.amount})`;
 		case "draw":
 			return `draw(P${ev.player})`;
+		case "cycle":
+			return `cycle(P${ev.player}, ${name(engine, state, ev.card)}#${ev.card})`;
 		case "mill":
 			return `mill(P${ev.player}, ${ev.amount})`;
 		case "exile top":
@@ -5669,6 +5704,16 @@ function executeIn(
 			assert(
 				spell.controller === ev.player,
 				"cast event player does not control its spell",
+			);
+			break;
+		}
+
+		case "cycle": {
+			const card = maybeObject(state, ev.card);
+			assert(card?.kind === "card", "cycled event subject is not a card");
+			assert(
+				card.owner === ev.player,
+				"cycled event player does not own its card",
 			);
 			break;
 		}
@@ -8983,10 +9028,7 @@ function activatedAbilityActions(
 	return [...state.objects.values()].flatMap((object) => {
 		if (
 			object.kind !== "permanent" &&
-			!(
-				object.kind === "card" &&
-				(object.zone === "graveyard" || object.zone === "exile")
-			)
+			!(object.kind === "card" && object.zone !== "library")
 		)
 			return [];
 		const abilityController = controllerOf(object) ?? object.owner;
@@ -8996,7 +9038,7 @@ function activatedAbilityActions(
 		for (const ability of snapshot.currentCharacteristics.abilities.activated) {
 			const definition = abilityDefinition(read.engine, "activated", ability);
 			const functionsFrom =
-				definition.kind === "activated" ? definition.functionsFrom : undefined;
+				definition.kind === "mana" ? undefined : definition.functionsFrom;
 			if (!functionsHere(functionsFrom, object.zone)) continue;
 			if (
 				definition.kind === "activated" &&
@@ -9030,8 +9072,18 @@ function activatedAbilityActions(
 				}).length === 0
 			)
 				continue;
-			if (definition.cost.discard && state.players[player].hand.length === 0)
-				continue;
+			if (definition.cost.discard) {
+				if (
+					definition.cost.discard.subject === "source" &&
+					(object.kind !== "card" || object.zone !== "hand")
+				)
+					continue;
+				if (
+					definition.cost.discard.subject === undefined &&
+					state.players[player].hand.length === 0
+				)
+					continue;
+			}
 			if (definition.kind === "activated") {
 				// CR 601.2c via CR 602.2b: an ability with a required target cannot
 				// be activated at all unless a legal target exists for it.
@@ -9153,13 +9205,10 @@ function activateAbilityIn(
 	const object = maybeObject(state, action.source);
 	if (
 		object?.kind !== "permanent" &&
-		!(
-			object?.kind === "card" &&
-			(object.zone === "graveyard" || object.zone === "exile")
-		)
+		!(object?.kind === "card" && object.zone !== "library")
 	) {
 		throw new IllegalAbilityActivationError(
-			`object ${action.source} is not an ability source in a public supported zone`,
+			`object ${action.source} is not an ability source in a supported zone`,
 		);
 	}
 	const abilityController = controllerOf(object) ?? object.owner;
@@ -9180,7 +9229,7 @@ function activateAbilityIn(
 	}
 	const ability = abilityDefinition(engine, "activated", action.ability);
 	const functionsFrom =
-		ability.kind === "activated" ? ability.functionsFrom : undefined;
+		ability.kind === "mana" ? undefined : ability.functionsFrom;
 	if (!functionsHere(functionsFrom, object.zone)) {
 		throw new IllegalAbilityActivationError(
 			`ability ${action.ability} does not function from ${object.zone}`,
@@ -9329,7 +9378,7 @@ function activateAbilityIn(
 	}
 	let targets: TargetBindings = [];
 	let targetDefinitions: TargetDef[] = [];
-	if (ability.kind === "activated") {
+	if (ability.kind !== "mana") {
 		for (const effect of ability.effects) {
 			if (
 				effect.kind === "draw" ||
@@ -9436,16 +9485,24 @@ function activateAbilityIn(
 	const discardCost = ability.cost.discard;
 	if (discardCost) {
 		assert(discardCost.amount === 1, "only discarding one card is implemented");
-		const hand = state.players[priorityPlayer].hand;
-		if (hand.length === 0) {
-			throw new IllegalAbilityActivationError(
-				`ability ${action.ability} has no card that can pay its discard cost`,
-			);
+		if (discardCost.subject === "source") {
+			if (object.kind !== "card" || object.zone !== "hand")
+				throw new IllegalAbilityActivationError(
+					`ability ${action.ability} cannot discard its source from ${object.zone}`,
+				);
+			discardPayment = object.id;
+		} else {
+			const hand = state.players[priorityPlayer].hand;
+			if (hand.length === 0) {
+				throw new IllegalAbilityActivationError(
+					`ability ${action.ability} has no card that can pay its discard cost`,
+				);
+			}
+			discardPayment = choices.chooseObject(state, priorityPlayer, {
+				reason: { kind: "discard" },
+				objects: [...hand],
+			});
 		}
-		discardPayment = choices.chooseObject(state, priorityPlayer, {
-			reason: { kind: "discard" },
-			objects: [...hand],
-		});
 	}
 
 	// CR 602.2b puts the ability on the stack before its cost is paid, so the
@@ -9457,7 +9514,7 @@ function activateAbilityIn(
 	// to receive its source's last known information when paying the cost is
 	// what removes the source. A mana ability never uses the stack.
 	const item: ActivatedAbilityStackItem | null =
-		ability.kind === "activated"
+		ability.kind !== "mana"
 			? {
 					id: state.nextStackItemId++ as StackItemId,
 					kind: "activated ability",
@@ -9569,6 +9626,26 @@ function activateAbilityIn(
 			) {
 				throw new IllegalAbilityActivationError(
 					`the discard cost for ability ${action.ability} was not paid`,
+				);
+			}
+			if (ability.kind === "cycling") {
+				assert(
+					discardPayment === object.id,
+					"cycling must discard its source card",
+				);
+				const cycledCard = discard.created[0];
+				assertDefined(cycledCard, "cycling discard created no card object");
+				assert(
+					discard.created.length === 1,
+					"cycling discard created more than one card object",
+				);
+				performIn(
+					engine,
+					state,
+					{ kind: "cycle", player: priorityPlayer, card: cycledCard },
+					choices,
+					scope,
+					0,
 				);
 			}
 		}

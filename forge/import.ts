@@ -4142,11 +4142,39 @@ export function lowerForgeCard(
 
 	const keywords: Keyword[] = [];
 	const keywordReplacements: ReplacementEffectDefinition[] = [];
+	const cyclingCosts: PayableActivationManaCost[] = [];
 	const resolver: SVarResolver = { face, consumed: new Set() };
 	const usedSVarNames = resolver.consumed;
 	const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
 	for (const record of face.keywordRecords) {
 		const where = { nodeId: record.source.nodeId, line: record.source.line };
+		if (record.keyword === "Cycling") {
+			const [, costText] = record.segments;
+			if (record.segments.length !== 2 || !costText)
+				return reject(
+					issue(
+						"UNSUPPORTED_KEYWORD",
+						`unsupported keyword: ${record.raw}`,
+						where,
+					),
+				);
+			const parsed = parseActivationCost(costText, where);
+			if (!parsed.ok) return reject(parsed);
+			if (
+				parsed.value.tapSelf ||
+				parsed.value.sacrifice !== undefined ||
+				parsed.value.discard !== undefined
+			)
+				return reject(
+					issue(
+						"UNSUPPORTED_COST",
+						`unsupported cycling cost ${costText}`,
+						where,
+					),
+				);
+			cyclingCosts.push(parsed.value.mana);
+			continue;
+		}
 		if (record.keyword === "ETBReplacement") {
 			const lowered = lowerCopyEtbKeyword(resolver, record);
 			if (!lowered.ok) return reject(lowered);
@@ -4251,6 +4279,29 @@ export function lowerForgeCard(
 	}
 
 	const activatedAbilities: AnyActivatedAbilityDefinition[] = [];
+	let activatedCount = 0;
+	for (const mana of cyclingCosts) {
+		activatedCount += 1;
+		activatedAbilities.push({
+			kind: "cycling",
+			id: `activated-${activatedCount}`,
+			text: "Cycling.",
+			functionsFrom: ["hand"],
+			cost: {
+				mana,
+				tapSelf: false,
+				discard: { amount: 1, subject: "source" },
+			},
+			targets: [],
+			effects: [
+				{
+					kind: "draw",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
+		});
+	}
 	const triggers: TriggeredAbilityDefinition[] = [];
 	const abilityHost: AbilityHost = {
 		cardId: id,
@@ -4267,7 +4318,6 @@ export function lowerForgeCard(
 
 	let spell: SpellAbilityDef | undefined;
 	let spellCount = 0;
-	let activatedCount = 0;
 	for (const record of face.abilities) {
 		const where = { nodeId: record.source.nodeId, line: record.source.line };
 		const params = record.params;

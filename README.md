@@ -126,7 +126,9 @@ searches may fail to find. A qualified search into a hand still rejects because
 the engine does not yet represent revealing the found card to every player;
 predicate-filtered cards can be shuffled from one or more hand, graveyard, or
 exile zones into their owners' libraries, including the each-player form used
-by Timetwister and the triggering-card form used by Worldspine Wurm; spells,
+by Timetwister and the triggering-card form used by Worldspine Wurm; cycling
+with fixed generic and/or colored mana costs, represented as a hand-only
+activated ability that discards its own source and draws on resolution; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, `Opponent`, a spell (`TargetType$ Spell`) optionally narrowed
 by a supported `ValidTgts$` selector other than the domain-sensitive
@@ -161,7 +163,7 @@ domain: for example, `not creature` over permanents can match a land, but it
 cannot introduce a player, spell, or card in another zone.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 4,078 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 4,180 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
@@ -186,6 +188,7 @@ Normal progression through `advance()` currently supports:
 - relative-player and targeted-player sacrifice effects in which that player chooses one matching permanent;
 - single-card library searches whose eligible cards are exposed only in a dedicated replay-safe search choice, followed by result-bound movement and shuffling;
 - predicate-filtered shuffling from hands, graveyards, and exile into owners' libraries, including each-player effects;
+- cycling cards from hand for fixed generic and/or colored mana costs;
 - the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith), and targeted triggers (e.g. Flametongue Kavu, Manic Vandal);
 - declaring attackers, blockers, and two-player combat damage, including trample; and
 - replacement, prohibition, and state-based effects encountered by those events.
