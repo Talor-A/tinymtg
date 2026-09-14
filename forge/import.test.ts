@@ -660,6 +660,54 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		});
 	});
 
+	test("Metal Fatigue lowers one resolution-selected plural tap instruction", () => {
+		const result = importFixture("m/metal_fatigue");
+		if (!result.ok) throw new Error("expected Metal Fatigue to import");
+		expect(result.card.spell).toEqual({
+			id: "spell-1",
+			text: "Tap all artifacts.",
+			targets: [],
+			effects: [
+				{
+					kind: "tap",
+					subjects: {
+						kind: "matching-permanents",
+						predicate: { kind: "type", type: "artifact" },
+					},
+				},
+			],
+		});
+	});
+
+	test("TapAll rejects missing, targeted, and unsupported predicates", () => {
+		const definition = cardText("m/metal_fatigue");
+		for (const [name, mutated] of [
+			["missing", definition.replace(" | ValidCards$ Artifact", "")],
+			[
+				"targeted",
+				definition.replace(
+					"ValidCards$ Artifact |",
+					"ValidCards$ Artifact | ValidTgts$ Player |",
+				),
+			],
+			[
+				"unsupported",
+				definition.replace(
+					"ValidCards$ Artifact",
+					"ValidCards$ Creature.cmcGE3",
+				),
+			],
+		] as const) {
+			const result = importForgeCard(mutated, { id: `tap-all-${name}` });
+			expect(result.ok, name).toBe(false);
+		}
+	});
+
+	test("Ensnare remains rejected while its alternative cost is unsupported", () => {
+		const result = importFixture("e/ensnare");
+		expect(result.ok).toBe(false);
+	});
+
 	test("Network Disruptor lowers its unrestricted permanent target", () => {
 		const result = importFixture("n/network_disruptor");
 		if (!result.ok) throw new Error("expected Network Disruptor to import");

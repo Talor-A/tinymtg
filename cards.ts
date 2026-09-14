@@ -88,6 +88,8 @@ const CORPUS_CARDS = [
 	loadCardFixture("w/wrenns_resolve"),
 	loadCardFixture("d/demonic_tutor"),
 	loadCardFixture("e/evolving_wilds"),
+	loadCardFixture("m/metal_fatigue"),
+	loadCardFixture("d/darksteel_sentinel"),
 	loadCardFixture("t/timetwister"),
 	loadCardFixture("w/worldspine_wurm"),
 	loadCardFixture("w/writhing_chrysalis"),

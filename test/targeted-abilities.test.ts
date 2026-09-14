@@ -255,11 +255,13 @@ const TEST_CARD_7 = defineCard({
 			text: "If a permanent would become tapped, it becomes tapped and is destroyed.",
 			layer: "other",
 			functionsFrom: "any",
-			applies: (ev) => ev.kind === "tap" && ev.ref.kind === "object",
-			replace: (ev) =>
-				ev.kind === "tap" && ev.ref.kind === "object"
-					? [ev, { kind: "destroy", object: ev.ref.object, noRegen: true }]
-					: [ev],
+			applies: (ev) => ev.kind === "tap" && ev.objects.length === 1,
+			replace(ev) {
+				if (ev.kind !== "tap" || ev.objects.length !== 1) return [ev];
+				const object = ev.objects[0];
+				if (object === undefined) throw new Error("tap event has no object");
+				return [ev, { kind: "destroy", object, noRegen: true }];
+			},
 		},
 	],
 });
@@ -280,7 +282,7 @@ const TEST_CARD_8 = defineCard({
 			text: "If a permanent would become tapped, its controller loses 1 life instead.",
 			layer: "other",
 			functionsFrom: "any",
-			applies: (ev) => ev.kind === "tap" && ev.ref.kind === "object",
+			applies: (ev) => ev.kind === "tap" && ev.objects.length === 1,
 			replace: (_ev, ctx) => [
 				{ kind: "lose life", player: ctx.controller, amount: 1 },
 			],

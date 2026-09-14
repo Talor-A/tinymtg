@@ -684,7 +684,6 @@ const REMEMBERED_ZONE_CHANGE_SLOT = "remembered-zone-change-object";
 /** The old library object chosen by a search, before its following movement. */
 const SEARCHED_LIBRARY_SLOT = "searched-library-card";
 
-
 /**
  * A targeting effect and its ability's `ValidTgts$` have to agree, or the
  * engine would resolve an effect against a target nobody checked.
@@ -1275,6 +1274,24 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				{
 					kind: api,
 					subject: { kind: "target", slot: TARGET_SLOT },
+				},
+			]);
+		}
+		case "tapall": {
+			const badParams = claim("validcards");
+			if (!badParams.ok) return badParams;
+			const validCards = getForgeParam(params, "ValidCards");
+			const predicate = validCards ? parseSelector(validCards) : null;
+			if (!predicate)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"TapAll requires a supported ValidCards$ predicate",
+					where,
+				);
+			return ok([
+				{
+					kind: "tap",
+					subjects: { kind: "matching-permanents", predicate },
 				},
 			]);
 		}

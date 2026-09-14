@@ -2329,11 +2329,7 @@ describe("forge-import runtime: activated abilities", () => {
 			expect(state.players[ALICE].library[0]).toBe(scried);
 			expect(state.players[ALICE].library.at(-1)).toBe(deeper);
 
-			engine.perform(
-				state,
-				{ kind: "untap", ref: { kind: "object", object: temple } },
-				agents,
-			);
+			engine.perform(state, { kind: "untap", objects: [temple] }, agents);
 			expect(permanent(state, temple).tapped).toBe(false);
 
 			engine.executeAbilityAction(
@@ -2388,11 +2384,7 @@ describe("forge-import runtime: activated abilities", () => {
 		).toContain("Forest");
 		expect(permanent(state, farm).tapped).toBe(true);
 
-		engine.perform(
-			state,
-			{ kind: "untap", ref: { kind: "object", object: farm } },
-			agents,
-		);
+		engine.perform(state, { kind: "untap", objects: [farm] }, agents);
 		engine.executeAbilityAction(
 			state,
 			ALICE,

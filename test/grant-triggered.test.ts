@@ -159,7 +159,7 @@ describe("temporary triggered-ability grants", () => {
 
 		engine.perform(
 			state,
-			{ kind: "tap", ref: { kind: "object", object: creature.id } },
+			{ kind: "tap", objects: [creature.id] },
 			passingAgents(),
 		);
 		expect(state.pendingTriggers.map((trigger) => trigger.triggerId)).toEqual([

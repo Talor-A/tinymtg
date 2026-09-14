@@ -126,7 +126,7 @@ const TEST_CARD_4 = defineCard({
 			text: "If a permanent would become tapped, its controller loses 1 life instead.",
 			layer: "other",
 			functionsFrom: "any",
-			applies: (event) => event.kind === "tap" && event.ref.kind === "object",
+			applies: (event) => event.kind === "tap" && event.objects.length === 1,
 			replace: (_event, context) => [
 				{ kind: "lose life", player: context.controller, amount: 1 },
 			],
@@ -147,8 +147,10 @@ const TEST_CARD_5 = defineCard({
 			layer: "other",
 			functionsFrom: "any",
 			applies: (event, context) => {
-				if (event.kind !== "tap" || event.ref.kind !== "object") return false;
-				const object = context.state.objects.get(event.ref.object);
+				if (event.kind !== "tap" || event.objects.length !== 1) return false;
+				const objectId = event.objects[0];
+				if (objectId === undefined) return false;
+				const object = context.state.objects.get(objectId);
 				return (
 					object?.kind === "permanent" &&
 					object.representation.kind === "card" &&
@@ -173,8 +175,10 @@ const TEST_CARD_6 = defineCard({
 			layer: "other",
 			functionsFrom: "any",
 			applies: (event, context) => {
-				if (event.kind !== "tap" || event.ref.kind !== "object") return false;
-				const object = context.state.objects.get(event.ref.object);
+				if (event.kind !== "tap" || event.objects.length !== 1) return false;
+				const objectId = event.objects[0];
+				if (objectId === undefined) return false;
+				const object = context.state.objects.get(objectId);
 				return (
 					object?.kind === "permanent" &&
 					object.representation.kind === "card" &&

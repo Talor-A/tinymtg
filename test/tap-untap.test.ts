@@ -14,7 +14,12 @@ import {
 	permanent,
 	turnLocation,
 } from "../index.ts";
-import { beginFirstTurn, completePreGame } from "./utils/engine-helpers.ts";
+import {
+	beginFirstTurn,
+	completePreGame,
+	expectScriptConsumed,
+	setupMain,
+} from "./utils/engine-helpers.ts";
 
 const ALICE = 0 as PlayerId;
 const BOB = 1 as PlayerId;
@@ -135,7 +140,7 @@ const BULK_TAP_REPLACEMENTS = (
 				label: id,
 				text: `${name} replaces bulk tap events.`,
 				layer: "other",
-				applies: (event) => event.kind === "tap" && event.ref.kind === "all",
+				applies: (event) => event.kind === "tap",
 				replace: (event) => [event],
 			},
 		],
@@ -156,6 +161,42 @@ const passingAgents: [ScriptedAgent, ScriptedAgent] = [
 ];
 
 describe("tap and untap occurrences", () => {
+	test("a plural effect selects its permanents after responses resolve", () => {
+		const state = setupMain(engine);
+		const metalFatigue = engine.spawnCard(
+			state,
+			"metal-fatigue",
+			ALICE,
+			"hand",
+		);
+		const sentinel = engine.spawnCard(state, "darksteel-sentinel", BOB, "hand");
+		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		state.players[ALICE].manaPool.w = 1;
+		state.players[ALICE].manaPool.c = 2;
+		state.players[BOB].manaPool.c = 6;
+
+		const alice = new ScriptedAgent(
+			[],
+			[],
+			[{ kind: "cast", card: metalFatigue.id }],
+		);
+		const bob = new ScriptedAgent(
+			[],
+			[],
+			[{ kind: "cast", card: sentinel.id }],
+		);
+		engine.settlePriority(state, [alice, bob]);
+
+		expectScriptConsumed(alice);
+		expectScriptConsumed(bob);
+		const flashed = state.battlefield.find(
+			(id) => engine.name(state, id) === "Darksteel Sentinel",
+		);
+		if (flashed === undefined) throw new Error("sentinel did not resolve");
+		expect(permanent(state, flashed).tapped).toBe(true);
+		expect(permanent(state, bears.id).tapped).toBe(false);
+	});
+
 	test("single-object events occur and trigger only for actual transitions", () => {
 		const state = engine.newGame();
 		// The trigger reaches the stack through a priority window, which only
@@ -165,7 +206,7 @@ describe("tap and untap occurrences", () => {
 
 		const tap = engine.perform(
 			state,
-			{ kind: "tap", ref: { kind: "object", object: observer.id } },
+			{ kind: "tap", objects: [observer.id] },
 			passingAgents,
 		);
 		expect(tap.executed).toHaveLength(1);
@@ -178,7 +219,7 @@ describe("tap and untap occurrences", () => {
 
 		const untap = engine.perform(
 			state,
-			{ kind: "untap", ref: { kind: "object", object: observer.id } },
+			{ kind: "untap", objects: [observer.id] },
 			passingAgents,
 		);
 		expect(untap.executed).toHaveLength(1);
@@ -199,14 +240,14 @@ describe("tap and untap occurrences", () => {
 		expect(
 			engine.perform(
 				state,
-				{ kind: "tap", ref: { kind: "object", object: tapped.id } },
+				{ kind: "tap", objects: [tapped.id] },
 				passingAgents,
 			).executed,
 		).toEqual([]);
 		expect(
 			engine.perform(
 				state,
-				{ kind: "untap", ref: { kind: "object", object: untapped.id } },
+				{ kind: "untap", objects: [untapped.id] },
 				passingAgents,
 			).executed,
 		).toEqual([]);
@@ -224,7 +265,7 @@ describe("tap and untap occurrences", () => {
 
 		const result = engine.perform(
 			state,
-			{ kind: "tap", ref: { kind: "all", player: ALICE } },
+			{ kind: "tap", objects: [...state.battlefield] },
 			passingAgents,
 		);
 
@@ -246,7 +287,7 @@ describe("tap and untap occurrences", () => {
 
 		const result = engine.perform(
 			state,
-			{ kind: "tap", ref: { kind: "all", player: ALICE } },
+			{ kind: "tap", objects: [...state.battlefield] },
 			passingAgents,
 		);
 
@@ -260,7 +301,7 @@ describe("tap and untap occurrences", () => {
 		beginFirstTurn(engine, state, passingAgents);
 		engine.spawnPermanent(state, "test-bulk-tap-replacement-a", ALICE);
 		engine.spawnPermanent(state, "test-bulk-tap-replacement-b", ALICE);
-		engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
 		const requests: ChoiceRequest[] = [];
 		const unexpected: SyncAgent = {
 			choose: () => {
@@ -276,7 +317,7 @@ describe("tap and untap occurrences", () => {
 			},
 		};
 
-		engine.perform(state, { kind: "tap", ref: { kind: "all", player: BOB } }, [
+		engine.perform(state, { kind: "tap", objects: [bears.id] }, [
 			unexpected,
 			affected,
 		]);

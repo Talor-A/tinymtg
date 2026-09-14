@@ -115,6 +115,7 @@ such as Sleight of Hand, Impulse, and Stock Up, which put a card-defined
 number into hand (defaulting Forge's omitted `ChangeNum$` to one) and order the
 rest on the bottom; the unmodified `Investigate` effect, which creates one
 canonical Clue token for the ability's controller; damage, destroy, counter,
+predicate-selected `TapAll` effects such as Metal Fatigue,
 one-permanent sacrifice for a relative or targeted player, targeted or
 self-directed fixed counter placement (including Forge's omitted `Defined$`
 default for a nontargeted permanent ability), and one-object zone changes from
@@ -167,7 +168,7 @@ domain: for example, `not creature` over permanents can match a land, but it
 cannot introduce a player, spell, or card in another zone.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 4,298 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 4,304 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
@@ -265,6 +266,11 @@ Plural effects use `subjects` and represent one game instruction. For example,
 Vision Skeins lowers to one draw effect with `subjects: "each-player"`. It does
 not lower to separate controller and opponent effects. The resolver applies
 that instruction in active-player, then nonactive-player order (CR 121.2c).
+Plural permanent subjects retain their battlefield predicate until resolution,
+then snapshot every matching current permanent into one concrete event. Thus a
+matching permanent created while a spell such as Metal Fatigue is waiting on
+the stack is included, while one that appears after the instruction resolves is
+not.
 
 ### Targeting
 

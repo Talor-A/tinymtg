@@ -390,6 +390,7 @@ Blighted Fen
 Blighted Gorge
 Blighted Shaman
 Blind Phantasm
+Blinding Light
 Blinding Mage
 Blinking Spirit
 Blinkmoth Well
@@ -2296,6 +2297,7 @@ Mesa Cavalier
 Mesa Enchantress
 Mesa Unicorn
 Messenger Drake
+Metal Fatigue
 Metallic Sliver
 Metalspinner's Puzzleknot
 Meteor Golem
@@ -2958,6 +2960,7 @@ Ringwarden Owl
 Riot Devils
 Rip-Clan Crasher
 Ripchain Razorkin
+Riptide
 Riptide Crab
 Riptide Turtle
 Rise Again
@@ -2975,6 +2978,7 @@ River Hoopoe
 River Kaijin
 Riverwheel Aerialists
 Roaring Primadox
+Roaring Slagwurm
 Robot Chicken
 Roc Egg
 Roc Hunter
@@ -3282,6 +3286,7 @@ Silent Observer
 Silicate Surveyor
 Silk Net
 Silkwing Scout
+Silt Crawler
 Silver Drake
 Silver Erne
 Silver Myr
@@ -3567,6 +3572,7 @@ Stronghold Taskmaster
 Student of Ojutai
 Study
 Stunt Double
+Subjugator Angel
 Submerged Boneyard
 Subterranean Cavern
 Suburban Sanctuary
@@ -4301,4 +4307,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4298`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4304`;

@@ -798,15 +798,8 @@ interface AddManaEvent extends EventCommon {
 
 interface TapEvent extends EventCommon {
 	kind: "tap" | "untap";
-	ref:
-		| {
-				kind: "object";
-				object: ObjectId;
-		  }
-		| {
-				kind: "all";
-				player: PlayerId;
-		  };
+	/** The complete set of permanents instructed to change state together. */
+	objects: ObjectId[];
 }
 
 interface BeginTurnEvent extends EventCommon {
@@ -2160,6 +2153,12 @@ export interface ChosenPermanentEffectRef<Player extends TriggerEffectPlayer> {
 	prompt: string;
 }
 
+/** Every battlefield permanent matching this predicate as the effect resolves. */
+export interface MatchingPermanentSubjects {
+	kind: "matching-permanents";
+	predicate: ObjectPredicateDef;
+}
+
 export type MayPlaySubjectRef = TargetEffectRef | EffectResultObjectRef;
 
 export type EffectPlayerSubject<AllowedPlayer extends TriggerEffectPlayer> =
@@ -2309,6 +2308,7 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	  }
 	| { kind: "destroy"; subject: TargetEffectRef }
 	| { kind: "tap" | "untap"; subject: TargetEffectRef }
+	| { kind: "tap" | "untap"; subjects: MatchingPermanentSubjects }
 	| { kind: "counter"; subject: TargetEffectRef }
 	| {
 			kind: "add counters";
@@ -2371,7 +2371,7 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 			kind: "may";
 			decider: RelativeEffectPlayer;
 			effects: EffectDef<AllowedPlayer>[];
-		  };
+	  };
 
 interface DeclaredEffectResult {
 	slot: string;
@@ -2636,7 +2636,16 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 	switch (effect.kind) {
 		case "damage":
 			return effect.subject.kind === "target"
-				? [{ slot: effect.subject.slot, required: { kind: "damage-recipient", message: "damage requires a player, permanent, or any-target selector" } }]
+				? [
+						{
+							slot: effect.subject.slot,
+							required: {
+								kind: "damage-recipient",
+								message:
+									"damage requires a player, permanent, or any-target selector",
+							},
+						},
+					]
 				: [];
 		case "gain-life":
 		case "lose-life":
@@ -2647,27 +2656,57 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 		case "exile-top":
 		case "sacrifice":
 			return effect.subject.kind === "target-player"
-				? [{ slot: effect.subject.slot, required: { kind: "player", message: "a targeted player effect requires a player target" } }]
+				? [
+						{
+							slot: effect.subject.slot,
+							required: {
+								kind: "player",
+								message: "a targeted player effect requires a player target",
+							},
+						},
+					]
 				: [];
 		case "destroy":
+		case "counter":
+			return [
+				{
+					slot: effect.subject.slot,
+					required: {
+						kind: effect.kind === "counter" ? "spell" : "permanent",
+						message:
+							effect.kind === "counter"
+								? "counter requires a spell target"
+								: `${effect.kind} requires a permanent target`,
+					},
+				},
+			];
 		case "tap":
 		case "untap":
-		case "counter":
-			return [{
-				slot: effect.subject.slot,
-				required: {
-					kind: effect.kind === "counter" ? "spell" : "permanent",
-					message: effect.kind === "counter"
-						? "counter requires a spell target"
-						: `${effect.kind} requires a permanent target`,
-				},
-			}];
+			return "subject" in effect
+				? [
+						{
+							slot: effect.subject.slot,
+							required: {
+								kind: "permanent",
+								message: `${effect.kind} requires a permanent target`,
+							},
+						},
+					]
+				: [];
 		case "modify-pt":
 		case "grant-keyword":
 		case "grant-triggered":
 		case "add counters":
 			return effect.subject.kind === "target"
-				? [{ slot: effect.subject.slot, required: { kind: "permanent", message: `${effect.kind} requires a permanent target` } }]
+				? [
+						{
+							slot: effect.subject.slot,
+							required: {
+								kind: "permanent",
+								message: `${effect.kind} requires a permanent target`,
+							},
+						},
+					]
 				: [];
 		case "change-zone":
 			if (effect.subject.kind !== "target") return [];
@@ -2675,31 +2714,76 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 				effect.from !== "library",
 				"a targeted card change-zone effect must use a public origin",
 			);
-			return [{
-				slot: effect.subject.slot,
-				required: effect.from === "battlefield"
-					? { kind: "permanent", message: "a battlefield change-zone effect requires a permanent target" }
-					: { kind: "card", zone: effect.from, message: "a card change-zone effect requires a target in its origin" },
-			}];
+			return [
+				{
+					slot: effect.subject.slot,
+					required:
+						effect.from === "battlefield"
+							? {
+									kind: "permanent",
+									message:
+										"a battlefield change-zone effect requires a permanent target",
+								}
+							: {
+									kind: "card",
+									zone: effect.from,
+									message:
+										"a card change-zone effect requires a target in its origin",
+								},
+				},
+			];
 		case "may-play":
 			return effect.subject.kind === "target"
-				? [{ slot: effect.subject.slot, required: { kind: "card", zone: effect.from, message: "temporary play permission requires a card target in its origin" } }]
+				? [
+						{
+							slot: effect.subject.slot,
+							required: {
+								kind: "card",
+								zone: effect.from,
+								message:
+									"temporary play permission requires a card target in its origin",
+							},
+						},
+					]
 				: [];
 		case "search-library": {
 			const uses: EffectTargetUse[] = [];
 			for (const subject of [effect.searcher, effect.owner]) {
 				if (subject.kind !== "target-player") continue;
-				uses.push({ slot: subject.slot, required: { kind: "player", message: "library search requires a player target" } });
+				uses.push({
+					slot: subject.slot,
+					required: {
+						kind: "player",
+						message: "library search requires a player target",
+					},
+				});
 			}
 			return uses;
 		}
 		case "shuffle-library":
 			return effect.subject.kind === "target-player"
-				? [{ slot: effect.subject.slot, required: { kind: "player", message: "library shuffle requires a player target" } }]
+				? [
+						{
+							slot: effect.subject.slot,
+							required: {
+								kind: "player",
+								message: "library shuffle requires a player target",
+							},
+						},
+					]
 				: [];
 		case "shuffle-into-library":
-			return effect.owners !== "each-player" && effect.owners.kind === "target-player"
-				? [{ slot: effect.owners.slot, required: { kind: "player", message: "library shuffle requires a player target" } }]
+			return effect.owners !== "each-player" &&
+				effect.owners.kind === "target-player"
+				? [
+						{
+							slot: effect.owners.slot,
+							required: {
+								kind: "player",
+								message: "library shuffle requires a player target",
+							},
+						},
+					]
 				: [];
 		case "each player draw":
 		case "create-delayed-trigger":
@@ -2718,7 +2802,11 @@ export function targetSelectorSatisfies(
 	requirement: TargetRequirement,
 ): boolean {
 	if (requirement.kind === "damage-recipient")
-		return selector.kind === "player" || selector.kind === "permanent" || selector.kind === "any-target";
+		return (
+			selector.kind === "player" ||
+			selector.kind === "permanent" ||
+			selector.kind === "any-target"
+		);
 	if (requirement.kind === "card")
 		return selector.kind === "card" && selector.zone === requirement.zone;
 	return selector.kind === requirement.kind;
@@ -4916,9 +5004,16 @@ export function affectedPlayer(
 		case "regenerate":
 			return affectedObjectPlayer(state, ev.object);
 		case "tap":
-		case "untap":
-			if (ev.ref.kind === "all") return ev.ref.player;
-			return affectedObjectPlayer(state, ev.ref.object);
+		case "untap": {
+			const first = ev.objects[0];
+			assertDefined(first, `${ev.kind} event has no affected permanent`);
+			const player = affectedObjectPlayer(state, first);
+			assert(
+				ev.objects.every((id) => affectedObjectPlayer(state, id) === player),
+				`replacement ordering for a ${ev.kind} event affecting multiple players is not implemented`,
+			);
+			return player;
+		}
 
 		case "add counters":
 		case "remove counters":
@@ -5090,10 +5185,11 @@ function resolveReplacements(
 
 		const tiered = candidates.filter((c) => c.def.layer === tier);
 
-		const chooser = affectedPlayer(read.state, current);
+		const chooser =
+			tiered.length === 1 ? null : affectedPlayer(read.state, current);
 
 		const chosen =
-			tiered.length === 1
+			chooser === null
 				? tiered[0]
 				: /**
 					 * 616.1. If two or more replacement and/or prevention effects are attempting
@@ -5119,7 +5215,7 @@ function resolveReplacements(
 		log(
 			read.state as GameState,
 			`  [replace] ${chosen.label}` +
-				(tiered.length > 1 ? ` (P${chooser} chose from ${tiered.length})` : ""),
+				(chooser === null ? "" : ` (P${chooser} chose from ${tiered.length})`),
 		);
 
 		// A single same-kind result is a *modification*: keep iterating on it so
@@ -5384,11 +5480,10 @@ function describeEvent(
 				.filter(Boolean)
 				.join(" ")})`;
 		case "tap":
-			if (ev.ref.kind === "all") return `tap(all P${ev.ref.player})`;
-			return `tap(${name(engine, state, ev.ref.object)})`;
 		case "untap":
-			if (ev.ref.kind === "all") return `untap(all P${ev.ref.player})`;
-			return `untap(${name(engine, state, ev.ref.object)})`;
+			return `${ev.kind}(${ev.objects
+				.map((id) => `${name(engine, state, id)}#${id}`)
+				.join(", ")})`;
 		case "begin turn":
 			return `beginTurn(P${ev.player}, #${ev.turnId}${ev.isExtra ? ", extra" : ""})`;
 		case "begin step":
@@ -6542,22 +6637,20 @@ function executeIn(
 		case "tap":
 		case "untap": {
 			const tapped = ev.kind === "tap";
-			if (ev.ref.kind === "all") {
-				const p = state.players[ev.ref.player];
-				for (const o of permanentsInPlay(state).filter(
-					(o) => o.controller === p.id,
-				)) {
-					if (o.tapped === tapped) continue;
-					o.tapped = tapped;
-					changed.push(o.id);
-				}
-				if (changed.length === 0) happened = false;
-			} else {
-				const o = maybePermanent(state, ev.ref.object);
-				if (!o || o.tapped === tapped) {
-					happened = false;
-					break;
-				}
+			assert(
+				new Set(ev.objects).size === ev.objects.length,
+				`${ev.kind} event contains duplicate permanents`,
+			);
+			const transitions = ev.objects.flatMap((id) => {
+				const object = maybePermanent(state, id);
+				return object && object.tapped !== tapped ? [object] : [];
+			});
+			if (transitions.length === 0) {
+				happened = false;
+				break;
+			}
+			// The complete transition set is determined before any permanent changes.
+			for (const o of transitions) {
 				o.tapped = tapped;
 				changed.push(o.id);
 			}
@@ -7654,6 +7747,32 @@ function resolveEffects(
 			}
 			continue;
 		}
+		if (
+			(effect.kind === "tap" || effect.kind === "untap") &&
+			"subjects" in effect
+		) {
+			assert(effect.subjects.kind === "matching-permanents");
+			const read = createReadContext(engine, state);
+			const subjects = state.battlefield.filter((id) => {
+				const object = getSnapshot(read, id);
+				assert(object.kind === "permanent");
+				return objectMatchesPredicate(effect.subjects.predicate, object, {
+					controller: item.controller,
+					source: item.source,
+				});
+			});
+			if (subjects.length > 0) {
+				performIn(
+					engine,
+					state,
+					{ kind: effect.kind, objects: subjects },
+					choices,
+					scope,
+					0,
+				);
+			}
+			continue;
+		}
 		if (effect.kind === "create-delayed-trigger") {
 			// Capture the source now. The delayed ability can trigger and resolve
 			// after the original object has left every zone where it functioned.
@@ -8247,13 +8366,14 @@ function effectToEvent(
 			};
 		case "tap":
 		case "untap":
+			assert("subject" in effect, `${effect.kind} set resolves directly`);
 			assert(
 				subject !== null && subject.type === "permanent",
 				`${effect.kind} requires a bound permanent target`,
 			);
 			return {
 				kind: effect.kind,
-				ref: { kind: "object", object: subject.id },
+				objects: [subject.id],
 			};
 		case "counter":
 			assert(
@@ -9458,7 +9578,7 @@ function activateAbilityIn(
 			const tapPayment = performIn(
 				engine,
 				state,
-				{ kind: "tap", ref: { kind: "object", object: object.id } },
+				{ kind: "tap", objects: [object.id] },
 				choices,
 				scope,
 				0,
@@ -9467,8 +9587,8 @@ function activateAbilityIn(
 				!tapPayment.executed.some(
 					(event) =>
 						event.kind === "tap" &&
-						event.ref.kind === "object" &&
-						event.ref.object === object.id,
+						event.objects.length === 1 &&
+						event.objects[0] === object.id,
 				)
 			) {
 				throw new IllegalAbilityActivationError(
@@ -10088,19 +10208,24 @@ function performTurnBasedActions(
 	active: PlayerId,
 ): void {
 	switch (step.kind) {
-		case "untap":
+		case "untap": {
+			const objects = state.battlefield.filter(
+				(id) => maybePermanent(state, id)?.controller === active,
+			);
+			if (objects.length === 0) break;
 			performIn(
 				engine,
 				state,
 				{
 					kind: "untap",
-					ref: { kind: "all", player: active },
+					objects,
 				},
 				choices,
 				newScope(),
 				0,
 			);
 			break;
+		}
 		case "draw":
 			state.players[active].stats.drawn.inDrawStep = 0;
 			performIn(
