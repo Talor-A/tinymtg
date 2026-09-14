@@ -121,6 +121,7 @@ const RUNTIME_CARDS = [
 	loadRuntimeFixture("l/lorescale_coatl", "rt-lorescale-coatl"),
 	loadRuntimeFixture("u/underworld_dreams", "rt-underworld-dreams"),
 	loadRuntimeFixture("r/rummaging_goblin", "rt-rummaging-goblin"),
+	loadRuntimeFixture("t/traveling_minister", "rt-traveling-minister"),
 	loadRuntimeFixture("b/black_lotus", "rt-black-lotus"),
 	loadRuntimeFixture("w/wrenns_resolve", "rt-wrenns-resolve"),
 	loadRuntimeFixture("c/cloudshift", "rt-cloudshift"),
@@ -1875,6 +1876,106 @@ describe("forge-import runtime: spell effects", () => {
 });
 
 describe("forge-import runtime: activated abilities", () => {
+	test("Traveling Minister can be activated only during its controller's main phase with an empty stack", () => {
+		const ability = abilityId("activated", "rt-traveling-minister", 0);
+		const actionFor = (source: ObjectId) => ({
+			kind: "activate ability" as const,
+			source,
+			ability,
+		});
+
+		const upkeep = engine.newGame();
+		stockLibraries(upkeep);
+		beginFirstTurn(engine, upkeep, passingAgents());
+		const upkeepMinister = engine.spawnPermanent(
+			upkeep,
+			"rt-traveling-minister",
+			ALICE,
+			{ summoningSick: false },
+		);
+		expect(engine.getObservableActions(upkeep, ALICE)).not.toContainEqual(
+			actionFor(upkeepMinister.id),
+		);
+		expect(() =>
+			engine.executeAbilityAction(
+				upkeep,
+				ALICE,
+				actionFor(upkeepMinister.id),
+				passingAgents(),
+			),
+		).toThrow("only as a sorcery");
+		expect(permanent(upkeep, upkeepMinister.id).tapped).toBe(false);
+
+		const main = setupMain(engine);
+		const mainMinister = engine.spawnPermanent(
+			main,
+			"rt-traveling-minister",
+			ALICE,
+			{ summoningSick: false },
+		);
+		expect(engine.getObservableActions(main, ALICE)).toContainEqual(
+			actionFor(mainMinister.id),
+		);
+		engine.executeAbilityAction(
+			main,
+			ALICE,
+			actionFor(mainMinister.id),
+			passingAgents(),
+		);
+		expect(permanent(main, mainMinister.id).tapped).toBe(true);
+		expect(main.stack).toHaveLength(1);
+
+		const nonactive = setupMain(engine);
+		const bobsMinister = engine.spawnPermanent(
+			nonactive,
+			"rt-traveling-minister",
+			BOB,
+			{ summoningSick: false },
+		);
+		expect(engine.getObservableActions(nonactive, BOB)).not.toContainEqual(
+			actionFor(bobsMinister.id),
+		);
+		expect(() =>
+			engine.executeAbilityAction(
+				nonactive,
+				BOB,
+				actionFor(bobsMinister.id),
+				passingAgents(),
+			),
+		).toThrow("only as a sorcery");
+
+		const stacked = setupMain(engine);
+		const stackedMinister = engine.spawnPermanent(
+			stacked,
+			"rt-traveling-minister",
+			ALICE,
+			{ summoningSick: false },
+		);
+		const bears = engine.spawnCard(stacked, "grizzly-bears", BOB, "hand");
+		engine.perform(
+			stacked,
+			{
+				kind: "change zone",
+				object: bears.id,
+				from: "hand",
+				destination: { zone: "stack", controller: BOB, targets: [] },
+				cause: "cast",
+			},
+			passingAgents(),
+		);
+		expect(engine.getObservableActions(stacked, ALICE)).not.toContainEqual(
+			actionFor(stackedMinister.id),
+		);
+		expect(() =>
+			engine.executeAbilityAction(
+				stacked,
+				ALICE,
+				actionFor(stackedMinister.id),
+				passingAgents(),
+			),
+		).toThrow("only as a sorcery");
+	});
+
 	test("Giant Caterpillar survives its source sacrifice as a delayed end-step trigger", () => {
 		const state = setupMain(engine);
 		const agents = passingAgents();

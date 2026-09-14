@@ -56,6 +56,7 @@ Aesthir Glider
 Aether Adept
 Aether Spellbomb
 Aether Sting
+Aetherjacket
 Affa Guard Hound
 Affa Protector
 Aftershock
@@ -298,6 +299,7 @@ Bartizan Bats
 Bartolomé del Presidio
 Basal Thrull
 Basilica Bell-Haunt
+Basilica Skullbomb
 Bastion Enforcer
 Bastion Mastodon
 Bastion of Remembrance
@@ -386,6 +388,7 @@ Bloodflow Connoisseur
 Bloodgift Demon
 Bloodhunter Bat
 Bloodlust Inciter
+Bloodpyre Elemental
 Bloodrage Brawler
 Bloodrite Invoker
 Bloodstone Cameo
@@ -416,6 +419,7 @@ Bonded Fetch
 Bone Splinters
 Bone to Ash
 Bonebreaker Giant
+Bonecaller Cleric
 Boomerang
 Boomerang, Blade Flinger
 Border Guard
@@ -441,6 +445,7 @@ Bramble Creeper
 Bramblecrush
 Brambleweft Behemoth
 Brass Secretary
+Brave-Kin Duo
 Brazen Freebooter
 Brazen Scourge
 Brazen Wolves
@@ -463,6 +468,7 @@ Bronze Sable
 Bronze Walrus
 Bronzebeak Moa
 Brood Weaver
+Broodheart Engine
 Broodhunter Wurm
 Broodmate Dragon
 Brotherhood Patriarch
@@ -472,6 +478,7 @@ Brute Strength
 Bull Cerodon
 Bull Rush
 Bulwark Giant
+Bumbleflower's Sharepot
 Burglar Rat
 Buried Ruin
 Burlfist Oak
@@ -512,6 +519,7 @@ Captain Storm, Cosmium Raider
 Captain of Umbar
 Captain's Call
 Captain's Defense
+Captivating Cave
 Captivating Unicorn
 Captive Flame
 Caravan Hurda
@@ -540,6 +548,7 @@ Cathedral Sanctifier
 Cauldron Familiar
 Caustic Caterpillar
 Caustic Rain
+Cave of Temptation
 Cavern Thoctar
 Celebrity Fencer
 Celestial Prism
@@ -684,6 +693,7 @@ Cowl Prowler
 Crack Open
 Crackling Cyclops
 Crackling Triton
+Cradle of the Accursed
 Crash of Rhinos
 Crash the Ramparts
 Craterize
@@ -713,6 +723,7 @@ Cruel Truths
 Cruel Witness
 Crumbling Necropolis
 Crush
+Crustacean Commando
 Crypt Creeper
 Crypt Ripper
 Crypt of the Eternals
@@ -807,6 +818,7 @@ Deepwood Drummer
 Defense Force Aggressor
 Defiant Elf
 Defiant Khenra
+Defiant Salvager
 Defiant Strike
 Deliberate
 Delighted Killbot
@@ -930,6 +942,7 @@ Dross Crocodile
 Dross Hopper
 Dross Ripper
 Dross Scorpion
+Dross Skullbomb
 Drossforge Bridge
 Drown in Shapelessness
 Drowned Rusalka
@@ -1308,6 +1321,7 @@ Geist of the Archives
 Geist of the Moors
 Generous Stray
 Generous Visitor
+Genghis Frog
 Geothermal Bog
 Geothermal Crevice
 Gerrard's Irregulars
@@ -1452,6 +1466,7 @@ Greenside Watcher
 Greenweaver Druid
 Greenwood Sentinel
 Grendel, Spawn of Knull
+Greta, Sweettooth Scourge
 Grey Havens Navigator
 Griffin Dreamfinder
 Griffin Protector
@@ -1678,6 +1693,7 @@ Imperial Oath
 Imperial Outrider
 Imperious Inkmage
 Implement of Examination
+Implement of Ferocity
 Implement of Improvement
 Implements of Sacrifice
 Implode
@@ -1706,6 +1722,7 @@ Inkrise Infiltrator
 Inner-Chamber Guard
 Inordinate Rage
 Insatiable Harpy
+Inside Source
 Insight
 Insomnia, Crown City
 Inspiration
@@ -1715,6 +1732,7 @@ Inspiring Overseer
 Inspiring Veteran
 Instant Ramen
 Intrepid Provisioner
+Intrepid Tenderfoot
 Introduction to Prophecy
 Intruding Soulrager
 Invasion Reinforcements
@@ -2034,6 +2052,7 @@ Malakir Cullblade
 Malamet Brawler
 Malcator's Watcher
 Malevolent Awakening
+Malevolent Chandelier
 Malevolent Noble
 Mammoth Spider
 Man-o'-War
@@ -2070,6 +2089,7 @@ Masterwork of Ingenuity
 Mausoleum Guard
 Maw of the Mire
 Mawcor
+Maze Skullbomb
 Meandering River
 Meditation Pools
 Megatog
@@ -2123,6 +2143,7 @@ Minotaur Abomination
 Minotaur Skullcleaver
 Minotaur Warrior
 Mintstrosity
+Mire Shade
 Mire Triton
 Mire in Misery
 Mirkwood Spider
@@ -2209,6 +2230,7 @@ Murmuring Mystic
 Murmuring Phantasm
 Muse Drake
 Muse's Encouragement
+Mushroom Watchdogs
 Mutant Town
 Mutant Town Musicians
 Myr Scrapling
@@ -2261,6 +2283,7 @@ Neurok Replica
 New Benalia
 Nexus Wardens
 Nezumi Informant
+Nezumi Linkbreaker
 Nezumi Ronin
 Nezumi Shadow-Watcher
 Niblis of Dusk
@@ -2294,6 +2317,7 @@ Norwood Ranger
 Not on My Watch
 Notion Rain
 Nourish
+Novice Dissector
 Novice Inspector
 Novice Occultist
 Noxious Grasp
@@ -2359,6 +2383,7 @@ Onslaught
 Onulet
 Onyx Goblet
 Onyx Mage
+Ooze Spill
 Opaline Unicorn
 Open Fire
 Opportunity
@@ -2459,6 +2484,7 @@ Pierce Strider
 Piercing Light
 Piggy Bank
 Pilfered Plans
+Pillardrop Warden
 Pillarfield Ox
 Pious Wayfarer
 Piranha Fly
@@ -2498,6 +2524,7 @@ Preening Champion
 Preordain
 Prescient Chimera
 Pressure Point
+Prickly Pair
 Prideful Parent
 Priest of Ancient Lore
 Priest of Iroas
@@ -2558,6 +2585,7 @@ Quiet Purity
 Quilled Slagwurm
 Quirion Dryad
 Rabanastre, Royal City
+Raccoon Rallier
 Racers' Ring
 Radiant Fountain
 Radiant Grove
@@ -2880,6 +2908,7 @@ Seat of the Synod
 Second Thoughts
 Secret Passage
 Sedge Scorpion
+Seedship Broodtender
 Seeker of Skybreak
 Seeker of the Way
 Seer of the Last Tomorrow
@@ -3073,6 +3102,7 @@ Slumbering Waterways
 Smash
 Smelt
 Smoldering Efreet
+Smoldering Tar
 Snake Pit
 Snapping Creeper
 Snapping Drake
@@ -3183,6 +3213,7 @@ Stark Industries
 Stark Industries Executive
 Starlight Invoker
 Starlit Angel
+Starnheim Memento
 Starved Rusalka
 Staunch Defenders
 Staunch Shieldmate
@@ -3227,6 +3258,7 @@ Storm Shaman
 Storm Spirit
 Stormcaller of Keranos
 Stormchaser Mage
+Stormclaw Rager
 Stormcloud Spirit
 Stormfront Pegasus
 Stormrider Spirit
@@ -3264,6 +3296,7 @@ Sultai Banner
 Sultai Skullkeeper
 Summit Prowler
 Summit Sentinel
+Summoned Dromedary
 Summoner's Bane
 Sun Sentinel
 Sun-Blessed Peak
@@ -3288,6 +3321,7 @@ Supply Drop
 Supply-Line Cranes
 Supreme Phantom
 Surge of Righteousness
+Surgical Skullbomb
 Surveillance Room
 Survey the Wreckage
 Survive the Night
@@ -3498,7 +3532,9 @@ Tranquil Cove
 Tranquil Expanse
 Transdimensional Bovine
 Transluminant
+Transmogrant Altar
 Trash for Treasure
+Traveling Minister
 Traveling Philosopher
 Tread Upon
 Treasure Hunter
@@ -3507,6 +3543,7 @@ Tree Monkey
 Tree of Tales
 Treetop Freedom Fighters
 Treetop Recluse
+Treetop Snarespinner
 Treetop Warden
 Trench Wurm
 Trenching Steed
@@ -3605,6 +3642,7 @@ Utopia Tree
 Utter End
 Valakut Invoker
 Valakut Predator
+Valgavoth's Faithful
 Valiant Guard
 Valkyrior Skyrider
 Valley Mightcaller
@@ -3704,6 +3742,7 @@ Volrath's Stronghold
 Voltaic Construct
 Voltaic Key
 Volunteer Militia
+Voracious Null
 Voracious Varmint
 Vorstclaw
 Voyage's End
@@ -3742,6 +3781,7 @@ Wander Off
 Wanderer's Intervention
 Wandering Ones
 Wandering Tombshell
+Wanted Griffin
 War Chariot
 War Mammoth
 War Priest of Thune
@@ -3785,6 +3825,7 @@ Welder Automaton
 Weldfast Wingsmith
 Welkin Guide
 Western Paladin
+Westfold Rider
 Wetland Sambar
 Whip Sergeant
 Whiptail Moloch
@@ -3902,6 +3943,7 @@ Zhalfirin Void
 Zof Shade
 Zombie Goliath
 Zombify
+Zookeeper Mechan
 Zuberi, Golden Feather
 Zuko's Offense
 Zuko, Avatar Hunter
@@ -3910,4 +3952,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3907`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3949`;

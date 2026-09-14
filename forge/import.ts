@@ -1136,7 +1136,12 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 	const claim = (...keys: string[]) =>
 		consumeParams(
 			params,
-			new Set([discriminatorLower, ...keys, ...COMMON_EFFECT_PARAMS]),
+			new Set([
+				discriminatorLower,
+				...keys,
+				...COMMON_EFFECT_PARAMS,
+				...(discriminatorLower === "ab" ? ["sorceryspeed"] : []),
+			]),
 			where,
 		);
 	switch (api) {
@@ -2357,7 +2362,15 @@ function lowerNextEndStepDelayedTrigger(
 ): Result<ActivatedEffectDef[], ImportIssue> {
 	const badParams = consumeParams(
 		params,
-		new Set(["ab", "cost", "mode", "phase", "execute", "spelldescription"]),
+		new Set([
+			"ab",
+			"cost",
+			"mode",
+			"phase",
+			"execute",
+			"spelldescription",
+			"sorceryspeed",
+		]),
 		where,
 	);
 	if (!badParams.ok) return badParams;
@@ -3989,6 +4002,7 @@ export function lowerForgeCard(
 		}
 
 		let activationCost: ActivationCost | undefined;
+		let restrictions: { asSorcery: true } | undefined;
 		if (disc.token === "AB") {
 			const parsedCost = parseActivationCost(
 				getForgeParam(params, "Cost"),
@@ -3996,6 +4010,20 @@ export function lowerForgeCard(
 			);
 			if (!parsedCost.ok) return reject(parsedCost);
 			activationCost = parsedCost.value;
+
+			const sorcerySpeed = getForgeParam(params, "SorcerySpeed");
+			if (sorcerySpeed !== undefined) {
+				if (sorcerySpeed !== "True") {
+					return reject(
+						issue(
+							"UNSUPPORTED_PARAMETER",
+							"SorcerySpeed$ must be True",
+							where,
+						),
+					);
+				}
+				restrictions = { asSorcery: true };
+			}
 		}
 
 		if (disc.token === "AB" && disc.api === "delayedtrigger") {
@@ -4023,6 +4051,7 @@ export function lowerForgeCard(
 				id: `activated-${activatedCount}`,
 				text: description,
 				cost: activationCost,
+				...(restrictions ? { restrictions } : {}),
 				targets: [],
 				effects: delayed.value,
 			});
@@ -4288,6 +4317,7 @@ export function lowerForgeCard(
 				text: description,
 				cost: activationCost,
 				...(functionsFrom ? { functionsFrom } : {}),
+				...(restrictions ? { restrictions } : {}),
 				targets,
 				effects: chain.value,
 			});

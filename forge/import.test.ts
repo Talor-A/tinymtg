@@ -82,6 +82,29 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Traveling Minister imports its sorcery-speed activation restriction", () => {
+		const result = importFixture("t/traveling_minister");
+		if (!result.ok) throw new Error("expected Traveling Minister to import");
+		expect(result.card.abilityDefinitions.activated).toMatchObject([
+			{
+				kind: "activated",
+				restrictions: { asSorcery: true },
+			},
+		]);
+	});
+
+	test("SorcerySpeed requires Forge's exact True value", () => {
+		const result = importText(
+			"Name:Bad Timing\nManaCost:W\nTypes:Creature Cleric\nPT:1/1\nA:AB$ GainLife | Cost$ T | LifeAmount$ 1 | SorcerySpeed$ False | SpellDescription$ You gain 1 life.\nOracle:\n",
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_PARAMETER",
+			message: "SorcerySpeed$ must be True",
+		});
+	});
+
 	test.each([
 		["s/soul_warden", "Soul Warden", "w", "Human", "Cleric"],
 		["e/essence_warden", "Essence Warden", "g", "Elf", "Shaman"],

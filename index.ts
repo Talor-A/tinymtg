@@ -2610,6 +2610,9 @@ export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
 	functionsFrom?: [PublicObjectZone];
 	targets: TargetDef[];
 	effects: ActivatedEffectDef[];
+	restrictions?: {
+		asSorcery: true;
+	};
 }
 
 /** A mana ability whose instructions always produce the same mana. */
@@ -8023,9 +8026,16 @@ function doTimingRestrictionsAllowCast(
 	}
 	if (characteristics.keywords.includes("flash")) return true;
 
+	return isSorcerySpeed(state, player);
+}
+
+/** @returns true if "only as a sorcery" abilities can be activated now.
+ * in theory some spells could grant actual sorceries flash or otherwise
+ * modify their timing. this is not that.
+ */
+function isSorcerySpeed(state: ReadonlyGameState, player: PlayerId): boolean {
 	// CR 307.1: sorcery timing. A main phase of your own turn, with the stack
-	// empty. Every non-instant card type shares this restriction, so unlike the
-	// instant case above there is nothing per-type left to check.
+	// empty. Every non-instant card type shares this restriction.
 	if (turnLocation(state)?.kind !== "mainPhase") return false;
 	if (activePlayer(state) !== player) return false;
 	if (state.stack.length !== 0) return false;
@@ -8755,6 +8765,13 @@ function activatedAbilityActions(
 				definition.kind === "activated" ? definition.functionsFrom : undefined;
 			if (!functionsHere(functionsFrom, object.zone)) continue;
 			if (
+				definition.kind === "activated" &&
+				definition.restrictions?.asSorcery &&
+				!isSorcerySpeed(state, player)
+			) {
+				continue;
+			}
+			if (
 				definition.cost.tapSelf &&
 				(object.kind !== "permanent" || object.tapped)
 			)
@@ -8933,6 +8950,15 @@ function activateAbilityIn(
 	if (!functionsHere(functionsFrom, object.zone)) {
 		throw new IllegalAbilityActivationError(
 			`ability ${action.ability} does not function from ${object.zone}`,
+		);
+	}
+	if (
+		ability.kind === "activated" &&
+		ability.restrictions?.asSorcery &&
+		!isSorcerySpeed(state, priorityPlayer)
+	) {
+		throw new IllegalAbilityActivationError(
+			`ability ${action.ability} can be activated only as a sorcery`,
 		);
 	}
 	if (ability.cost.tapSelf) {
