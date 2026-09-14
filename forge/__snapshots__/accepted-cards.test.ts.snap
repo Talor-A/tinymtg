@@ -3659,6 +3659,7 @@ Universal Solvent
 University Campus
 Unknown Shores
 Unlikely Aid
+Unlikely Alliance
 Unnatural Predation
 Unnatural Speed
 Unraveling Mummy
@@ -3999,4 +4000,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3996`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3997`;

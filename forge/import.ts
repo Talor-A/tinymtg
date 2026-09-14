@@ -443,7 +443,34 @@ function parseDrawnPlayer(value: string | undefined): ValidPlayer | null {
 	return null;
 }
 
+/**
+ * Modifiers Forge's `!` prefix may negate, such as the `!token` of
+ * `Creature.YouCtrl+!token`.
+ *
+ * `!` negates any restriction in Forge, and the corpus negates about a
+ * hundred distinct words. Almost all of them name state the engine does not
+ * model -- `!IsRemembered`, `!ManaAbility`, `!wasCastFromYourHand`,
+ * `!attackedThisTurn` -- and reject on the word itself. These three are the
+ * surveyed remainder: their positive form already lowers, and the negation
+ * says exactly what it denies. A word whose negation would have to pick
+ * between two readings is why this is a list and not a blanket rule; add to
+ * it when a card needs it.
+ */
+const NEGATABLE_MODIFIERS: ReadonlySet<string> = new Set([
+	"token",
+	"Token",
+	"attacking",
+	"blocking",
+]);
+
 function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
+	if (modifier.startsWith("!")) {
+		const inner = modifier.slice(1);
+		if (!NEGATABLE_MODIFIERS.has(inner)) return null;
+		const predicate = parseSelectorModifier(inner);
+		if (!predicate) return null;
+		return { kind: "not", predicate };
+	}
 	if (modifier === "Other") return { kind: "not", predicate: { kind: "self" } };
 	if (modifier === "attacking") return { kind: "attacking" };
 	if (modifier === "blocking") return { kind: "blocking" };
@@ -451,13 +478,9 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
 	if (modifier === "YouOwn") return { kind: "owner", player: "you" };
 	if (modifier === "OppOwn") return { kind: "owner", player: "opponent" };
-	// Forge writes tokenness as `token`, negated with its `!` prefix: the
-	// `Creature.YouCtrl+!token` of a nontoken dies trigger. Both spellings of
-	// the word appear in the corpus and mean the same property; `!` on any
-	// other modifier still rejects, since only this one was surveyed.
+	// Both spellings of the word appear in the corpus and mean the same
+	// property: a permanent or nonbattlefield object that is a token.
 	if (modifier === "token" || modifier === "Token") return { kind: "token" };
-	if (modifier === "!token" || modifier === "!Token")
-		return { kind: "not", predicate: { kind: "token" } };
 	const negated = modifier.startsWith("non");
 	const inner = negated ? modifier.slice(3) : modifier;
 	const word = inner.toLowerCase();

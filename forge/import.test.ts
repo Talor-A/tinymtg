@@ -3482,16 +3482,42 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 		});
 	});
 
-	test("`!` on a modifier other than token rejects", () => {
-		// `!` is Forge's general negation prefix, but only `!token` was
-		// surveyed; the rest stay out of the vocabulary.
-		const result = importForgeCard(
-			hostile.replaceAll("%TARGET%", "Creature.!attacking"),
-			{ id: "hostile-witness" },
-		);
-		expect(result.ok).toBe(false);
-		if (result.ok) return;
-		expect(result.diagnostics[0]).toMatchObject({ code: "UNSUPPORTED_TARGET" });
+	test("`!attacking` and `!blocking` negate the combat modifiers", () => {
+		// Unlikely Alliance targets `Creature.!attacking+!blocking`.
+		const result = importFixture("u/unlikely_alliance");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.activated[0]).toMatchObject({
+			targets: [
+				{
+					legal: {
+						kind: "permanent",
+						predicate: {
+							kind: "and",
+							predicates: [
+								{ kind: "type", type: "creature" },
+								{ kind: "not", predicate: { kind: "attacking" } },
+								{ kind: "not", predicate: { kind: "blocking" } },
+							],
+						},
+					},
+				},
+			],
+		});
+	});
+
+	test("`!` on a modifier outside the negatable set rejects", () => {
+		// The corpus negates about a hundred distinct words; all but the
+		// surveyed three name state the engine does not model.
+		for (const target of ["Creature.!IsRemembered", "Creature.!ManaAbility"]) {
+			const result = importForgeCard(hostile.replaceAll("%TARGET%", target), {
+				id: "hostile-witness",
+			});
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]).toMatchObject({
+				code: "UNSUPPORTED_TARGET",
+			});
+		}
 	});
 
 	test("ForgetOtherTargets without the RememberTargets chain rejects", () => {
