@@ -16,8 +16,9 @@
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
  * `ChangeZone` searches other than a single card from a library, hidden Hand
- * origins, Stack origins, and
- * multi-object movement; random or multi-card discard; alternate spell costs,
+ * origins and Stack origins; multi-object movement other than the exact
+ * shuffle-into-library forms documented below; random or multi-card discard;
+ * alternate spell costs,
  * additional spell costs other than one permanent sacrifice, and activation
  * costs other than fixed generic/coloured mana,
  * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
@@ -831,6 +832,17 @@ function effectTargetUse<Player extends TriggerEffectPlayer>(
 						},
 					}
 				: null;
+		case "shuffle-into-library":
+			return effect.owners !== "each-player" &&
+				effect.owners.kind === "target-player"
+				? {
+						slot: effect.owners.slot,
+						required: {
+							kind: "player",
+							message: "Shuffle requires a player target",
+						},
+					}
+				: null;
 		default:
 			return null;
 	}
@@ -1464,10 +1476,47 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				"mandatory",
 				"changetype",
 				"changetypedesc",
+				"shuffle",
 			);
 			if (!badParams.ok) return badParams;
 			const originText = getForgeParam(params, "Origin");
 			const changeType = getForgeParam(params, "ChangeType");
+			const shuffle = getForgeParam(params, "Shuffle");
+			if (shuffle !== undefined) {
+				if (
+					shuffle !== "True" ||
+					originText !== "Graveyard" ||
+					getForgeParam(params, "Destination") !== "Library" ||
+					getForgeParam(params, "Defined") !== "TriggeredCardLKICopy" ||
+					triggeringZoneChangeDestination !== "graveyard" ||
+					getForgeParam(params, "ValidTgts") !== undefined ||
+					getForgeParam(params, "TgtZone") !== undefined ||
+					getForgeParam(params, "ChangeNum") !== undefined ||
+					getForgeParam(params, "GainControl") !== undefined ||
+					getForgeParam(params, "Tapped") !== undefined ||
+					getForgeParam(params, "LibraryPosition") !== undefined ||
+					getForgeParam(params, "ActivationZone") !== undefined ||
+					getForgeParam(params, "RememberTargets") !== undefined ||
+					getForgeParam(params, "ForgetOtherTargets") !== undefined ||
+					getForgeParam(params, "Hidden") !== undefined ||
+					getForgeParam(params, "Mandatory") !== undefined ||
+					changeType !== undefined ||
+					getForgeParam(params, "ChangeTypeDesc") !== undefined
+				)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"unsupported ChangeZone shuffle shape",
+						where,
+					);
+				return ok([
+					{
+						kind: "shuffle-into-library",
+						owners: { kind: "triggering-zone-change-result-owner" },
+						from: ["graveyard"],
+						predicate: { kind: "self" },
+					},
+				]);
+			}
 			if (originText === "Library") {
 				const amount = positiveInteger(getForgeParam(params, "ChangeNum"), 1);
 				const predicate =
@@ -1838,6 +1887,40 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			}
 			throw new Error("unreachable ChangeZone origin");
 		}
+		case "changezoneall": {
+			const badParams = claim(
+				"changetype",
+				"origin",
+				"destination",
+				"defined",
+				"shuffle",
+				"usealloriginzones",
+			);
+			if (!badParams.ok) return badParams;
+			const origins = getForgeParam(params, "Origin")?.split(",");
+			if (
+				getForgeParam(params, "ChangeType") !== "Card" ||
+				origins?.length !== 2 ||
+				origins[0] !== "Hand" ||
+				origins[1] !== "Graveyard" ||
+				getForgeParam(params, "Destination") !== "Library" ||
+				getForgeParam(params, "Defined") !== undefined ||
+				getForgeParam(params, "Shuffle") !== "True" ||
+				getForgeParam(params, "UseAllOriginZones") !== "True"
+			)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"only each player's whole hand and graveyard shuffled into their library is supported",
+					where,
+				);
+			return ok([
+				{
+					kind: "shuffle-into-library",
+					owners: "each-player",
+					from: ["hand", "graveyard"],
+				},
+			]);
+		}
 		case "putcounter": {
 			const badParams = claim(
 				"defined",
@@ -1904,12 +1987,6 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 					where,
 				);
 			const owner = getForgeParam(params, "TokenOwner");
-			if (owner !== undefined && owner !== "You")
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					`unsupported TokenOwner$ ${owner}`,
-					where,
-				);
 			const controller = parsePlayer(owner);
 			if (!controller)
 				return issue(
@@ -3152,6 +3229,11 @@ function lowerTrigger(
 		getForgeParam(params, "Origin") === "Battlefield" &&
 		getForgeParam(params, "Destination") === "Graveyard" &&
 		getForgeParam(params, "ValidCard") === "Card.Self";
+	const isSelfGraveyardArrival =
+		mode === "ChangesZone" &&
+		getForgeParam(params, "Origin") === "Any" &&
+		getForgeParam(params, "Destination") === "Graveyard" &&
+		getForgeParam(params, "ValidCard") === "Card.Self";
 	// The trigger declares targets on its executed ability. Parse them before
 	// effects so every effect is checked as it is constructed.
 	const targets = parseTarget(
@@ -3178,7 +3260,7 @@ function lowerTrigger(
 				: triggerEffectPlayer,
 		true,
 		abilityHost,
-		isSelfDeath ? "graveyard" : null,
+		isSelfDeath || isSelfGraveyardArrival ? "graveyard" : null,
 	);
 	if (!chain.ok) return chain;
 	const effects = optionalDecider
@@ -3278,9 +3360,15 @@ function lowerTrigger(
 			// (Priest of Ancient Lore), which defaults to Any.
 			const etb = (origin ?? "Any") === "Any" && destination === "Battlefield";
 			const dies = origin === "Battlefield" && destination === "Graveyard";
+			const selfGraveyardArrival =
+				origin === "Any" &&
+				destination === "Graveyard" &&
+				getForgeParam(params, "ValidCard") === "Card.Self";
 			if (
-				!(etb || dies) ||
-				(triggerZones !== undefined && triggerZones !== "Battlefield") ||
+				!(etb || dies || selfGraveyardArrival) ||
+				(triggerZones !== undefined &&
+					triggerZones !==
+						(selfGraveyardArrival ? "Graveyard" : "Battlefield")) ||
 				(secondary !== undefined && secondary !== "True") ||
 				(triggerController !== undefined &&
 					(!dies || triggerController !== "TriggeredCardController"))
@@ -3308,12 +3396,22 @@ function lowerTrigger(
 							to: "graveyard",
 							predicate: selector,
 						}
-					: {
-							kind: "change zone",
-							from: "any",
-							to: "battlefield",
-							predicate: selector,
-						},
+					: selfGraveyardArrival
+						? {
+								kind: "change zone",
+								from: "any",
+								to: "graveyard",
+								predicate: selector,
+							}
+						: {
+								kind: "change zone",
+								from: "any",
+								to: "battlefield",
+								predicate: selector,
+							},
+				...(selfGraveyardArrival
+					? { functionsFrom: ["graveyard"] as ["graveyard"] }
+					: {}),
 				targets,
 				effects,
 			});

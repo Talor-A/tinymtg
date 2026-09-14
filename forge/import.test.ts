@@ -3384,6 +3384,78 @@ describe("lowerForgeCard: one-object ChangeZone", () => {
 	}
 });
 
+describe("lowerForgeCard: shuffle cards into libraries", () => {
+	test("lowers Timetwister as a shuffle followed by seven draws", () => {
+		const result = importFixture("t/timetwister");
+		if (!result.ok) throw new Error("expected Timetwister to import");
+		expect(result.card.spell?.effects).toEqual([
+			{
+				kind: "shuffle-into-library",
+				owners: "each-player",
+				from: ["hand", "graveyard"],
+			},
+			{
+				kind: "each player draw",
+				subjects: "each-player",
+				amount: 7,
+			},
+		]);
+	});
+
+	test("lowers both Worldspine Wurm graveyard triggers exactly", () => {
+		const result = importFixture("w/worldspine_wurm");
+		if (!result.ok) throw new Error("expected Worldspine Wurm to import");
+		expect(result.card.abilityDefinitions.triggered).toMatchObject([
+			{
+				condition: {
+					kind: "change zone",
+					from: "battlefield",
+					to: "graveyard",
+					predicate: { kind: "self" },
+				},
+				effects: [
+					{
+						kind: "create-token",
+						controller: "you",
+						amount: 3,
+					},
+				],
+			},
+			{
+				condition: {
+					kind: "change zone",
+					from: "any",
+					to: "graveyard",
+					predicate: { kind: "self" },
+				},
+				functionsFrom: ["graveyard"],
+				effects: [
+					{
+						kind: "shuffle-into-library",
+						owners: { kind: "triggering-zone-change-result-owner" },
+						from: ["graveyard"],
+						predicate: { kind: "self" },
+					},
+				],
+			},
+		]);
+	});
+
+	test("rejects nearby ChangeZoneAll shapes instead of broadening them", () => {
+		const source = cardText("t/timetwister");
+		for (const [needle, replacement] of [
+			["ChangeType$ Card", "ChangeType$ Creature"],
+			["Origin$ Hand,Graveyard", "Origin$ Graveyard"],
+			["Shuffle$ True", "Shuffle$ False"],
+		] as const) {
+			const result = importForgeCard(source.replace(needle, replacement), {
+				id: `mutated-timetwister-${replacement}`,
+			});
+			expect(result.ok).toBe(false);
+		}
+	});
+});
+
 describe("lowerForgeCard: `+` selector combination and negated subtypes", () => {
 	test("Restoration Angel targets a non-Angel creature its controller owns", () => {
 		const result = importFixture("r/restoration_angel");

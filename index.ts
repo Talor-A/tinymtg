@@ -2245,6 +2245,19 @@ type EachPlayerDrawEffectDef = {
 	amount: number;
 };
 
+type ShuffleIntoLibraryEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
+	kind: "shuffle-into-library";
+	/** Whose nonlibrary zones are inspected and whose libraries are shuffled. */
+	owners:
+		| "each-player"
+		| EffectPlayerSubject<AllowedPlayer>
+		| { kind: "triggering-zone-change-result-owner" };
+	/** Every listed zone is inspected before any matching card moves. */
+	from: [Exclude<CardZone, "library">, ...Exclude<CardZone, "library">[]];
+	/** Omitted means every card in the declared owners' origin zones. */
+	predicate?: ObjectPredicateDef;
+};
+
 type CreateDelayedTriggerEffectDef = {
 	kind: "create-delayed-trigger";
 	ability: TriggeredAbilityId;
@@ -2261,6 +2274,7 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	| CreateDelayedTriggerEffectDef
 	| ExileTopEffectDef<AllowedPlayer>
 	| SearchLibraryEffectDef<AllowedPlayer>
+	| ShuffleIntoLibraryEffectDef<AllowedPlayer>
 	| {
 			kind: "shuffle-library";
 			subject: EffectPlayerSubject<AllowedPlayer>;
@@ -7484,6 +7498,78 @@ function resolveEffects(
 			shuffleLibrary(state, resolvePlayer(effect.subject));
 			continue;
 		}
+		if (effect.kind === "shuffle-into-library") {
+			let predicateSource = item.source;
+			let owners: PlayerId[];
+			if (effect.owners === "each-player") {
+				owners = [0 as PlayerId, 1 as PlayerId];
+			} else if (effect.owners.kind === "triggering-zone-change-result-owner") {
+				assert(
+					item.ability?.kind === "triggered ability",
+					"a triggering zone-change owner requires a triggered ability",
+				);
+				const id = item.ability.triggeringZoneChangeResult;
+				if (id === null) continue;
+				const result = maybeObject(state, id);
+				// If another instruction already moved the destination object, there
+				// is no longer an object in the declared origin to shuffle back.
+				if (
+					!result ||
+					!effect.from.includes(result.zone as Exclude<CardZone, "library">)
+				)
+					continue;
+				assert(
+					result.kind === "card",
+					"a shuffled trigger result must be a card",
+				);
+				owners = [result.owner];
+				predicateSource = result.id;
+			} else {
+				owners = [resolvePlayer(effect.owners)];
+			}
+
+			const read = createReadContext(engine, state);
+			const candidatesByOwner = owners.map((owner) => ({
+				owner,
+				candidates: effect.from.flatMap((zone) =>
+					read.state.players[owner][zone].filter((id) => {
+						if (effect.predicate === undefined) return true;
+						return objectMatchesPredicate(
+							effect.predicate,
+							getSnapshot(read, id),
+							{ controller: item.controller, source: predicateSource },
+						);
+					}),
+				),
+			}));
+			for (const { owner, candidates } of candidatesByOwner) {
+				for (const id of candidates) {
+					const card = maybeObject(state, id);
+					if (
+						card?.kind !== "card" ||
+						card.owner !== owner ||
+						!effect.from.includes(card.zone as Exclude<CardZone, "library">)
+					)
+						continue;
+					performIn(
+						engine,
+						state,
+						{
+							kind: "change zone",
+							object: card.id,
+							from: card.zone,
+							destination: { zone: "library", position: "top" },
+							cause: "effect",
+						},
+						choices,
+						scope,
+						0,
+					);
+				}
+				shuffleLibrary(state, owner);
+			}
+			continue;
+		}
 		let bound: EntityRef | null = null;
 		const damageTarget =
 			effect.kind === "damage" && effect.subject.kind === "target"
@@ -8097,6 +8183,10 @@ function effectToEvent(
 			throw new Error("library searches resolve without creating an event");
 		case "shuffle-library":
 			throw new Error("library shuffles resolve without creating an event");
+		case "shuffle-into-library":
+			throw new Error(
+				"shuffling cards into libraries resolves without one aggregate event",
+			);
 		case "add-mana":
 			return {
 				kind: "add mana",
