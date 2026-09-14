@@ -492,27 +492,72 @@ describe("triggered abilities", () => {
 		expect(state.pendingTriggers).toHaveLength(0);
 	});
 
-	test.each(["test-broad-self-death", "test-nonself-death"])(
-		"keeps %s as an explicit unsupported leaves trigger",
-		(cardId) => {
-			const state = engine.newGame();
-			const source = engine.spawnPermanent(state, cardId, ALICE);
+	test("keeps non-dies battlefield departures explicitly unsupported", () => {
+		const state = engine.newGame();
+		const source = engine.spawnPermanent(state, "test-broad-self-death", ALICE);
 
-			expect(() =>
-				engine.perform(
-					state,
-					{
-						kind: "change zone",
-						object: source.id,
-						from: "battlefield",
-						destination: { zone: "graveyard" },
-						cause: "destroy",
-					},
-					passingAgents(),
-				),
-			).toThrow("leaves the battlefield triggers are not supported");
-		},
-	);
+		expect(() =>
+			engine.perform(
+				state,
+				{
+					kind: "change zone",
+					object: source.id,
+					from: "battlefield",
+					destination: { zone: "graveyard" },
+					cause: "destroy",
+				},
+				passingAgents(),
+			),
+		).toThrow("leaves the battlefield triggers are not supported");
+	});
+
+	test("matches a dies predicate against another permanent's last-known characteristics", () => {
+		const state = engine.newGame();
+		const watcher = engine.spawnPermanent(state, "test-nonself-death", ALICE);
+		const victim = engine.spawnPermanent(state, "grizzly-bears", BOB);
+
+		engine.perform(
+			state,
+			{
+				kind: "change zone",
+				object: victim.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "destroy",
+			},
+			passingAgents(),
+		);
+
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(state.pendingTriggers[0]).toMatchObject({
+			source: watcher.id,
+			triggerId: "test-nonself-death:0",
+			controller: ALICE,
+		});
+	});
+
+	test("a watcher dying in an SBA pass observes itself and every simultaneous death", () => {
+		const state = engine.newGame();
+		const watcher = engine.spawnPermanent(state, "test-nonself-death", ALICE);
+		const victim = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		permanent(state, watcher.id).damage = 1;
+		permanent(state, victim.id).damage = 2;
+
+		engine.checkStateBasedActions(state, passingAgents());
+
+		expect(state.objects.has(watcher.id)).toBe(false);
+		expect(state.objects.has(victim.id)).toBe(false);
+		expect(state.pendingTriggers).toHaveLength(2);
+		expect(
+			state.pendingTriggers.map((trigger) => ({
+				source: trigger.source,
+				triggerId: String(trigger.triggerId),
+			})),
+		).toEqual([
+			{ source: watcher.id, triggerId: "test-nonself-death:0" },
+			{ source: watcher.id, triggerId: "test-nonself-death:0" },
+		]);
+	});
 
 	test("a trigger resolves after its source leaves", () => {
 		const state = engine.newGame();

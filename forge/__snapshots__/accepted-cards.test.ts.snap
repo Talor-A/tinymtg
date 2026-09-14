@@ -1,7 +1,8 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`the accepted-card list matches its snapshot: accepted card names 1`] = `
-"A-Canopy Tactician
+"A-Blood Artist
+A-Canopy Tactician
 A-Cauldron Familiar
 A-Celebrity Fencer
 A-Dragonborn Looter
@@ -12,6 +13,7 @@ A-Midnight Assassin
 A-Pseudodragon Familiar
 A-Queza, Augur of Agonies
 A-Rockslide Sorcerer
+A-Skemfar Avenger
 A-Social Climber
 A-Stimulus Package
 A-Umara Mystic
@@ -70,12 +72,14 @@ Ajani's Mantra
 Ajani's Sunstriker
 Ajani's Welcome
 Akki Drillmaster
+Akki Raider
 Akki Scrapchomper
 Akoum Boulderfoot
 Akoum Hellhound
 Akoum Refuge
 Akroan Jailer
 Akroan Mastiff
+Al Bhed Salvagers
 Alabaster Host Sanctifier
 Alabaster Kirin
 Alabaster Mage
@@ -204,6 +208,7 @@ Asgardian Citadel
 Ashcoat Bear
 Ashen Powder
 Ashen Rider
+Ashiok's Reaper
 Ashnod's Altar
 Aspiring Aeronaut
 Assault Griffin
@@ -294,6 +299,7 @@ Basal Thrull
 Basilica Bell-Haunt
 Bastion Enforcer
 Bastion Mastodon
+Bastion of Remembrance
 Bathe in Dragonfire
 Batterhorn
 Battle Rampart
@@ -332,6 +338,7 @@ Binding Mummy
 Bird Maiden
 Birds of Paradise
 Birnin Zana Plaza
+Bishop of Wings
 Bishop's Soldier
 Bitterbloom Bearer
 Bitterbow Sharpshooters
@@ -360,6 +367,7 @@ Blinkmoth Well
 Blistering Barrier
 Blisterstick Shaman
 Blitzball Shot
+Blood Artist
 Blood Bairn
 Blood Divination
 Blood Glutton
@@ -392,6 +400,7 @@ Bog Witch
 Bog Wreckage
 Bogardan Firefiend
 Bogardan Rager
+Boggart Cursecrafter
 Bogstomper
 Bogwater Lumaret
 Boiling Rock Prison
@@ -472,6 +481,7 @@ Burrenton Shield-Bearers
 Burrog Banemaker
 Burrowing Razormaw
 Burst of Energy
+Butcher of Malakir
 Buzz Bots
 Byway Courier
 Cabal Archon
@@ -696,6 +706,7 @@ Crossbow Infantry
 Crossroads Watcher
 Crow of Dark Tidings
 Crowd Favorites
+Cruel Celebrant
 Cruel Edict
 Cruel Truths
 Cruel Witness
@@ -741,6 +752,7 @@ Dark Deed
 Dark Heart of the Wood
 Dark Nourishment
 Dark Offering
+Dark Prophecy
 Dark Remedy
 Darklit Gargoyle
 Darkmoss Bridge
@@ -780,6 +792,7 @@ Death Cultist
 Death-Hood Cobra
 Deathbloom Gardener
 Deathgaze Cockatrice
+Deathgreeter
 Deathgrip
 Deathless Angel
 Deathmark
@@ -823,6 +836,7 @@ Devout Decree
 Devout Monk
 Devout Witness
 Diabolic Edict
+Dictate of Erebos
 Dictate of Heliod
 Dimension X
 Dimir Aqueduct
@@ -836,6 +850,7 @@ Dire Fleet Poisoner
 Direct Hit
 Diregraf Ghoul
 Diresight
+Disciple of the Vault
 Discordant Piper
 Disempower
 Disenchant
@@ -910,6 +925,7 @@ Dromoka Warrior
 Dross Crocodile
 Dross Hopper
 Dross Ripper
+Dross Scorpion
 Drossforge Bridge
 Drown in Shapelessness
 Drowned Rusalka
@@ -957,6 +973,7 @@ Eel-Hounds
 Efficient Construction
 Eidolon of Blossoms
 Eidolon of Philosophy
+Elas il-Kor, Sadistic Pilgrim
 Elder Auntie
 Elderfang Disciple
 Elderfang Ritualist
@@ -1082,6 +1099,7 @@ Failed Inspection
 Faithbearer Paladin
 Faithful Watchdog
 Falkenrath Marauders
+Falkenrath Noble
 Falkenrath Reaver
 Fall of the Gavel
 Fallen Angel
@@ -1096,6 +1114,7 @@ Fanatical Strength
 Fang Guardian
 Fang of Shigeki
 Fangren Hunter
+Fangren Marauder
 Fate Forgotten
 Fate Unraveler
 Fateful Discovery
@@ -1111,6 +1130,7 @@ Felhide Minotaur
 Felidar Cub
 Felidar Guardian
 Fell
+Femeref Enchantress
 Femeref Scouts
 Fencer Clique
 Feral Abomination
@@ -1276,6 +1296,7 @@ Garruk's Companion
 Garruk's Gorehorn
 Gates of Istfell
 Gavony Trapper
+Gavony Unhallowed
 Geist Snatch
 Geist of the Archives
 Geist of the Moors
@@ -1435,6 +1456,7 @@ Grim Bounty
 Grim Guardian
 Griptide
 Grisly Ritual
+Gristle Grinner
 Grizzled Leotau
 Grizzled Outrider
 Grizzly Bears
@@ -1449,6 +1471,7 @@ Gryff Vanguard
 Guadosalam, Farplane Gateway
 Guarded Heir
 Guardian Automaton
+Guardian Kirin
 Guardian Lions
 Guardian of Cloverdell
 Guardian of Pilgrims
@@ -1500,6 +1523,7 @@ Hate Weaver
 Haunted Crossroads
 Haunted Mire
 Havengul Skaab
+Havengul Vampire
 Havenwood Battleground
 Havenwood Wurm
 Havoc
@@ -1657,6 +1681,7 @@ Improvised Club
 Improvised Weaponry
 Impulse
 Incurable Ogre
+Indebted Samurai
 Independent Troops
 Indomitable Ancients
 Indrik Stomphowler
@@ -1827,6 +1852,7 @@ Kitsune Diviner
 Klingon Strike Force
 Knight Errant
 Knight Watch
+Knight of Doves
 Knight of New Benalia
 Knight of the Keep
 Knight of the New Coalition
@@ -1834,6 +1860,7 @@ Knight of the Tusk
 Knights of Dol Amroth
 Knotvine Mystic
 Knowledge Seeker
+Knucklebone Witch
 Koala-Sheep
 Kobolds of Kher Keep
 Kolinahr Priest
@@ -1995,6 +2022,7 @@ Makindi Ox
 Makindi Shieldmate
 Makindi Sliderunner
 Malachite Golem
+Malakir Cullblade
 Malamet Brawler
 Malcator's Watcher
 Malevolent Awakening
@@ -2070,6 +2098,7 @@ Meteorite
 Meticulous Archive
 Meticulous Artisan
 Midnight Assassin
+Midnight Entourage
 Midnight Haunting
 Might Weaver
 Might of Oaks
@@ -2107,8 +2136,10 @@ Mogg Fanatic
 Mogg Raider
 Mogg Sentry
 Mold Adder
+Molder Beast
 Molder Slug
 Moldering Karok
+Moldervine Reclamation
 Molten Ravager
 Molten Tributary
 Moment of Defiance
@@ -2125,6 +2156,7 @@ Moon Sprite
 Moonglove Extract
 Moonglove Extractor
 Moonglove Winnower
+Moonlit Wake
 Moonwing Moth
 Moopsy
 Moorish Cavalry
@@ -2133,6 +2165,7 @@ Morgue Thrull
 Morgue Toad
 Moriok Reaver
 Moriok Replica
+Moriok Rigger
 Moriok Scavenger
 Moroii
 Mortal's Ardor
@@ -2285,6 +2318,7 @@ Obsidian Giant
 Obyra, Dreaming Duelist
 Obzedat's Aid
 Octoprophet
+Odric's Outrider
 Odunos River Trawler
 Offer Immortality
 Oggyar Battle-Seer
@@ -2307,6 +2341,7 @@ Omen of the Sea
 Omen of the Sun
 Omenspeaker
 Ominous Asylum
+Omnath, Locus of Rage
 Omni-Cheese Pizza
 Onakke Ogre
 One-Clown Band
@@ -2371,6 +2406,7 @@ Paragon of New Dawns
 Paragon of Open Graves
 Parcel Myr
 Pardic Wanderer
+Pashalik Mons
 Patagia Golem
 Patagia Tiger
 Patriar's Seal
@@ -2405,6 +2441,7 @@ Phyrexian Hulk
 Phyrexian Rager
 Phyrexian Tower
 Phyrexian Vault
+Phyrexian Vivisector
 Phyrexian Walker
 Phytoburst
 Pia and Kiran Nalaar
@@ -2418,6 +2455,7 @@ Piranha Fly
 Piranha Marsh
 Pirate's Prize
 Pitchburn Devils
+Pitiless Plunderer
 Pitiless Pontiff
 Pixie Queen
 Plains
@@ -2433,6 +2471,7 @@ Poison Arrow
 Poison Dart Frog
 Poison the Blade
 Poison-Blade Mentor
+Poison-Tip Archer
 Polluted Dead
 Possessed Skaab
 Potion of Healing
@@ -2534,6 +2573,7 @@ Rakdos Signet
 Rakka Mar
 Ral's Reinforcements
 Rambunctious Mutt
+Rampage of the Valkyries
 Rampaging Baloths
 Rapacious Dragon
 Raphael, Tough Turtle
@@ -2606,6 +2646,7 @@ Renowned Weaver
 Repel
 Repulse
 Repulsor Rays
+Requiem Angel
 Rescue
 Rescuer Chwinga
 Research Assistant
@@ -2647,6 +2688,7 @@ Rise Again
 Rise of Eagles
 Risen Sanctuary
 Rishadan Port
+Rising Populace
 Rite of the Dragoncaller
 Rith's Attendant
 Ritual of Rejuvenation
@@ -2657,6 +2699,7 @@ River Hoopoe
 River Kaijin
 Riverwheel Aerialists
 Roaring Primadox
+Robot Chicken
 Roc Hunter
 Roc of Kher Ridges
 Rockslide Sorcerer
@@ -2674,7 +2717,9 @@ Rootrider Faun
 Rootwater Diver
 Rootwater Hunter
 Rorix Bladewing
+Rot Shambler
 Rotcrown Ghoul
+Rotlung Reanimator
 Rotted Hulk
 Rotted Hystrix
 Rotting Fensnake
@@ -2740,6 +2785,7 @@ Sandblast
 Sandsteppe Citadel
 Sandstone Bridge
 Sanguinary Mage
+Sanguinary Priest
 Sanguine Syphoner
 Sanitarium Skeleton
 Sanitation Automaton
@@ -2755,6 +2801,7 @@ Savai Sabertooth
 Savannah
 Savannah Lions
 Savannah Sage
+Savior of the Sleeping
 Sazh's Chocobo
 Scalding Cauldron
 Scaldkin
@@ -2767,6 +2814,7 @@ Scarwood Goblins
 Scarwood Treefolk
 Scathe Zombies
 Scatter Arc
+Scavenger Drake
 Scavenger Folk
 Scavenging Harpy
 Scavenging Scarab
@@ -2781,6 +2829,7 @@ Scour from Existence
 Scoured Barrens
 Scourge of the Undercity
 Scrap Compactor
+Scrapheap
 Scream Puff
 Screaming Fury
 Screaming Phantom
@@ -2833,6 +2882,7 @@ Selesnya Guildgate
 Selesnya Sanctuary
 Selesnya Signet
 Selfless Savior
+Selhoff Occultist
 Sell-Sword Brute
 Seller of Songbirds
 Senate Courier
@@ -3231,6 +3281,7 @@ Sustenance
 Svyelunite Temple
 Swab Goblin
 Swamp
+Swarm of Bloodflies
 Sweettooth Witch
 Swift Spinner
 Swiftwater Cliffs
@@ -3318,10 +3369,12 @@ Territorial Scythecat
 Terror of the Fairgrounds
 Teyo's Lightshield
 Thallid Soothsayer
+Thanos, Death's Consort
 Thassa's Devourer
 Thaumaturge's Familiar
 Thawbringer
 The Autonomous Furnace
+The Balrog, Flame of Udûn
 The Dross Pits
 The Fabulous Frog-Man
 The Fair Basilica
@@ -3381,6 +3434,7 @@ Tireless Missionaries
 Tireless Tribe
 Titan's Grave
 Titan's Strength
+Titania, Protector of Argoth
 Titanic Growth
 Titanic Pelagosaur
 Tithebearer Giant
@@ -3491,6 +3545,7 @@ Unauthorized Exit
 Unbender Tine
 Unburied Earthcarver
 Uncanny Speed
+Undead Augur
 Undead Minotaur
 Undercity Dire Rat
 Undercity Sewers
@@ -3514,6 +3569,7 @@ Unlikely Aid
 Unnatural Predation
 Unnatural Speed
 Unraveling Mummy
+Unruly Mob
 Unstable Obelisk
 Unsubtle Mockery
 Unsummon
@@ -3570,6 +3626,9 @@ Venerable Knight
 Venerable Lammasu
 Venerable Monk
 Vengeant Vampire
+Vengeful Bloodwitch
+Vengeful Dead
+Venomcrawler
 Venomous Hierophant
 Venser's Sliver
 Verdant Automaton
@@ -3602,6 +3661,7 @@ Vinelasher Kudzu
 Vinereap Mentor
 Viridescent Bog
 Viridian Acolyte
+Viridian Revel
 Viridian Shaman
 Viridian Zealot
 Virulent Emissary
@@ -3679,6 +3739,7 @@ Warpath Ghoul
 Warriors of Wakanda
 Warship Flight Crew
 Warship Scout
+Warteye Witch
 Wary Okapi
 Wary Thespian
 Wary Watchdog
@@ -3719,6 +3780,7 @@ White Lotus Reinforcements
 Whitemane Lion
 Whitesun's Passage
 Wicked Reward
+Wicked Visitor
 Wicker Witch
 Wielding the Green Dragon
 Wild Celebrants
@@ -3791,6 +3853,7 @@ Wyluli Wolf
 Xenobotanist
 Xindi Surveyors
 Xira Arien
+Yahenni, Undying Partisan
 Yargle and Multani
 Yargle, Glutton of Urborg
 Yarok's Wavecrasher
@@ -3825,8 +3888,9 @@ Zombify
 Zuberi, Golden Feather
 Zuko's Offense
 Zuko, Avatar Hunter
+Zulaport Cutthroat
 Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3826`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3890`;

@@ -4355,7 +4355,7 @@ describe("lowerForgeCard: ChangesZone dies triggers", () => {
 		});
 	});
 
-	test("rejects a dies trigger that watches other creatures", () => {
+	test("lowers a dies trigger that watches other creatures", () => {
 		const result = importText(
 			diesCard({
 				origin: "Battlefield",
@@ -4363,9 +4363,20 @@ describe("lowerForgeCard: ChangesZone dies triggers", () => {
 				validCard: "Creature.Other",
 			}),
 		);
-		expect(result.ok).toBe(false);
-		if (result.ok) return;
-		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.abilityDefinitions.triggered[0]?.condition).toEqual({
+			kind: "change zone",
+			from: "battlefield",
+			to: "graveyard",
+			predicate: {
+				kind: "and",
+				predicates: [
+					{ kind: "type", type: "creature" },
+					{ kind: "not", predicate: { kind: "self" } },
+				],
+			},
+		});
 	});
 
 	test("rejects battlefield departures to zones other than the graveyard", () => {

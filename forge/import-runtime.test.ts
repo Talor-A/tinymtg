@@ -114,6 +114,7 @@ const RUNTIME_CARDS = [
 	loadRuntimeFixture("b/baleful_strix", "rt-baleful-strix"),
 	loadRuntimeFixture("p/pierce_strider", "rt-pierce-strider"),
 	loadRuntimeFixture("e/etched_familiar", "rt-etched-familiar"),
+	loadRuntimeFixture("d/deathgreeter", "rt-deathgreeter"),
 	loadRuntimeFixture("t/thraben_inspector", "rt-thraben-inspector"),
 	loadRuntimeFixture("d/doomed_dissenter", "rt-doomed-dissenter"),
 	loadRuntimeFixture("t/timberland_guide", "rt-timberland-guide"),
@@ -488,6 +489,31 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].life).toBe(18);
 		expect(state.players[BOB].life).toBe(22);
 		expect(state.stack).toHaveLength(0);
+	});
+
+	test("Deathgreeter's imported dies predicate watches another creature", () => {
+		const state = engine.newGame();
+		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
+		const watcher = engine.spawnPermanent(state, "rt-deathgreeter", ALICE);
+		const victim = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
+
+		engine.perform(
+			state,
+			{
+				kind: "change zone",
+				object: victim.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "destroy",
+			},
+			agents,
+		);
+
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(state.pendingTriggers[0]).toMatchObject({
+			source: watcher.id,
+			controller: ALICE,
+		});
 	});
 
 	test("Resolute Reinforcements casts during an opponent's turn and creates its Soldier", () => {

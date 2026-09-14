@@ -2983,15 +2983,6 @@ function lowerTrigger(
 					"ChangesZone requires a supported ValidCard$ selector",
 					where,
 				);
-			// The engine only resolves battlefield-origin triggers for the
-			// departing permanent itself; anything wider throws at trigger time,
-			// so reject it here instead of importing a card that cannot die.
-			if (dies && selector.kind !== "self")
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"only Card.Self dies triggers are supported",
-					where,
-				);
 			return ok({
 				id: execute,
 				text,

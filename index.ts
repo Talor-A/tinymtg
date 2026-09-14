@@ -5329,95 +5329,111 @@ function checkStateBasedActionsIn(
 			continue;
 		}
 
-		let sbaRead = createReadContext(engine, state);
-		for (const id of [...state.battlefield]) {
+		const sbaRead = createReadContext(engine, state);
+		const simultaneousView = sbaRead.view;
+		const zeroToughness: { id: ObjectId; toughness: number }[] = [];
+		const lethalDamageIds: ObjectId[] = [];
+		const counterCancellations: { id: ObjectId; amount: number }[] = [];
+		for (const id of state.battlefield) {
 			const o = maybePermanent(state, id);
 			if (!o) continue;
 			const snapshot = getSnapshot(sbaRead, id);
 			assert(snapshot.kind === "permanent");
 			const characteristics = snapshot.currentCharacteristics;
-			if (characteristics.kind !== "creature") continue;
-			// 704.5f. If a creature has toughness 0 or less, it's put into its
-			// owner's graveyard. Regeneration can't replace this event.
-			if (characteristics.toughness <= 0) {
-				log(
-					state,
-					`  SBA: ${name(engine, state, id)} has toughness ${characteristics.toughness}`,
-				);
-				performIn(
-					engine,
-					state,
-					{
-						kind: "change zone",
-						object: id,
-						from: "battlefield",
-						destination: { zone: "graveyard" },
-						cause: "sba",
-					},
-					choices,
-					newScope(),
-					0,
-				);
-				acted = true;
-				sbaRead = createReadContext(engine, state);
-				continue;
+			if (characteristics.kind === "creature") {
+				if (characteristics.toughness <= 0) {
+					zeroToughness.push({ id, toughness: characteristics.toughness });
+				} else if (
+					lethalDamage(engine, sbaRead, id) ||
+					deathtouchedSinceLastCheck.has(id)
+				) {
+					lethalDamageIds.push(id);
+				}
 			}
+			if (o.counters["+1/+1"] && o.counters["-1/-1"]) {
+				counterCancellations.push({
+					id,
+					amount: Math.min(o.counters["+1/+1"], o.counters["-1/-1"]),
+				});
+			}
+		}
+
+		// CR 704.3: determine every applicable SBA from one derived view before
+		// performing any of them. Passing that same view into each departure also
+		// gives dies triggers the correct last-known set of watching abilities.
+		for (const { id, toughness } of zeroToughness) {
+			if (!maybePermanent(state, id)) continue;
+			// 704.5f. Regeneration cannot replace a nonpositive-toughness death.
+			log(
+				state,
+				`  SBA: ${name(engine, state, id)} has toughness ${toughness}`,
+			);
+			performIn(
+				engine,
+				state,
+				{
+					kind: "change zone",
+					object: id,
+					from: "battlefield",
+					destination: { zone: "graveyard" },
+					cause: "sba",
+				},
+				choices,
+				newScope(),
+				0,
+				simultaneousView,
+			);
+			acted = true;
+		}
+
+		for (const id of lethalDamageIds) {
+			if (!maybePermanent(state, id)) continue;
 			// 704.5g. If a creature has toughness greater than 0, it has damage marked
 			// on it, and the total damage marked on it is greater than or equal to its
 			// toughness, that creature has been dealt lethal damage and is destroyed.
 			// Regeneration can replace this event.
-			if (
-				lethalDamage(engine, sbaRead, id) ||
-				deathtouchedSinceLastCheck.has(id)
-			) {
-				const destroy: DestroyEvent = {
-					kind: "destroy",
-					object: id,
-					noRegen: false,
-				};
-				// Always use the replacement pipeline here. Under CR 614.17c, even an
-				// otherwise prohibited event must first get a chance to be changed by a
-				// self-replacement effect. Only count the SBA as acting if something
-				// actually happened, so an indestructible creature doesn't keep the SBA
-				// loop running forever.
-				const objectName = name(engine, state, id);
-				const result = performIn(
-					engine,
-					state,
-					destroy,
-					choices,
-					newScope(),
-					0,
-				);
-				// Effect scratch preparation may mutate canonical state even when a
-				// prohibition prevents the event.
-				sbaRead = createReadContext(engine, state);
-				if (result.executed.length > 0) {
-					log(state, `  SBA: ${objectName} has lethal damage`);
-					acted = true;
-					if (!state.objects.has(id)) continue;
-				}
+			const destroy: DestroyEvent = {
+				kind: "destroy",
+				object: id,
+				noRegen: false,
+			};
+			// Always use the replacement pipeline here. Under CR 614.17c, even an
+			// otherwise prohibited event must first get a chance to be changed by a
+			// self-replacement effect. Only count the SBA as acting if something
+			// actually happened, so an indestructible creature doesn't keep the SBA
+			// loop running forever.
+			const objectName = name(engine, state, id);
+			const result = performIn(
+				engine,
+				state,
+				destroy,
+				choices,
+				newScope(),
+				0,
+				simultaneousView,
+			);
+			if (result.executed.length > 0) {
+				log(state, `  SBA: ${objectName} has lethal damage`);
+				acted = true;
 			}
+		}
 
-			// 704.5q. If a permanent has both a +1/+1 counter and a -1/-1 counter on
-			// it, N +1/+1 and N -1/-1 counters are removed from it, where N is the
-			// smaller of the number of +1/+1 and -1/-1 counters on it.
-			if (o.counters["+1/+1"] && o.counters["-1/-1"]) {
-				const n = Math.min(o.counters["+1/+1"], o.counters["-1/-1"]);
+		// 704.5q. Counter cancellation was determined in the same SBA window.
+		for (const { id, amount } of counterCancellations) {
+			if (maybePermanent(state, id)) {
 				performIn(
 					engine,
 					state,
 					{
 						kind: "remove counters",
 						permanent: { type: "permanent", id: id },
-						counters: { "+1/+1": n, "-1/-1": n },
+						counters: { "+1/+1": amount, "-1/-1": amount },
 					},
 					choices,
 					newScope(),
 					0,
 				);
 				acted = true;
-				sbaRead = createReadContext(engine, state);
 			}
 		}
 
@@ -5485,6 +5501,7 @@ function performIn(
 	choices: AnyChoiceController,
 	scope: Scope,
 	depth: number,
+	leavesTriggerView?: GameView,
 ): PerformResult {
 	log(state, `${"  ".repeat(depth)}> ${describeEvent(engine, state, event)}`);
 	// Mutable replacement scratch is installed before the mutation-free read window.
@@ -5505,6 +5522,7 @@ function performIn(
 			choices,
 			scope,
 			depth + 1,
+			leavesTriggerView,
 		);
 		executed.push(...result.executed);
 		created.push(...result.created);
@@ -5524,6 +5542,7 @@ function executeIn(
 	choices: AnyChoiceController,
 	scope: Scope,
 	depth: number,
+	leavesTriggerView?: GameView,
 ): PerformResult {
 	if (ev.guard && !scope.facts.has(ev.guard)) {
 		log(
@@ -5544,7 +5563,7 @@ function executeIn(
 	const created: ObjectId[] = [];
 	const changed: ObjectId[] = [];
 	const childResults: PerformResult[] = [];
-	let selfDeathTriggers: SelfDeathTriggerCandidate[] = [];
+	let leavesBattlefieldTriggers: LeavesBattlefieldTriggerCandidate[] = [];
 
 	switch (ev.kind) {
 		case "cast": {
@@ -6054,6 +6073,7 @@ function executeIn(
 				choices,
 				scope,
 				depth + 1,
+				leavesTriggerView,
 			);
 			childResults.push(movement);
 			happened = movement.executed.some(
@@ -6086,7 +6106,11 @@ function executeIn(
 		}
 
 		case "change zone": {
-			selfDeathTriggers = selfDeathTriggerCandidates(before, ev);
+			leavesBattlefieldTriggers = leavesBattlefieldTriggerCandidates(
+				engine,
+				leavesTriggerView ?? before.view,
+				ev,
+			);
 			let newId: ObjectId;
 			if (ev.from === null) {
 				assert(
@@ -6464,7 +6488,7 @@ function executeIn(
 		executed.push(ev);
 		state.revision++;
 		if (ev.kind === "change zone")
-			enqueueSelfDeathTriggers(state, selfDeathTriggers, ev);
+			enqueueLeavesBattlefieldTriggers(state, leavesBattlefieldTriggers, ev);
 		detectTriggers(
 			state,
 			createReadContext(engine, state),
@@ -6640,10 +6664,11 @@ function triggerMatches(
 				return false;
 
 			if (condition.from === "battlefield") {
-				// The exact self-death form is detected from the pre-event context. A
-				// surviving permanent with the same ability is not the departed self.
-				if (condition.to === "graveyard" && condition.predicate.kind === "self")
-					return false;
+				// Battlefield-to-graveyard triggers are detected from the pre-event
+				// view, where both the departed object and every watching ability still
+				// have their last-known characteristics. Never inspect the new graveyard
+				// object here: it is a different object under CR 400.7.
+				if (condition.to === "graveyard") return false;
 				throw new Error("leaves the battlefield triggers are not supported");
 			}
 			// CR 400.7: ev.object names the old object, which no longer exists after
@@ -6755,79 +6780,82 @@ function enqueueMatchingDelayedTriggers(
 	state.delayedTriggers = remaining;
 }
 
-interface SelfDeathTriggerCandidate {
+interface LeavesBattlefieldTriggerCandidate {
 	pending: Omit<PendingTrigger, "triggeringEvent">;
 	sourceName: string;
 }
 
 /**
- * Read the one supported leaves-the-battlefield trigger shape while its source
- * and derived abilities still exist. Other matching battlefield-origin forms
- * remain explicit unsupported cases.
+ * Detect dies triggers from the last-known battlefield view. This view can be
+ * shared by every zone change in one simultaneous state-based-action pass, so
+ * a watcher that dies in that pass still observes all the other deaths.
  */
-function selfDeathTriggerCandidates(
-	before: ReadContext,
+function leavesBattlefieldTriggerCandidates(
+	engine: Engine,
+	before: GameView,
 	ev: ZoneChangeEvent,
-): SelfDeathTriggerCandidate[] {
+): LeavesBattlefieldTriggerCandidate[] {
 	if (ev.from !== "battlefield") return [];
 
-	const source = maybeObject(before.state, ev.object);
+	const departed = before.objects.get(ev.object);
 	assert(
-		source?.kind === "permanent" && source.zone === "battlefield",
+		departed?.kind === "permanent" && departed.zone === "battlefield",
 		"a battlefield departure source must be a battlefield permanent",
 	);
-	const snapshot = getSnapshot(before, source.id);
-	assert(
-		snapshot.kind === "permanent" && snapshot.zone === "battlefield",
-		"a battlefield departure source must have a permanent snapshot",
-	);
-	const controller = snapshot.controller;
-	assertDefined(controller, "a departing permanent must have a controller");
 
-	const candidates: SelfDeathTriggerCandidate[] = [];
-	for (const triggerId of snapshot.currentCharacteristics.abilities.triggered) {
-		const trigger = abilityDefinition(before.engine, "triggered", triggerId);
-		if (!functionsHere(trigger.functionsFrom, "battlefield")) continue;
-		const condition = trigger.condition;
-		if (condition.kind !== "change zone" || condition.from !== "battlefield")
-			continue;
-		if (condition.to !== "any" && condition.to !== ev.destination.zone)
-			continue;
+	const candidates: LeavesBattlefieldTriggerCandidate[] = [];
+	for (const source of before.objects.values()) {
+		if (source.kind !== "permanent" || source.zone !== "battlefield") continue;
+		const controller = source.controller;
+		assertDefined(
+			controller,
+			"a battlefield trigger source must have a controller",
+		);
 
-		if (
-			ev.destination.zone !== "graveyard" ||
-			condition.to !== "graveyard" ||
-			condition.predicate.kind !== "self"
-		) {
-			throw new Error("leaves the battlefield triggers are not supported");
-		}
-
-		candidates.push({
-			pending: {
-				source: source.id,
-				triggerId,
-				controller,
-				text: trigger.text,
-				targetDefinitions: structuredClone(trigger.targets),
-				effects: structuredClone(trigger.effects),
-				sourceLastKnown: {
+		for (const triggerId of source.currentCharacteristics.abilities.triggered) {
+			const trigger = abilityDefinition(engine, "triggered", triggerId);
+			if (!functionsHere(trigger.functionsFrom, "battlefield")) continue;
+			const condition = trigger.condition;
+			if (condition.kind !== "change zone" || condition.from !== "battlefield")
+				continue;
+			if (condition.to !== "any" && condition.to !== ev.destination.zone)
+				continue;
+			if (ev.destination.zone !== "graveyard" || condition.to !== "graveyard")
+				throw new Error("leaves the battlefield triggers are not supported");
+			if (
+				!objectMatchesPredicate(condition.predicate, departed, {
 					controller,
-					colors: [...snapshot.currentCharacteristics.colors],
-					deathtouch:
-						snapshot.currentCharacteristics.keywords.includes("deathtouch"),
-					lifelink:
-						snapshot.currentCharacteristics.keywords.includes("lifelink"),
+					source: source.objectId,
+				})
+			)
+				continue;
+
+			const characteristics = source.currentCharacteristics;
+			candidates.push({
+				pending: {
+					source: source.objectId,
+					triggerId,
+					controller,
+					text: trigger.text,
+					targetDefinitions: structuredClone(trigger.targets),
+					effects: structuredClone(trigger.effects),
+					sourceLastKnown: {
+						controller,
+						colors: [...characteristics.colors],
+						deathtouch: characteristics.keywords.includes("deathtouch"),
+						lifelink: characteristics.keywords.includes("lifelink"),
+					},
 				},
-			},
-			sourceName: snapshot.currentCharacteristics.name,
-		});
+				sourceName: characteristics.name,
+			});
+		}
 	}
 	return candidates;
 }
 
-function enqueueSelfDeathTriggers(
+function enqueueLeavesBattlefieldTriggers(
 	state: GameState,
-	candidates: SelfDeathTriggerCandidate[],
+	candidates: LeavesBattlefieldTriggerCandidate[],
 	triggeringEvent: DeepReadOnly<ZoneChangeEvent>,
 ): void {
 	for (const { pending, sourceName } of candidates) {
