@@ -2578,6 +2578,25 @@ export type ObjectPredicateDef =
 	| { kind: "color"; color: Color }
 	| { kind: "owner"; player: "you" | "opponent" }
 	| { kind: "controller"; player: "you" | "opponent" }
+	/**
+	 * Compares the object's mana value (CR 202.3) against a fixed number, as
+	 * in the `cmcGE5` of "a spell with mana value 5 or greater".
+	 *
+	 * The bound is a number rather than an expression because no supported
+	 * mana cost contains {X}: `{X}` rejects at import, so a mana value is
+	 * always the fixed printed total, in every zone.
+	 */
+	| {
+			kind: "mana value";
+			comparison:
+				| "at least"
+				| "greater than"
+				| "at most"
+				| "less than"
+				| "exactly"
+				| "other than";
+			value: number;
+	  }
 	| {
 			kind: "and" | "or";
 			predicates: [
@@ -2864,6 +2883,30 @@ export function objectMatchesPredicate(
 			return predicate.player === "you"
 				? object.controller === context.controller
 				: object.controller !== context.controller;
+		case "mana value": {
+			// CR 202.3: mana value is the total amount of mana in the cost, and
+			// an object with no mana cost has mana value 0 (CR 202.3a).
+			const cost = characteristics.manaCost;
+			const value =
+				cost === "none" || cost === "zero"
+					? 0
+					: MANA_COST_TYPES.reduce((sum, type) => sum + (cost[type] ?? 0), 0);
+			switch (predicate.comparison) {
+				case "at least":
+					return value >= predicate.value;
+				case "greater than":
+					return value > predicate.value;
+				case "at most":
+					return value <= predicate.value;
+				case "less than":
+					return value < predicate.value;
+				case "exactly":
+					return value === predicate.value;
+				case "other than":
+					return value !== predicate.value;
+			}
+			return assertNever(predicate.comparison);
+		}
 		case "and":
 			return predicate.predicates.every((part) =>
 				objectMatchesPredicate(part, object, context),

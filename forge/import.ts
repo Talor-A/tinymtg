@@ -468,6 +468,21 @@ const NEGATABLE_MODIFIERS: ReadonlySet<string> = new Set([
 	"blocking",
 ]);
 
+type ManaValueComparison = Extract<
+	ObjectPredicateDef,
+	{ kind: "mana value" }
+>["comparison"];
+
+/** Forge's mana value comparators, spelled as the predicate spells them. */
+const CMC_COMPARISONS = new Map<string, ManaValueComparison>([
+	["GE", "at least"],
+	["GT", "greater than"],
+	["LE", "at most"],
+	["LT", "less than"],
+	["EQ", "exactly"],
+	["NE", "other than"],
+]);
+
 function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	if (modifier.startsWith("!")) {
 		const inner = modifier.slice(1);
@@ -486,6 +501,17 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	// Both spellings of the word appear in the corpus and mean the same
 	// property: a permanent or nonbattlefield object that is a token.
 	if (modifier === "token" || modifier === "Token") return { kind: "token" };
+	// `cmcGE5`: a mana value comparison against a literal bound. Forge also
+	// writes the bound as `X` (`cmcLEX`, `cmcEQX`), which reads a value chosen
+	// elsewhere on the card; a selector has no access to that value here, so
+	// only the literal form lowers.
+	const cmc = /^cmc([A-Z]{2})(\d+)$/.exec(modifier);
+	if (cmc) {
+		const comparison = CMC_COMPARISONS.get(cmc[1] ?? "");
+		const value = Number(cmc[2]);
+		if (comparison === undefined || !Number.isSafeInteger(value)) return null;
+		return { kind: "mana value", comparison, value };
+	}
 	const negated = modifier.startsWith("non");
 	const inner = negated ? modifier.slice(3) : modifier;
 	const word = inner.toLowerCase();
@@ -3137,9 +3163,18 @@ function lowerTrigger(
 				"validcard",
 				"validactivatingplayer",
 				"triggerzones",
+				"secondary",
 				"optionaldecider",
 			);
 			if (!badParams.ok) return badParams;
+			// Forge's `Secondary$ True` marks a trigger whose printed text is
+			// already covered by an earlier trigger's description, as on the two
+			// halves of "When CARDNAME enters and whenever you cast...". It says
+			// nothing about how the trigger works, so it only has to be the flag
+			// it claims to be.
+			const secondary = getForgeParam(params, "Secondary");
+			if (secondary !== undefined && secondary !== "True")
+				return issue("UNSUPPORTED_PARAMETER", "Secondary$ must be True", where);
 			const triggerZones = getForgeParam(params, "TriggerZones");
 			const rawSelector = getForgeParam(params, "ValidCard");
 			const rawPlayer = getForgeParam(params, "ValidActivatingPlayer");

@@ -97,6 +97,7 @@ const CORPUS_CARDS = [
 	loadCardFixture("r/restoration_angel"),
 	loadCardFixture("p/pegasus_courser"),
 	loadCardFixture("s/supernatural_stamina"),
+	loadCardFixture("u/up_the_beanstalk"),
 ] as const;
 
 /**

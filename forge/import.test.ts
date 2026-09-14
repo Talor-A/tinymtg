@@ -694,7 +694,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				"unsupported",
 				definition.replace(
 					"ValidCards$ Artifact",
-					"ValidCards$ Creature.cmcGE3",
+					"ValidCards$ Creature.cmcLEX",
 				),
 			],
 		] as const) {
@@ -2238,6 +2238,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				},
 			],
 			["Card.Black", { kind: "color", color: "b" }],
+			["Card.cmcGE5", { kind: "mana value", comparison: "at least", value: 5 }],
 		] as const) {
 			const result = importText(card(forgeSelector));
 			if (!result.ok) throw new Error(`expected ${forgeSelector} to import`);
@@ -2263,7 +2264,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				"",
 			].join("\n");
 
-		for (const selector of ["Permanent", "Creature.cmcGE5"]) {
+		// `cmcLEX` compares against a value chosen elsewhere on the card, which
+		// a selector cannot read; the literal `cmcGE5` form does lower.
+		for (const selector of ["Permanent", "Creature.cmcLEX"]) {
 			const result = importText(card(selector));
 			expect(result.ok).toBe(false);
 			if (result.ok) return;
