@@ -3158,6 +3158,77 @@ describe("lowerForgeCard: accepted card lowering", () => {
 });
 
 describe("lowerForgeCard: one-object ChangeZone", () => {
+	test("lowers library searches as choose, move, then shuffle sequences", () => {
+		const tutor = importFixture("d/demonic_tutor");
+		if (!tutor.ok) throw new Error("expected Demonic Tutor to import");
+		expect(tutor.card.spell?.effects).toEqual([
+			{
+				kind: "search-library",
+				searcher: { kind: "relative-player", player: "you" },
+				owner: { kind: "relative-player", player: "you" },
+				resultSlot: "searched-library-card",
+			},
+			{
+				kind: "change-zone",
+				subject: {
+					kind: "effect-result",
+					slot: "searched-library-card",
+				},
+				from: "library",
+				destination: { zone: "hand" },
+			},
+			{
+				kind: "shuffle-library",
+				subject: { kind: "relative-player", player: "you" },
+			},
+		]);
+
+		const wilds = importFixture("e/evolving_wilds");
+		if (!wilds.ok) throw new Error("expected Evolving Wilds to import");
+		expect(wilds.card.abilityDefinitions.activated[0]?.effects).toEqual([
+			{
+				kind: "search-library",
+				searcher: { kind: "relative-player", player: "you" },
+				owner: { kind: "relative-player", player: "you" },
+				predicate: {
+					kind: "and",
+					predicates: [
+						{ kind: "type", type: "land" },
+						{ kind: "supertype", supertype: "basic" },
+					],
+				},
+				resultSlot: "searched-library-card",
+			},
+			{
+				kind: "change-zone",
+				subject: {
+					kind: "effect-result",
+					slot: "searched-library-card",
+				},
+				from: "library",
+				destination: {
+					zone: "battlefield",
+					controller: "owner",
+					tapped: true,
+				},
+			},
+			{
+				kind: "shuffle-library",
+				subject: { kind: "relative-player", player: "you" },
+			},
+		]);
+	});
+
+	test("rejects a qualified search into hand until reveal is represented", () => {
+		const result = importFixture("i/idyllic_tutor");
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message: "qualified searches into a hand require reveal support",
+		});
+	});
+
 	const unsummon = cardText("u/unsummon");
 
 	test("keeps a graveyard target distinct from a source object", () => {

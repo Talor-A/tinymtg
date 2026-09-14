@@ -15,8 +15,8 @@
  * the concrete subset documented in the acceptance matrix in README.md lowers.
  *
  * Deferred / explicitly unsupported (each rejects rather than approximating):
- * `ChangeZone` searches other than a mandatory single choice from the public
- * battlefield, hidden Hand/Library origins, Stack origins, and
+ * `ChangeZone` searches other than a single card from a library, hidden Hand
+ * origins, Stack origins, and
  * multi-object movement; random or multi-card discard; alternate spell costs,
  * additional spell costs other than one permanent sacrifice, and activation
  * costs other than fixed generic/coloured mana,
@@ -676,6 +676,9 @@ const REMEMBERED_EXILE_SLOT = "remembered-exile-cards";
  */
 const REMEMBERED_ZONE_CHANGE_SLOT = "remembered-zone-change-object";
 
+/** The old library object chosen by a search, before its following movement. */
+const SEARCHED_LIBRARY_SLOT = "searched-library-card";
+
 /**
  * What one effect requires of the target slot it names. `any` is the damage
  * case: every legal target kind can take damage, so the declared slot needs no
@@ -783,22 +786,49 @@ function effectTargetUse<Player extends TriggerEffectPlayer>(
 		case "change-zone":
 			// A battlefield origin targets the permanent itself; every other
 			// origin targets a card sitting in that same public zone.
-			return effect.subject.kind === "target"
+			if (effect.subject.kind !== "target") return null;
+			if (effect.from === "battlefield")
+				return {
+					slot: effect.subject.slot,
+					required: {
+						kind: "permanent",
+						message: "ChangeZone target kind and zone must match Origin$",
+					},
+				};
+			assert(
+				effect.from === "graveyard" || effect.from === "exile",
+				"a targeted card change-zone effect must use a public origin",
+			);
+			return {
+				slot: effect.subject.slot,
+				required: {
+					kind: "card",
+					zone: effect.from,
+					message: "ChangeZone target kind and zone must match Origin$",
+				},
+			};
+		case "search-library": {
+			const targeted = [effect.searcher, effect.owner].find(
+				(subject) => subject.kind === "target-player",
+			);
+			return targeted?.kind === "target-player"
+				? {
+						slot: targeted.slot,
+						required: {
+							kind: "player",
+							message: "Search requires a player target",
+						},
+					}
+				: null;
+		}
+		case "shuffle-library":
+			return effect.subject.kind === "target-player"
 				? {
 						slot: effect.subject.slot,
-						required:
-							effect.from === "battlefield"
-								? {
-										kind: "permanent",
-										message:
-											"ChangeZone target kind and zone must match Origin$",
-									}
-								: {
-										kind: "card",
-										zone: effect.from,
-										message:
-											"ChangeZone target kind and zone must match Origin$",
-									},
+						required: {
+							kind: "player",
+							message: "Shuffle requires a player target",
+						},
 					}
 				: null;
 		default:
@@ -1433,10 +1463,127 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				"hidden",
 				"mandatory",
 				"changetype",
+				"changetypedesc",
 			);
 			if (!badParams.ok) return badParams;
 			const originText = getForgeParam(params, "Origin");
 			const changeType = getForgeParam(params, "ChangeType");
+			if (originText === "Library") {
+				const amount = positiveInteger(getForgeParam(params, "ChangeNum"), 1);
+				const predicate =
+					changeType === "Card"
+						? undefined
+						: changeType === undefined
+							? null
+							: parseSelector(changeType);
+				const owner = parseEffectPlayer(params, parsePlayer);
+				const searcher = parsePlayer("You");
+				const destinationText = getForgeParam(params, "Destination");
+				const gainControl = getForgeParam(params, "GainControl");
+				const tapped = getForgeParam(params, "Tapped");
+				const mandatory = getForgeParam(params, "Mandatory");
+				if (
+					amount !== 1 ||
+					predicate === null ||
+					!owner ||
+					!searcher ||
+					(getForgeParam(params, "Hidden") !== undefined &&
+						getForgeParam(params, "Hidden") !== "True") ||
+					(mandatory !== undefined && mandatory !== "True") ||
+					getForgeParam(params, "TgtZone") !== undefined ||
+					getForgeParam(params, "LibraryPosition") !== undefined ||
+					getForgeParam(params, "ActivationZone") !== undefined ||
+					getForgeParam(params, "RememberTargets") !== undefined ||
+					getForgeParam(params, "ForgetOtherTargets") !== undefined
+				) {
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"library search requires one supported card selector and destination",
+						where,
+					);
+				}
+
+				let destination: Exclude<
+					ZoneChangeEffectDestination<Player>,
+					{ zone: "library" }
+				>;
+				if (
+					destinationText === "Hand" ||
+					destinationText === "Graveyard" ||
+					destinationText === "Exile"
+				) {
+					if (gainControl !== undefined || tapped !== undefined)
+						return issue(
+							"UNSUPPORTED_PARAMETER",
+							"library search destination metadata does not match its destination",
+							where,
+						);
+					// A qualified search into a hidden hand must reveal the found card
+					// to every player. The engine has no one-shot reveal projection yet,
+					// so accepting that family would hide rules-visible information.
+					if (destinationText === "Hand" && predicate !== undefined)
+						return issue(
+							"UNSUPPORTED_EFFECT",
+							"qualified searches into a hand require reveal support",
+							where,
+						);
+					destination = {
+						zone: destinationText.toLowerCase() as
+							| "hand"
+							| "graveyard"
+							| "exile",
+					};
+				} else if (destinationText === "Battlefield") {
+					if (
+						(gainControl !== undefined &&
+							gainControl !== "True" &&
+							gainControl !== "False") ||
+						(tapped !== undefined && tapped !== "True" && tapped !== "False")
+					)
+						return issue(
+							"UNSUPPORTED_PARAMETER",
+							"unsupported battlefield library search destination",
+							where,
+						);
+					destination = {
+						zone: "battlefield",
+						controller: gainControl === "True" ? searcher : "owner",
+						...(tapped === "True" ? { tapped: true } : {}),
+					};
+				} else {
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"unsupported library search destination",
+						where,
+					);
+				}
+
+				return ok([
+					{
+						kind: "search-library",
+						searcher: { kind: "relative-player", player: searcher },
+						owner,
+						...(predicate ? { predicate } : {}),
+						resultSlot: SEARCHED_LIBRARY_SLOT,
+					},
+					{
+						kind: "change-zone",
+						subject: {
+							kind: "effect-result",
+							slot: SEARCHED_LIBRARY_SLOT,
+						},
+						from: "library",
+						destination,
+					},
+					{ kind: "shuffle-library", subject: owner },
+				]);
+			}
+			if (getForgeParam(params, "ChangeTypeDesc") !== undefined)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"ChangeTypeDesc is supported only for library searches",
+					where,
+				);
 			if (changeType !== undefined) {
 				const selector = parseSelector(changeType);
 				const amount = positiveInteger(getForgeParam(params, "ChangeNum"), 1);

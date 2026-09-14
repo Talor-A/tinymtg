@@ -76,6 +76,8 @@ const CORPUS_CARDS = [
 	loadCardFixture("v/vision_skeins"),
 	loadCardFixture("f/forced_fruition"),
 	loadCardFixture("w/wrenns_resolve"),
+	loadCardFixture("d/demonic_tutor"),
+	loadCardFixture("e/evolving_wilds"),
 	loadCardFixture("c/cloudshift"),
 	loadCardFixture("r/restoration_angel"),
 	loadCardFixture("p/pegasus_courser"),

@@ -56,6 +56,7 @@ export class ScriptedAgent implements SyncAgent {
 			kept: ObjectId[];
 			bottom: ObjectId[];
 		}[] = [],
+		public searchChoices: (ObjectId | null)[] = [],
 	) {}
 
 	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
@@ -83,6 +84,15 @@ export class ScriptedAgent implements SyncAgent {
 				return permanent
 					? { optionId: String(permanent) }
 					: firstOption(request);
+			}
+
+			case "searchLibrary": {
+				const card = this.searchChoices.shift();
+				return card === null
+					? { optionId: "decline" }
+					: card === undefined
+						? firstOption(request)
+						: { optionId: String(card) };
 			}
 
 			case "mana":
@@ -205,6 +215,7 @@ export class RandomAgent implements SyncAgent {
 			case "optional":
 			case "priorityAction":
 			case "mana":
+			case "searchLibrary":
 				return { optionId: randomElement(request.options).id };
 			default:
 				return assertNever(request);
@@ -243,6 +254,11 @@ export class KeyboardAgent implements SyncAgent {
 					default:
 						return assertNever(request.context.reason);
 				}
+				break;
+			case "searchLibrary":
+				console.log(
+					`\n[Player ${request.player}: search player ${request.context.owner}'s library]`,
+				);
 				break;
 			case "target":
 				console.log(

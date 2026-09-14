@@ -33,6 +33,7 @@ export {
 	type RequiredObjectChoiceInput,
 	type ScryChoiceAnswer,
 	type ScryResult,
+	type SearchLibraryChoiceRequest,
 	type SurveilChoiceAnswer,
 	type SurveilResult,
 	type SyncAgent,
@@ -1109,6 +1110,9 @@ export type PlayerHandObjectView = PlayerNonbattlefieldObjectView<"hand">;
 export type PlayerGraveyardObjectView =
 	PlayerNonbattlefieldObjectView<"graveyard">;
 export type PlayerExileObjectView = PlayerNonbattlefieldObjectView<"exile">;
+export type PlayerLibrarySearchCardView = DeepReadOnly<
+	CardSnapshot & { readonly zone: "library" }
+>;
 export type PlayerBattlefieldObjectView = DeepReadOnly<PermanentSnapshot>;
 
 /** Stack entries are either spell snapshots or declarative ability items. */
@@ -2185,6 +2189,20 @@ type BoundZoneChangeEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
 	};
 }[PublicObjectZone];
 
+/** Hidden library cards can only enter this instruction through a preceding search. */
+type SearchedCardZoneChangeEffectDef<
+	AllowedPlayer extends TriggerEffectPlayer,
+> = {
+	kind: "change-zone";
+	subject: EffectResultObjectRef;
+	from: "library";
+	destination: Exclude<
+		ZoneChangeEffectDestination<AllowedPlayer>,
+		{ zone: "library" }
+	>;
+	resultSlot?: string;
+};
+
 type ChosenPermanentZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
 	kind: "change-zone";
 	subject: ChosenPermanentEffectRef<Player>;
@@ -2198,7 +2216,19 @@ type ChosenPermanentZoneChangeEffectDef<Player extends TriggerEffectPlayer> = {
 
 export type ZoneChangeEffectDef<Player extends TriggerEffectPlayer> =
 	| BoundZoneChangeEffectDef<Player>
+	| SearchedCardZoneChangeEffectDef<Player>
 	| ChosenPermanentZoneChangeEffectDef<Player>;
+
+type SearchLibraryEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
+	kind: "search-library";
+	/** The player who sees the eligible cards and makes the choice. */
+	searcher: EffectPlayerSubject<AllowedPlayer>;
+	/** The player whose library is inspected and later shuffled. */
+	owner: EffectPlayerSubject<AllowedPlayer>;
+	/** Omitted means "a card"; a predicate makes failing to find legal. */
+	predicate?: ObjectPredicateDef;
+	resultSlot: string;
+};
 
 type ExileTopEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
 	kind: "exile-top";
@@ -2230,6 +2260,11 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	| EachPlayerDrawEffectDef
 	| CreateDelayedTriggerEffectDef
 	| ExileTopEffectDef<AllowedPlayer>
+	| SearchLibraryEffectDef<AllowedPlayer>
+	| {
+			kind: "shuffle-library";
+			subject: EffectPlayerSubject<AllowedPlayer>;
+	  }
 	| {
 			kind: "choose-from-top";
 			subject: AllowedPlayer;
@@ -7349,6 +7384,18 @@ function resolveEffects(
 	effects: EffectDef<TriggerEffectPlayer>[],
 	scope: Scope,
 ): void {
+	const resolvePlayer = (
+		subject: EffectPlayerSubject<TriggerEffectPlayer>,
+	): PlayerId => {
+		if (subject.kind === "relative-player")
+			return relativeEffectPlayer(item, subject.player);
+		const binding = item.targets.find(({ slot }) => slot === subject.slot);
+		assert(
+			binding?.target.type === "player",
+			`effect has no player target in slot ${subject.slot}`,
+		);
+		return binding.target.player;
+	};
 	// iterate effects
 	for (const [effectIndex, effect] of effects.entries()) {
 		if (effect.kind === "may") {
@@ -7392,6 +7439,49 @@ function resolveEffects(
 				triggerId: effect.ability,
 			});
 			state.revision++;
+			continue;
+		}
+		if (effect.kind === "search-library") {
+			assert(
+				!scope.bindings.has(effect.resultSlot),
+				`effect result slot ${effect.resultSlot} is already bound`,
+			);
+			// Bind the empty result first so an empty library, no eligible card, or
+			// a legal fail-to-find all have the same precise downstream meaning.
+			scope.bindings.set(effect.resultSlot, []);
+			const chosen = choices.searchLibrary(
+				state,
+				resolvePlayer(effect.searcher),
+				{
+					owner: resolvePlayer(effect.owner),
+					source: item.source,
+					...(effect.predicate
+						? {
+								predicate: {
+									definition: effect.predicate,
+									context: {
+										controller: item.controller,
+										source: item.source,
+									},
+								},
+							}
+						: {}),
+				},
+			);
+			if (chosen !== null) {
+				const object = maybeObject(state, chosen);
+				assert(
+					object?.kind === "card" &&
+						object.zone === "library" &&
+						object.owner === resolvePlayer(effect.owner),
+					"library search returned a card outside the searched library",
+				);
+				scope.bindings.set(effect.resultSlot, [{ type: "card", id: chosen }]);
+			}
+			continue;
+		}
+		if (effect.kind === "shuffle-library") {
+			shuffleLibrary(state, resolvePlayer(effect.subject));
 			continue;
 		}
 		let bound: EntityRef | null = null;
@@ -8003,6 +8093,10 @@ function effectToEvent(
 			throw new Error(
 				"temporary play permissions resolve without creating an event",
 			);
+		case "search-library":
+			throw new Error("library searches resolve without creating an event");
+		case "shuffle-library":
+			throw new Error("library shuffles resolve without creating an event");
 		case "add-mana":
 			return {
 				kind: "add mana",
@@ -8180,7 +8274,9 @@ function validateEffectResultFlow(
 				);
 			}
 			if (
-				(effect.kind === "exile-top" || effect.kind === "change-zone") &&
+				(effect.kind === "exile-top" ||
+					effect.kind === "change-zone" ||
+					effect.kind === "search-library") &&
 				effect.resultSlot !== undefined
 			) {
 				assert(
@@ -8193,7 +8289,11 @@ function validateEffectResultFlow(
 				);
 				available.set(
 					effect.resultSlot,
-					effect.kind === "exile-top" ? "exile" : effect.destination.zone,
+					(() => {
+						if (effect.kind === "exile-top") return "exile";
+						if (effect.kind === "search-library") return "library";
+						return effect.destination.zone;
+					})(),
 				);
 			}
 			if (
@@ -8257,6 +8357,32 @@ function requiredTargetDefinition(
 			return;
 		}
 		if (effect.kind === "choose-from-top") return;
+		if (effect.kind === "search-library") {
+			for (const subject of [effect.searcher, effect.owner]) {
+				if (subject.kind === "relative-player") continue;
+				assert(
+					target !== null && subject.slot === target.id,
+					"library search must reference its ability's target player slot",
+				);
+				assert(
+					target.legal.kind === "player",
+					"library search requires a player target",
+				);
+			}
+			return;
+		}
+		if (effect.kind === "shuffle-library") {
+			if (effect.subject.kind === "relative-player") return;
+			assert(
+				target !== null && effect.subject.slot === target.id,
+				"library shuffle must reference its ability's target player slot",
+			);
+			assert(
+				target.legal.kind === "player",
+				"library shuffle requires a player target",
+			);
+			return;
+		}
 		if (effect.kind === "may-play" && effect.subject.kind === "effect-result")
 			return;
 		if (
@@ -9137,7 +9263,9 @@ function activateAbilityIn(
 				effect.kind === "add counters" ||
 				effect.kind === "sacrifice" ||
 				effect.kind === "create-token" ||
-				effect.kind === "create-delayed-trigger"
+				effect.kind === "create-delayed-trigger" ||
+				effect.kind === "search-library" ||
+				effect.kind === "shuffle-library"
 			) {
 				continue;
 			}

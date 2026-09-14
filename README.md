@@ -119,7 +119,11 @@ one-permanent sacrifice for a relative or targeted player, targeted or
 self-directed fixed counter placement (including Forge's omitted `Defined$`
 default for a nontargeted permanent ability), and one-object zone changes from
 battlefield, graveyard, or exile to hand, graveyard, exile, the top or bottom
-of a library, or the battlefield; spells,
+of a library, or the battlefield; single-card library searches, lowered as an
+explicit search choice followed by a result-bound zone change and a shuffle,
+with the searcher and library owner represented independently. Qualified
+searches may fail to find. A qualified search into a hand still rejects because
+the engine does not yet represent revealing the found card to every player; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, `Opponent`, a spell (`TargetType$ Spell`) optionally narrowed
 by a supported `ValidTgts$` selector other than the domain-sensitive
@@ -154,7 +158,7 @@ domain: for example, `not creature` over permanents can match a land, but it
 cannot introduce a player, spell, or card in another zone.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 3,370 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 4,032 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
@@ -177,6 +181,7 @@ Normal progression through `advance()` currently supports:
 - activated abilities with fixed generic/WUBRG mana, optional tap-self, and optional single-permanent sacrifice costs, with or without a target;
 - activated abilities that explicitly function from a public graveyard or exile zone, with that card's owner as the activator;
 - relative-player and targeted-player sacrifice effects in which that player chooses one matching permanent;
+- single-card library searches whose eligible cards are exposed only in a dedicated replay-safe search choice, followed by result-bound movement and shuffling;
 - the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith), and targeted triggers (e.g. Flametongue Kavu, Manic Vandal);
 - declaring attackers, blockers, and two-player combat damage, including trample; and
 - replacement, prohibition, and state-based effects encountered by those events.

@@ -13,6 +13,7 @@ import type {
 	ObjectPredicateDef,
 	PendingTrigger,
 	PlayerId,
+	PlayerLibrarySearchCardView,
 	PlayerView,
 	PredicateContext,
 	PriorityAction,
@@ -204,6 +205,22 @@ export interface ChooseFromTopChoiceRequest extends ChoiceRequestBase {
 	};
 }
 
+/**
+ * Searching is its own choice rather than a generic object choice because it
+ * temporarily reveals cards from a normally hidden library to the searcher.
+ * `player` is the searcher; `owner` is intentionally independent.
+ */
+export interface SearchLibraryChoiceRequest extends ChoiceRequestBase {
+	kind: "searchLibrary";
+	context: {
+		owner: PlayerId;
+		source: ObjectId;
+		cards: PlayerLibrarySearchCardView[];
+		predicate?: ObjectPredicateDef;
+		optional: boolean;
+	};
+}
+
 export type ChoiceRequest =
 	| TargetChoiceRequest
 	| ReplacementChoiceRequest
@@ -216,7 +233,8 @@ export type ChoiceRequest =
 	| DeclareBlockersChoiceRequest
 	| ScryChoiceRequest
 	| SurveilChoiceRequest
-	| ChooseFromTopChoiceRequest;
+	| ChooseFromTopChoiceRequest
+	| SearchLibraryChoiceRequest;
 
 export interface ScryChoiceAnswer {
 	/**
@@ -343,6 +361,10 @@ type RequestInput =
 	  >
 	| Omit<ScryChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
 	| Omit<SurveilChoiceRequest, "version" | "id" | "ordinal" | "fingerprint">
+	| Omit<
+			SearchLibraryChoiceRequest,
+			"version" | "id" | "ordinal" | "fingerprint"
+	  >
 	| Omit<
 			ChooseFromTopChoiceRequest,
 			"version" | "id" | "ordinal" | "fingerprint"
@@ -983,6 +1005,72 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				...(input.optional
 					? [{ id: "decline", label: input.optional.label }]
 					: []),
+			],
+		});
+		return this.choose(state, request, candidates);
+	}
+
+	/**
+	 * Search one library for at most one eligible card. Qualified hidden-zone
+	 * searches may fail to find; an unrestricted search must choose when the
+	 * library is nonempty (CR 701.19b).
+	 */
+	searchLibrary(
+		state: ReadonlyGameState,
+		searcher: PlayerId,
+		input: {
+			owner: PlayerId;
+			source: ObjectId;
+			predicate?: {
+				definition: ObjectPredicateDef;
+				context: PredicateContext;
+			};
+		},
+	): ObjectId | null {
+		const read = this.engine.createReadContext(state);
+		const cards: PlayerLibrarySearchCardView[] = state.players[
+			input.owner
+		].library
+			.map((id): PlayerLibrarySearchCardView => {
+				const card = getSnapshot(read, id);
+				assert(
+					card.kind === "card" && card.zone === "library",
+					`library contains non-card object ${id}`,
+				);
+				return { ...card, zone: "library" };
+			})
+			.filter((card) =>
+				input.predicate
+					? objectMatchesPredicate(
+							input.predicate.definition,
+							card,
+							input.predicate.context,
+						)
+					: true,
+			);
+		if (cards.length === 0) return null;
+
+		const optional = input.predicate !== undefined;
+		const candidates: { id: string; value: ObjectId | null }[] = cards.map(
+			(card) => ({ id: String(card.objectId), value: card.objectId }),
+		);
+		if (optional) candidates.push({ id: "decline", value: null });
+		const request = this.request({
+			kind: "searchLibrary",
+			player: searcher,
+			context: {
+				owner: input.owner,
+				source: input.source,
+				cards: cards.map((card) => structuredClone(card)),
+				...(input.predicate ? { predicate: input.predicate.definition } : {}),
+				optional,
+			},
+			options: [
+				...cards.map((card) => ({
+					id: String(card.objectId),
+					label: `${card.currentCharacteristics.name}#${card.objectId}`,
+				})),
+				...(optional ? [{ id: "decline", label: "Find no card" }] : []),
 			],
 		});
 		return this.choose(state, request, candidates);
