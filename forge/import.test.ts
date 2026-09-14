@@ -23,6 +23,37 @@ function importFixture(path: string) {
 }
 
 describe("lowerForgeCard: accepted card lowering", () => {
+	test("Hexproof and shroud lower as targeting-restriction keywords", () => {
+		for (const [fixture, keyword] of [
+			["g/gladecover_scout", "hexproof"],
+			["k/kalonian_behemoth", "shroud"],
+		] as const) {
+			const result = importFixture(fixture);
+			if (!result.ok) throw new Error(`expected ${fixture} to import`);
+			expect(result.card.keywords).toEqual([keyword]);
+		}
+	});
+
+	test("Ranger's Guile lowers its temporary hexproof grant", () => {
+		const result = importFixture("r/rangers_guile");
+		if (!result.ok) throw new Error("expected Ranger's Guile to import");
+		expect(result.card.spell?.effects).toEqual([
+			{
+				kind: "grant-keyword",
+				subject: { kind: "target", slot: "target-1" },
+				keyword: "hexproof",
+				duration: "until-end-of-turn",
+			},
+			{
+				kind: "modify-pt",
+				subject: { kind: "target", slot: "target-1" },
+				power: 1,
+				toughness: 1,
+				duration: "until-end-of-turn",
+			},
+		]);
+	});
+
 	test("Devoid makes a card colorless without changing its mana cost", () => {
 		const result = importFixture("r/reality_hemorrhage");
 		if (!result.ok) throw new Error("expected Reality Hemorrhage to import");

@@ -539,6 +539,71 @@ describe("single-target spell casting", () => {
 		);
 	});
 
+	test("hexproof rejects opponents' sources while shroud rejects every source", () => {
+		const { state, spell } = setupCast();
+		const ordinary = engine.spawnPermanent(state, "grizzly-bears", 1);
+		const friendlyHexproof = engine.spawnPermanent(
+			state,
+			"gladecover-scout",
+			0,
+		);
+		engine.spawnPermanent(state, "gladecover-scout", 1);
+		engine.spawnPermanent(state, "kalonian-behemoth", 0);
+		engine.spawnPermanent(state, "kalonian-behemoth", 1);
+		const choices = ChoiceController.record(engine, passingAgents());
+
+		engine.executeCastAction(
+			state,
+			0,
+			{ kind: "cast", card: spell.id },
+			choices,
+		);
+
+		const request = choices.transcript().choices[0]?.request;
+		expect(request?.kind).toBe("target");
+		expect(request?.options.map((option) => option.id)).toEqual([
+			`permanent:${ordinary.id}`,
+			`permanent:${friendlyHexproof.id}`,
+		]);
+	});
+
+	test("a controller can target and destroy their own hexproof creature", () => {
+		const { state, spell } = setupCast();
+		const scout = engine.spawnPermanent(state, "gladecover-scout", 0);
+
+		castAt(state, spell.id, { type: "permanent", id: scout.id });
+		engine.settlePriority(state, passingAgents());
+
+		expect(state.battlefield).not.toContain(scout.id);
+	});
+
+	test("gaining hexproof makes an opponent's existing target illegal", () => {
+		const { state, spell } = setupCast();
+		const creature = engine.spawnPermanent(state, "grizzly-bears", 1);
+		castAt(state, spell.id, { type: "permanent", id: creature.id });
+		const guile = engine.spawnCard(state, "rangers-guile", 1, "hand");
+		engine.perform(
+			state,
+			{ kind: "add mana", source: guile.id, player: 1, mana: { g: 1 } },
+			passingAgents(),
+		);
+		const agents = passingAgents();
+		agents[1].priorityActions.push({ kind: "cast", card: guile.id });
+		agents[1].targetChoices.push({ type: "permanent", id: creature.id });
+
+		engine.settlePriority(state, agents);
+
+		expect(agents[1].priorityActions).toHaveLength(0);
+		expect(state.battlefield).toContain(creature.id);
+		expect(
+			getSnapshot(engine.createReadContext(state), creature.id)
+				.currentCharacteristics.keywords,
+		).toContain("hexproof");
+		expect(state.log.some((line) => line.includes("[illegal target]"))).toBe(
+			true,
+		);
+	});
+
 	test("Unsummon returns the targeted creature to its owner's hand", () => {
 		const { state, spell } = setupCast("unsummon");
 		engine.perform(

@@ -2510,6 +2510,8 @@ export interface TriggeredAbilityDefinition {
 export type Keyword =
 	| "devoid"
 	| "indestructible"
+	| "hexproof"
+	| "shroud"
 	| "deathtouch"
 	| "lifelink"
 	| "flying"
@@ -8797,6 +8799,17 @@ function isLegalTarget(
 	// CR 608.2b: a target that left the zone it was targeted in is illegal, and
 	// the object that replaced it is a different object with a different id.
 	if (snapshot?.kind !== "permanent") return false;
+	// CR 702.18a / 702.11b: shroud rejects every spell or ability targeting
+	// this permanent; hexproof rejects only sources an opponent controls.
+	// `ctx.controller` is captured from the announcing spell or ability, while
+	// the permanent's current controller comes from the same derived snapshot
+	// whose type, colour, and other target restrictions are checked below.
+	if (snapshot.currentCharacteristics.keywords.includes("shroud")) return false;
+	if (
+		snapshot.currentCharacteristics.keywords.includes("hexproof") &&
+		snapshot.controller !== ctx.controller
+	)
+		return false;
 	if (definition.legal.kind === "any-target") {
 		// CR 115.4: "any target" is a creature, a planeswalker, a battle, or a
 		// player; the engine has no battles.

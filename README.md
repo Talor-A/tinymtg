@@ -79,9 +79,9 @@ accepted. A recognized keyword is never silently dropped: every root `A`, `T`,
 
 The current subset covers: literal characteristics (name, mana cost, types,
 colors, P/T); the keywords Deathtouch, Flying, Reach, Defender, Lifelink,
-Indestructible, Vigilance, and Trample, plus `Bushido:N`, which the engine
-compiles into a blocks-or-becomes-blocked trigger the way it already does
-Prowess;
+Indestructible, Hexproof, Shroud, Vigilance, and Trample, plus `Bushido:N`,
+which the engine compiles into a blocks-or-becomes-blocked trigger the way it
+already does Prowess;
 literal entry-counter shorthand and both canonical enters-tapped `R:` forms —
 the self form (`ValidCard$ Card.Self`, e.g. Charcoal Diamond) lowers directly
 to `CardDefInput.entersTapped`, and the global form (a supported selector
@@ -154,8 +154,8 @@ fixtures this is checked against, and
 the "Deferred / explicitly unsupported" list at the top of `forge-import.ts`
 for what is intentionally out of scope (other `Dig` forms, including dynamic
 amounts and non-bottom dispositions; `Investigate` with an explicit count or
-player; random/multi-card discard, alternate costs, hexproof/shroud/protection,
-and more).
+player; random/multi-card discard, alternate costs, hexproof/shroud/protection
+target-selector modifiers, and more).
 
 The engine's own predicate vocabulary is wider than the spellings the bridge
 accepts: `ObjectPredicateDef` covers the source itself, card type, supertype,
@@ -166,7 +166,7 @@ domain: for example, `not creature` over permanents can match a land, but it
 cannot introduce a player, spell, or card in another zone.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 4,212 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 4,277 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.
@@ -308,11 +308,11 @@ engine does not support planeswalkers yet. Battles are outside the card-type
 model. Mana abilities must run before casting, and payment still precedes the
 move to the stack.
 
-Multiple or optional targets, non-spell stack targets, and graveyard targets
-remain deferred, as do hexproof, shroud, and protection: those are not in the
-`Keyword` union, so no target is ever illegal because of them and the importer
-rejects cards that have them. Unsupported target declarations raise assertions
-before payment. Target-choice requests use the same replay protocol as other
-agent choices.
+Multiple or optional targets and non-spell stack targets remain deferred, as do
+protection, player hexproof, and qualified variants such as hexproof from a
+color. Hexproof and shroud on permanents use their current characteristics when
+targets are chosen and checked again on resolution. Unsupported target
+declarations raise assertions before payment. Target-choice requests use the
+same replay protocol as other agent choices.
 
 `perform()` injects a rules event directly, and `settlePriority()` resolves the current priority window directly. They are useful for focused rules tests and integrations, but do not represent player actions supported by the normal gameplay loop.

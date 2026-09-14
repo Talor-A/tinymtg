@@ -216,6 +216,8 @@ const BARE_KEYWORDS = new Map<string, Keyword>([
 	["Defender", "defender"],
 	["Lifelink", "lifelink"],
 	["Indestructible", "indestructible"],
+	["Hexproof", "hexproof"],
+	["Shroud", "shroud"],
 	["Haste", "haste"],
 	["Vigilance", "vigilance"],
 	["Trample", "trample"],
