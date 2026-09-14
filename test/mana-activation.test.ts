@@ -208,7 +208,7 @@ const TEST_CARD_7 = defineCard({
 					kind: "discard",
 					selector: "any",
 					amount: 2,
-					subject: "you",
+					subject: { kind: "relative-player", player: "you" },
 				},
 			],
 		},

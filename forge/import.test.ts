@@ -1483,7 +1483,10 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						kind: "discard",
 						selector: "any",
 						amount: 1,
-						subject: "triggering-player",
+						subject: {
+							kind: "relative-player",
+							player: "triggering-player",
+						},
 					},
 				],
 			},
@@ -2274,6 +2277,24 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				"SpellCast requires a supported ValidCard$ selector",
 			);
 		}
+	});
+
+	test("Ravenous Rats discards from the targeted player's hand", () => {
+		const result = importFixture("r/ravenous_rats");
+		if (!result.ok) throw new Error("expected ok");
+		const trigger = result.card.abilityDefinitions.triggered[0];
+		expect(trigger?.targets[0]?.legal).toEqual({
+			kind: "player",
+			player: "opponent",
+		});
+		expect(trigger?.effects).toEqual([
+			{
+				kind: "discard",
+				selector: "any",
+				amount: 1,
+				subject: { kind: "target-player", slot: "target-1" },
+			},
+		]);
 	});
 
 	test("Hunted Lammasu gives the token to the targeted player", () => {
@@ -3101,7 +3122,12 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						subject: { kind: "relative-player", player: "you" },
 						amount: 1,
 					},
-					{ kind: "discard", selector: "any", amount: 1, subject: "you" },
+					{
+						kind: "discard",
+						selector: "any",
+						amount: 1,
+						subject: { kind: "relative-player", player: "you" },
+					},
 				],
 			},
 		]);

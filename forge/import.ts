@@ -1208,7 +1208,13 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			return ok([{ kind: "draw", subject: who, amount }]);
 		}
 		case "discard": {
-			const badParams = claim("defined", "mode", "numcards");
+			const badParams = claim(
+				"defined",
+				"mode",
+				"numcards",
+				"validtgts",
+				"tgtprompt",
+			);
 			if (!badParams.ok) return badParams;
 			if (getForgeParam(params, "Mode") !== "TgtChoose")
 				return issue(
@@ -1216,7 +1222,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 					"only Mode$ TgtChoose discard is supported",
 					where,
 				);
-			const who = parsePlayer(getForgeParam(params, "Defined"));
+			const who = parseEffectPlayer(params, parsePlayer);
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!who || amount !== 1)
 				return issue(

@@ -512,6 +512,7 @@ Broodhunter Wurm
 Broodmate Dragon
 Brotherhood Patriarch
 Brushstrider
+Brutal Nightstalker
 Brute Force
 Brute Strength
 Bull Cerodon
@@ -581,6 +582,7 @@ Cartographer
 Carven Caryatid
 Cast Down
 Castle Sengir
+Cat Burglar
 Cat Oven
 Catacomb Crocodile
 Catacomb Sifter
@@ -604,6 +606,7 @@ Centaur Glade
 Centaur Healer
 Centaur Nurturer
 Centaur's Herald
+Cephalid Looter
 Cephalid Scout
 Cerodon Yearling
 Ceta Disciple
@@ -732,6 +735,7 @@ Corpse Knight
 Corpsehatch
 Corridor Monitor
 Corroding Dragonstorm
+Corrupt Court Official
 Corrupt Eunuchs
 Corrupted Conviction
 Corsair Captain
@@ -790,6 +794,7 @@ Crystal Ball
 Crystal Grotto
 Crystal Quarry
 Crystal Vein
+Cult Guildmage
 Cumber Stone
 Cunning Breezedancer
 Cunning Maneuver
@@ -857,6 +862,7 @@ Daysquad Marshal
 Dazzling Angel
 Dazzling Ramparts
 Deadapult
+Deadbridge Shaman
 Deadeye Duelist
 Deadly Derision
 Deadly Dispute
@@ -1074,6 +1080,7 @@ East Wind Avatar
 Eastern Paladin
 Easy Prey
 Eat to Extinction
+Ebon Dragon
 Ebon Stronghold
 Ebony Rhino
 Ebony Treefolk
@@ -1794,6 +1801,7 @@ Hornet Queen
 Hornet Sting
 Hornswoggle
 Horrid Vigor
+Horrifying Revelation
 Horror of the Dim
 Hostile Minotaur
 Hotfoot Gnome
@@ -1859,6 +1867,7 @@ Imperious Inkmage
 Implement of Examination
 Implement of Ferocity
 Implement of Improvement
+Implement of Malice
 Implements of Sacrifice
 Implode
 Impolite Entrance
@@ -2032,6 +2041,7 @@ Keepers of the Faith
 Keldon Necropolis
 Kelinore Bat
 Kemba's Skyguard
+Kemuri-Onna
 Kessig Flamebreather
 Kessig Recluse
 Ketria Crystal
@@ -2180,6 +2190,7 @@ Lightshell Duo
 Lightshield Parry
 Liliana's Mastery
 Liliana's Specter
+Liliana's Steward
 Limestone Golem
 Living Lightning
 Living Tempest
@@ -2489,6 +2500,7 @@ Nebula Dragon
 Neck Snap
 Necrogen Mists
 Necrogen Scudder
+Necrogen Spellbomb
 Necrogenesis
 Necromancer's Assistant
 Nectar Faerie
@@ -2513,6 +2525,7 @@ Neurok Replica
 Neutralize
 New Benalia
 Nexus Wardens
+Nezumi Bone-Reader
 Nezumi Informant
 Nezumi Linkbreaker
 Nezumi Ronin
@@ -2898,6 +2911,7 @@ Ravenous Chupacabra
 Ravenous Giant
 Ravenous Harpy
 Ravenous Lindwurm
+Ravenous Rats
 Ravenous Skirge
 Ray of Dissolution
 Ray of Ruin
@@ -2921,6 +2935,7 @@ Reckless Fireweaver
 Reckless Pangolin
 Reckless Ransacking
 Reckless Reveler
+Reckless Scholar
 Reclaim
 Reclaiming Vines
 Reclamation Sage
@@ -3044,6 +3059,7 @@ Rotcrown Ghoul
 Rotlung Reanimator
 Rotted Hulk
 Rotted Hystrix
+Rottenheart Ghoul
 Rotting Fensnake
 Rotting Legion
 Rotting Mastodon
@@ -3977,6 +3993,7 @@ Unexplained Disappearance
 Unfathomable Truths
 Unfriendly Fire
 Unhallowed Phalanx
+Unhinge
 Unholy Grotto
 Unholy Officiant
 Universal Solvent
@@ -4103,6 +4120,7 @@ Vitu-Ghazi, the City-Tree
 Vivisection
 Vizier of Tumbling Sands
 Vizzerdrix
+Vodalian Hypnotist
 Vodalian Merchant
 Vodalian Soldiers
 Voice of the Provinces
@@ -4139,6 +4157,7 @@ Walking Corpse
 Wall of Air
 Wall of Blossoms
 Wall of Denial
+Wall of Distortion
 Wall of Earth
 Wall of Faith
 Wall of Granite
@@ -4360,4 +4379,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4357`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4376`;

@@ -2297,7 +2297,8 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 			kind: "discard";
 			selector: "any" | "random";
 			amount: number;
-			subject: AllowedPlayer;
+			/** A relative player, or the player bound to a target slot. */
+			subject: EffectPlayerSubject<AllowedPlayer>;
 	  }
 	| {
 			kind: "damage";
@@ -2674,6 +2675,7 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 		case "mill":
 		case "exile-top":
 		case "sacrifice":
+		case "discard":
 			return effect.subject.kind === "target-player"
 				? [
 						{
@@ -2819,7 +2821,6 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 		case "each player draw":
 		case "create-delayed-trigger":
 		case "choose-from-top":
-		case "discard":
 		case "add-mana":
 			return [];
 		default:
@@ -8364,7 +8365,7 @@ function effectToEvent(
 			if (effect.selector === "any") {
 				return {
 					kind: "discard",
-					player: relativeEffectPlayer(item, effect.subject),
+					player: effectPlayer(effect.subject),
 					cards: { kind: "any" },
 				};
 			}
