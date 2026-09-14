@@ -3333,6 +3333,67 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		});
 	});
 
+	test("Languish lowers to a fixed set-based P/T instruction", () => {
+		const result = importFixture("l/languish");
+		if (!result.ok) throw new Error("expected Languish to import");
+		expect(result.card.spell?.effects).toEqual([
+			{
+				kind: "pump-all",
+				subjects: {
+					kind: "matching-permanents",
+					predicate: { kind: "type", type: "creature" },
+				},
+				power: -4,
+				toughness: -4,
+				keywords: [],
+				duration: "until-end-of-turn",
+			},
+		]);
+	});
+
+	test("Make a Stand lowers its set-based keyword and one-sided pump", () => {
+		const result = importFixture("m/make_a_stand");
+		if (!result.ok) throw new Error("expected Make a Stand to import");
+		expect(result.card.spell?.effects).toEqual([
+			{
+				kind: "pump-all",
+				subjects: {
+					kind: "matching-permanents",
+					predicate: {
+						kind: "and",
+						predicates: [
+							{ kind: "type", type: "creature" },
+							{ kind: "controller", player: "you" },
+						],
+					},
+				},
+				power: 1,
+				toughness: 0,
+				keywords: ["indestructible"],
+				duration: "until-end-of-turn",
+			},
+		]);
+	});
+
+	test("PumpAll rejects unsupported selectors and dynamic values", () => {
+		const definition = cardText("l/languish");
+		for (const [name, mutated] of [
+			["missing-selector", definition.replace(" | ValidCards$ Creature", "")],
+			[
+				"unsupported-selector",
+				definition.replace(
+					"ValidCards$ Creature",
+					"ValidCards$ Creature.cmcLEX",
+				),
+			],
+			["dynamic-power", definition.replace("NumAtt$ -4", "NumAtt$ X")],
+			["false-curse", definition.replace("IsCurse$ True", "IsCurse$ False")],
+		] as const) {
+			const result = importForgeCard(mutated, { id: `pump-all-${name}` });
+			expect(result.ok, name).toBe(false);
+		}
+	});
+
 	test("Bull Rush lowers NumAtt$ alone as +2/+0", () => {
 		// Forge leaves out the side that doesn't change. A missing NumDef$ is a
 		// toughness delta of zero, not a reason to drop the P/T change.

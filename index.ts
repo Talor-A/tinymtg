@@ -1416,13 +1416,16 @@ function buildFilteredGameView(
 				const definition = temporaryEffectDefinition(engine, effect);
 				if (
 					definition?.kind !== "grant-keyword" &&
+					definition?.kind !== "pump-all" &&
 					definition?.kind !== "grant-triggered"
 				)
 					continue;
 				const slot =
-					definition.subject.kind === "source"
-						? SELF_SLOT
-						: definition.subject.slot;
+					definition.kind === "pump-all"
+						? MATCHING_SUBJECT_SLOT
+						: definition.subject.kind === "source"
+							? SELF_SLOT
+							: definition.subject.slot;
 				const bound = effect.bindings[slot];
 				assertDefined(
 					bound,
@@ -1434,6 +1437,11 @@ function buildFilteredGameView(
 				if (definition.kind === "grant-keyword") {
 					if (!current.keywords.includes(definition.keyword))
 						current.keywords.push(definition.keyword);
+				} else if (definition.kind === "pump-all") {
+					for (const keyword of definition.keywords) {
+						if (!current.keywords.includes(keyword))
+							current.keywords.push(keyword);
+					}
 				} else {
 					current.abilities.triggered.push(definition.ability);
 				}
@@ -1443,11 +1451,14 @@ function buildFilteredGameView(
 		if (layer === "7c-modify-power-toughness") {
 			for (const effect of state.temporaryEffects) {
 				const definition = temporaryEffectDefinition(engine, effect);
-				if (definition?.kind !== "modify-pt") continue;
+				if (definition?.kind !== "modify-pt" && definition?.kind !== "pump-all")
+					continue;
 				const slot =
-					definition.subject.kind === "source"
-						? SELF_SLOT
-						: definition.subject.slot;
+					definition.kind === "pump-all"
+						? MATCHING_SUBJECT_SLOT
+						: definition.subject.kind === "source"
+							? SELF_SLOT
+							: definition.subject.slot;
 				const bound = effect.bindings[slot];
 				assertDefined(bound, `temporary P/T effect has no binding for ${slot}`);
 				if (bound.type !== "permanent") continue;
@@ -2062,6 +2073,9 @@ export type TemporaryEffect = TemporaryEffectCommon &
 /** Binding key for an effect that affects the object that created it. */
 export const SELF_SLOT = "self";
 
+/** Binding key for one permanent captured by a set-based temporary effect. */
+const MATCHING_SUBJECT_SLOT = "matching-subject";
+
 export type NewTemporaryEffect = Pick<TemporaryEffect, "source" | "bindings">;
 
 export function addTemporaryEffect(
@@ -2371,6 +2385,14 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 			kind: "grant-keyword";
 			keyword: Keyword;
 			subject: SourceEffectRef | TargetEffectRef;
+			duration: TemporaryEffectDuration;
+	  }
+	| {
+			kind: "pump-all";
+			subjects: MatchingPermanentSubjects;
+			power: number;
+			toughness: number;
+			keywords: Keyword[];
 			duration: TemporaryEffectDuration;
 	  }
 	| {
@@ -2729,6 +2751,7 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 			];
 		case "destroy-all":
 		case "tap-all":
+		case "pump-all":
 			return [];
 		case "counter":
 			return [
@@ -5818,10 +5841,12 @@ function checkStateBasedActionsIn(
 			state,
 			(effect) => includes(CHARACTERISTIC_CHANGING_LAYERS, effect.layer),
 		);
-		const hasTemporaryPtChange = state.temporaryEffects.some(
-			(effect) =>
-				temporaryEffectDefinition(engine, effect)?.kind === "modify-pt",
-		);
+		const hasTemporaryPtChange = state.temporaryEffects.some((effect) => {
+			const definition = temporaryEffectDefinition(engine, effect);
+			return (
+				definition?.kind === "modify-pt" || definition?.kind === "pump-all"
+			);
+		});
 
 		const needsPermanentSbas =
 			hasCharacteristicChangingStatic ||
@@ -8070,6 +8095,31 @@ function resolveEffects(
 			);
 			continue;
 		}
+		if (effect.kind === "pump-all") {
+			const read = createReadContext(engine, state);
+			const subjects = state.battlefield.filter((id) => {
+				const object = getSnapshot(read, id);
+				assert(object.kind === "permanent");
+				return objectMatchesPredicate(effect.subjects.predicate, object, {
+					controller: item.controller,
+					source: item.source,
+				});
+			});
+			for (const subject of subjects) {
+				addTemporaryEffect(
+					state,
+					item.controller,
+					{
+						source: resolvingEffectSource(state, item, effectIndex),
+						bindings: {
+							[MATCHING_SUBJECT_SLOT]: { type: "permanent", id: subject },
+						},
+					},
+					effect.duration,
+				);
+			}
+			continue;
+		}
 		if (effect.kind === "create-delayed-trigger") {
 			// Capture the source now. The delayed ability can trigger and resolve
 			// after the original object has left every zone where it functioned.
@@ -8732,6 +8782,10 @@ function effectToEvent(
 		case "modify-pt":
 			throw new Error(
 				"temporary P/T effects resolve without creating an event",
+			);
+		case "pump-all":
+			throw new Error(
+				"set-based temporary characteristic effects resolve without creating an event",
 			);
 		case "grant-keyword":
 			throw new Error(
@@ -9889,6 +9943,7 @@ function activateAbilityIn(
 				effect.kind === "counter" ||
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
+				effect.kind === "pump-all" ||
 				effect.kind === "grant-keyword" ||
 				effect.kind === "grant-triggered" ||
 				effect.kind === "may-play" ||

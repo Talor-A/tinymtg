@@ -2052,6 +2052,86 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			});
 			return ok(effects);
 		}
+		case "pumpall": {
+			const badParams = claim(
+				"validcards",
+				"numatt",
+				"numdef",
+				"kw",
+				"iscurse",
+			);
+			if (!badParams.ok) return badParams;
+			const validCards = getForgeParam(params, "ValidCards");
+			const predicate = validCards ? parseSelector(validCards) : null;
+			if (!predicate)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"PumpAll requires a supported ValidCards$ predicate",
+					where,
+				);
+			const isCurse = getForgeParam(params, "IsCurse");
+			if (isCurse !== undefined && isCurse !== "True")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"IsCurse must be True when present",
+					where,
+				);
+
+			const powerText = getForgeParam(params, "NumAtt");
+			const toughnessText = getForgeParam(params, "NumDef");
+			const rawKeywords = getForgeParam(params, "KW")
+				?.split("&")
+				.map((keyword) => keyword.trim());
+			if (
+				powerText === undefined &&
+				toughnessText === undefined &&
+				rawKeywords === undefined
+			)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"PumpAll must modify power, toughness, or keywords",
+					where,
+				);
+
+			const keywords: Keyword[] = [];
+			for (const rawKeyword of rawKeywords ?? []) {
+				const keyword = BARE_KEYWORDS.get(rawKeyword);
+				if (keyword === undefined)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						`unsupported temporary keyword ${rawKeyword}`,
+						where,
+					);
+				keywords.push(keyword);
+			}
+
+			let power = 0;
+			let toughness = 0;
+			if (powerText !== undefined || toughnessText !== undefined) {
+				const parsedPower =
+					powerText === undefined ? 0 : signedInteger(powerText);
+				const parsedToughness =
+					toughnessText === undefined ? 0 : signedInteger(toughnessText);
+				if (parsedPower === null || parsedToughness === null)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"PumpAll requires fixed NumAtt$/NumDef$ values",
+						where,
+					);
+				power = parsedPower;
+				toughness = parsedToughness;
+			}
+			return ok([
+				{
+					kind: "pump-all",
+					subjects: { kind: "matching-permanents", predicate },
+					power,
+					toughness,
+					keywords,
+					duration: "until-end-of-turn",
+				},
+			]);
+		}
 		case "pump": {
 			const badParams = claim(
 				"defined",
