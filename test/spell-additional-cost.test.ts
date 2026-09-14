@@ -49,10 +49,11 @@ const TEST_CARD_1 = defineCard({
 	spell: {
 		id: "spell",
 		text: "As an additional cost to cast this spell, sacrifice a creature. Destroy target creature an opponent controls.",
-		additionalCost: {
-			kind: "sacrifice",
-			predicate: { kind: "type", type: "creature" },
-			amount: 1,
+		additionalCosts: {
+			sacrifice: {
+				predicate: { kind: "type", type: "creature" },
+				amount: 1,
+			},
 		},
 		targets: [opponentCreatureTarget],
 		effects: [
@@ -101,7 +102,34 @@ const TEST_CARD_3 = defineCard({
 	],
 });
 
-const engine = createEngine([...CARDS, TEST_CARD_1, TEST_CARD_2, TEST_CARD_3]);
+const TEST_CARD_4 = defineCard({
+	id: "test-discard-card-spell",
+	name: "Test Discard Card Spell",
+	types: ["instant"],
+	colors: [],
+	manaCost: "zero",
+	spell: {
+		id: "spell",
+		text: "As an additional cost to cast this spell, discard a card. You gain 1 life.",
+		additionalCosts: { discard: { amount: 1 } },
+		targets: [],
+		effects: [
+			{
+				kind: "gain-life",
+				subject: { kind: "relative-player", player: "you" },
+				amount: 1,
+			},
+		],
+	},
+});
+
+const engine = createEngine([
+	...CARDS,
+	TEST_CARD_1,
+	TEST_CARD_2,
+	TEST_CARD_3,
+	TEST_CARD_4,
+]);
 
 function canonicalStateBytes(state: GameState): string {
 	return JSON.stringify(state, (_key, value) =>
@@ -400,5 +428,43 @@ describe("spell additional sacrifice cost", () => {
 		expect(state.battlefield).not.toContain(sacrifice);
 		expect(state.objects.has(target)).toBe(false);
 		expect(state.stack).toHaveLength(0);
+	});
+});
+
+describe("spell additional discard cost", () => {
+	test("does not count the spell itself as a card it can discard", () => {
+		const state = setupMain(engine);
+		for (const card of [...state.players[ALICE].hand]) {
+			engine.perform(
+				state,
+				{
+					kind: "change zone",
+					object: card,
+					from: "hand",
+					destination: { zone: "exile" },
+					cause: "effect",
+				},
+				passingAgents(),
+			);
+		}
+		const spell = engine.spawnCard(
+			state,
+			"test-discard-card-spell",
+			ALICE,
+			"hand",
+		);
+		expect(offered(state, spell.id)).toBe(false);
+
+		const fodder = engine.spawnCard(state, "forest", ALICE, "hand");
+		expect(offered(state, spell.id)).toBe(true);
+		const alice = new ScriptedAgent([], [], [], [], [], [], [], [fodder.id]);
+		engine.executeCastAction(state, ALICE, castAction(spell.id), [
+			alice,
+			new ScriptedAgent(),
+		]);
+
+		expect(state.players[ALICE].hand).toHaveLength(0);
+		expect(state.players[ALICE].graveyard).toHaveLength(1);
+		expect(state.stack).toHaveLength(1);
 	});
 });

@@ -18,10 +18,10 @@
  * `ChangeZone` searches other than a single card from a library, hidden Hand
  * origins and Stack origins; multi-object movement other than the exact
  * shuffle-into-library forms documented below; random or multi-card discard;
- * alternate spell costs,
- * additional spell costs other than one permanent sacrifice, and activation
- * costs other than fixed generic/coloured mana,
- * tap-self, and one permanent sacrifice; X/colorless/hybrid/Phyrexian/snow mana
+ * alternate spell costs; additional spell costs other than one permanent
+ * sacrifice and/or one-card discard; activation costs other than fixed
+ * generic/coloured mana, tap-self, one permanent sacrifice, and one-card
+ * discard; X/colorless/hybrid/Phyrexian/snow mana
  * and dynamic amounts; `Investigate` with an explicit count or player;
  * more than one target slot,
  * or an optional one; selector modifiers outside
@@ -41,6 +41,7 @@ import assert from "node:assert/strict";
 import type {
 	ActivatedEffectDef,
 	ActivationCost,
+	AdditionalCosts,
 	AnyActivatedAbilityDefinition,
 	CardDef,
 	CardDefInput,
@@ -60,7 +61,6 @@ import type {
 	RelativeEffectPlayer,
 	ReplacementEffectDefinition,
 	SpellAbilityDef,
-	SpellAdditionalCostDef,
 	StaticAbilityDefinition,
 	Supertype,
 	TargetDef,
@@ -4615,7 +4615,7 @@ export function lowerForgeCard(
 		// A spell's `Cost$` restates the printed mana cost and then appends the
 		// additional costs. Only the appended part is new information, so the
 		// mana part is checked against `ManaCost:` rather than charged again.
-		let additionalCost: SpellAdditionalCostDef | undefined;
+		let additionalCosts: AdditionalCosts | undefined;
 		if (disc.token === "SP") {
 			const costText = getForgeParam(params, "Cost");
 			if (costText !== undefined) {
@@ -4625,7 +4625,7 @@ export function lowerForgeCard(
 				if (
 					parsedCost.value.tapSelf ||
 					!restated ||
-					!parsedCost.value.sacrifice
+					(!parsedCost.value.sacrifice && !parsedCost.value.discard)
 				) {
 					return reject(
 						issue(
@@ -4635,12 +4635,13 @@ export function lowerForgeCard(
 						),
 					);
 				}
-				// The engine models exactly one additional cost: sacrifice one
-				// permanent you control matching the Forge selector.
-				additionalCost = {
-					kind: "sacrifice",
-					predicate: parsedCost.value.sacrifice.predicate,
-					amount: 1,
+				additionalCosts = {
+					...(parsedCost.value.sacrifice
+						? { sacrifice: parsedCost.value.sacrifice }
+						: {}),
+					...(parsedCost.value.discard
+						? { discard: parsedCost.value.discard }
+						: {}),
 				};
 			}
 		}
@@ -4699,7 +4700,7 @@ export function lowerForgeCard(
 			spell = {
 				id: `spell-${spellCount}`,
 				text: description,
-				...(additionalCost ? { additionalCost } : {}),
+				...(additionalCosts ? { additionalCosts } : {}),
 				targets,
 				effects: chain.value,
 			};

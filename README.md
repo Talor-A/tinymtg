@@ -251,9 +251,10 @@ During either precombat or postcombat main phase, the active player's priority c
 The allowance starts at one and includes finite positive additions from battlefield static abilities affecting their source's current controller, such as Exploration and Azusa, Lost but Seeking. These additions are derived from current ability possession and source control rather than stored on the player. Temporary adjustments such as Explore and Summer Bloom, unlimited allowances such as Fastbond, conditional or negative adjustments, playing from alternate zones, and effects granting special timing are not implemented. Invalid or stale land actions are rejected before action-specific state changes.
 
 Sacrifice effects and costs currently support one permanent at a time. Multiple
-and optional sacrifices are not implemented. A spell can have one additional
-cost that sacrifices one matching permanent. Deck construction, opening hands,
-mulligans, and alternative activation costs are also not implemented yet.
+and optional sacrifices are not implemented. Spells and activated abilities
+share fixed mana, tap-self, sacrifice, and discard payment logic; a spell's
+nonmana components are represented as additional costs. Deck construction,
+opening hands, mulligans, and alternative costs are also not implemented yet.
 
 Effect definitions call the entity they act on a `subject`. A singular player
 subject can be relative (`you`, `opponent`, or `triggering-player`) or refer to

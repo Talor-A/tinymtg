@@ -2861,7 +2861,7 @@ export interface PredicateContext {
  * `self` case compares against, or null where there is no source object.
  */
 export function objectMatchesPredicate(
-	predicate: ObjectPredicateDef,
+	predicate: DeepReadOnly<ObjectPredicateDef>,
 	object: DeepReadOnly<GameObjectSnapshot | ContinuousEffectEvaluation>,
 	context: PredicateContext,
 ): boolean {
@@ -2942,33 +2942,33 @@ export function objectMatchesPredicate(
 export interface SpellAbilityDef {
 	id: string;
 	text: string;
-	additionalCost?: SpellAdditionalCostDef;
+	additionalCosts?: AdditionalCosts;
 	targets: TargetDef[];
 	effects: SpellEffectDef[];
 }
 
-/** The one required additional spell cost currently supported. */
-export type SpellAdditionalCostDef = {
-	kind: "sacrifice";
-	predicate: ObjectPredicateDef;
-	amount: 1;
-};
-
-export interface SacrificeActivationCost {
+export interface SacrificeCost {
 	predicate: ObjectPredicateDef;
 	amount: 1;
 }
 
-/**
- * Discarding as a cost. The card is chosen from hand while the ability is
- * announced, so it is any card its controller holds, not a selected one: no
- * printed cost narrows the choice in the supported set (e.g. the Blood token's
- * "{1}, {T}, Discard a card, Sacrifice this token: Draw a card").
- */
-export interface DiscardActivationCost {
+export interface DiscardCost {
 	amount: 1;
+}
+
+/**
+ * Discarding as an activation cost. The card is chosen from hand while the
+ * ability is announced. Cycling instead discards the ability's own source.
+ */
+export interface ActivationDiscardCost extends DiscardCost {
 	/** Cycling discards its source; omitted means the player chooses a card. */
 	subject?: "source";
+}
+
+/** Nonmana cost components shared by spells and activated abilities. */
+export interface AdditionalCosts {
+	sacrifice?: SacrificeCost;
+	discard?: DiscardCost;
 }
 
 interface ActivatedAbilityDefBase {
@@ -3070,12 +3070,16 @@ export type PayableActivationManaCost =
 	  }
 	| "zero";
 
-/** The fixed components supported for one activation cost. */
-export interface ActivationCost {
-	mana: PayableActivationManaCost;
+/** Every fixed cost component the engine knows how to pay. */
+export interface PayableCost extends AdditionalCosts {
+	mana: PayableManaCost;
 	tapSelf: boolean;
-	sacrifice?: SacrificeActivationCost;
-	discard?: DiscardActivationCost;
+	discard?: ActivationDiscardCost;
+}
+
+/** The fixed components supported for one activation cost. */
+export interface ActivationCost extends PayableCost {
+	mana: PayableActivationManaCost;
 }
 
 export type CardDefManaCost =
@@ -8910,7 +8914,7 @@ function legalTargets(
 function legalSacrifices(
 	read: ReadContext,
 	player: PlayerId,
-	predicate: ObjectPredicateDef,
+	predicate: DeepReadOnly<ObjectPredicateDef>,
 	context: PredicateContext,
 ): ObjectId[] {
 	return read.state.battlefield.filter((id) => {
@@ -8924,6 +8928,209 @@ function legalSacrifices(
 			})
 		);
 	});
+}
+
+interface CostPaymentOptions {
+	mana: ManaAmount;
+	sacrifices: ObjectId[] | null;
+	discards: ObjectId[] | null;
+	discardIsSource: boolean;
+}
+
+interface CostPayment {
+	mana: ManaAmount;
+	sacrifice: ObjectId | null;
+	discard: ObjectId | null;
+}
+
+/**
+ * All choices with which `player` can pay `cost` right now, or null when any
+ * component is impossible. This is shared by action offering and announcement;
+ * announcement subsequently binds one object from each nonmana candidate set.
+ */
+function costPaymentOptions(
+	read: ReadContext,
+	player: PlayerId,
+	source: ObjectId,
+	cost: DeepReadOnly<PayableCost>,
+	discardExclusions: readonly ObjectId[] = [],
+): CostPaymentOptions | null {
+	const mana = planManaPayment(read.state.players[player].manaPool, cost.mana);
+	if (!mana) return null;
+	if (cost.sacrifice)
+		assert(
+			cost.sacrifice.amount === 1,
+			"only sacrificing one permanent is implemented",
+		);
+	if (cost.discard)
+		assert(
+			cost.discard.amount === 1,
+			"only discarding one card is implemented",
+		);
+
+	const object = read.state.objects.get(source);
+	if (cost.tapSelf) {
+		if (object?.kind !== "permanent" || object.tapped) return null;
+		const snapshot = getSnapshot(read, source);
+		if (
+			object.summoningSick &&
+			snapshot.currentCharacteristics.types.includes("creature") &&
+			!snapshot.currentCharacteristics.keywords.includes("haste")
+		)
+			return null;
+	}
+
+	const sacrifices = cost.sacrifice
+		? legalSacrifices(read, player, cost.sacrifice.predicate, {
+				controller: player,
+				source,
+			})
+		: null;
+	if (sacrifices?.length === 0) return null;
+
+	let discards: ObjectId[] | null = null;
+	if (cost.discard?.subject === "source") {
+		if (
+			object?.kind !== "card" ||
+			object.zone !== "hand" ||
+			!read.state.players[player].hand.includes(source)
+		)
+			return null;
+		discards = [source];
+	} else if (cost.discard) {
+		discards = read.state.players[player].hand.filter(
+			(id) => !discardExclusions.includes(id),
+		);
+		if (discards.length === 0) return null;
+	}
+
+	return {
+		mana,
+		sacrifices,
+		discards,
+		discardIsSource: cost.discard?.subject === "source",
+	};
+}
+
+/** Bind all object choices for a payable cost without mutating the game. */
+function chooseCostPayment(
+	state: GameState,
+	player: PlayerId,
+	options: CostPaymentOptions,
+	choices: AnyChoiceController,
+): CostPayment {
+	return {
+		mana: options.mana,
+		sacrifice: options.sacrifices
+			? choices.chooseObject(state, player, {
+					reason: { kind: "sacrifice" },
+					objects: options.sacrifices,
+				})
+			: null,
+		discard: options.discardIsSource
+			? (options.discards?.[0] ?? null)
+			: options.discards
+				? choices.chooseObject(state, player, {
+						reason: { kind: "discard" },
+						objects: options.discards,
+					})
+				: null,
+	};
+}
+
+/**
+ * Pay every bound component in rules order. Replaceable components must really
+ * execute; callers own the surrounding announcement checkpoint and rollback.
+ */
+function payCostIn(
+	engine: Engine,
+	state: GameState,
+	player: PlayerId,
+	source: ObjectId,
+	cost: DeepReadOnly<PayableCost>,
+	payment: CostPayment,
+	choices: AnyChoiceController,
+	scope: Scope,
+	illegal: (message: string) => Error,
+): PerformResult | null {
+	const pool = state.players[player].manaPool;
+	let spentMana = false;
+	for (const type of MANA_TYPES) {
+		const spent = payment.mana[type] ?? 0;
+		assert(
+			pool[type] >= spent,
+			`payment plan spends ${spent} ${type} from a pool holding ${pool[type]}`,
+		);
+		pool[type] -= spent;
+		if (spent > 0) spentMana = true;
+	}
+	if (spentMana) state.revision++;
+
+	if (cost.tapSelf) {
+		const tap = performIn(
+			engine,
+			state,
+			{ kind: "tap", objects: [source] },
+			choices,
+			scope,
+			0,
+		);
+		if (
+			!tap.executed.some(
+				(event) =>
+					event.kind === "tap" &&
+					event.objects.length === 1 &&
+					event.objects[0] === source,
+			)
+		)
+			throw illegal("tap cost was not paid");
+	}
+
+	if (cost.sacrifice) {
+		assertDefined(payment.sacrifice);
+		const sacrifice = performIn(
+			engine,
+			state,
+			{ kind: "sacrifice", object: payment.sacrifice },
+			choices,
+			scope,
+			0,
+		);
+		if (
+			!sacrifice.executed.some(
+				(event) =>
+					event.kind === "sacrifice" && event.object === payment.sacrifice,
+			)
+		)
+			throw illegal("sacrifice cost was not paid");
+	}
+
+	if (!cost.discard) return null;
+	assertDefined(payment.discard);
+	const discard = performIn(
+		engine,
+		state,
+		{
+			kind: "discard",
+			player,
+			cards: { kind: "specific", card: payment.discard },
+		},
+		choices,
+		scope,
+		0,
+	);
+	// The card moving out of the hand pays the cost even when a replacement
+	// changes its destination (CR 701.8a).
+	if (
+		!discard.executed.some(
+			(event) =>
+				event.kind === "change zone" &&
+				event.object === payment.discard &&
+				event.cause === "discard",
+		)
+	)
+		throw illegal("discard cost was not paid");
+	return discard;
 }
 
 /* ------------------------------------------------------------------ *
@@ -8993,15 +9200,14 @@ function canCast(
 	if (!doTimingRestrictionsAllowCast(characteristics, state, player))
 		return false;
 
-	if (
-		planManaPayment(
-			state.players[player].manaPool,
-			characteristics.manaCost,
-		) === null
-	)
-		return false;
 	const definition = read.engine.cardDefinition(object.cardId).spell;
-	const additionalCost = definition?.additionalCost;
+	const cost: PayableCost = {
+		mana: characteristics.manaCost,
+		tapSelf: false,
+		...definition?.additionalCosts,
+	};
+	if (!costPaymentOptions(read, player, object.id, cost, [object.id]))
+		return false;
 	if (characteristics.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
 		assertDefined(
 			definition,
@@ -9022,17 +9228,6 @@ function canCast(
 			!definition?.targets.length,
 			"targeted permanent spells are not implemented",
 		);
-	}
-	if (additionalCost) {
-		assert(additionalCost.kind === "sacrifice");
-		assert(additionalCost.amount === 1);
-		if (
-			legalSacrifices(read, player, additionalCost.predicate, {
-				controller: player,
-				source: object.id,
-			}).length === 0
-		)
-			return false;
 	}
 	return true;
 }
@@ -9134,43 +9329,8 @@ function activatedAbilityActions(
 			) {
 				continue;
 			}
-			if (
-				definition.cost.tapSelf &&
-				(object.kind !== "permanent" || object.tapped)
-			)
+			if (!costPaymentOptions(read, player, object.id, definition.cost))
 				continue;
-			if (
-				definition.cost.tapSelf &&
-				object.kind === "permanent" &&
-				object.summoningSick &&
-				snapshot.currentCharacteristics.types.includes("creature") &&
-				!snapshot.currentCharacteristics.keywords.includes("haste")
-			)
-				continue;
-			if (
-				!planManaPayment(state.players[player].manaPool, definition.cost.mana)
-			)
-				continue;
-			if (
-				definition.cost.sacrifice &&
-				legalSacrifices(read, player, definition.cost.sacrifice.predicate, {
-					controller: player,
-					source: object.id,
-				}).length === 0
-			)
-				continue;
-			if (definition.cost.discard) {
-				if (
-					definition.cost.discard.subject === "source" &&
-					(object.kind !== "card" || object.zone !== "hand")
-				)
-					continue;
-				if (
-					definition.cost.discard.subject === undefined &&
-					state.players[player].hand.length === 0
-				)
-					continue;
-			}
 			if (definition.kind === "activated") {
 				// CR 601.2c via CR 602.2b: an ability with a required target cannot
 				// be activated at all unless a legal target exists for it.
@@ -9331,34 +9491,15 @@ function activateAbilityIn(
 			`ability ${action.ability} can be activated only as a sorcery`,
 		);
 	}
-	if (ability.cost.tapSelf) {
-		if (object.kind !== "permanent") {
-			throw new IllegalAbilityActivationError(
-				`object ${action.source} cannot pay a tap cost from ${object.zone}`,
-			);
-		}
-		if (object.tapped) {
-			throw new IllegalAbilityActivationError(
-				`object ${action.source} is already tapped`,
-			);
-		}
-		if (
-			object.summoningSick &&
-			snapshot.currentCharacteristics.types.includes("creature") &&
-			!snapshot.currentCharacteristics.keywords.includes("haste")
-		) {
-			throw new IllegalAbilityActivationError(
-				`object ${action.source} cannot pay a tap cost due to summoning sickness`,
-			);
-		}
-	}
-	const manaPayment = planManaPayment(
-		state.players[priorityPlayer].manaPool,
-		ability.cost.mana,
+	const paymentOptions = costPaymentOptions(
+		createReadContext(engine, state),
+		priorityPlayer,
+		object.id,
+		ability.cost,
 	);
-	if (!manaPayment) {
+	if (!paymentOptions) {
 		throw new IllegalAbilityActivationError(
-			`P${priorityPlayer} cannot pay ability ${action.ability}'s mana cost from their mana pool`,
+			`P${priorityPlayer} cannot pay ability ${action.ability}'s cost`,
 		);
 	}
 
@@ -9545,52 +9686,12 @@ function activateAbilityIn(
 		}
 	}
 	// Cost choices are made while announcing the ability, before payment.
-	let sacrificePayment: ObjectId | null = null;
-	const sacrificeCost = ability.cost.sacrifice;
-	if (sacrificeCost) {
-		assert(
-			sacrificeCost.amount === 1,
-			"only sacrificing one permanent is implemented",
-		);
-		const candidates = legalSacrifices(
-			createReadContext(engine, state),
-			priorityPlayer,
-			sacrificeCost.predicate,
-			{ controller: priorityPlayer, source: object.id },
-		);
-		if (candidates.length === 0) {
-			throw new IllegalAbilityActivationError(
-				`ability ${action.ability} has no permanent that can pay its sacrifice cost`,
-			);
-		}
-		sacrificePayment = choices.chooseObject(state, priorityPlayer, {
-			reason: { kind: "sacrifice" },
-			objects: candidates,
-		});
-	}
-	let discardPayment: ObjectId | null = null;
-	const discardCost = ability.cost.discard;
-	if (discardCost) {
-		assert(discardCost.amount === 1, "only discarding one card is implemented");
-		if (discardCost.subject === "source") {
-			if (object.kind !== "card" || object.zone !== "hand")
-				throw new IllegalAbilityActivationError(
-					`ability ${action.ability} cannot discard its source from ${object.zone}`,
-				);
-			discardPayment = object.id;
-		} else {
-			const hand = state.players[priorityPlayer].hand;
-			if (hand.length === 0) {
-				throw new IllegalAbilityActivationError(
-					`ability ${action.ability} has no card that can pay its discard cost`,
-				);
-			}
-			discardPayment = choices.chooseObject(state, priorityPlayer, {
-				reason: { kind: "discard" },
-				objects: [...hand],
-			});
-		}
-	}
+	const payment = chooseCostPayment(
+		state,
+		priorityPlayer,
+		paymentOptions,
+		choices,
+	);
 
 	// CR 602.2b puts the ability on the stack before its cost is paid, so the
 	// announcement mutates before the activation is known to be legal. CR 733.1
@@ -9623,101 +9724,25 @@ function activateAbilityIn(
 
 	const scope = newScope();
 	try {
-		// Spending mana is not an event, but it shares the activation checkpoint
-		// with replaceable tap and sacrifice events. If payment fails after a
-		// replacement changes the game, every component and the announcement rewind.
-		const pool = state.players[priorityPlayer].manaPool;
-		let spentMana = false;
-		for (const type of MANA_TYPES) {
-			const spent = manaPayment[type] ?? 0;
-			assert(
-				pool[type] >= spent,
-				`payment plan spends ${spent} ${type} from a pool holding ${pool[type]}`,
-			);
-			pool[type] -= spent;
-			if (spent > 0) spentMana = true;
-		}
-		if (spentMana) state.revision++;
-
-		if (ability.cost.tapSelf) {
-			const tapPayment = performIn(
-				engine,
-				state,
-				{ kind: "tap", objects: [object.id] },
-				choices,
-				scope,
-				0,
-			);
-			if (
-				!tapPayment.executed.some(
-					(event) =>
-						event.kind === "tap" &&
-						event.objects.length === 1 &&
-						event.objects[0] === object.id,
-				)
-			) {
-				throw new IllegalAbilityActivationError(
-					`the tap cost for ability ${action.ability} was not paid`,
-				);
-			}
-		}
-
-		if (sacrificeCost) {
-			assertDefined(sacrificePayment);
-			const sacrifice = performIn(
-				engine,
-				state,
-				{ kind: "sacrifice", object: sacrificePayment },
-				choices,
-				scope,
-				0,
-			);
-			if (
-				!sacrifice.executed.some(
-					(event) =>
-						event.kind === "sacrifice" && event.object === sacrificePayment,
-				)
-			) {
-				throw new IllegalAbilityActivationError(
-					`the sacrifice cost for ability ${action.ability} was not paid`,
-				);
-			}
-		}
-
-		if (discardCost) {
-			assertDefined(discardPayment);
-			const discard = performIn(
-				engine,
-				state,
-				{
-					kind: "discard",
-					player: priorityPlayer,
-					cards: { kind: "specific", card: discardPayment },
-				},
-				choices,
-				scope,
-				0,
-			);
-			// The discard event itself only instructs; the card leaving hand is
-			// the child that actually pays the cost. Its destination is not part
-			// of that check: CR 701.8a still calls the card discarded when a
-			// replacement (Rest in Peace) exiles it instead of putting it in the
-			// graveyard, so the cost is paid either way.
-			if (
-				!discard.executed.some(
-					(event) =>
-						event.kind === "change zone" &&
-						event.object === discardPayment &&
-						event.cause === "discard",
-				)
-			) {
-				throw new IllegalAbilityActivationError(
-					`the discard cost for ability ${action.ability} was not paid`,
-				);
-			}
+		const discard = payCostIn(
+			engine,
+			state,
+			priorityPlayer,
+			object.id,
+			ability.cost,
+			payment,
+			choices,
+			scope,
+			(message) =>
+				new IllegalAbilityActivationError(
+					`ability ${action.ability}'s ${message}`,
+				),
+		);
+		if (ability.cost.discard) {
+			assertDefined(discard);
 			if (ability.kind === "cycling") {
 				assert(
-					discardPayment === object.id,
+					payment.discard === object.id,
 					"cycling must discard its source card",
 				);
 				const cycledCard = discard.created[0];
@@ -9820,19 +9845,20 @@ function castSpellIn(
 		);
 	}
 
-	const payment = planManaPayment(
-		state.players[priorityPlayer].manaPool,
-		characteristics.manaCost,
-	);
-	if (!payment) {
+	const definition = read.engine.cardDefinition(object.cardId).spell;
+	const cost: PayableCost = {
+		mana: characteristics.manaCost,
+		tapSelf: false,
+		...definition?.additionalCosts,
+	};
+	if (
+		!costPaymentOptions(read, priorityPlayer, object.id, cost, [object.id])
+	) {
 		throw new IllegalCastError(
-			`P${priorityPlayer} cannot pay ${characteristics.name}'s mana cost from their mana pool`,
+			`P${priorityPlayer} cannot pay ${characteristics.name}'s cost`,
 		);
 	}
-
-	const definition = read.engine.cardDefinition(object.cardId).spell;
 	let target: TargetDef | null = null;
-	const additionalCost = definition?.additionalCost ?? null;
 	if (characteristics.types.some((type) => includes(SPELL_CARD_TYPES, type))) {
 		assertDefined(
 			definition,
@@ -9845,21 +9871,6 @@ function castSpellIn(
 			"targeted permanent spells are not implemented",
 		);
 	}
-	if (additionalCost) {
-		assert(additionalCost.kind === "sacrifice");
-		assert(additionalCost.amount === 1);
-		if (
-			legalSacrifices(read, priorityPlayer, additionalCost.predicate, {
-				controller: priorityPlayer,
-				source: action.card,
-			}).length === 0
-		) {
-			throw new IllegalCastError(
-				`${characteristics.name} has no permanent that can pay its additional cost`,
-			);
-		}
-	}
-
 	// CR 601.2a moves the card to the stack before CR 601.2c chooses targets and
 	// CR 601.2h pays costs. Since that exposes an incomplete announcement to
 	// replacements and choices, CR 733.1 rewinds the entire attempt if any later
@@ -9950,70 +9961,47 @@ function castSpellIn(
 			state.revision++;
 		}
 
-		let sacrificePayment: ObjectId | null = null;
-		if (additionalCost) {
-			const candidates = legalSacrifices(
-				createReadContext(engine, state),
-				priorityPlayer,
-				additionalCost.predicate,
-				{ controller: priorityPlayer, source: spellId },
+		const paymentOptions = costPaymentOptions(
+			createReadContext(engine, state),
+			priorityPlayer,
+			spellId,
+			cost,
+		);
+		if (!paymentOptions) {
+			throw new IllegalCastError(
+				`P${priorityPlayer} cannot pay ${characteristics.name}'s cost`,
 			);
-			if (candidates.length === 0) {
-				throw new IllegalCastError(
-					`${characteristics.name} has no permanent that can pay its additional cost`,
-				);
-			}
-			sacrificePayment = choices.chooseObject(state, priorityPlayer, {
-				reason: { kind: "sacrifice" },
-				objects: candidates,
-			});
 		}
-
-		// Spending mana is a cost, not an event, so nothing may replace or trigger
-		// off it. It shares the announcement transaction with the replaceable
-		// sacrifice payment below.
-		const pool = state.players[priorityPlayer].manaPool;
-		for (const type of MANA_TYPES) {
-			const spent = payment[type] ?? 0;
-			assert(
-				pool[type] >= spent,
-				`payment plan spends ${spent} ${type} from a pool holding ${pool[type]}`,
-			);
-			pool[type] -= spent;
-		}
-		state.revision++;
+		const payment = chooseCostPayment(
+			state,
+			priorityPlayer,
+			paymentOptions,
+			choices,
+		);
+		payCostIn(
+			engine,
+			state,
+			priorityPlayer,
+			spellId,
+			cost,
+			payment,
+			choices,
+			newScope(),
+			(message) =>
+				new IllegalCastError(`${characteristics.name}'s ${message}`),
+		);
 		log(
 			state,
 			`  [cast] P${priorityPlayer} pays ${
 				MANA_TYPES.map((type) =>
-					payment[type] ? `${payment[type]}${type.toUpperCase()}` : "",
+					payment.mana[type]
+						? `${payment.mana[type]}${type.toUpperCase()}`
+						: "",
 				)
 					.filter(Boolean)
 					.join(" ") || "nothing"
 			} for ${characteristics.name}`,
 		);
-
-		if (additionalCost) {
-			assertDefined(sacrificePayment);
-			const sacrifice = performIn(
-				engine,
-				state,
-				{ kind: "sacrifice", object: sacrificePayment },
-				choices,
-				newScope(),
-				0,
-			);
-			if (
-				!sacrifice.executed.some(
-					(event) =>
-						event.kind === "sacrifice" && event.object === sacrificePayment,
-				)
-			) {
-				throw new IllegalCastError(
-					`${characteristics.name}'s additional sacrifice cost was not paid`,
-				);
-			}
-		}
 
 		castSpell = spellId;
 	} catch (error) {

@@ -2849,6 +2849,7 @@ Quagmire Druid
 Quakestrider Ceratops
 Quaketusk Boar
 Quandrix Campus
+Quarrel's End
 Quarry Beetle
 Queen's Bay Soldier
 Queen's Commission
@@ -3829,6 +3830,7 @@ Thrashing Brontodon
 Thraxodemon
 Three Tree Rootweaver
 Three Visits
+Thrill of Possibility
 Thriss, Nantuko Primus
 Thundering Falls
 Thundering Giant
@@ -4379,4 +4381,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4376`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4378`;

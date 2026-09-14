@@ -3139,10 +3139,11 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.spell).toEqual({
 			id: "spell-1",
 			text: "Draw two cards.",
-			additionalCost: {
-				kind: "sacrifice",
-				predicate: { kind: "type", type: "creature" },
-				amount: 1,
+			additionalCosts: {
+				sacrifice: {
+					predicate: { kind: "type", type: "creature" },
+					amount: 1,
+				},
 			},
 			targets: [],
 			effects: [
@@ -3158,24 +3159,26 @@ describe("lowerForgeCard: accepted card lowering", () => {
 	test("additional sacrifice costs retain their full permanent predicate", () => {
 		const deadlyDispute = importFixture("d/deadly_dispute");
 		if (!deadlyDispute.ok) throw new Error("expected Deadly Dispute to import");
-		expect(deadlyDispute.card.spell?.additionalCost).toEqual({
-			kind: "sacrifice",
-			predicate: {
-				kind: "or",
-				predicates: [
-					{ kind: "type", type: "artifact" },
-					{ kind: "type", type: "creature" },
-				],
+		expect(deadlyDispute.card.spell?.additionalCosts).toEqual({
+			sacrifice: {
+				predicate: {
+					kind: "or",
+					predicates: [
+						{ kind: "type", type: "artifact" },
+						{ kind: "type", type: "creature" },
+					],
+				},
+				amount: 1,
 			},
-			amount: 1,
 		});
 
 		const abjure = importFixture("a/abjure");
 		if (!abjure.ok) throw new Error("expected Abjure to import");
-		expect(abjure.card.spell?.additionalCost).toEqual({
-			kind: "sacrifice",
-			predicate: { kind: "color", color: "u" },
-			amount: 1,
+		expect(abjure.card.spell?.additionalCosts).toEqual({
+			sacrifice: {
+				predicate: { kind: "color", color: "u" },
+				amount: 1,
+			},
 		});
 	});
 
@@ -3232,10 +3235,11 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		const result = importFixture("r/reckless_abandon");
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.manaCost).toEqual({ r: 1 });
-		expect(result.card.spell?.additionalCost).toEqual({
-			kind: "sacrifice",
-			predicate: { kind: "type", type: "creature" },
-			amount: 1,
+		expect(result.card.spell?.additionalCosts).toEqual({
+			sacrifice: {
+				predicate: { kind: "type", type: "creature" },
+				amount: 1,
+			},
 		});
 	});
 
@@ -4274,10 +4278,25 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.card.manaCost).toEqual({ r: 1 });
-		expect(result.card.spell?.additionalCost).toEqual({
-			kind: "sacrifice",
-			predicate: { kind: "type", type: "creature" },
-			amount: 1,
+		expect(result.card.spell?.additionalCosts).toEqual({
+			sacrifice: {
+				predicate: { kind: "type", type: "creature" },
+				amount: 1,
+			},
+		});
+	});
+
+	test("accepts a spell Cost$ that adds a one-card discard", () => {
+		const result = importText(
+			REVITALIZE.replace(
+				"SP$ GainLife |",
+				"SP$ GainLife | Cost$ 1 W Discard<1/Card> |",
+			),
+		);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.card.spell?.additionalCosts).toEqual({
+			discard: { amount: 1 },
 		});
 	});
 

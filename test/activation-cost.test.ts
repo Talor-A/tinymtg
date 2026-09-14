@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
 	ActivationCost,
+	AdditionalCosts,
 	ManaPool,
 	PayableActivationManaCost,
 } from "../index.ts";
@@ -71,11 +72,20 @@ const duplicateComponents: ActivationCost = {
 	costs: [{ kind: "tap-self" }, { kind: "tap-self" }],
 };
 
+const sourceDiscardSpellCost: AdditionalCosts = {
+	discard: {
+		amount: 1,
+		// @ts-expect-error a spell is on the stack and cannot discard itself
+		subject: "source",
+	},
+};
+
 void noManaCost;
 void specificallyColorless;
 void variableMana;
 void lifePayment;
 void duplicateComponents;
+void sourceDiscardSpellCost;
 
 describe("payable activation costs", () => {
 	test("represent each supported combination of cost components", () => {
