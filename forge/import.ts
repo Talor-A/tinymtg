@@ -1767,19 +1767,20 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				"duration",
 			);
 			if (!badParams.ok) return badParams;
-			if (discriminatorLower !== "sp")
-				return issue(
-					"UNSUPPORTED_EFFECT",
-					"Animate is currently supported only as a spell's root effect",
-					where,
-				);
-			if (
-				getForgeParam(params, "Defined") !== undefined ||
-				getForgeParam(params, "ValidTgts") === undefined
-			)
+			const defined = getForgeParam(params, "Defined");
+			const validTargets = getForgeParam(params, "ValidTgts");
+			const targetsRoot =
+				discriminatorLower === "sp" &&
+				defined === undefined &&
+				validTargets !== undefined;
+			const continuesForParentTarget =
+				discriminatorLower === "db" &&
+				defined === "ParentTarget" &&
+				validTargets === undefined;
+			if (!targetsRoot && !continuesForParentTarget)
 				return issue(
 					"UNSUPPORTED_PARAMETER",
-					"root Animate must apply to the spell's declared target",
+					"Animate must target at the spell root or continue for Defined$ ParentTarget",
 					where,
 				);
 			const duration = getForgeParam(params, "Duration");

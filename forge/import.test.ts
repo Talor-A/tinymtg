@@ -3046,6 +3046,50 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Supernatural Stamina carries its target into a chained Animate", () => {
+		const result = importFixture("s/supernatural_stamina");
+		if (!result.ok) throw new Error("expected Supernatural Stamina to import");
+		expect(result.card.spell?.effects).toEqual([
+			{
+				kind: "modify-pt",
+				subject: { kind: "target", slot: "target-1" },
+				power: 2,
+				toughness: 0,
+				duration: "until-end-of-turn",
+			},
+			{
+				kind: "grant-triggered",
+				subject: { kind: "target", slot: "target-1" },
+				ability: abilityId("triggered", "supernatural-stamina", 0),
+				duration: "until-end-of-turn",
+			},
+		]);
+		expect(result.card.printedAbilities.triggered).toEqual([]);
+		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+			{
+				kind: "change-zone",
+				subject: { kind: "triggering-zone-change-result" },
+				from: "graveyard",
+				destination: {
+					zone: "battlefield",
+					controller: "owner",
+					tapped: true,
+				},
+			},
+		]);
+	});
+
+	test("a chained Animate accepts only its exact ParentTarget binding", () => {
+		const source = cardText("s/supernatural_stamina");
+		for (const replacement of ["Self", "Targeted", ""] as const) {
+			const result = importForgeCard(
+				source.replace("Defined$ ParentTarget", `Defined$ ${replacement}`),
+				{ id: `bad-chained-animate-${replacement || "omitted"}` },
+			);
+			expect(result.ok).toBe(false);
+		}
+	});
+
 	test("Selfless Savior lowers its self-sacrifice and temporary indestructible grant", () => {
 		const result = importFixture("s/selfless_savior");
 		if (!result.ok) throw new Error("expected ok");

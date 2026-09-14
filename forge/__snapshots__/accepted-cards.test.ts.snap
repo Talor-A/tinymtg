@@ -26,6 +26,7 @@ Abandoned Outpost
 Abbey Griffin
 Abbey Matron
 Abjure
+Abnormal Endurance
 Abraded Bluffs
 Absorb
 Abzan Banner
@@ -811,6 +812,7 @@ Deliberate
 Delighted Killbot
 Demolish
 Demon's Due
+Demonic Gifts
 Demonic Taskmaster
 Demystify
 Deny Entry
@@ -1101,6 +1103,7 @@ Faerie Vandal
 Failed Inspection
 Faithbearer Paladin
 Faithful Watchdog
+Fake Your Own Death
 Falkenrath Marauders
 Falkenrath Noble
 Falkenrath Reaver
@@ -1696,6 +1699,7 @@ Infernal Grasp
 Infernal Idol
 Infestation Sage
 Infuriate
+Infuse with Vitality
 Ingenious Skaab
 Initiate's Companion
 Inkrise Infiltrator
@@ -2665,6 +2669,7 @@ Resupply
 Resurrection
 Retributive Wand
 Retrieval Agent
+Return to Action
 Return to Battle
 Returned Centaur
 Revel of the Fallen God
@@ -3278,6 +3283,7 @@ Sunscorched Divide
 Sunspire Griffin
 Suntail Hawk
 Super-Skrull
+Supernatural Stamina
 Supply Drop
 Supply-Line Cranes
 Supreme Phantom
@@ -3904,4 +3910,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3901`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3907`;
