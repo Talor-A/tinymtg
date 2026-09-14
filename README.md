@@ -133,8 +133,11 @@ supertype word that may carry Forge's `non` prefix; the exact target form
 upkeep, self-attack, card-drawn, and bushido's blocks-or-becomes-blocked
 triggers, including one optional (`may`) wrapper around
 a trigger's whole (possibly multi-step) effect sequence; fixed temporary P/T
-changes; temporary `KW$ Indestructible` grants; and fixed controlled-creature
-P/T statics. See the acceptance matrix in `forge/import.test.ts` for the exact
+changes; temporary keyword grants; and direct or `Defined$ ParentTarget`
+`Animate` effects that grant a supported self-dies trigger until end of turn,
+including moving `TriggeredNewCardLKICopy` from the graveyard (e.g. Pain 101,
+Verdant Rebirth, and Supernatural Stamina); and fixed controlled-creature P/T
+statics. See the acceptance matrix in `forge/import.test.ts` for the exact
 fixtures this is checked against, and
 the "Deferred / explicitly unsupported" list at the top of `forge-import.ts`
 for what is intentionally out of scope (other `Dig` forms, including dynamic
