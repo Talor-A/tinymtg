@@ -2473,6 +2473,7 @@ export type Keyword =
  * `and` and `or` leaves no empty or single-operand boolean form to interpret.
  */
 export type ObjectPredicateDef =
+	| { kind: "token" }
 	| { kind: "self" }
 	| { kind: "attacking" }
 	| { kind: "blocking" }
@@ -2545,6 +2546,17 @@ export function objectMatchesPredicate(
 			return characteristics.subtypes.includes(predicate.subtype);
 		case "color":
 			return characteristics.colors.includes(predicate.color);
+		case "token":
+			if (object.kind === "nonbattlefield-token") return true;
+			if (object.kind === "permanent") {
+				return object.representation.kind === "token";
+			} else if (
+				object.kind === undefined ||
+				object.kind === "continuous effect evaluation"
+			) {
+				return object.token;
+			}
+			return false;
 		case "owner":
 			return predicate.player === "you"
 				? object.owner === context.controller
@@ -4164,7 +4176,10 @@ export function effectiveCharacteristics(
 	return snapshot.currentCharacteristics;
 }
 
+// TODO: this duplicates info and does not discriminate by category of game object.
 export interface ContinuousEffectEvaluation {
+	readonly kind?: "continuous effect evaluation";
+	readonly token: boolean;
 	readonly objectId: ObjectId;
 	readonly cardId: string | null;
 	readonly owner: PlayerId;
@@ -4183,6 +4198,9 @@ function continuousEffectEvaluation(
 	return {
 		objectId: object.id,
 		cardId,
+		token:
+			object.kind === "nonbattlefield-token" ||
+			(object.kind === "permanent" && object.representation.kind === "token"),
 		owner: object.owner,
 		controller: controllerOf(object),
 		zone: object.zone,
