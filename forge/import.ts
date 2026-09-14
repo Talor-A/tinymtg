@@ -1197,8 +1197,8 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			if (getForgeParam(params, "Defined") === "Player")
 				return ok([
 					{
-						kind: "each player draw",
-						subjects: "each-player",
+						kind: "draw",
+						subject: "each-player",
 						amount,
 					},
 				]);

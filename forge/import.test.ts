@@ -814,7 +814,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		// player field holds one, so the lowering spells the instruction once
 		// for each side of the table.
 		expect(result.card.spell?.effects).toEqual([
-			{ kind: "each player draw", subjects: "each-player", amount: 2 },
+			{ kind: "draw", subject: "each-player", amount: 2 },
 		]);
 	});
 
@@ -3687,8 +3687,8 @@ describe("lowerForgeCard: shuffle cards into libraries", () => {
 				from: ["hand", "graveyard"],
 			},
 			{
-				kind: "each player draw",
-				subjects: "each-player",
+				kind: "draw",
+				subject: "each-player",
 				amount: 7,
 			},
 		]);

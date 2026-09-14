@@ -2165,6 +2165,15 @@ export type EffectPlayerSubject<AllowedPlayer extends TriggerEffectPlayer> =
 	| { kind: "relative-player"; player: AllowedPlayer }
 	| { kind: "target-player"; slot: string };
 
+/**
+ * One player, or every player in turn order (CR 101.4). An instruction
+ * addressing the whole table performs once per player rather than once, so
+ * only the instructions that can repeat accept this.
+ */
+export type EffectPlayerSet<AllowedPlayer extends TriggerEffectPlayer> =
+	| EffectPlayerSubject<AllowedPlayer>
+	| "each-player";
+
 /** A destination resolved only when a one-object zone change executes. */
 export type ZoneChangeEffectDestination<
 	AllowedPlayer extends TriggerEffectPlayer,
@@ -2247,18 +2256,11 @@ type ExileTopEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
 	resultSlot?: string;
 };
 
-type EachPlayerDrawEffectDef = {
-	kind: "each player draw";
-	subjects: "each-player";
-	amount: number;
-};
-
 type ShuffleIntoLibraryEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
 	kind: "shuffle-into-library";
 	/** Whose nonlibrary zones are inspected and whose libraries are shuffled. */
 	owners:
-		| "each-player"
-		| EffectPlayerSubject<AllowedPlayer>
+		| EffectPlayerSet<AllowedPlayer>
 		| { kind: "triggering-zone-change-result-owner" };
 	/** Every listed zone is inspected before any matching card moves. */
 	from: [Exclude<CardZone, "library">, ...Exclude<CardZone, "library">[]];
@@ -2273,12 +2275,17 @@ type CreateDelayedTriggerEffectDef = {
 
 export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	| {
-			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
+			kind: "gain-life" | "lose-life" | "scry" | "surveil" | "mill";
 			/** A relative player, or the player bound to a target slot. */
 			subject: EffectPlayerSubject<AllowedPlayer>;
 			amount: number;
 	  }
-	| EachPlayerDrawEffectDef
+	| {
+			kind: "draw";
+			/** One player, the player bound to a target slot, or the table. */
+			subject: EffectPlayerSet<AllowedPlayer>;
+			amount: number;
+	  }
 	| CreateDelayedTriggerEffectDef
 	| ExileTopEffectDef<AllowedPlayer>
 	| SearchLibraryEffectDef<AllowedPlayer>
@@ -2669,14 +2676,15 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 				: [];
 		case "gain-life":
 		case "lose-life":
-		case "draw":
 		case "scry":
 		case "surveil":
 		case "mill":
 		case "exile-top":
 		case "sacrifice":
 		case "discard":
-			return effect.subject.kind === "target-player"
+		case "draw":
+			return effect.subject !== "each-player" &&
+				effect.subject.kind === "target-player"
 				? [
 						{
 							slot: effect.subject.slot,
@@ -2818,7 +2826,6 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 						},
 					]
 				: [];
-		case "each player draw":
 		case "create-delayed-trigger":
 		case "choose-from-top":
 		case "add-mana":
@@ -7734,6 +7741,17 @@ function resolvingEffectSource(
 	};
 }
 
+/**
+ * Every player, starting with the active player (CR 101.4). An instruction
+ * that addresses the table performs in this order, so each player sees the
+ * state the players before them left behind.
+ */
+function playersInTurnOrder(state: GameState, instruction: string): PlayerId[] {
+	const active = activePlayer(state);
+	assertDefined(active, `an each-player ${instruction} must resolve in a turn`);
+	return [active, (1 - active) as PlayerId];
+}
+
 function resolveEffects(
 	engine: Engine,
 	state: GameState,
@@ -7780,11 +7798,8 @@ function resolveEffects(
 			// replaces this only with objects that reached the declared destination.
 			scope.bindings.set(declaredResult.slot, []);
 		}
-		if (effect.kind === "each player draw") {
-			assert(effect.subjects === "each-player");
-			const active = activePlayer(state);
-			assertDefined(active, "each-player draw must resolve during a turn");
-			for (const player of [active, (1 - active) as PlayerId]) {
+		if (effect.kind === "draw" && effect.subject === "each-player") {
+			for (const player of playersInTurnOrder(state, "draw")) {
 				performIn(
 					engine,
 					state,
@@ -7875,12 +7890,7 @@ function resolveEffects(
 			let predicateSource = item.source;
 			let owners: PlayerId[];
 			if (effect.owners === "each-player") {
-				const active = activePlayer(state);
-				assertDefined(
-					active,
-					"each-player shuffle must resolve during a turn",
-				);
-				owners = [active, (1 - active) as PlayerId];
+				owners = playersInTurnOrder(state, "shuffle");
 			} else if (effect.owners.kind === "triggering-zone-change-result-owner") {
 				assert(
 					item.ability?.kind === "triggered ability",
@@ -8277,7 +8287,7 @@ function effectToEvent(
 	item: ResolutionSource,
 	effect: Exclude<
 		EffectDef<TriggerEffectPlayer>,
-		{ kind: "may" } | EachPlayerDrawEffectDef | CreateDelayedTriggerEffectDef
+		{ kind: "may" } | CreateDelayedTriggerEffectDef
 	>,
 	subject: EntityRef | null,
 ): GameEvent {
@@ -8310,6 +8320,12 @@ function effectToEvent(
 				amount: effect.amount,
 			};
 		case "draw":
+			// An each-player draw performs one event per player, so it is expanded
+			// before it reaches this point.
+			assert(
+				effect.subject !== "each-player",
+				"each-player draw resolves directly",
+			);
 			return {
 				kind: "draw cards",
 				player: effectPlayer(effect.subject),
