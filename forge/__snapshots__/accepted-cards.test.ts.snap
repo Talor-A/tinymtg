@@ -141,6 +141,7 @@ Angelheart Protector
 Angelic Blessing
 Angelic Edict
 Angelic Page
+Angelic Shield
 Angelic Wall
 Angler Drake
 Anguished Unmaking
@@ -213,6 +214,7 @@ Ashen Rider
 Ashiok's Reaper
 Ashnod's Altar
 Aspiring Aeronaut
+Assault Drone
 Assault Griffin
 Assault Zeppelid
 Atlantean Cavalry
@@ -352,11 +354,13 @@ Blacklance Paragon
 Blade of the Sixth Pride
 Bladebrand
 Bladed Sentinel
+Bladestitched Skaab
 Blanchwood Treefolk
 Blaster Mage
 Blazing Crescendo
 Blazing Hellhound
 Blessed Light
+Blessed Orator
 Blessed Spirits
 Blight Keeper
 Blighted Cataract
@@ -733,6 +737,7 @@ Crystal Ball
 Crystal Grotto
 Crystal Quarry
 Crystal Vein
+Cumber Stone
 Cunning Breezedancer
 Cunning Maneuver
 Cunning Sparkmage
@@ -755,6 +760,7 @@ Dakmor Bat
 Dakmor Ghoul
 Dakmor Lancer
 Dakmor Scorpion
+Dampening Pulse
 Dancing Scimitar
 Darigaaz's Attendant
 Daring Demolition
@@ -862,6 +868,7 @@ Dimir Informant
 Dimir Signet
 Dining Room
 Dire Fleet Hoarder
+Dire Fleet Neckbreaker
 Dire Fleet Poisoner
 Direct Hit
 Diregraf Ghoul
@@ -1191,6 +1198,7 @@ Fire Imp
 Fire Nation Ambushers
 Fire Nation Archers
 Fire Nation Soldier
+Fire Nation's Conquest
 Fire Snake
 Fire Sprites
 Fire Urchin
@@ -1265,6 +1273,7 @@ Forlorn Flats
 Forsaken Drifters
 Forsaken Sanctuary
 Fortified Rampart
+Fortifying Provisions
 Fortress Crab
 Forum of Amity
 Foul Imp
@@ -1403,6 +1412,7 @@ Goblin Hero
 Goblin Instigator
 Goblin Masons
 Goblin Motivator
+Goblin Oriflamme
 Goblin Picker
 Goblin Piker
 Goblin Raider
@@ -1543,6 +1553,7 @@ Hatching Plans
 Hate Weaver
 Haunted Crossroads
 Haunted Mire
+Haunter of Nightveil
 Havengul Skaab
 Havengul Vampire
 Havenwood Battleground
@@ -1741,6 +1752,7 @@ Invoke the Divine
 Iona's Judgment
 Irencrag Pyromancer
 Iron Giant
+Iron Man, Tony Stark
 Iron Myr
 Iron Tusk Elephant
 Iron-Barb Hellion
@@ -1762,6 +1774,7 @@ Izzet Signet
 Jace's Erasure
 Jace's Ingenuity
 Jackalope Herd
+Jacques le Vert
 Jaddi Offshoot
 Jade Avenger
 Jade Bearer
@@ -2130,6 +2143,7 @@ Midnight Entourage
 Midnight Haunting
 Might Weaver
 Might of Oaks
+Mightstone
 Mighty Leap
 Mikokoro, Center of the Sea
 Millennial Gargoyle
@@ -2395,6 +2409,7 @@ Orazca Frillback
 Orazca Raptor
 Orcish Bloodpainter
 Orcish Mechanics
+Orcish Oriflamme
 Orcish Vandal
 Order of the Sacred Bell
 Ordinary Bear
@@ -2512,6 +2527,7 @@ Polluted Dead
 Possessed Skaab
 Potion of Healing
 Pouncing Cheetah
+Power Boost
 Power Word Kill
 Powerstone Fracture
 Prakhata Club Security
@@ -2525,6 +2541,7 @@ Preordain
 Prescient Chimera
 Pressure Point
 Prickly Pair
+Pride of the Perfect
 Prideful Parent
 Priest of Ancient Lore
 Priest of Iroas
@@ -3694,6 +3711,7 @@ Vessel of Endless Rest
 Vessel of Ephemera
 Vessel of Paramnesia
 Vessel of Volatility
+Veteran Armorer
 Veteran Cavalier
 Vexing Gull
 Vial of Dragonfire
@@ -3783,9 +3801,11 @@ Wandering Ones
 Wandering Tombshell
 Wanted Griffin
 War Chariot
+War Horn
 War Mammoth
 War Priest of Thune
 War-Torch Goblin
+Warded Battlements
 Warden of Geometries
 Warden of the Eye
 Warleader's Call
@@ -3812,6 +3832,7 @@ Waterfront District
 Wave-Wing Elemental
 Wayward Servant
 Wayward Soul
+Weakstone
 Weaponize the Monsters
 Weatherseed Treefolk
 Weave Fate
@@ -3952,4 +3973,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3949`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3970`;

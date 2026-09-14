@@ -3456,6 +3456,68 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 	});
 });
 
+describe("lowerForgeCard: one-sided pump statics", () => {
+	/** Runs a lowered characteristic static's `modify` over a 2/2 body. */
+	function pumped(path: string): { power: number; toughness: number } {
+		const result = importFixture(path);
+		if (!result.ok) throw new Error(`expected ${path} to lower`);
+		const effect = result.card.abilityDefinitions.static[0];
+		if (!effect || "kind" in effect)
+			throw new Error("expected a characteristic static effect");
+		const body = { power: 2, toughness: 2 };
+		effect.modify(
+			body as unknown as Parameters<typeof effect.modify>[0],
+			{} as never,
+			{} as never,
+		);
+		return body;
+	}
+
+	test("AddPower$ alone leaves toughness untouched", () => {
+		// Fire Nation's Conquest is `AddPower$ 1` with no AddToughness$ line:
+		// Forge omits the half a static does not change.
+		expect(pumped("f/fire_nations_conquest")).toEqual({
+			power: 3,
+			toughness: 2,
+		});
+	});
+
+	test("AddToughness$ alone leaves power untouched", () => {
+		expect(pumped("f/fortifying_provisions")).toEqual({
+			power: 2,
+			toughness: 3,
+		});
+	});
+
+	test("a negative one-sided pump subtracts from the half it names", () => {
+		expect(pumped("w/weakstone")).toEqual({ power: 1, toughness: 2 });
+	});
+
+	const conquest = cardText("f/fire_nations_conquest");
+
+	test("a Continuous static changing neither half rejects", () => {
+		const result = importText(conquest.replace(" | AddPower$ 1", ""));
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message: "unsupported static ability shape",
+		});
+	});
+
+	test("a half that is present but not a signed integer still rejects", () => {
+		// A variable pump must not lower as a fixed one just because the
+		// other half is absent.
+		const result = importText(conquest.replace("AddPower$ 1", "AddPower$ X"));
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message: "unsupported static ability shape",
+		});
+	});
+});
+
 describe("lowerForgeCard: strict Clone shape", () => {
 	const clone = cardText("c/clone");
 	const mutations = [

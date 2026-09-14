@@ -2511,10 +2511,18 @@ function lowerStatic(
 		});
 	}
 	const selector = affected ? parseSelector(affected) : null;
-	const addPower = signedInteger(getForgeParam(params, "AddPower"));
-	const addToughness = signedInteger(getForgeParam(params, "AddToughness"));
+	// Forge omits the half it does not change, so `+1/+0` is written as
+	// `AddPower$ 1` with no AddToughness$ at all. An omitted half adds 0; a
+	// half that is present but not a signed integer — `AddPower$ X` and its
+	// kind — still rejects, so a variable pump never lowers as a fixed one.
+	const powerText = getForgeParam(params, "AddPower");
+	const toughnessText = getForgeParam(params, "AddToughness");
+	const addPower = powerText === undefined ? 0 : signedInteger(powerText);
+	const addToughness =
+		toughnessText === undefined ? 0 : signedInteger(toughnessText);
 	if (
 		!selector ||
+		(powerText === undefined && toughnessText === undefined) ||
 		addPower === null ||
 		addToughness === null ||
 		getForgeParam(params, "ValidCard") !== undefined ||
