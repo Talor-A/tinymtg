@@ -7120,17 +7120,13 @@ function triggerMatches(
 			if (condition.to !== "any" && ev.destination.zone !== condition.to)
 				return false;
 
-			if (condition.from === "battlefield") {
-				// Battlefield-to-graveyard triggers are detected from the pre-event
-				// view, where both the departed object and every watching ability still
-				// have their last-known characteristics. Never inspect the new graveyard
-				// object here: it is a different object under CR 400.7.
-				if (condition.to === "graveyard") return false;
-				throw new Error("leaves the battlefield triggers are not supported");
-			}
+			// A departure from the battlefield is detected from the pre-event view,
+			// where both the departed object and every watching ability still have
+			// their last-known characteristics. Never inspect the object at the
+			// destination here: it is a different object under CR 400.7.
+			if (condition.from === "battlefield") return false;
 			// CR 400.7: ev.object names the old object, which no longer exists after
 			// execution. Match against the new object(s) returned by moveObject instead.
-			// Leaves-the-battlefield triggers will need last-known information here.
 			const movedObjects = created.flatMap((id) => {
 				const moved = maybeObject(read.state, id);
 				return moved ? [moved] : [];
@@ -7286,8 +7282,6 @@ function leavesBattlefieldTriggerCandidates(
 				continue;
 			if (condition.to !== "any" && condition.to !== ev.destination.zone)
 				continue;
-			if (ev.destination.zone !== "graveyard" || condition.to !== "graveyard")
-				throw new Error("leaves the battlefield triggers are not supported");
 			if (
 				!objectMatchesPredicate(condition.predicate, departed, {
 					controller,

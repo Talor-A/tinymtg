@@ -63,8 +63,8 @@ const TEST_CARD_1 = defineCard({
 });
 
 const TEST_CARD_2 = defineCard({
-	id: "test-broad-self-death",
-	name: "Test broad self-death",
+	id: "test-self-departure",
+	name: "Test self departure",
 	types: ["creature"],
 	colors: [],
 	manaCost: "zero",
@@ -72,8 +72,8 @@ const TEST_CARD_2 = defineCard({
 	toughness: 1,
 	triggers: [
 		{
-			id: "broad-self-death",
-			text: "Unsupported broad battlefield-origin trigger.",
+			id: "self-departure",
+			text: "When this creature leaves the battlefield, you gain 1 life.",
 			condition: {
 				kind: "change zone",
 				from: "battlefield",
@@ -81,7 +81,13 @@ const TEST_CARD_2 = defineCard({
 				predicate: { kind: "self" },
 			},
 			targets: [],
-			effects: [],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
 		},
 	],
 });
@@ -493,23 +499,26 @@ describe("triggered abilities", () => {
 		expect(state.pendingTriggers).toHaveLength(0);
 	});
 
-	test("keeps non-dies battlefield departures explicitly unsupported", () => {
-		const state = engine.newGame();
-		const source = engine.spawnPermanent(state, "test-broad-self-death", ALICE);
+	test("a departure trigger fires whichever zone the permanent reaches", () => {
+		for (const zone of ["graveyard", "exile", "hand"] as const) {
+			const state = engine.newGame();
+			const source = engine.spawnPermanent(state, "test-self-departure", ALICE);
 
-		expect(() =>
 			engine.perform(
 				state,
 				{
 					kind: "change zone",
 					object: source.id,
 					from: "battlefield",
-					destination: { zone: "graveyard" },
+					destination: { zone },
 					cause: "destroy",
 				},
 				passingAgents(),
-			),
-		).toThrow("leaves the battlefield triggers are not supported");
+			);
+
+			expect(state.pendingTriggers, zone).toHaveLength(1);
+			expect(state.pendingTriggers[0]?.source).toBe(source.id);
+		}
 	});
 
 	test("matches a dies predicate against another permanent's last-known characteristics", () => {

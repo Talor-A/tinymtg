@@ -282,6 +282,7 @@ Azure Mage
 Azusa, Lost but Seeking
 Bad River
 Badlands
+Baffling End
 Bake into a Pie
 Balduvian Barbarians
 Balduvian Bears
@@ -478,6 +479,7 @@ Braidwood Cup
 Bramble Creeper
 Bramblecrush
 Brambleweft Behemoth
+Brandywine Farmer
 Brass Secretary
 Brave-Kin Duo
 Brazen Freebooter
@@ -639,6 +641,7 @@ Cinder Hellion
 Cinder Storm
 Cirith Ungol Patrol
 Citanul Druid
+City Pigeon
 Citywatch Sphinx
 Civic Gardener
 Civic Guildmage
@@ -654,6 +657,7 @@ Clinquant Skymage
 Cloak of Feathers
 Cloaked Siren
 Clockwork Drawbridge
+Clockwork Fox
 Clockwork Percussionist
 Cloistered Telepath
 Clone
@@ -884,6 +888,7 @@ Defiant Salvager
 Defiant Strike
 Deliberate
 Delighted Killbot
+Delusions of Mediocrity
 Demolish
 Demon's Due
 Demonic Gifts
@@ -1244,6 +1249,7 @@ Fear of Lost Teeth
 Fear of Surveillance
 Fearless Fledgling
 Fearless Halberdier
+Featherbrained Filcher
 Feed the Serpent
 Feiyi Snake
 Felhide Minotaur
@@ -1318,6 +1324,7 @@ Flamekin Brawler
 Flamekin Gildweaver
 Flamekin Spitfire
 Flametongue Kavu
+Flaming Fist Officer
 Flash Counter
 Flashfreeze
 Flayed One
@@ -1526,6 +1533,7 @@ Goblin Commando
 Goblin Deathraiders
 Goblin Digging Team
 Goblin Firebomb
+Goblin Firebug
 Goblin Gang Leader
 Goblin Gardener
 Goblin Glider
@@ -2427,6 +2435,7 @@ Mountain
 Mountain Bandit
 Mountain Valley
 Mournful Zombie
+Mouser Foundry
 Mox Emerald
 Mox Jet
 Mox Pearl
@@ -2453,6 +2462,7 @@ Mystic Archaeologist
 Mystic Denial
 Mystic Monastery
 Mystic Skyfish
+Nadier's Nightblade
 Naga Eternal
 Naga Oracle
 Nantuko Disciple
@@ -2527,6 +2537,7 @@ Nimble Thopterist
 Nimble-Blade Khenra
 Nimbus of the Isles
 Nine-Tail White Fox
+Ninth Bridge Patrol
 Niv-Mizzet, the Firemind
 Nocturnal Feeder
 Nomad Outpost
@@ -2714,6 +2725,7 @@ Phyrexian Tower
 Phyrexian Vault
 Phyrexian Vivisector
 Phyrexian Walker
+Phyrexian War Beast
 Phytoburst
 Pia and Kiran Nalaar
 Pierce Strider
@@ -3237,6 +3249,7 @@ Serra Sphinx
 Serum Powder
 Serum Visionary
 Serum Visions
+Servant of Volrath
 Servo Exhibition
 Servo Schematic
 Setessan Champion
@@ -3794,6 +3807,7 @@ Thraben Inspector
 Thraben Purebloods
 Thraben Standard Bearer
 Thraben Valiant
+Thragtusk
 Thran Dynamo
 Thrashing Brontodon
 Thraxodemon
@@ -4346,4 +4360,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4343`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4357`;

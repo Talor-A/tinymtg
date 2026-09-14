@@ -100,6 +100,8 @@ const CORPUS_CARDS = [
 	loadCardFixture("u/up_the_beanstalk"),
 	loadCardFixture("h/hunted_lammasu"),
 	loadCardFixture("w/wanted_scoundrels"),
+	loadCardFixture("b/baffling_end"),
+	loadCardFixture("t/thragtusk"),
 ] as const;
 
 /**

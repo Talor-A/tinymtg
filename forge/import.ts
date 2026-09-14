@@ -69,6 +69,7 @@ import type {
 	TriggeredAbilityDefinition,
 	TriggeringZoneChangeResultEffectRef,
 	ValidPlayer,
+	Zone,
 	ZoneChangeEffectDestination,
 } from "../index.ts";
 import {
@@ -179,6 +180,20 @@ const PUBLIC_ZONES = new Map<string, PublicObjectZone>([
 	["Battlefield", "battlefield"],
 	["Graveyard", "graveyard"],
 	["Exile", "exile"],
+]);
+/**
+ * Where a permanent that leaves the battlefield can end up. Forge writes an
+ * unrestricted destination as `Any`, which matches every departure.
+ *
+ * `Ante` and `Command` are absent because the engine has no such zone, so a
+ * lookup that misses rejects the trigger.
+ */
+const BATTLEFIELD_DEPARTURES = new Map<string, Zone | "any">([
+	["Any", "any"],
+	["Graveyard", "graveyard"],
+	["Exile", "exile"],
+	["Hand", "hand"],
+	["Library", "library"],
 ]);
 // `Map`, not a plain object: an object literal's lookups fall through to
 // `Object.prototype` (`obj["constructor"]` resolves to `Function`), and every
@@ -360,11 +375,12 @@ function triggerEffectPlayer(
 	return player(value);
 }
 
-function selfDeathEffectPlayer(
+function selfDepartureEffectPlayer(
 	value: string | undefined,
 ): TriggerEffectPlayer | null {
-	// A Card.Self dies trigger's controller is captured from the departing
-	// permanent before it leaves. In that exact trigger shape,
+	// A Card.Self trigger watching its own departure from the battlefield
+	// captures its controller from the permanent before it leaves. In that
+	// trigger shape, whatever destination the permanent reaches,
 	// TriggeredCardController is therefore the ability controller ("you").
 	if (value === "TriggeredCardController") return "you";
 	return triggerEffectPlayer(value);
@@ -3115,11 +3131,17 @@ function lowerTrigger(
 			where,
 		);
 
-	const isSelfDeath =
+	const isSelfDeparture =
 		mode === "ChangesZone" &&
 		getForgeParam(params, "Origin") === "Battlefield" &&
-		getForgeParam(params, "Destination") === "Graveyard" &&
 		getForgeParam(params, "ValidCard") === "Card.Self";
+	// An effect can name the object its own departure created only when the
+	// trigger declares one destination to look in. `Destination$ Any` declares
+	// none, and a destination outside the public zones holds no object an
+	// effect could name.
+	const departureDestination = isSelfDeparture
+		? (PUBLIC_ZONES.get(getForgeParam(params, "Destination") ?? "") ?? null)
+		: null;
 	const isSelfGraveyardArrival =
 		mode === "ChangesZone" &&
 		getForgeParam(params, "Origin") === "Any" &&
@@ -3146,12 +3168,12 @@ function lowerTrigger(
 		["DB"],
 		mode === "SpellCast"
 			? spellCastEffectPlayer
-			: isSelfDeath
-				? selfDeathEffectPlayer
+			: isSelfDeparture
+				? selfDepartureEffectPlayer
 				: triggerEffectPlayer,
 		true,
 		abilityHost,
-		isSelfDeath || isSelfGraveyardArrival ? "graveyard" : null,
+		isSelfGraveyardArrival ? "graveyard" : departureDestination,
 	);
 	if (!chain.ok) return chain;
 	const effects = optionalDecider
@@ -3369,25 +3391,31 @@ function lowerTrigger(
 			const origin = getForgeParam(params, "Origin");
 			const destination = getForgeParam(params, "Destination");
 			// The trigger watches the battlefield either way: an
-			// enters-the-battlefield trigger from any zone, or a dies trigger on
-			// the permanent itself. Forge omits TriggerZones on the latter,
-			// which matches the engine's battlefield-by-default functionsFrom.
-			// Forge also omits Origin$ on some enters-the-battlefield triggers
-			// (Priest of Ancient Lore), which defaults to Any.
+			// enters-the-battlefield trigger from any zone, or a departure from
+			// the battlefield. Forge omits TriggerZones on the latter, which
+			// matches the engine's battlefield-by-default functionsFrom. Forge
+			// also omits Origin$ on some enters-the-battlefield triggers (Priest
+			// of Ancient Lore), which defaults to Any.
 			const etb = (origin ?? "Any") === "Any" && destination === "Battlefield";
-			const dies = origin === "Battlefield" && destination === "Graveyard";
+			// A departure is one event whatever its destination: "dies" is the
+			// graveyard spelling of it, and the rest of them have no such name.
+			const departure =
+				origin === "Battlefield"
+					? (BATTLEFIELD_DEPARTURES.get(destination ?? "") ?? null)
+					: null;
 			const selfGraveyardArrival =
 				origin === "Any" &&
 				destination === "Graveyard" &&
 				getForgeParam(params, "ValidCard") === "Card.Self";
 			if (
-				!(etb || dies || selfGraveyardArrival) ||
+				!(etb || departure !== null || selfGraveyardArrival) ||
 				(triggerZones !== undefined &&
 					triggerZones !==
 						(selfGraveyardArrival ? "Graveyard" : "Battlefield")) ||
 				(secondary !== undefined && secondary !== "True") ||
 				(triggerController !== undefined &&
-					(!dies || triggerController !== "TriggeredCardController"))
+					(departure === null ||
+						triggerController !== "TriggeredCardController"))
 			)
 				return issue(
 					"UNSUPPORTED_EFFECT",
@@ -3405,26 +3433,27 @@ function lowerTrigger(
 			return ok({
 				id: execute,
 				text,
-				condition: dies
-					? {
-							kind: "change zone",
-							from: "battlefield",
-							to: "graveyard",
-							predicate: selector,
-						}
-					: selfGraveyardArrival
+				condition:
+					departure !== null
 						? {
 								kind: "change zone",
-								from: "any",
-								to: "graveyard",
+								from: "battlefield",
+								to: departure,
 								predicate: selector,
 							}
-						: {
-								kind: "change zone",
-								from: "any",
-								to: "battlefield",
-								predicate: selector,
-							},
+						: selfGraveyardArrival
+							? {
+									kind: "change zone",
+									from: "any",
+									to: "graveyard",
+									predicate: selector,
+								}
+							: {
+									kind: "change zone",
+									from: "any",
+									to: "battlefield",
+									predicate: selector,
+								},
 				...(selfGraveyardArrival
 					? { functionsFrom: ["graveyard"] as ["graveyard"] }
 					: {}),

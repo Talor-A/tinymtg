@@ -5159,8 +5159,15 @@ describe("lowerForgeCard: ChangesZone dies triggers", () => {
 		});
 	});
 
-	test("rejects battlefield departures to zones other than the graveyard", () => {
-		for (const destination of ["Exile", "Hand", "Any"]) {
+	test("lowers a battlefield departure to each zone it can reach", () => {
+		for (const [destination, to] of [
+			["Exile", "exile"],
+			["Hand", "hand"],
+			["Library", "library"],
+			// `Any` is Forge's unrestricted destination: the trigger fires on
+			// every departure, whichever zone the permanent reaches.
+			["Any", "any"],
+		] as const) {
 			const result = importText(
 				diesCard({
 					origin: "Battlefield",
@@ -5168,7 +5175,27 @@ describe("lowerForgeCard: ChangesZone dies triggers", () => {
 					validCard: "Card.Self",
 				}),
 			);
-			expect(result.ok).toBe(false);
+			expect(result.ok, destination).toBe(true);
+			if (!result.ok) return;
+			expect(result.card.abilityDefinitions.triggered[0]?.condition).toEqual({
+				kind: "change zone",
+				from: "battlefield",
+				to,
+				predicate: { kind: "self" },
+			});
+		}
+	});
+
+	test("rejects a departure to a zone the engine does not have", () => {
+		for (const destination of ["Ante", "Command", "Sideboard"]) {
+			const result = importText(
+				diesCard({
+					origin: "Battlefield",
+					destination,
+					validCard: "Card.Self",
+				}),
+			);
+			expect(result.ok, destination).toBe(false);
 			if (result.ok) return;
 			expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 		}
