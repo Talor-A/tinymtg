@@ -3409,6 +3409,51 @@ function lowerTrigger(
 				effects,
 			});
 		}
+		case "Sacrificed": {
+			const badParams = claim(
+				"validcard",
+				"validplayer",
+				"triggerzones",
+				"optionaldecider",
+			);
+			if (!badParams.ok) return badParams;
+			const triggerZones = getForgeParam(params, "TriggerZones");
+			if (triggerZones !== undefined && triggerZones !== "Battlefield")
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"Sacrificed triggers must function from the battlefield",
+					where,
+				);
+			const rawSelector = getForgeParam(params, "ValidCard");
+			const selector = rawSelector ? parseSelector(rawSelector) : null;
+			if (selector === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"Sacrificed requires a supported ValidCard$ selector",
+					where,
+				);
+			const rawPlayer = getForgeParam(params, "ValidPlayer");
+			const sacrificingPlayer = rawPlayer
+				? parseValidPlayer(rawPlayer)
+				: "either";
+			if (sacrificingPlayer === null)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					`unsupported ValidPlayer$ ${rawPlayer}`,
+					where,
+				);
+			return ok({
+				id: execute,
+				text,
+				condition: {
+					kind: "sacrifice",
+					player: sacrificingPlayer,
+					predicate: selector,
+				},
+				targets,
+				effects,
+			});
+		}
 		case "ChangesZone": {
 			const badParams = claim(
 				"origin",

@@ -90,6 +90,7 @@ const CORPUS_CARDS = [
 	loadCardFixture("e/evolving_wilds"),
 	loadCardFixture("t/timetwister"),
 	loadCardFixture("w/worldspine_wurm"),
+	loadCardFixture("w/writhing_chrysalis"),
 	loadCardFixture("c/cloudshift"),
 	loadCardFixture("r/restoration_angel"),
 	loadCardFixture("p/pegasus_courser"),

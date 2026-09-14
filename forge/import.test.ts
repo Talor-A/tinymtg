@@ -1728,6 +1728,59 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 	});
 
+	test("Writhing Chrysalis imports its sacrifice trigger from the battlefield", () => {
+		const result = importFixture("w/writhing_chrysalis");
+		if (!result.ok) throw new Error("expected Writhing Chrysalis to import");
+		expect(result.card.abilityDefinitions.triggered[1]).toEqual({
+			id: "TrigPutCounter",
+			text: expect.any(String),
+			condition: {
+				kind: "sacrifice",
+				player: "you",
+				predicate: {
+					kind: "and",
+					predicates: [
+						{ kind: "subtype", subtype: "Eldrazi" },
+						{ kind: "not", predicate: { kind: "self" } },
+					],
+				},
+			},
+			targets: [],
+			effects: [
+				{
+					kind: "add counters",
+					subject: { kind: "source" },
+					counter: "+1/+1",
+					amount: 1,
+				},
+			],
+		});
+	});
+
+	test("Sacrificed triggers reject unsupported zones and missing subjects", () => {
+		const wrongZone = importForgeCard(
+			cardText("w/writhing_chrysalis").replace(
+				"TriggerZones$ Battlefield | ValidPlayer$ You",
+				"TriggerZones$ Graveyard | ValidPlayer$ You",
+			),
+			{ id: "graveyard-writhing-chrysalis" },
+		);
+		expect(wrongZone.ok).toBe(false);
+		if (!wrongZone.ok)
+			expect(wrongZone.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+
+		const missingSubject = importForgeCard(
+			cardText("w/writhing_chrysalis").replace(
+				"Mode$ Sacrificed | ValidCard$ Eldrazi.Other |",
+				"Mode$ Sacrificed |",
+			),
+			{ id: "subjectless-writhing-chrysalis" },
+		);
+		expect(missingSubject.ok).toBe(false);
+		if (!missingSubject.ok)
+			expect(missingSubject.diagnostics[0]?.code).toBe("UNSUPPORTED_PARAMETER");
+	});
+
 	test("self PutCounter lowers to a source-counter effect", () => {
 		const result = importFixture("d/deeproot_champion");
 		if (!result.ok) throw new Error("expected ok");

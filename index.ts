@@ -2476,6 +2476,13 @@ interface TapTriggerCondition {
 	predicate: ObjectPredicateDef;
 }
 
+/** Matches a permanent sacrificed by the specified relative player. */
+interface SacrificeTriggerCondition {
+	kind: "sacrifice";
+	player: ValidPlayer;
+	predicate: ObjectPredicateDef;
+}
+
 type TriggerCondition =
 	| GainLifeTriggerCondition
 	| DrawTriggerCondition
@@ -2486,7 +2493,8 @@ type TriggerCondition =
 	| DeclareBlockersTriggerCondition
 	| BeginStepTriggerCondition
 	| ZoneChangeTriggerCondition
-	| TapTriggerCondition;
+	| TapTriggerCondition
+	| SacrificeTriggerCondition;
 
 export interface TriggeredAbilityDefinition {
 	id: string;
@@ -5622,6 +5630,20 @@ export interface PerformResult {
 	created: ObjectId[];
 }
 
+/**
+ * One successfully executed final event, with the derived information from
+ * immediately before and after it. Higher-level events whose child events
+ * remove their subject (such as sacrifice) match that subject against
+ * `before`; arrival, cast, tap, and other events match their result in `after`.
+ */
+interface EventOccurrence {
+	readonly event: DeepReadOnly<GameEvent>;
+	readonly before: GameView;
+	readonly after: ReadContext;
+	readonly created: readonly ObjectId[];
+	readonly changed: readonly ObjectId[];
+}
+
 /** Public entry point. Replace, then execute. Callers must run SBAs separately. */
 function perform(
 	engine: Engine,
@@ -5706,6 +5728,9 @@ function executeIn(
 	}
 
 	let happened = true;
+	// Materialize the view before any direct mutation or child event can make
+	// the ReadContext stale. Trigger matching receives this exact LKI view.
+	const beforeView = before.view;
 	const created: ObjectId[] = [];
 	const changed: ObjectId[] = [];
 	const childResults: PerformResult[] = [];
@@ -6650,13 +6675,13 @@ function executeIn(
 				ev,
 				created,
 			);
-		detectTriggers(
-			state,
-			createReadContext(engine, state),
-			ev,
+		detectTriggers(state, {
+			event: ev,
+			before: beforeView,
+			after: createReadContext(engine, state),
 			created,
 			changed,
-		);
+		});
 		if (ev.kind === "begin step" && state.delayedTriggers.length > 0)
 			enqueueMatchingDelayedTriggers(engine, state, ev);
 		if (ev.fact) scope.facts.add(ev.fact);
@@ -6677,7 +6702,7 @@ function enqueueTrigger(
 	triggerId: TriggeredAbilityId,
 	trigger: TriggeredAbilityDefinition,
 	triggeringEvent: DeepReadOnly<GameEvent>,
-	created: ObjectId[],
+	created: readonly ObjectId[],
 ): void {
 	// A card in the graveyard has no controller (CR 109.4). Its owner is the
 	// only player the engine can mean by "you" for a trigger that functions
@@ -6741,13 +6766,11 @@ function triggerSubjectsMatch(
 }
 
 function triggerMatches(
-	read: ReadContext,
+	occurrence: EventOccurrence,
 	source: DeepReadOnly<GameObject>,
 	condition: TriggerCondition,
-	ev: GameEvent,
-	created: ObjectId[],
-	changed: ObjectId[],
 ): boolean {
+	const { event: ev, after: read, created, changed } = occurrence;
 	if (ev.kind !== condition.kind) return false;
 
 	switch (condition.kind) {
@@ -6876,17 +6899,30 @@ function triggerMatches(
 			});
 			return triggerSubjectsMatch(read, source, subjects, condition.predicate);
 		}
+
+		case "sacrifice": {
+			assert(ev.kind === "sacrifice");
+			const sacrificed = occurrence.before.objects.get(ev.object);
+			assert(
+				sacrificed?.kind === "permanent",
+				"sacrifice trigger subject has no permanent LKI",
+			);
+			if (
+				!relativePlayerMatches(sacrificed.controller, condition.player, source)
+			)
+				return false;
+			const controller = controllerOf(source) ?? source.owner;
+			return objectMatchesPredicate(condition.predicate, sacrificed, {
+				controller,
+				source: source.id,
+			});
+		}
 	}
 }
 
-/** Observe events only after they successfully execute and all replacements are final. */
-function detectTriggers(
-	state: GameState,
-	read: ReadContext,
-	ev: GameEvent,
-	created: ObjectId[],
-	changed: ObjectId[],
-): void {
+/** Observe only successful, final event occurrences. */
+function detectTriggers(state: GameState, occurrence: EventOccurrence): void {
+	const read = occurrence.after;
 	for (const abilitySource of state.objects.values()) {
 		const snapshot = read.view.objects.get(abilitySource.id);
 		assertDefined(snapshot, `no derived view for object ${abilitySource.id}`);
@@ -6895,24 +6931,15 @@ function detectTriggers(
 			const trigger = abilityDefinition(read.engine, "triggered", triggerId);
 			const functionsFrom = trigger.functionsFrom ?? ["battlefield"];
 			if (!functionsFrom.includes(abilitySource.zone)) continue;
-			if (
-				triggerMatches(
-					read,
-					abilitySource,
-					trigger.condition,
-					ev,
-					created,
-					changed,
-				)
-			) {
+			if (triggerMatches(occurrence, abilitySource, trigger.condition)) {
 				enqueueTrigger(
 					read.engine,
 					state,
 					abilitySource,
 					triggerId,
 					trigger,
-					ev,
-					created,
+					occurrence.event,
+					occurrence.created,
 				);
 			}
 		}

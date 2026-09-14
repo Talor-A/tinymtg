@@ -360,6 +360,7 @@ Bile Urchin
 Billiard Room
 Binding Mummy
 Biomechan Engineer
+Biotech Specialist
 Bird Maiden
 Birds of Paradise
 Birnin Zana Plaza
@@ -407,6 +408,7 @@ Blood Price
 Blood Rites
 Blood Servitor
 Blood Vassal
+Bloodbriar
 Bloodfell Caves
 Bloodfire Expert
 Bloodfire Mentor
@@ -552,6 +554,7 @@ Capashen Templar
 Capashen Unicorn
 Capital City
 Capital Guard
+Captain Lannery Storm
 Captain Storm, Cosmium Raider
 Captain of Umbar
 Captain's Call
@@ -1313,7 +1316,9 @@ Fledgling Imp
 Fleetfoot Dancer
 Fleetfoot Panther
 Fleeting Image
+Fleeting Memories
 Flesh Burrower
+Fleshtaker
 Flick a Coin
 Flood Plain
 Floodhound
@@ -1441,6 +1446,7 @@ Ghostly Visit
 Giant Caterpillar
 Giant Cockroach
 Giant Crab
+Giant Fly
 Giant Growth
 Giant Mantis
 Giant Octopus
@@ -1469,6 +1475,7 @@ Glare of Heresy
 Glass Golem
 Glaze Fiend
 Gleaming Barrier
+Gleaming Geardrake
 Glidedive Duo
 Glider Kids
 Glimmerburst
@@ -1483,6 +1490,7 @@ Gloomhunter
 Glorious Anthem
 Glory Seeker
 Glowing Anemone
+Gluttonous Guest
 Gnarled Mass
 Gnathosaur
 Gnawing Zombie
@@ -1555,6 +1563,7 @@ Gore Swine
 Gorilla Warrior
 Gorn Captain
 Graceful Cat
+Graf Mole
 Granite Gargoyle
 Grappler Spider
 Grappling Sundew
@@ -1670,6 +1679,7 @@ Havenwood Battleground
 Havenwood Wurm
 Havoc
 Havoc Devils
+Havoc Jester
 Hawkeater Moth
 Hawkeye, Clint Barton
 Haywire Mite
@@ -2359,6 +2369,7 @@ Moonglove Extract
 Moonglove Extractor
 Moonglove Winnower
 Moonlit Wake
+Moonstone Eulogist
 Moonwing Moth
 Moopsy
 Moorish Cavalry
@@ -2372,6 +2383,7 @@ Moriok Scavenger
 Moroii
 Mortal's Ardor
 Mortal's Resolve
+Mortician Beetle
 Mortify
 Mortiphobia
 Mortus Strider
@@ -2685,6 +2697,7 @@ Pincher Beetles
 Pious Wayfarer
 Piranha Fly
 Piranha Marsh
+Pirate Peddlers
 Pirate's Prize
 Pitchburn Devils
 Pitiless Plunderer
@@ -3023,6 +3036,7 @@ Rusted Sentinel
 Rustspore Ram
 Rustvale Bridge
 Rustwing Falcon
+Ruthless Deathfang
 Ruthless Winnower
 S.H.I.E.L.D. Deployment Drone
 Sabotender
@@ -3765,6 +3779,7 @@ Tinder Farm
 Tinker
 Tinker's Tote
 Tireless Missionaries
+Tireless Tracker
 Tireless Tribe
 Titan's Grave
 Titan's Strength
@@ -3879,6 +3894,7 @@ Uktabi Orangutan
 Ukud Cobra
 Ulrich's Kindred
 Ultron, Machine Overlord
+Ulvenwald Mysteries
 Umara Entangler
 Umara Mystic
 Umara Raptor
@@ -4232,6 +4248,7 @@ Wrenn's Resolve
 Wretched Anurid
 Wretched Doll
 Wriggling Grub
+Writhing Chrysalis
 Wu Infantry
 Wyluli Wolf
 Xander's Lounge
@@ -4284,4 +4301,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4281`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4298`;
