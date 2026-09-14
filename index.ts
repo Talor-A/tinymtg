@@ -5935,35 +5935,7 @@ function executeIn(
 			break;
 		}
 
-		case "mill": {
-			const p = state.players[ev.player];
-			if (ev.amount <= 0 || p.library.length === 0) {
-				happened = false;
-				break;
-			}
-			for (let i = 0; i < ev.amount; i++) {
-				const top = p.library[p.library.length - 1];
-				if (top === undefined) break;
-				childResults.push(
-					performIn(
-						engine,
-						state,
-						{
-							kind: "change zone",
-							object: top,
-							from: "library",
-							destination: { zone: "graveyard" },
-							cause: "mill",
-						},
-						choices,
-						scope,
-						depth + 1,
-					),
-				);
-			}
-			break;
-		}
-
+		case "mill":
 		case "exile top": {
 			const p = state.players[ev.player];
 			if (ev.amount <= 0 || p.library.length === 0) {
@@ -5981,8 +5953,10 @@ function executeIn(
 							kind: "change zone",
 							object: top,
 							from: "library",
-							destination: { zone: "exile" },
-							cause: "exile top",
+							destination: {
+								zone: ev.kind === "mill" ? "graveyard" : "exile",
+							},
+							cause: ev.kind,
 						},
 						choices,
 						scope,
