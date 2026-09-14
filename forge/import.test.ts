@@ -38,6 +38,50 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.abilityDefinitions.triggered).toHaveLength(0);
 	});
 
+	test("Giant Caterpillar hosts its delayed token trigger without printing it", () => {
+		const result = importFixture("g/giant_caterpillar");
+		if (!result.ok) throw new Error("expected Giant Caterpillar to import");
+		expect(result.card.printedAbilities).toMatchObject({
+			activated: ["giant-caterpillar:0"],
+			triggered: [],
+		});
+		expect(result.card.abilityDefinitions.activated).toMatchObject([
+			{
+				cost: {
+					mana: { g: 1 },
+					sacrifice: { predicate: { kind: "self" }, amount: 1 },
+				},
+				effects: [
+					{
+						kind: "create-delayed-trigger",
+						ability: "giant-caterpillar:0",
+					},
+				],
+			},
+		]);
+		expect(result.card.abilityDefinitions.triggered).toMatchObject([
+			{
+				id: "TrigToken",
+				condition: { kind: "begin step", player: "either", step: "end" },
+				targets: [],
+				effects: [
+					{
+						kind: "create-token",
+						controller: "you",
+						amount: 1,
+						characteristics: {
+							name: "Butterfly",
+							colors: ["g"],
+							keywords: ["flying"],
+							power: 1,
+							toughness: 1,
+						},
+					},
+				],
+			},
+		]);
+	});
+
 	test.each([
 		["s/soul_warden", "Soul Warden", "w", "Human", "Cleric"],
 		["e/essence_warden", "Essence Warden", "g", "Elf", "Shaman"],

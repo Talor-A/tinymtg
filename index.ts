@@ -1571,6 +1571,17 @@ export interface PendingTrigger {
 	sourceLastKnown: SourceLastKnown | null;
 }
 
+export type DelayedTriggerId = Brand<number, "DelayedTriggerId">;
+
+/** A one-shot trigger waiting for its definition's next matching event. */
+export interface DelayedTrigger {
+	id: DelayedTriggerId;
+	controller: PlayerId;
+	source: ObjectId;
+	sourceLastKnown: SourceLastKnown;
+	triggerId: TriggeredAbilityId;
+}
+
 interface PlayerState {
 	id: PlayerId;
 	life: number;
@@ -1682,6 +1693,8 @@ export interface GameState {
 	stack: StackEntry[];
 	/** Trigger occurrences waiting for the next time a player would receive priority. */
 	pendingTriggers: PendingTrigger[];
+	/** One-shot triggers waiting for their next matching event. */
+	delayedTriggers: DelayedTrigger[];
 	temporaryEffects: TemporaryEffect[];
 	/** Block declarations for the current combat, in damage-assignment order. */
 	blockAssignments: BlockAssignment[];
@@ -1690,6 +1703,7 @@ export interface GameState {
 	turnScheduler: TurnScheduler;
 	nextObjectId: number;
 	nextStackItemId: number;
+	nextDelayedTriggerId: number;
 	/** Monotonic tag source for guard facts (e.g. Chains of Mephistopheles). */
 	nextTag: number;
 	log: string[];
@@ -2181,6 +2195,11 @@ type EachPlayerDrawEffectDef = {
 	amount: number;
 };
 
+type CreateDelayedTriggerEffectDef = {
+	kind: "create-delayed-trigger";
+	ability: TriggeredAbilityId;
+};
+
 export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	| {
 			kind: "gain-life" | "lose-life" | "draw" | "scry" | "surveil" | "mill";
@@ -2189,6 +2208,7 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 			amount: number;
 	  }
 	| EachPlayerDrawEffectDef
+	| CreateDelayedTriggerEffectDef
 	| ExileTopEffectDef<AllowedPlayer>
 	| {
 			kind: "choose-from-top";
@@ -3242,6 +3262,7 @@ function newGame(seed = 0): GameState {
 		battlefield: [],
 		stack: [],
 		pendingTriggers: [],
+		delayedTriggers: [],
 		temporaryEffects: [],
 		blockAssignments: [],
 		completedTurns: 0,
@@ -3256,6 +3277,7 @@ function newGame(seed = 0): GameState {
 		},
 		nextObjectId: 0,
 		nextStackItemId: 0,
+		nextDelayedTriggerId: 0,
 		nextTag: 0,
 		log: [],
 		rngState: seedRng(seed),
@@ -3857,6 +3879,9 @@ function etbPreview(
 		stack: structuredClone(state.stack) as StackEntry[],
 		pendingTriggers: state.pendingTriggers.map(
 			(trigger) => structuredClone(trigger) as PendingTrigger,
+		),
+		delayedTriggers: state.delayedTriggers.map(
+			(trigger) => structuredClone(trigger) as DelayedTrigger,
 		),
 		temporaryEffects: state.temporaryEffects.map((effect) => ({ ...effect })),
 		log: [],
@@ -6447,6 +6472,8 @@ function executeIn(
 			created,
 			changed,
 		);
+		if (ev.kind === "begin step" && state.delayedTriggers.length > 0)
+			enqueueMatchingDelayedTriggers(engine, state, ev);
 		if (ev.fact) scope.facts.add(ev.fact);
 	}
 
@@ -6683,6 +6710,49 @@ function detectTriggers(
 			}
 		}
 	}
+}
+
+/** Consume each one-shot delayed trigger whose next matching event just happened. */
+function enqueueMatchingDelayedTriggers(
+	engine: Engine,
+	state: GameState,
+	ev: BeginStepEvent,
+): void {
+	const remaining: DelayedTrigger[] = [];
+	for (const delayed of state.delayedTriggers) {
+		const trigger = abilityDefinition(engine, "triggered", delayed.triggerId);
+		const condition = trigger.condition;
+		assert(
+			condition.kind === "begin step",
+			"only delayed begin-step triggers are implemented",
+		);
+		if (ev.step !== condition.step) {
+			remaining.push(delayed);
+			continue;
+		}
+		const playerMatches =
+			condition.player === "either" ||
+			(condition.player === "you"
+				? ev.player === delayed.controller
+				: ev.player !== delayed.controller);
+		if (!playerMatches) {
+			remaining.push(delayed);
+			continue;
+		}
+
+		state.pendingTriggers.push({
+			source: delayed.source,
+			triggerId: delayed.triggerId,
+			controller: delayed.controller,
+			text: trigger.text,
+			triggeringEvent: ev,
+			targetDefinitions: structuredClone(trigger.targets),
+			effects: structuredClone(trigger.effects),
+			sourceLastKnown: structuredClone(delayed.sourceLastKnown),
+		});
+		log(state, `  [delayed trigger] #${delayed.id} — ${trigger.text}`);
+	}
+	state.delayedTriggers = remaining;
 }
 
 interface SelfDeathTriggerCandidate {
@@ -7206,6 +7276,19 @@ function resolveEffects(
 			}
 			continue;
 		}
+		if (effect.kind === "create-delayed-trigger") {
+			// Capture the source now. The delayed ability can trigger and resolve
+			// after the original object has left every zone where it functioned.
+			state.delayedTriggers.push({
+				id: state.nextDelayedTriggerId++ as DelayedTriggerId,
+				controller: item.controller,
+				source: item.source,
+				sourceLastKnown: sourceInformation(engine, state, item),
+				triggerId: effect.ability,
+			});
+			state.revision++;
+			continue;
+		}
 		let bound: EntityRef | null = null;
 		const damageTarget =
 			effect.kind === "damage" && effect.subject.kind === "target"
@@ -7566,7 +7649,7 @@ function effectToEvent(
 	item: ResolutionSource,
 	effect: Exclude<
 		EffectDef<TriggerEffectPlayer>,
-		{ kind: "may" } | EachPlayerDrawEffectDef
+		{ kind: "may" } | EachPlayerDrawEffectDef | CreateDelayedTriggerEffectDef
 	>,
 	subject: EntityRef | null,
 ): GameEvent {
@@ -8861,7 +8944,8 @@ function activateAbilityIn(
 				effect.kind === "may-play" ||
 				effect.kind === "add counters" ||
 				effect.kind === "sacrifice" ||
-				effect.kind === "create-token"
+				effect.kind === "create-token" ||
+				effect.kind === "create-delayed-trigger"
 			) {
 				continue;
 			}

@@ -123,6 +123,7 @@ const RUNTIME_CARDS = [
 	loadRuntimeFixture("b/black_lotus", "rt-black-lotus"),
 	loadRuntimeFixture("w/wrenns_resolve", "rt-wrenns-resolve"),
 	loadRuntimeFixture("c/cloudshift", "rt-cloudshift"),
+	loadRuntimeFixture("g/giant_caterpillar", "rt-giant-caterpillar"),
 ];
 
 const SELF_COUNTER = (() => {
@@ -1775,6 +1776,92 @@ describe("forge-import runtime: spell effects", () => {
 });
 
 describe("forge-import runtime: activated abilities", () => {
+	test("Giant Caterpillar survives its source sacrifice as a delayed end-step trigger", () => {
+		const state = setupMain(engine);
+		const agents = passingAgents();
+		const caterpillar = engine.spawnPermanent(
+			state,
+			"rt-giant-caterpillar",
+			ALICE,
+		);
+		state.players[ALICE].manaPool.g = 1;
+
+		engine.executeAbilityAction(
+			state,
+			ALICE,
+			{
+				kind: "activate ability",
+				source: caterpillar.id,
+				ability: abilityId("activated", "rt-giant-caterpillar", 0),
+			},
+			agents,
+		);
+
+		expect(state.battlefield).not.toContain(caterpillar.id);
+		expect(state.delayedTriggers).toHaveLength(0);
+		engine.settlePriority(state, agents);
+		expect(state.delayedTriggers).toMatchObject([
+			{
+				controller: ALICE,
+				source: caterpillar.id,
+				triggerId: "rt-giant-caterpillar:0",
+				sourceLastKnown: { controller: ALICE },
+			},
+		]);
+		expect(
+			state.battlefield.some((id) => engine.name(state, id) === "Butterfly"),
+		).toBe(false);
+
+		advanceUntil(engine, state, agents, (next) => isTurnStep(next, "end"));
+
+		expect(state.delayedTriggers).toHaveLength(0);
+		expect(
+			state.battlefield.filter((id) => engine.name(state, id) === "Butterfly"),
+		).toHaveLength(1);
+	});
+
+	test("Giant Caterpillar activated during an end step waits for the following end step", () => {
+		const state = setupMain(engine);
+		const agents = passingAgents();
+		advanceUntil(engine, state, agents, (next) => isTurnStep(next, "end"));
+		const completedTurns = state.completedTurns;
+		const caterpillar = engine.spawnPermanent(
+			state,
+			"rt-giant-caterpillar",
+			ALICE,
+		);
+		state.players[ALICE].manaPool.g = 1;
+
+		engine.executeAbilityAction(
+			state,
+			ALICE,
+			{
+				kind: "activate ability",
+				source: caterpillar.id,
+				ability: abilityId("activated", "rt-giant-caterpillar", 0),
+			},
+			agents,
+		);
+		engine.settlePriority(state, agents);
+		expect(state.delayedTriggers).toHaveLength(1);
+
+		engine.advance(state, agents);
+		expect(
+			state.battlefield.some((id) => engine.name(state, id) === "Butterfly"),
+		).toBe(false);
+		advanceUntil(
+			engine,
+			state,
+			agents,
+			(next) => next.completedTurns > completedTurns && isTurnStep(next, "end"),
+		);
+
+		expect(state.delayedTriggers).toHaveLength(0);
+		expect(
+			state.battlefield.filter((id) => engine.name(state, id) === "Butterfly"),
+		).toHaveLength(1);
+	});
+
 	test("Rummaging Goblin's imported discard cost is paid before it draws", () => {
 		const state = setupMain(engine);
 		const agents = passingAgents();

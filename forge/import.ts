@@ -916,10 +916,12 @@ const COMMON_EFFECT_PARAMS = [
 	"cost",
 ];
 
-interface TokenAbilityHost {
+interface RegistryAbilityHost {
 	cardId: string;
 	activated: AnyActivatedAbilityDefinition[];
+	triggered: TriggeredAbilityDefinition[];
 	hostedActivatedIndices: Set<number>;
+	hostedTriggeredIndices: Set<number>;
 }
 
 interface SVarResolver {
@@ -966,7 +968,7 @@ function consumeAbilitySVar(
 function fixedTokenCharacteristics(
 	scriptId: string,
 	where: { nodeId?: string; line?: number },
-	host: TokenAbilityHost,
+	host: RegistryAbilityHost,
 ): Result<CharacteristicsSnapshot, ImportIssue> {
 	if (!/^[A-Za-z0-9_]+$/.test(scriptId))
 		return issue(
@@ -991,8 +993,7 @@ function fixedTokenCharacteristics(
 	// Activated abilities lower onto the creating card below, so a token
 	// script may carry any of them, mana or not: Treasure's mana ability and
 	// Food's "{2}, {T}, Sacrifice this token: You gain 3 life" host the same
-	// way. Every other ability kind still needs the token itself to own it,
-	// which the host has no way to express.
+	// way. Other token ability kinds remain outside this importer subset.
 	if (
 		imported.card.spell ||
 		imported.card.printedAbilities.static.length > 0 ||
@@ -1122,7 +1123,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 	where: { nodeId?: string; line?: number },
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
-	tokenAbilityHost: TokenAbilityHost,
+	abilityHost: RegistryAbilityHost,
 ): Result<NonMayEffect<Player>[], ImportIssue> {
 	// Every branch claims this record's whole parameter list, and every branch's
 	// list opens with its own discriminator and closes with the keys common to
@@ -1725,7 +1726,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			const characteristics = fixedTokenCharacteristics(
 				scriptId,
 				where,
-				tokenAbilityHost,
+				abilityHost,
 			);
 			if (!characteristics.ok) return characteristics;
 			return ok([
@@ -1948,7 +1949,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 	rootTokens: readonly (typeof ABILITY_DISCRIMINATOR_TOKENS)[number][],
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
-	tokenAbilityHost: TokenAbilityHost,
+	abilityHost: RegistryAbilityHost,
 ): Result<EffectDef<Player>[], ImportIssue> {
 	const effects: EffectDef<Player>[] = [];
 	let current = rootParams;
@@ -2179,7 +2180,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			where,
 			parsePlayer,
 			allowSourceObject,
-			tokenAbilityHost,
+			abilityHost,
 		);
 		if (!_lowered.ok) return _lowered;
 		const lowered = _lowered.value;
@@ -2233,6 +2234,82 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 				where,
 			);
 	}
+}
+
+/** Lower Forge's exact "at the beginning of the next end step" ability. */
+function lowerNextEndStepDelayedTrigger(
+	resolver: SVarResolver,
+	params: ForgeParamList,
+	where: { nodeId?: string; line?: number },
+	description: string,
+	host: RegistryAbilityHost,
+): Result<ActivatedEffectDef[], ImportIssue> {
+	const badParams = consumeParams(
+		params,
+		new Set(["ab", "cost", "mode", "phase", "execute", "spelldescription"]),
+		where,
+	);
+	if (!badParams.ok) return badParams;
+	if (
+		getForgeParam(params, "Mode") !== "Phase" ||
+		getForgeParam(params, "Phase") !== "End of Turn"
+	) {
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"DelayedTrigger requires Mode$ Phase and Phase$ End of Turn",
+			where,
+		);
+	}
+
+	const execute = getForgeParam(params, "Execute");
+	if (!execute)
+		return issue(
+			"UNSUPPORTED_REFERENCE",
+			"DelayedTrigger requires Execute$",
+			where,
+		);
+	const _executeSVar = consumeAbilitySVar(resolver, execute, "Execute", where);
+	if (!_executeSVar.ok) return _executeSVar;
+	const executeSVar = _executeSVar.value;
+	const executeParams = executeSVar.parsed.params;
+	const targets = parseTarget(
+		getForgeParam(executeParams, "ValidTgts"),
+		undefined,
+		changeZoneTargetZone(
+			executeParams,
+			getForgeParam(executeParams, "DB") === "ChangeZone",
+		),
+	);
+	if (!targets)
+		return issue("UNSUPPORTED_TARGET", "unsupported ValidTgts$ value", where);
+	const effects = lowerEffectChain(
+		resolver,
+		executeParams,
+		{ nodeId: executeSVar.source.nodeId, line: executeSVar.source.line },
+		targets,
+		true,
+		["DB"],
+		triggerEffectPlayer,
+		true,
+		host,
+	);
+	if (!effects.ok) return effects;
+
+	const triggerIndex = host.triggered.length;
+	host.triggered.push({
+		id: execute,
+		text: description,
+		condition: { kind: "begin step", player: "either", step: "end" },
+		targets,
+		effects: effects.value,
+	});
+	host.hostedTriggeredIndices.add(triggerIndex);
+	return ok([
+		{
+			kind: "create-delayed-trigger",
+			ability: abilityId("triggered", host.cardId, triggerIndex),
+		},
+	]);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -2733,7 +2810,7 @@ function lowerReplacement(
 function lowerTrigger(
 	resolver: SVarResolver,
 	record: { params: ForgeParamList; source: { nodeId: string; line: number } },
-	tokenAbilityHost: TokenAbilityHost,
+	abilityHost: RegistryAbilityHost,
 ): Result<TriggeredAbilityDefinition, ImportIssue> {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
@@ -2790,7 +2867,7 @@ function lowerTrigger(
 				? selfDeathEffectPlayer
 				: triggerEffectPlayer,
 		true,
-		tokenAbilityHost,
+		abilityHost,
 	);
 	if (!chain.ok) return chain;
 	const effects = optionalDecider
@@ -3770,14 +3847,16 @@ export function lowerForgeCard(
 	}
 
 	const activatedAbilities: AnyActivatedAbilityDefinition[] = [];
-	const tokenAbilityHost: TokenAbilityHost = {
+	const triggers: TriggeredAbilityDefinition[] = [];
+	const abilityHost: RegistryAbilityHost = {
 		cardId: id,
 		activated: activatedAbilities,
+		triggered: triggers,
 		hostedActivatedIndices: new Set(),
+		hostedTriggeredIndices: new Set(),
 	};
-	const triggers: TriggeredAbilityDefinition[] = [];
 	for (const record of face.triggers) {
-		const lowered = lowerTrigger(resolver, record, tokenAbilityHost);
+		const lowered = lowerTrigger(resolver, record, abilityHost);
 		if (!lowered.ok) return reject(lowered);
 		triggers.push(lowered.value);
 	}
@@ -3809,6 +3888,37 @@ export function lowerForgeCard(
 			);
 			if (!parsedCost.ok) return reject(parsedCost);
 			activationCost = parsedCost.value;
+		}
+
+		if (disc.token === "AB" && disc.api === "delayedtrigger") {
+			const description = getForgeParam(params, "SpellDescription");
+			if (!description)
+				return reject(
+					issue(
+						"UNSUPPORTED_PARAMETER",
+						"SpellDescription$ is required",
+						where,
+					),
+				);
+			const delayed = lowerNextEndStepDelayedTrigger(
+				resolver,
+				params,
+				where,
+				description,
+				abilityHost,
+			);
+			if (!delayed.ok) return reject(delayed);
+			assert(activationCost !== undefined);
+			activatedCount += 1;
+			activatedAbilities.push({
+				kind: "activated",
+				id: `activated-${activatedCount}`,
+				text: description,
+				cost: activationCost,
+				targets: [],
+				effects: delayed.value,
+			});
+			continue;
 		}
 
 		if (disc.token === "AB" && disc.api === "mana") {
@@ -4033,7 +4143,7 @@ export function lowerForgeCard(
 			disc.token === "SP" ? ["SP"] : ["AB"],
 			player,
 			disc.token === "AB",
-			tokenAbilityHost,
+			abilityHost,
 		);
 		if (!chain.ok) return reject(chain);
 		const description = getForgeParam(params, "SpellDescription");
@@ -4178,6 +4288,21 @@ export function lowerForgeCard(
 		}
 	}
 
+	const printed: CardDefInput["printed"] = {};
+	if (abilityHost.hostedActivatedIndices.size > 0) {
+		printed.activated = activatedAbilities
+			.map((_, index) => index)
+			.filter((index) => !abilityHost.hostedActivatedIndices.has(index));
+	}
+	if (abilityHost.hostedTriggeredIndices.size > 0) {
+		printed.triggered = triggers
+			.map((_, index) => index)
+			.filter((index) => !abilityHost.hostedTriggeredIndices.has(index));
+	}
+	const hasRegistryHostedAbilities =
+		abilityHost.hostedActivatedIndices.size > 0 ||
+		abilityHost.hostedTriggeredIndices.size > 0;
+
 	const input: CardDefInput = {
 		id,
 		name,
@@ -4194,17 +4319,7 @@ export function lowerForgeCard(
 		...(spell ? { spell } : {}),
 		...(statics.length > 0 ? { statics } : {}),
 		...(activatedAbilities.length > 0 ? { activatedAbilities } : {}),
-		...(tokenAbilityHost.hostedActivatedIndices.size > 0
-			? {
-					printed: {
-						activated: activatedAbilities
-							.map((_, index) => index)
-							.filter(
-								(index) => !tokenAbilityHost.hostedActivatedIndices.has(index),
-							),
-					},
-				}
-			: {}),
+		...(hasRegistryHostedAbilities ? { printed } : {}),
 		...(triggers.length > 0 ? { triggers } : {}),
 		...(replacements.length > 0 ? { replacements } : {}),
 	};

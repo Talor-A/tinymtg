@@ -1294,6 +1294,7 @@ Ghitu War Cry
 Ghost Warden
 Ghostly Sentinel
 Ghostly Visit
+Giant Caterpillar
 Giant Cockroach
 Giant Growth
 Giant Mantis
@@ -3428,6 +3429,7 @@ Tramway Station
 Tranquil Cove
 Tranquil Expanse
 Transdimensional Bovine
+Transluminant
 Trash for Treasure
 Traveling Philosopher
 Tread Upon
@@ -3827,4 +3829,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3824`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3826`;
