@@ -1573,6 +1573,8 @@ export interface PendingTrigger {
 	text: string;
 	/** The final event occurrence that caused this trigger to fire. */
 	readonly triggeringEvent: DeepReadOnly<GameEvent>;
+	/** The new object created by that occurrence, when it was a zone change. */
+	readonly triggeringZoneChangeResult: ObjectId | null;
 	/** Copied off the trigger definition, which outlives it. */
 	targetDefinitions: TargetDef[];
 	effects: TriggeredEffectDef[];
@@ -1663,6 +1665,7 @@ export interface TriggeredAbilityStackItem
 	kind: "triggered ability";
 	triggerId: TriggeredAbilityId;
 	readonly triggeringEvent: DeepReadOnly<GameEvent>;
+	readonly triggeringZoneChangeResult: ObjectId | null;
 }
 
 export interface ActivatedAbilityStackItem
@@ -2131,6 +2134,11 @@ export interface EffectResultObjectRef {
 	slot: string;
 }
 
+/** The new object created by the zone change that triggered this ability. */
+export interface TriggeringZoneChangeResultEffectRef {
+	kind: "triggering-zone-change-result";
+}
+
 /** A non-targeted permanent chosen as an instruction resolves. */
 export interface ChosenPermanentEffectRef<Player extends TriggerEffectPlayer> {
 	kind: "chosen-permanent";
@@ -2162,7 +2170,11 @@ export type ZoneChangeEffectDestination<
 type BoundZoneChangeEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
 	[Origin in PublicObjectZone]: {
 		kind: "change-zone";
-		subject: SourceEffectRef | TargetEffectRef | EffectResultObjectRef;
+		subject:
+			| SourceEffectRef
+			| TargetEffectRef
+			| EffectResultObjectRef
+			| TriggeringZoneChangeResultEffectRef;
 		from: Origin;
 		destination: Exclude<
 			ZoneChangeEffectDestination<AllowedPlayer>,
@@ -6502,7 +6514,12 @@ function executeIn(
 		executed.push(ev);
 		state.revision++;
 		if (ev.kind === "change zone")
-			enqueueLeavesBattlefieldTriggers(state, leavesBattlefieldTriggers, ev);
+			enqueueLeavesBattlefieldTriggers(
+				state,
+				leavesBattlefieldTriggers,
+				ev,
+				created,
+			);
 		detectTriggers(
 			state,
 			createReadContext(engine, state),
@@ -6530,6 +6547,7 @@ function enqueueTrigger(
 	triggerId: TriggeredAbilityId,
 	trigger: TriggeredAbilityDefinition,
 	triggeringEvent: DeepReadOnly<GameEvent>,
+	created: ObjectId[],
 ): void {
 	// A card in the graveyard has no controller (CR 109.4). Its owner is the
 	// only player the engine can mean by "you" for a trigger that functions
@@ -6543,6 +6561,16 @@ function enqueueTrigger(
 		controller,
 		text: trigger.text,
 		triggeringEvent,
+		triggeringZoneChangeResult:
+			triggeringEvent.kind === "change zone"
+				? (() => {
+						assert(
+							created.length === 1,
+							"a zone-change occurrence must create exactly one new object",
+						);
+						return created[0] ?? null;
+					})()
+				: null,
 		targetDefinitions: structuredClone(trigger.targets),
 		effects: structuredClone(trigger.effects),
 		sourceLastKnown: null,
@@ -6745,6 +6773,7 @@ function detectTriggers(
 					triggerId,
 					trigger,
 					ev,
+					created,
 				);
 			}
 		}
@@ -6785,6 +6814,7 @@ function enqueueMatchingDelayedTriggers(
 			controller: delayed.controller,
 			text: trigger.text,
 			triggeringEvent: ev,
+			triggeringZoneChangeResult: null,
 			targetDefinitions: structuredClone(trigger.targets),
 			effects: structuredClone(trigger.effects),
 			sourceLastKnown: structuredClone(delayed.sourceLastKnown),
@@ -6795,7 +6825,10 @@ function enqueueMatchingDelayedTriggers(
 }
 
 interface LeavesBattlefieldTriggerCandidate {
-	pending: Omit<PendingTrigger, "triggeringEvent">;
+	pending: Omit<
+		PendingTrigger,
+		"triggeringEvent" | "triggeringZoneChangeResult"
+	>;
 	sourceName: string;
 }
 
@@ -6871,9 +6904,18 @@ function enqueueLeavesBattlefieldTriggers(
 	state: GameState,
 	candidates: LeavesBattlefieldTriggerCandidate[],
 	triggeringEvent: DeepReadOnly<ZoneChangeEvent>,
+	created: ObjectId[],
 ): void {
+	assert(
+		created.length === 1,
+		"a zone-change occurrence must create exactly one new object",
+	);
 	for (const { pending, sourceName } of candidates) {
-		state.pendingTriggers.push({ ...pending, triggeringEvent });
+		state.pendingTriggers.push({
+			...pending,
+			triggeringEvent,
+			triggeringZoneChangeResult: created[0] ?? null,
+		});
 		log(state, `  [trigger] ${sourceName}#${pending.source} — ${pending.text}`);
 	}
 }
@@ -7463,7 +7505,32 @@ function resolveEffects(
 			let ref: EntityRef | null;
 			if (effect.subject.kind === "source") ref = null;
 			else if (effect.subject.kind === "target") ref = bound;
-			else if (effect.subject.kind === "chosen-permanent") {
+			else if (effect.subject.kind === "triggering-zone-change-result") {
+				assert(
+					item.ability?.kind === "triggered ability",
+					"a triggering zone-change result requires a triggered ability",
+				);
+				const id = item.ability.triggeringZoneChangeResult;
+				if (id === null) continue;
+				const result = maybeObject(state, id);
+				// A token has ceased to exist, or another effect has already moved the
+				// destination object. In either case this instruction does nothing.
+				if (!result || result.zone !== effect.from) continue;
+				if (effect.from === "battlefield") {
+					assert(
+						result.kind === "permanent",
+						"a battlefield zone-change result must be a permanent",
+					);
+					ref = { type: "permanent", id };
+				} else {
+					if (result.kind === "nonbattlefield-token") continue;
+					assert(
+						result.kind === "card",
+						"a public-zone change result must be a card",
+					);
+					ref = { type: "card", id };
+				}
+			} else if (effect.subject.kind === "chosen-permanent") {
 				assert(
 					effect.from === "battlefield",
 					"a chosen permanent must come from the battlefield",
@@ -8051,6 +8118,7 @@ export function planManaPayment(
  */
 function validateEffectResultFlow(
 	effects: EffectDef<TriggerEffectPlayer>[],
+	triggeringZoneChangeDestination: Zone | "any" | null = null,
 ): void {
 	const check = (
 		sequence: EffectDef<TriggerEffectPlayer>[],
@@ -8063,6 +8131,16 @@ function validateEffectResultFlow(
 				// result definitely available to a following outer instruction.
 				check(effect.effects, new Map(available));
 				continue;
+			}
+			if (
+				effect.kind === "change-zone" &&
+				effect.subject.kind === "triggering-zone-change-result"
+			) {
+				assert(
+					triggeringZoneChangeDestination === "any" ||
+						triggeringZoneChangeDestination === effect.from,
+					`change-zone refers to an unavailable triggering ${effect.from} object`,
+				);
 			}
 			if (
 				effect.kind === "change-zone" &&
@@ -8109,8 +8187,12 @@ function validateCardEffectResultFlow(definition: CardDef): void {
 	for (const ability of definition.abilityDefinitions.activated) {
 		if (ability.effects) validateEffectResultFlow(ability.effects);
 	}
-	for (const trigger of definition.abilityDefinitions.triggered)
-		validateEffectResultFlow(trigger.effects);
+	for (const trigger of definition.abilityDefinitions.triggered) {
+		validateEffectResultFlow(
+			trigger.effects,
+			trigger.condition.kind === "change zone" ? trigger.condition.to : null,
+		);
+	}
 }
 
 /**
@@ -8152,6 +8234,11 @@ function requiredTargetDefinition(
 		if (
 			effect.kind === "change-zone" &&
 			effect.subject.kind === "effect-result"
+		)
+			return;
+		if (
+			effect.kind === "change-zone" &&
+			effect.subject.kind === "triggering-zone-change-result"
 		)
 			return;
 		if (

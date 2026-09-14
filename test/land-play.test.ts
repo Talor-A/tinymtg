@@ -142,6 +142,7 @@ function occupyStack(state: GameState): void {
 		source: source.id,
 		triggerId: abilityId("triggered", "ajanis-mantra", 0),
 		controller: ALICE,
+		triggeringZoneChangeResult: null,
 		triggeringEvent: {
 			kind: "begin step",
 			turnId: 0 as TurnId,

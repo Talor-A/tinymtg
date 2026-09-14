@@ -399,6 +399,7 @@ describe("choice transcripts", () => {
 				source: 1 as ObjectId,
 				triggerId: abilityId("triggered", "ajanis-mantra", 0),
 				controller: 0,
+				triggeringZoneChangeResult: null,
 				triggeringEvent: {
 					kind: "begin step",
 					turnId: 0 as TurnId,
@@ -482,6 +483,7 @@ describe("choice transcripts", () => {
 				source: 1 as ObjectId,
 				triggerId: abilityId("triggered", "ajanis-mantra", 0),
 				controller: 0,
+				triggeringZoneChangeResult: null,
 				triggeringEvent: {
 					kind: "begin step",
 					turnId: 0 as TurnId,
