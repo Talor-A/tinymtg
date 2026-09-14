@@ -44,6 +44,7 @@ const CORPUS_CARDS = [
 	loadCardFixture("a/arashin_cleric"),
 	loadCardFixture("r/rhox_war_monk"),
 	loadCardFixture("r/root_maze"),
+	loadCardFixture("r/reality_hemorrhage"),
 	loadCardFixture("r/revitalize"),
 	loadCardFixture("v/viscera_seer"),
 	loadCardFixture("b/blazing_hellhound"),

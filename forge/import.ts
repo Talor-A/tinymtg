@@ -4209,6 +4209,21 @@ export function lowerForgeCard(
 	const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
 	for (const record of face.keywordRecords) {
 		const where = { nodeId: record.source.nodeId, line: record.source.line };
+		if (record.keyword === "Devoid") {
+			if (record.segments.length !== 1)
+				return reject(
+					issue(
+						"UNSUPPORTED_KEYWORD",
+						`unsupported keyword: ${record.raw}`,
+						where,
+					),
+				);
+			// CR 702.114a: devoid is a characteristic-defining ability that makes
+			// the card colorless regardless of the colored symbols in its mana cost.
+			colors = [];
+			keywords.push("devoid");
+			continue;
+		}
 		if (record.keyword === "Cycling") {
 			const [, costText] = record.segments;
 			if (record.segments.length !== 2 || !costText)

@@ -2508,6 +2508,7 @@ export interface TriggeredAbilityDefinition {
  * ------------------------------------------------------------------ */
 
 export type Keyword =
+	| "devoid"
 	| "indestructible"
 	| "deathtouch"
 	| "lifelink"
@@ -2962,6 +2963,10 @@ function printedEntryReplacements(
  * with its definition object identities intact.
  */
 export function defineCard(input: CardDefInput | CardDef): CardDef {
+	assert(
+		!input.keywords?.includes("devoid") || input.colors.length === 0,
+		`devoid card ${input.id} must be colorless`,
+	);
 	if ("abilityDefinitions" in input) {
 		validateCardEffectResultFlow(input);
 		return input;

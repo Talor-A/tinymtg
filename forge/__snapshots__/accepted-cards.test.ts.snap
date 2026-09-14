@@ -385,6 +385,7 @@ Blinding Mage
 Blinking Spirit
 Blinkmoth Well
 Blistering Barrier
+Blisterpod
 Blisterstick Shaman
 Blitzball Shot
 Blood Artist
@@ -488,6 +489,7 @@ Broadside Barrage
 Bronze Sable
 Bronze Walrus
 Bronzebeak Moa
+Brood Monitor
 Brood Weaver
 Broodheart Engine
 Broodhunter Wurm
@@ -522,6 +524,7 @@ Cadaver Imp
 Caelorna, Coral Tyrant
 Call of the Conclave
 Call the Cavalry
+Call the Scions
 Call to Mind
 Call to the Feast
 Caller of Gales
@@ -562,6 +565,7 @@ Cast Down
 Castle Sengir
 Cat Oven
 Catacomb Crocodile
+Catacomb Sifter
 Catacomb Slug
 Catalog
 Catalyst Elemental
@@ -1049,6 +1053,7 @@ Elderfang Disciple
 Elderfang Ritualist
 Elderleaf Mentor
 Eldrazi Devastator
+Eldrazi Skyspawner
 Electric Eel
 Electrify
 Electrostatic Field
@@ -1096,6 +1101,7 @@ Emergency Weld
 Emeria Angel
 Emmessi Tome
 Emrakul's Hatcher
+Emrakul's Messenger
 Enatu Golem
 Enchanted Prairie
 Enchantress's Presence
@@ -1163,6 +1169,7 @@ Exultant Skymarcher
 Eye of Nowhere
 Eye of Ramos
 Eyeblight Cullers
+Eyeless Watcher
 Facet Reader
 Facevaulter
 Fade from Memory
@@ -1798,6 +1805,7 @@ Improbable Alliance
 Improvised Club
 Improvised Weaponry
 Impulse
+Incubator Drone
 Incurable Ogre
 Indatha Crystal
 Indatha Triome
@@ -2480,6 +2488,7 @@ Obelisk of Grixis
 Obelisk of Jund
 Obelisk of Naya
 Obelisk of Undoing
+Oblivion Strike
 Oboro, Palace in the Clouds
 Obsessive Stitcher
 Obsianus Golem
@@ -2799,6 +2808,7 @@ Razortide Bridge
 Razortip Whip
 Reach Through Mists
 Read the Bones
+Reality Hemorrhage
 Rearing Embermare
 Reassembling Skeleton
 Rebellious Strike
@@ -3038,6 +3048,7 @@ Scavenging Scarab
 Scepter of Dominance
 Scepter of Insight
 School of the Unseen
+Scion Summoner
 Scion of Ugin
 Scorching Shot
 Scorching Spear
@@ -3192,6 +3203,7 @@ Siege Mastodon
 Siege Rhino
 Siege-Gang Commander
 Sift
+Sifter of Skulls
 Sigardian Priest
 Sigil of the Empty Throne
 Sigiled Skink
@@ -3829,6 +3841,7 @@ Undertaker
 Underworld Dreams
 Undying Beast
 Unexplained Disappearance
+Unfathomable Truths
 Unfriendly Fire
 Unhallowed Phalanx
 Unholy Grotto
@@ -3916,6 +3929,7 @@ Vessel of Endless Rest
 Vessel of Ephemera
 Vessel of Paramnesia
 Vessel of Volatility
+Vestige of Emrakul
 Veteran Armorer
 Veteran Cavalier
 Vexing Gull
@@ -4201,4 +4215,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4198`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4212`;

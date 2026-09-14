@@ -23,6 +23,29 @@ function importFixture(path: string) {
 }
 
 describe("lowerForgeCard: accepted card lowering", () => {
+	test("Devoid makes a card colorless without changing its mana cost", () => {
+		const result = importFixture("r/reality_hemorrhage");
+		if (!result.ok) throw new Error("expected Reality Hemorrhage to import");
+		expect(result.card).toMatchObject({
+			manaCost: { n: 1, r: 1 },
+			colors: [],
+			keywords: ["devoid"],
+		});
+	});
+
+	test("Devoid rejects parameters instead of ignoring them", () => {
+		const result = importForgeCard(
+			cardText("r/reality_hemorrhage").replace("K:Devoid", "K:Devoid:1"),
+			{ id: "mutated-reality-hemorrhage" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_KEYWORD",
+			message: "unsupported keyword: Devoid:1",
+		});
+	});
+
 	test("Grizzly Bears has literal characteristics and no rules", () => {
 		const result = importFixture("g/grizzly_bears");
 		if (!result.ok) throw new Error("expected ok");
