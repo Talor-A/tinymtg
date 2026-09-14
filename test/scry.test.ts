@@ -6,7 +6,9 @@ import {
 	type ChoiceAnswer,
 	ChoiceController,
 	ChoicePendingError,
+	ChoiceReplayMismatchError,
 	type ChoiceRequest,
+	type ChoiceTranscript,
 	createEngine,
 	type GameState,
 	InvalidChoiceAnswerError,
@@ -59,6 +61,36 @@ describe("scry choices", () => {
 			bottom: [a],
 		});
 		replay.assertComplete();
+	});
+
+	test("reports a corrupt recorded answer as a replay mismatch", () => {
+		const state = engine.newGame();
+		const [a, b, c] = cards(state);
+		if (a === undefined || b === undefined || c === undefined) {
+			throw new Error("expected three cards");
+		}
+		const agent: SyncAgent = {
+			choose: () => ({ top: [String(b), String(c)], bottom: [String(a)] }),
+		};
+		const recorder = ChoiceController.record(engine, [agent, agent]);
+		recorder.chooseScry(state, 0, [c, b, a]);
+
+		// A transcript that no longer describes a legal answer is a broken
+		// transcript, whichever choice recorded it.
+		const transcript = JSON.parse(
+			JSON.stringify(recorder.transcript()),
+		) as ChoiceTranscript;
+		const recorded = transcript.choices[0];
+		if (!recorded) throw new Error("expected a recorded choice");
+		recorded.answer = { top: [String(b)], bottom: [String(a)] };
+
+		expect(() =>
+			ChoiceController.replay(engine, transcript).chooseScry(state, 0, [
+				c,
+				b,
+				a,
+			]),
+		).toThrow(ChoiceReplayMismatchError);
 	});
 
 	test("rejects missing, duplicate, and unknown cards", () => {

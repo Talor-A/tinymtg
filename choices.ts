@@ -39,6 +39,23 @@ function objectLabel(
 	return object ? engine.name(state, id) : "unknown";
 }
 
+/** The option id naming one looked-at card. */
+function cardOptionId(id: ObjectId): string {
+	return String(id);
+}
+
+/**
+ * The card an option id names, inverting {@link cardOptionId}.
+ *
+ * `normalizeAnswer` has already checked that every id in a partition answer is
+ * one of the request's own options, so this converts rather than searches.
+ */
+function objectForCardOption(id: string): ObjectId {
+	const parsed = Number(id);
+	assert(Number.isSafeInteger(parsed), `card option ${id} is not an object id`);
+	return parsed as ObjectId;
+}
+
 export interface ChoiceOption {
 	id: string;
 	label: string;
@@ -752,152 +769,114 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		} as ChoiceRequest;
 	}
 
+	/**
+	 * The answer to one request: replayed from the transcript while the cursor
+	 * is still inside it, and asked of the agent once it is not.
+	 *
+	 * The caller decodes the answer, because only the caller knows which shape
+	 * its choice takes. `invalid` is how it reports an answer it cannot use:
+	 * a transcript that no longer fits the game being replayed is a replay
+	 * mismatch, while a live agent that answers something illegal is an
+	 * invalid answer, and the caller cannot tell those apart on its own.
+	 */
+	private ask(
+		state: ReadonlyGameState,
+		request: ChoiceRequest,
+	): { answer: ChoiceAnswer; invalid: (message: string) => Error } {
+		const recorded = this.decisions[this.cursor];
+		if (recorded) {
+			if (
+				recorded.request.id !== request.id ||
+				recorded.request.fingerprint !== request.fingerprint
+			) {
+				throw new ChoiceReplayMismatchError(
+					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
+				);
+			}
+			// A recorded answer the normalizer rejects is a broken transcript
+			// rather than a misbehaving agent, so it reports as a mismatch.
+			let answer: ChoiceAnswer;
+			try {
+				answer = normalizeAnswer(request, recorded.answer);
+			} catch (error) {
+				throw new ChoiceReplayMismatchError(
+					`recorded answer for choice ${request.id} is not a valid answer: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
+			}
+			this.cursor++;
+			return {
+				answer,
+				invalid: (message) => new ChoiceReplayMismatchError(message),
+			};
+		}
+
+		const agent = this.agents?.[request.player];
+		if (!agent) {
+			throw new ChoiceReplayMismatchError(
+				`transcript ended before choice ${request.id}`,
+			);
+		}
+		const answer = agent.choose(
+			this.engine.buildPlayerView(state, request.player),
+			request,
+		);
+		if (isPromiseLike(answer)) {
+			if (!this.allowSuspension) {
+				throw new Error("an async agent was used outside advanceWithReplay()");
+			}
+			this.pendingRequest = clone(request);
+			throw new ChoicePendingError(clone(request), answer);
+		}
+		const normalized = normalizeAnswer(request, answer);
+		this.decisions.push({
+			request: clone(request),
+			answer: clone(normalized),
+		});
+		this.cursor++;
+		return {
+			answer: normalized,
+			invalid: (message) => new InvalidChoiceAnswerError(message),
+		};
+	}
+
 	private choose<T>(
 		state: ReadonlyGameState,
 		request: ChoiceRequest,
 		candidates: readonly { id: string; value: T }[],
 	): T {
-		const recorded = this.decisions[this.cursor];
-		if (recorded) {
-			if (
-				recorded.request.id !== request.id ||
-				recorded.request.fingerprint !== request.fingerprint
-			) {
-				throw new ChoiceReplayMismatchError(
-					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
-				);
-			}
-			const recordedAnswer = recorded.answer;
-			if (!("optionId" in recordedAnswer)) {
-				throw new ChoiceReplayMismatchError(
-					`recorded answer for choice ${request.id} is not a single-select answer`,
-				);
-			}
-			const candidate = candidates.find(
-				(option) => option.id === recordedAnswer.optionId,
-			);
-			if (!candidate) {
-				throw new ChoiceReplayMismatchError(
-					`recorded answer ${recordedAnswer.optionId} is not legal for choice ${request.id}`,
-				);
-			}
-			this.cursor++;
-			return candidate.value;
-		}
-
-		const agent = this.agents?.[request.player];
-		if (!agent) {
-			throw new ChoiceReplayMismatchError(
-				`transcript ended before choice ${request.id}`,
-			);
-		}
-		const answer = agent.choose(
-			this.engine.buildPlayerView(state, request.player),
-			request,
-		);
-		if (isPromiseLike(answer)) {
-			if (!this.allowSuspension) {
-				throw new Error("an async agent was used outside advanceWithReplay()");
-			}
-			this.pendingRequest = clone(request);
-			throw new ChoicePendingError(clone(request), answer);
-		}
-		const normalized = normalizeAnswer(request, answer);
-		if (!("optionId" in normalized)) {
-			throw new InvalidChoiceAnswerError(
-				`choice ${request.id} requires a single-select answer`,
-			);
+		const { answer, invalid } = this.ask(state, request);
+		if (!("optionId" in answer)) {
+			throw invalid(`choice ${request.id} requires a single-select answer`);
 		}
 		const candidate = candidates.find(
-			(option) => option.id === normalized.optionId,
+			(option) => option.id === answer.optionId,
 		);
 		if (!candidate) {
-			throw new InvalidChoiceAnswerError(
-				`choice ${request.id} has no live candidate for ${normalized.optionId}`,
+			throw invalid(
+				`choice ${request.id} has no live candidate for ${answer.optionId}`,
 			);
 		}
-		this.decisions.push({
-			request: clone(request),
-			answer: clone(normalized),
-		});
-		this.cursor++;
 		return candidate.value;
 	}
 
 	private chooseMulti<T>(
-		state: GameState,
+		state: ReadonlyGameState,
 		request: ChoiceRequest,
 		candidates: readonly { id: string; value: T }[],
 	): T[] {
-		const recorded = this.decisions[this.cursor];
-		if (recorded) {
-			if (
-				recorded.request.id !== request.id ||
-				recorded.request.fingerprint !== request.fingerprint
-			) {
-				throw new ChoiceReplayMismatchError(
-					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
-				);
-			}
-			const normalized = normalizeAnswer(request, recorded.answer);
-			if (!("optionIds" in normalized)) {
-				throw new ChoiceReplayMismatchError(
-					`recorded answer for choice ${request.id} is not a multi-select answer`,
-				);
-			}
-			const values: T[] = [];
-			for (const id of normalized.optionIds) {
-				const candidate = candidates.find((option) => option.id === id);
-				if (!candidate) {
-					throw new ChoiceReplayMismatchError(
-						`recorded answer ${id} is not legal for choice ${request.id}`,
-					);
-				}
-				values.push(candidate.value);
-			}
-			this.cursor++;
-			return values;
+		const { answer, invalid } = this.ask(state, request);
+		if (!("optionIds" in answer)) {
+			throw invalid(`choice ${request.id} requires a multi-select answer`);
 		}
-
-		const agent = this.agents?.[request.player];
-		if (!agent) {
-			throw new ChoiceReplayMismatchError(
-				`transcript ended before choice ${request.id}`,
-			);
-		}
-		const answer = agent.choose(
-			this.engine.buildPlayerView(state, request.player),
-			request,
-		);
-		if (isPromiseLike(answer)) {
-			if (!this.allowSuspension) {
-				throw new Error("an async agent was used outside advanceWithReplay()");
-			}
-			this.pendingRequest = clone(request);
-			throw new ChoicePendingError(clone(request), answer);
-		}
-		const normalized = normalizeAnswer(request, answer);
-		if (!("optionIds" in normalized)) {
-			throw new InvalidChoiceAnswerError(
-				`choice ${request.id} requires a multi-select answer`,
-			);
-		}
-		const values: T[] = [];
-		for (const id of normalized.optionIds) {
+		return answer.optionIds.map((id) => {
 			const candidate = candidates.find((option) => option.id === id);
 			if (!candidate) {
-				throw new InvalidChoiceAnswerError(
-					`choice ${request.id} has no live candidate for ${id}`,
-				);
+				throw invalid(`choice ${request.id} has no live candidate for ${id}`);
 			}
-			values.push(candidate.value);
-		}
-		this.decisions.push({
-			request: clone(request),
-			answer: clone(normalized),
+			return candidate.value;
 		});
-		this.cursor++;
-		return values;
 	}
 
 	chooseTarget(
@@ -1272,70 +1251,19 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			new Set(cards).size === cards.length,
 			"scry candidates contain duplicate object ids",
 		);
-		const candidates = cards.map((id) => ({ id: String(id), value: id }));
 		const request = this.request({
 			kind: "scry",
 			player,
 			context: { cards: [...cards] },
-			options: cards.map((id) => ({
-				id: String(id),
-				label: `${objectLabel(this.engine, state, id)}#${id}`,
-			})),
+			options: this.cardOptions(state, cards),
 		});
-
-		let normalized: ChoiceAnswer;
-		const recorded = this.decisions[this.cursor];
-		if (recorded) {
-			if (
-				recorded.request.id !== request.id ||
-				recorded.request.fingerprint !== request.fingerprint
-			) {
-				throw new ChoiceReplayMismatchError(
-					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
-				);
-			}
-			normalized = normalizeAnswer(request, recorded.answer);
-		} else {
-			const agent = this.agents?.[request.player];
-			if (!agent) {
-				throw new ChoiceReplayMismatchError(
-					`transcript ended before choice ${request.id}`,
-				);
-			}
-			const answer = agent.choose(
-				this.engine.buildPlayerView(state, request.player),
-				request,
-			);
-			if (isPromiseLike(answer)) {
-				if (!this.allowSuspension) {
-					throw new Error(
-						"an async agent was used outside advanceWithReplay()",
-					);
-				}
-				this.pendingRequest = clone(request);
-				throw new ChoicePendingError(clone(request), answer);
-			}
-			normalized = normalizeAnswer(request, answer);
-			this.decisions.push({
-				request: clone(request),
-				answer: clone(normalized),
-			});
+		const { answer, invalid } = this.ask(state, request);
+		if (!("top" in answer)) {
+			throw invalid(`choice ${request.id} requires a scry answer`);
 		}
-
-		if (!("top" in normalized)) {
-			throw new InvalidChoiceAnswerError(
-				`choice ${request.id} requires a scry answer`,
-			);
-		}
-		const objectFor = (id: string): ObjectId => {
-			const candidate = candidates.find((entry) => entry.id === id);
-			assertDefined(candidate, `scry choice has no live candidate for ${id}`);
-			return candidate.value;
-		};
-		this.cursor++;
 		return {
-			top: normalized.top.map(objectFor),
-			bottom: normalized.bottom.map(objectFor),
+			top: answer.top.map(objectForCardOption),
+			bottom: answer.bottom.map(objectForCardOption),
 		};
 	}
 
@@ -1358,76 +1286,22 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			new Set(cards).size === cards.length,
 			"choose-from-top candidates contain duplicate object ids",
 		);
-		const actualKeep = Math.min(keep, cards.length);
 		if (cards.length <= keep) return { kept: [...cards], bottom: [] };
 
-		const candidates = cards.map((id) => ({ id: String(id), value: id }));
 		const request = this.request({
 			kind: "chooseFromTop",
 			player,
-			context: { cards: [...cards], keep: actualKeep },
-			options: cards.map((id) => ({
-				id: String(id),
-				label: `${objectLabel(this.engine, state, id)}#${id}`,
-			})),
+			// The early return above leaves more cards than the keep count.
+			context: { cards: [...cards], keep },
+			options: this.cardOptions(state, cards),
 		});
-
-		let normalized: ChoiceAnswer;
-		const recorded = this.decisions[this.cursor];
-		if (recorded) {
-			if (
-				recorded.request.id !== request.id ||
-				recorded.request.fingerprint !== request.fingerprint
-			) {
-				throw new ChoiceReplayMismatchError(
-					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
-				);
-			}
-			normalized = normalizeAnswer(request, recorded.answer);
-		} else {
-			const agent = this.agents?.[request.player];
-			if (!agent) {
-				throw new ChoiceReplayMismatchError(
-					`transcript ended before choice ${request.id}`,
-				);
-			}
-			const answer = agent.choose(
-				this.engine.buildPlayerView(state, request.player),
-				request,
-			);
-			if (isPromiseLike(answer)) {
-				if (!this.allowSuspension) {
-					throw new Error(
-						"an async agent was used outside advanceWithReplay()",
-					);
-				}
-				this.pendingRequest = clone(request);
-				throw new ChoicePendingError(clone(request), answer);
-			}
-			normalized = normalizeAnswer(request, answer);
-			this.decisions.push({
-				request: clone(request),
-				answer: clone(normalized),
-			});
+		const { answer, invalid } = this.ask(state, request);
+		if (!("kept" in answer)) {
+			throw invalid(`choice ${request.id} requires a choose-from-top answer`);
 		}
-
-		if (!("kept" in normalized)) {
-			throw new InvalidChoiceAnswerError(
-				`choice ${request.id} requires a choose-from-top answer`,
-			);
-		}
-		const objectFor = (id: string): ObjectId => {
-			const candidate = candidates.find((entry) => entry.id === id);
-			assertDefined(
-				candidate,
-				`choose-from-top choice has no live candidate for ${id}`,
-			);
-			return candidate.value;
-		};
-		this.cursor++;
 		return {
-			kept: normalized.kept.map(objectFor),
-			bottom: normalized.bottom.map(objectFor),
+			kept: answer.kept.map(objectForCardOption),
+			bottom: answer.bottom.map(objectForCardOption),
 		};
 	}
 
@@ -1442,74 +1316,31 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			new Set(cards).size === cards.length,
 			"surveil candidates contain duplicate object ids",
 		);
-		const candidates = cards.map((id) => ({ id: String(id), value: id }));
 		const request = this.request({
 			kind: "surveil",
 			player,
 			context: { cards: [...cards] },
-			options: cards.map((id) => ({
-				id: String(id),
-				label: `${objectLabel(this.engine, state, id)}#${id}`,
-			})),
+			options: this.cardOptions(state, cards),
 		});
-
-		let normalized: ChoiceAnswer;
-		const recorded = this.decisions[this.cursor];
-		if (recorded) {
-			if (
-				recorded.request.id !== request.id ||
-				recorded.request.fingerprint !== request.fingerprint
-			) {
-				throw new ChoiceReplayMismatchError(
-					`choice ${this.cursor} diverged: expected ${recorded.request.kind} ${recorded.request.fingerprint}, received ${request.kind} ${request.fingerprint}`,
-				);
-			}
-			normalized = normalizeAnswer(request, recorded.answer);
-		} else {
-			const agent = this.agents?.[request.player];
-			if (!agent) {
-				throw new ChoiceReplayMismatchError(
-					`transcript ended before choice ${request.id}`,
-				);
-			}
-			const answer = agent.choose(
-				this.engine.buildPlayerView(state, request.player),
-				request,
-			);
-			if (isPromiseLike(answer)) {
-				if (!this.allowSuspension) {
-					throw new Error(
-						"an async agent was used outside advanceWithReplay()",
-					);
-				}
-				this.pendingRequest = clone(request);
-				throw new ChoicePendingError(clone(request), answer);
-			}
-			normalized = normalizeAnswer(request, answer);
-			this.decisions.push({
-				request: clone(request),
-				answer: clone(normalized),
-			});
+		const { answer, invalid } = this.ask(state, request);
+		if (!("top" in answer)) {
+			throw invalid(`choice ${request.id} requires a surveil answer`);
 		}
-
-		if (!("top" in normalized)) {
-			throw new InvalidChoiceAnswerError(
-				`choice ${request.id} requires a surveil answer`,
-			);
-		}
-		const objectFor = (id: string): ObjectId => {
-			const candidate = candidates.find((entry) => entry.id === id);
-			assertDefined(
-				candidate,
-				`surveil choice has no live candidate for ${id}`,
-			);
-			return candidate.value;
-		};
-		this.cursor++;
 		return {
-			top: normalized.top.map(objectFor),
-			bottom: normalized.bottom.map(objectFor),
+			top: answer.top.map(objectForCardOption),
+			bottom: answer.bottom.map(objectForCardOption),
 		};
+	}
+
+	/** One option per looked-at card, in the order they were looked at. */
+	private cardOptions(
+		state: ReadonlyGameState,
+		cards: readonly ObjectId[],
+	): ChoiceOption[] {
+		return cards.map((id) => ({
+			id: cardOptionId(id),
+			label: `${objectLabel(this.engine, state, id)}#${id}`,
+		}));
 	}
 }
 
