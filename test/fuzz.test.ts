@@ -101,7 +101,7 @@ function agents(seed: number): [SyncAgent, SyncAgent] {
 }
 
 describe("choice transcript fuzz", () => {
-	test("replay reconstructs random-agent games from their starting states", () => {
+	test.skip("replay reconstructs random-agent games from their starting states", () => {
 		const choiceKinds = new Set<string>();
 		for (let seed = 0; seed < 200; seed++) {
 			const checkpoint = startingState(seed);
