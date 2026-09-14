@@ -125,6 +125,8 @@ const RUNTIME_CARDS = [
 	loadRuntimeFixture("w/wrenns_resolve", "rt-wrenns-resolve"),
 	loadRuntimeFixture("c/cloudshift", "rt-cloudshift"),
 	loadRuntimeFixture("g/giant_caterpillar", "rt-giant-caterpillar"),
+	loadRuntimeFixture("p/pain_101", "rt-pain-101"),
+	loadRuntimeFixture("v/verdant_rebirth", "rt-verdant-rebirth"),
 ];
 
 const SELF_COUNTER = (() => {
@@ -1079,6 +1081,77 @@ describe("forge-import runtime: statics and replacements", () => {
 });
 
 describe("forge-import runtime: spell effects", () => {
+	test("Pain 101 grants a dies trigger that returns the new card tapped", () => {
+		const state = setupMain(engine);
+		const target = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const originalId = target.id;
+		const spell = engine.spawnCard(state, "rt-pain-101", ALICE, "hand");
+		state.players[ALICE].manaPool.b = 1;
+		state.players[ALICE].manaPool.c = 1;
+		const alice = new ScriptedAgent();
+		alice.targetChoices.push({ type: "permanent", id: target.id });
+
+		engine.executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, [
+			alice,
+			new ScriptedAgent(),
+		]);
+		engine.settlePriority(state, passingAgents());
+		expect(
+			getSnapshot(engine.createReadContext(state), target.id)
+				.currentCharacteristics.keywords,
+		).toContain("deathtouch");
+
+		engine.perform(
+			state,
+			{ kind: "destroy", object: target.id, noRegen: false },
+			passingAgents(),
+		);
+		engine.settlePriority(state, passingAgents());
+
+		expect(state.objects.has(originalId)).toBe(false);
+		const returned = state.battlefield.find(
+			(id) => engine.name(state, id) === "Grizzly Bears",
+		);
+		if (returned === undefined)
+			throw new Error("Pain 101 returned no creature");
+		expect(returned).not.toBe(originalId);
+		expect(permanent(state, returned).tapped).toBe(true);
+	});
+
+	test("Verdant Rebirth draws, then its granted dies trigger returns the new card to hand", () => {
+		const state = setupMain(engine);
+		engine.spawnCard(state, "forest", ALICE, "library");
+		const librarySize = state.players[ALICE].library.length;
+		const target = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const originalId = target.id;
+		const spell = engine.spawnCard(state, "rt-verdant-rebirth", ALICE, "hand");
+		state.players[ALICE].manaPool.g = 1;
+		state.players[ALICE].manaPool.c = 1;
+		const alice = new ScriptedAgent();
+		alice.targetChoices.push({ type: "permanent", id: target.id });
+
+		engine.executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, [
+			alice,
+			new ScriptedAgent(),
+		]);
+		engine.settlePriority(state, passingAgents());
+		expect(state.players[ALICE].library).toHaveLength(librarySize - 1);
+
+		engine.perform(
+			state,
+			{ kind: "destroy", object: target.id, noRegen: false },
+			passingAgents(),
+		);
+		engine.settlePriority(state, passingAgents());
+
+		expect(state.objects.has(originalId)).toBe(false);
+		const returned = state.players[ALICE].hand.find(
+			(id) => engine.name(state, id) === "Grizzly Bears",
+		);
+		expect(returned).toBeDefined();
+		expect(returned).not.toBe(originalId);
+	});
+
 	test("Wrenn's Resolve permits only the cards its imported Dig actually exiles", () => {
 		const state = setupMain(engine);
 		const unrelated = engine.spawnCard(

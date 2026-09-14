@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createEngine } from "../index.ts";
+import { abilityId, createEngine } from "../index.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
 import { parseForgeCardScript } from "./ast.ts";
 import { importForgeCard, lowerForgeCard } from "./import.ts";
@@ -2975,6 +2975,73 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				power: 0,
 				toughness: 1,
 				duration: "until-end-of-turn",
+			},
+		]);
+	});
+
+	test("Pain 101 hosts and grants its dies trigger alongside deathtouch", () => {
+		const result = importFixture("p/pain_101");
+		if (!result.ok) throw new Error("expected Pain 101 to import");
+		expect(result.card.spell?.effects).toEqual([
+			{
+				kind: "grant-keyword",
+				subject: { kind: "target", slot: "target-1" },
+				keyword: "deathtouch",
+				duration: "until-end-of-turn",
+			},
+			{
+				kind: "grant-triggered",
+				subject: { kind: "target", slot: "target-1" },
+				ability: abilityId("triggered", "pain-101", 0),
+				duration: "until-end-of-turn",
+			},
+		]);
+		expect(result.card.printedAbilities.triggered).toEqual([]);
+		expect(result.card.abilityDefinitions.triggered[0]).toMatchObject({
+			condition: {
+				kind: "change zone",
+				from: "battlefield",
+				to: "graveyard",
+				predicate: { kind: "self" },
+			},
+			effects: [
+				{
+					kind: "change-zone",
+					subject: { kind: "triggering-zone-change-result" },
+					from: "graveyard",
+					destination: {
+						zone: "battlefield",
+						controller: "owner",
+						tapped: true,
+					},
+				},
+			],
+		});
+	});
+
+	test("Verdant Rebirth grants its dies trigger before its draw continuation", () => {
+		const result = importFixture("v/verdant_rebirth");
+		if (!result.ok) throw new Error("expected Verdant Rebirth to import");
+		expect(result.card.spell?.effects).toEqual([
+			{
+				kind: "grant-triggered",
+				subject: { kind: "target", slot: "target-1" },
+				ability: abilityId("triggered", "verdant-rebirth", 0),
+				duration: "until-end-of-turn",
+			},
+			{
+				kind: "draw",
+				subject: { kind: "relative-player", player: "you" },
+				amount: 1,
+			},
+		]);
+		expect(result.card.printedAbilities.triggered).toEqual([]);
+		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+			{
+				kind: "change-zone",
+				subject: { kind: "triggering-zone-change-result" },
+				from: "graveyard",
+				destination: { zone: "hand" },
 			},
 		]);
 	});

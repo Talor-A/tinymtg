@@ -730,6 +730,7 @@ Curious Killbot
 Cursebreak
 Cursed Ronin
 Custodian of the Trove
+Cyclopean Mummy
 Cyclopean Snare
 Cyclops of One-Eyed Pass
 Cylian Elf
@@ -754,6 +755,7 @@ Dark Nourishment
 Dark Offering
 Dark Prophecy
 Dark Remedy
+Dark Revenant
 Darklit Gargoyle
 Darkmoss Bridge
 Darkslick Drake
@@ -1029,6 +1031,7 @@ Enatu Golem
 Enchanted Prairie
 Enchantress's Presence
 Encroaching Wastes
+Endless Cockroaches
 Energizer
 Energy Refractor
 Enforcer Griffin
@@ -1662,6 +1665,7 @@ Illusory Demon
 Illvoi Galeblade
 Imaginary Friends
 Immolating Glare
+Immortal Phoenix
 Impact Tremors
 Impale
 Impassioned Orator
@@ -2172,6 +2176,7 @@ Mortal's Ardor
 Mortal's Resolve
 Mortify
 Mortiphobia
+Mortus Strider
 Moss Diamond
 Moss Kami
 Moss Monster
@@ -2390,6 +2395,7 @@ Oxidda Scrapmelter
 Oyobi, Who Split the Heavens
 Pacification Array
 Pactdoll Terror
+Pain 101
 Painful Lesson
 Painsmith
 Painted Bluffs
@@ -2940,6 +2946,7 @@ Shivan Gorge
 Shivan Harvest
 Shivan Hellkite
 Shivan Oasis
+Shivan Phoenix
 Shivan Wurm
 Shock
 Shock Troops
@@ -3128,6 +3135,7 @@ Spiked Baloth
 Spin Out
 Spinal Centipede
 Spinal Villain
+Spine of Ish Sah
 Spined Karok
 Spined Wurm
 Spineless Thug
@@ -3557,6 +3565,7 @@ Undergrowth Recon
 Undersea Invader
 Undertaker
 Underworld Dreams
+Undying Beast
 Unexplained Disappearance
 Unfriendly Fire
 Unhallowed Phalanx
@@ -3632,6 +3641,7 @@ Venomcrawler
 Venomous Hierophant
 Venser's Sliver
 Verdant Automaton
+Verdant Rebirth
 Verdigris
 Verduran Enchantress
 Vermiculos
@@ -3757,6 +3767,7 @@ Wave-Wing Elemental
 Wayward Servant
 Wayward Soul
 Weaponize the Monsters
+Weatherseed Treefolk
 Weave Fate
 Weaver of Currents
 Weaver of Lightning
@@ -3893,4 +3904,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3890`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `3901`;

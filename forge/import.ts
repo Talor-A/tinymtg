@@ -66,6 +66,7 @@ import type {
 	TargetEffectRef,
 	TriggerEffectPlayer,
 	TriggeredAbilityDefinition,
+	TriggeringZoneChangeResultEffectRef,
 	ValidPlayer,
 	ZoneChangeEffectDestination,
 } from "../index.ts";
@@ -729,12 +730,13 @@ function effectTargetUse<Player extends TriggerEffectPlayer>(
 					}
 				: null;
 		case "grant-keyword":
+		case "grant-triggered":
 			return effect.subject.kind === "target"
 				? {
 						slot: effect.subject.slot,
 						required: {
 							kind: "permanent",
-							message: "keyword grants require a permanent target",
+							message: "ability grants require a permanent target",
 						},
 					}
 				: null;
@@ -916,7 +918,7 @@ const COMMON_EFFECT_PARAMS = [
 	"cost",
 ];
 
-interface RegistryAbilityHost {
+interface AbilityHost {
 	cardId: string;
 	activated: AnyActivatedAbilityDefinition[];
 	triggered: TriggeredAbilityDefinition[];
@@ -968,7 +970,7 @@ function consumeAbilitySVar(
 function fixedTokenCharacteristics(
 	scriptId: string,
 	where: { nodeId?: string; line?: number },
-	host: RegistryAbilityHost,
+	host: AbilityHost,
 ): Result<CharacteristicsSnapshot, ImportIssue> {
 	if (!/^[A-Za-z0-9_]+$/.test(scriptId))
 		return issue(
@@ -1117,13 +1119,15 @@ type NonMayEffect<Player extends TriggerEffectPlayer> = Exclude<
 >;
 
 function parseEffects<Player extends TriggerEffectPlayer>(
+	resolver: SVarResolver,
 	params: ForgeParamList,
 	discriminatorLower: string,
 	api: string,
 	where: { nodeId?: string; line?: number },
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
-	abilityHost: RegistryAbilityHost,
+	abilityHost: AbilityHost,
+	triggeringZoneChangeDestination: PublicObjectZone | null,
 ): Result<NonMayEffect<Player>[], ImportIssue> {
 	// Every branch claims this record's whole parameter list, and every branch's
 	// list opens with its own discriminator and closes with the keys common to
@@ -1559,8 +1563,23 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 					"ForgetOtherTargets requires the RememberTargets chain",
 					where,
 				);
-			let subject: { kind: "source" } | TargetEffectRef;
-			if (validTargets !== undefined || defined === "Targeted") {
+			let subject:
+				| { kind: "source" }
+				| TargetEffectRef
+				| TriggeringZoneChangeResultEffectRef;
+			if (defined === "TriggeredNewCardLKICopy") {
+				if (
+					triggeringZoneChangeDestination === null ||
+					triggeringZoneChangeDestination !== origin ||
+					validTargets !== undefined
+				)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"TriggeredNewCardLKICopy must name the destination object of this trigger's zone change",
+						where,
+					);
+				subject = { kind: "triggering-zone-change-result" };
+			} else if (validTargets !== undefined || defined === "Targeted") {
 				if (defined !== undefined && defined !== "Targeted")
 					return issue(
 						"UNSUPPORTED_PARAMETER",
@@ -1581,7 +1600,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			}
 			if (
 				rememberTargets === "True" &&
-				(subject.kind === "source" ||
+				(subject.kind !== "target" ||
 					origin !== "battlefield" ||
 					destination.zone !== "exile")
 			)
@@ -1737,6 +1756,94 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 					amount,
 				},
 			]);
+		}
+		case "animate": {
+			const badParams = claim(
+				"defined",
+				"validtgts",
+				"tgtprompt",
+				"keywords",
+				"triggers",
+				"duration",
+			);
+			if (!badParams.ok) return badParams;
+			if (discriminatorLower !== "sp")
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"Animate is currently supported only as a spell's root effect",
+					where,
+				);
+			if (
+				getForgeParam(params, "Defined") !== undefined ||
+				getForgeParam(params, "ValidTgts") === undefined
+			)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"root Animate must apply to the spell's declared target",
+					where,
+				);
+			const duration = getForgeParam(params, "Duration");
+			if (duration !== undefined && duration !== "UntilEndOfTurn")
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"Animate supports only an until-end-of-turn duration",
+					where,
+				);
+
+			const effects: NonMayEffect<Player>[] = [];
+			const subject: TargetEffectRef = { kind: "target", slot: TARGET_SLOT };
+			const rawKeywords = getForgeParam(params, "Keywords");
+			for (const rawKeyword of rawKeywords
+				?.split("&")
+				.map((value) => value.trim()) ?? []) {
+				const keyword = BARE_KEYWORDS.get(rawKeyword);
+				if (keyword === undefined)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						`unsupported temporary keyword ${rawKeyword}`,
+						where,
+					);
+				effects.push({
+					kind: "grant-keyword",
+					subject,
+					keyword,
+					duration: "until-end-of-turn",
+				});
+			}
+
+			const triggerName = getForgeParam(params, "Triggers");
+			if (!triggerName)
+				return issue(
+					"UNSUPPORTED_PARAMETER",
+					"Animate requires one Triggers$ SVar reference",
+					where,
+				);
+			const triggerSVar = consumeAbilitySVar(
+				resolver,
+				triggerName,
+				"Triggers",
+				where,
+			);
+			if (!triggerSVar.ok) return triggerSVar;
+			const loweredTrigger = lowerTrigger(
+				resolver,
+				{
+					params: triggerSVar.value.parsed.params,
+					source: triggerSVar.value.source,
+				},
+				abilityHost,
+			);
+			if (!loweredTrigger.ok) return loweredTrigger;
+			const triggerIndex = abilityHost.triggered.length;
+			abilityHost.triggered.push(loweredTrigger.value);
+			abilityHost.hostedTriggeredIndices.add(triggerIndex);
+			effects.push({
+				kind: "grant-triggered",
+				subject,
+				ability: abilityId("triggered", abilityHost.cardId, triggerIndex),
+				duration: "until-end-of-turn",
+			});
+			return ok(effects);
 		}
 		case "pump": {
 			const badParams = claim(
@@ -1949,7 +2056,8 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 	rootTokens: readonly (typeof ABILITY_DISCRIMINATOR_TOKENS)[number][],
 	parsePlayer: (value: string | undefined) => Player | null,
 	allowSourceObject: boolean,
-	abilityHost: RegistryAbilityHost,
+	abilityHost: AbilityHost,
+	triggeringZoneChangeDestination: PublicObjectZone | null,
 ): Result<EffectDef<Player>[], ImportIssue> {
 	const effects: EffectDef<Player>[] = [];
 	let current = rootParams;
@@ -2174,6 +2282,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			return ok(effects);
 		}
 		const _lowered = parseEffects(
+			resolver,
 			current,
 			disc.token.toLowerCase(),
 			disc.api,
@@ -2181,6 +2290,7 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 			parsePlayer,
 			allowSourceObject,
 			abilityHost,
+			triggeringZoneChangeDestination,
 		);
 		if (!_lowered.ok) return _lowered;
 		const lowered = _lowered.value;
@@ -2242,7 +2352,7 @@ function lowerNextEndStepDelayedTrigger(
 	params: ForgeParamList,
 	where: { nodeId?: string; line?: number },
 	description: string,
-	host: RegistryAbilityHost,
+	host: AbilityHost,
 ): Result<ActivatedEffectDef[], ImportIssue> {
 	const badParams = consumeParams(
 		params,
@@ -2292,6 +2402,7 @@ function lowerNextEndStepDelayedTrigger(
 		triggerEffectPlayer,
 		true,
 		host,
+		null,
 	);
 	if (!effects.ok) return effects;
 
@@ -2810,7 +2921,7 @@ function lowerReplacement(
 function lowerTrigger(
 	resolver: SVarResolver,
 	record: { params: ForgeParamList; source: { nodeId: string; line: number } },
-	abilityHost: RegistryAbilityHost,
+	abilityHost: AbilityHost,
 ): Result<TriggeredAbilityDefinition, ImportIssue> {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
@@ -2868,6 +2979,7 @@ function lowerTrigger(
 				: triggerEffectPlayer,
 		true,
 		abilityHost,
+		isSelfDeath ? "graveyard" : null,
 	);
 	if (!chain.ok) return chain;
 	const effects = optionalDecider
@@ -2951,10 +3063,12 @@ function lowerTrigger(
 				"triggerzones",
 				"secondary",
 				"optionaldecider",
+				"triggercontroller",
 			);
 			if (!badParams.ok) return badParams;
 			const triggerZones = getForgeParam(params, "TriggerZones");
 			const secondary = getForgeParam(params, "Secondary");
+			const triggerController = getForgeParam(params, "TriggerController");
 			const origin = getForgeParam(params, "Origin");
 			const destination = getForgeParam(params, "Destination");
 			// The trigger watches the battlefield either way: an
@@ -2968,7 +3082,9 @@ function lowerTrigger(
 			if (
 				!(etb || dies) ||
 				(triggerZones !== undefined && triggerZones !== "Battlefield") ||
-				(secondary !== undefined && secondary !== "True")
+				(secondary !== undefined && secondary !== "True") ||
+				(triggerController !== undefined &&
+					(!dies || triggerController !== "TriggeredCardController"))
 			)
 				return issue(
 					"UNSUPPORTED_EFFECT",
@@ -3839,7 +3955,7 @@ export function lowerForgeCard(
 
 	const activatedAbilities: AnyActivatedAbilityDefinition[] = [];
 	const triggers: TriggeredAbilityDefinition[] = [];
-	const abilityHost: RegistryAbilityHost = {
+	const abilityHost: AbilityHost = {
 		cardId: id,
 		activated: activatedAbilities,
 		triggered: triggers,
@@ -4135,6 +4251,7 @@ export function lowerForgeCard(
 			player,
 			disc.token === "AB",
 			abilityHost,
+			null,
 		);
 		if (!chain.ok) return reject(chain);
 		const description = getForgeParam(params, "SpellDescription");
