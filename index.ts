@@ -7707,7 +7707,12 @@ function resolveEffects(
 			let predicateSource = item.source;
 			let owners: PlayerId[];
 			if (effect.owners === "each-player") {
-				owners = [0 as PlayerId, 1 as PlayerId];
+				const active = activePlayer(state);
+				assertDefined(
+					active,
+					"each-player shuffle must resolve during a turn",
+				);
+				owners = [active, (1 - active) as PlayerId];
 			} else if (effect.owners.kind === "triggering-zone-change-result-owner") {
 				assert(
 					item.ability?.kind === "triggered ability",

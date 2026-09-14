@@ -2,9 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
 import type { PlayerId } from "../index.ts";
-import { createEngine, defineCard, getSnapshot, permanent } from "../index.ts";
+import {
+	activePlayer,
+	createEngine,
+	defineCard,
+	getSnapshot,
+	permanent,
+	turnLocation,
+} from "../index.ts";
 import {
 	ALICE,
+	advanceUntil,
 	BOB,
 	expectScriptConsumed,
 	passingAgents,
@@ -113,6 +121,29 @@ describe("shuffle cards into a library", () => {
 				.map((id) => engine.name(state, id))
 				.includes("Darksteel Relic"),
 		).toBe(true);
+	});
+
+	test("an each-player shuffle processes the active player first", () => {
+		const state = setupMain(engine);
+		advanceUntil(
+			engine,
+			state,
+			passingAgents(),
+			(next) =>
+				activePlayer(next) === BOB && turnLocation(next)?.kind === "mainPhase",
+		);
+		for (let i = 0; i < 8; i++) {
+			engine.spawnCard(state, "forest", ALICE, "library");
+			engine.spawnCard(state, "forest", BOB, "library");
+		}
+
+		castTimetwister(state, BOB);
+
+		expect(
+			state.log
+				.filter((entry) => entry.includes("shuffles their library"))
+				.slice(-2),
+		).toEqual(["  P1 shuffles their library", "  P0 shuffles their library"]);
 	});
 
 	test("Worldspine Wurm dies into three trample tokens and its owner's library", () => {
