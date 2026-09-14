@@ -1407,7 +1407,11 @@ function buildFilteredGameView(
 		if (layer === "6-ability-changing") {
 			for (const effect of state.temporaryEffects) {
 				const definition = temporaryEffectDefinition(engine, effect);
-				if (definition?.kind !== "grant-keyword") continue;
+				if (
+					definition?.kind !== "grant-keyword" &&
+					definition?.kind !== "grant-triggered"
+				)
+					continue;
 				const slot =
 					definition.subject.kind === "source"
 						? SELF_SLOT
@@ -1415,13 +1419,17 @@ function buildFilteredGameView(
 				const bound = effect.bindings[slot];
 				assertDefined(
 					bound,
-					`temporary keyword effect has no binding for ${slot}`,
+					`temporary ability effect has no binding for ${slot}`,
 				);
 				if (bound.type !== "permanent") continue;
 				const current = characteristics.get(bound.id);
 				if (!current) continue;
-				if (!current.keywords.includes(definition.keyword))
-					current.keywords.push(definition.keyword);
+				if (definition.kind === "grant-keyword") {
+					if (!current.keywords.includes(definition.keyword))
+						current.keywords.push(definition.keyword);
+				} else {
+					current.abilities.triggered.push(definition.ability);
+				}
 			}
 		}
 
@@ -2262,6 +2270,12 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	| {
 			kind: "grant-keyword";
 			keyword: Keyword;
+			subject: SourceEffectRef | TargetEffectRef;
+			duration: TemporaryEffectDuration;
+	  }
+	| {
+			kind: "grant-triggered";
+			ability: TriggeredAbilityId;
 			subject: SourceEffectRef | TargetEffectRef;
 			duration: TemporaryEffectDuration;
 	  }
@@ -7348,6 +7362,7 @@ function resolveEffects(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
+				effect.kind === "grant-triggered" ||
 				effect.kind === "add counters") &&
 			effect.subject.kind === "target"
 				? effect.subject
@@ -7550,7 +7565,11 @@ function resolveEffects(
 			}
 			continue;
 		}
-		if (effect.kind === "modify-pt" || effect.kind === "grant-keyword") {
+		if (
+			effect.kind === "modify-pt" ||
+			effect.kind === "grant-keyword" ||
+			effect.kind === "grant-triggered"
+		) {
 			let slot: string;
 			let subject: EntityRef;
 			if (effect.subject.kind === "source") {
@@ -7888,6 +7907,10 @@ function effectToEvent(
 			throw new Error(
 				"temporary keyword effects resolve without creating an event",
 			);
+		case "grant-triggered":
+			throw new Error(
+				"temporary triggered-ability grants resolve without creating an event",
+			);
 		case "may-play":
 			throw new Error(
 				"temporary play permissions resolve without creating an event",
@@ -8152,6 +8175,7 @@ function requiredTargetDefinition(
 		if (
 			(effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
+				effect.kind === "grant-triggered" ||
 				effect.kind === "change-zone" ||
 				effect.kind === "add counters") &&
 			effect.subject.kind === "source"
@@ -8170,6 +8194,7 @@ function requiredTargetDefinition(
 			effect.kind !== "change-zone" &&
 			effect.kind !== "modify-pt" &&
 			effect.kind !== "grant-keyword" &&
+			effect.kind !== "grant-triggered" &&
 			effect.kind !== "may-play" &&
 			effect.kind !== "add counters" &&
 			effect.kind !== "sacrifice" &&
@@ -8208,6 +8233,7 @@ function requiredTargetDefinition(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
+				effect.kind === "grant-triggered" ||
 				effect.kind === "add counters") &&
 			effect.subject.kind === "target"
 				? effect.subject
@@ -8263,6 +8289,12 @@ function requiredTargetDefinition(
 			assert(
 				target.legal.kind === "permanent",
 				"temporary keyword grant requires a permanent target",
+			);
+		}
+		if (effect.kind === "grant-triggered") {
+			assert(
+				target.legal.kind === "permanent",
+				"temporary triggered-ability grant requires a permanent target",
 			);
 		}
 		if (effect.kind === "may-play") {
@@ -8969,6 +9001,7 @@ function activateAbilityIn(
 				effect.kind === "change-zone" ||
 				effect.kind === "modify-pt" ||
 				effect.kind === "grant-keyword" ||
+				effect.kind === "grant-triggered" ||
 				effect.kind === "may-play" ||
 				effect.kind === "add counters" ||
 				effect.kind === "sacrifice" ||
