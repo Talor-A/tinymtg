@@ -76,9 +76,11 @@ import {
 	characteristicsFromCardDef,
 	cloneCharacteristics,
 	defineCard,
+	effectTargetUses,
 	getSnapshot,
 	MANA_COST_TYPES,
 	objectMatchesPredicate,
+	targetSelectorSatisfies,
 } from "../index.ts";
 import { assertDefined } from "../lib/assert.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
@@ -682,173 +684,6 @@ const REMEMBERED_ZONE_CHANGE_SLOT = "remembered-zone-change-object";
 /** The old library object chosen by a search, before its following movement. */
 const SEARCHED_LIBRARY_SLOT = "searched-library-card";
 
-/**
- * What one effect requires of the target slot it names. `any` is the damage
- * case: every legal target kind can take damage, so the declared slot needs no
- * further agreement.
- */
-type RequiredTarget =
-	| { kind: "any" }
-	| { kind: "player" | "permanent" | "spell"; message: string }
-	| { kind: "card"; zone: "graveyard" | "exile"; message: string };
-
-/**
- * The target slot one effect names, or null when it names none: the same
- * effect kinds also resolve against their own source, a remembered object, or
- * a player relative to the controller, and those declare nothing to check.
- */
-function effectTargetUse<Player extends TriggerEffectPlayer>(
-	effect: Exclude<EffectDef<Player>, { kind: "may" }>,
-): { slot: string; required: RequiredTarget } | null {
-	switch (effect.kind) {
-		case "damage":
-			return effect.subject.kind === "target"
-				? {
-						slot: effect.subject.slot,
-						required: { kind: "any" },
-					}
-				: null;
-		case "gain-life":
-		case "lose-life":
-		case "draw":
-		case "scry":
-		case "surveil":
-		case "mill":
-			return effect.subject.kind === "target-player"
-				? {
-						slot: effect.subject.slot,
-						required: {
-							kind: "player",
-							message: "a targeted player effect requires a player target",
-						},
-					}
-				: null;
-		case "sacrifice":
-			return effect.subject.kind === "target-player"
-				? {
-						slot: effect.subject.slot,
-						required: {
-							kind: "player",
-							message: "Sacrifice requires a player target",
-						},
-					}
-				: null;
-		case "destroy":
-			return {
-				slot: effect.subject.slot,
-				required: {
-					kind: "permanent",
-					message: "Destroy requires a permanent target",
-				},
-			};
-		case "tap":
-		case "untap":
-			return {
-				slot: effect.subject.slot,
-				required: {
-					kind: "permanent",
-					message: `${effect.kind === "tap" ? "Tap" : "Untap"} requires a permanent target`,
-				},
-			};
-		case "counter":
-			return {
-				slot: effect.subject.slot,
-				required: { kind: "spell", message: "Counter requires a spell target" },
-			};
-		case "modify-pt":
-			return effect.subject.kind === "target"
-				? {
-						slot: effect.subject.slot,
-						required: {
-							kind: "permanent",
-							message: "Pump requires a permanent target",
-						},
-					}
-				: null;
-		case "grant-keyword":
-		case "grant-triggered":
-			return effect.subject.kind === "target"
-				? {
-						slot: effect.subject.slot,
-						required: {
-							kind: "permanent",
-							message: "ability grants require a permanent target",
-						},
-					}
-				: null;
-		case "add counters":
-			return effect.subject.kind === "target"
-				? {
-						slot: effect.subject.slot,
-						required: {
-							kind: "permanent",
-							message: "PutCounter requires a permanent target",
-						},
-					}
-				: null;
-		case "change-zone":
-			// A battlefield origin targets the permanent itself; every other
-			// origin targets a card sitting in that same public zone.
-			if (effect.subject.kind !== "target") return null;
-			if (effect.from === "battlefield")
-				return {
-					slot: effect.subject.slot,
-					required: {
-						kind: "permanent",
-						message: "ChangeZone target kind and zone must match Origin$",
-					},
-				};
-			assert(
-				effect.from === "graveyard" || effect.from === "exile",
-				"a targeted card change-zone effect must use a public origin",
-			);
-			return {
-				slot: effect.subject.slot,
-				required: {
-					kind: "card",
-					zone: effect.from,
-					message: "ChangeZone target kind and zone must match Origin$",
-				},
-			};
-		case "search-library": {
-			const targeted = [effect.searcher, effect.owner].find(
-				(subject) => subject.kind === "target-player",
-			);
-			return targeted?.kind === "target-player"
-				? {
-						slot: targeted.slot,
-						required: {
-							kind: "player",
-							message: "Search requires a player target",
-						},
-					}
-				: null;
-		}
-		case "shuffle-library":
-			return effect.subject.kind === "target-player"
-				? {
-						slot: effect.subject.slot,
-						required: {
-							kind: "player",
-							message: "Shuffle requires a player target",
-						},
-					}
-				: null;
-		case "shuffle-into-library":
-			return effect.owners !== "each-player" &&
-				effect.owners.kind === "target-player"
-				? {
-						slot: effect.owners.slot,
-						required: {
-							kind: "player",
-							message: "Shuffle requires a player target",
-						},
-					}
-				: null;
-		default:
-			return null;
-	}
-}
 
 /**
  * A targeting effect and its ability's `ValidTgts$` have to agree, or the
@@ -865,24 +700,18 @@ function checkEffectTargetSlots<Player extends TriggerEffectPlayer>(
 			if (inner) return inner;
 			continue;
 		}
-		const use = effectTargetUse(effect);
-		if (use === null) continue;
-		const target = targets[0];
-		if (targets.length !== 1 || !target || use.slot !== target.id) {
-			return issue(
-				"UNSUPPORTED_TARGET",
-				"targeted effects must reference the declared target slot",
-				where,
-			);
+		for (const use of effectTargetUses(effect)) {
+			const target = targets[0];
+			if (targets.length !== 1 || !target || use.slot !== target.id) {
+				return issue(
+					"UNSUPPORTED_TARGET",
+					"targeted effects must reference the declared target slot",
+					where,
+				);
+			}
+			if (!targetSelectorSatisfies(target.legal, use.required))
+				return issue("UNSUPPORTED_TARGET", use.required.message, where);
 		}
-		if (use.required.kind === "any") continue;
-		const agrees =
-			use.required.kind === "card"
-				? target.legal.kind === "card" &&
-					target.legal.zone === use.required.zone
-				: target.legal.kind === use.required.kind;
-		if (!agrees)
-			return issue("UNSUPPORTED_TARGET", use.required.message, where);
 	}
 	return null;
 }

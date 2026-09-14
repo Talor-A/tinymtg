@@ -2592,6 +2592,120 @@ export interface TargetDef {
 		| { kind: "any-target" };
 }
 
+/** What an effect requires from each target slot it consumes. */
+export type TargetRequirement =
+	| { kind: "damage-recipient"; message: string }
+	| { kind: "player" | "permanent" | "spell"; message: string }
+	| {
+			kind: "card";
+			zone: Extract<CardZone, "graveyard" | "exile">;
+			message: string;
+	  };
+
+export interface EffectTargetUse {
+	slot: string;
+	required: TargetRequirement;
+}
+
+/**
+ * The target slots one effect consumes and the selector domain each requires.
+ * The declared {@link TargetDef} remains the canonical full selector, including
+ * its predicate; these requirements only prove that the effect can consume it.
+ */
+export function effectTargetUses<Player extends TriggerEffectPlayer>(
+	effect: Exclude<EffectDef<Player>, { kind: "may" }>,
+): EffectTargetUse[] {
+	switch (effect.kind) {
+		case "damage":
+			return effect.subject.kind === "target"
+				? [{ slot: effect.subject.slot, required: { kind: "damage-recipient", message: "damage requires a player, permanent, or any-target selector" } }]
+				: [];
+		case "gain-life":
+		case "lose-life":
+		case "draw":
+		case "scry":
+		case "surveil":
+		case "mill":
+		case "exile-top":
+		case "sacrifice":
+			return effect.subject.kind === "target-player"
+				? [{ slot: effect.subject.slot, required: { kind: "player", message: "a targeted player effect requires a player target" } }]
+				: [];
+		case "destroy":
+		case "tap":
+		case "untap":
+		case "counter":
+			return [{
+				slot: effect.subject.slot,
+				required: {
+					kind: effect.kind === "counter" ? "spell" : "permanent",
+					message: effect.kind === "counter"
+						? "counter requires a spell target"
+						: `${effect.kind} requires a permanent target`,
+				},
+			}];
+		case "modify-pt":
+		case "grant-keyword":
+		case "grant-triggered":
+		case "add counters":
+			return effect.subject.kind === "target"
+				? [{ slot: effect.subject.slot, required: { kind: "permanent", message: `${effect.kind} requires a permanent target` } }]
+				: [];
+		case "change-zone":
+			if (effect.subject.kind !== "target") return [];
+			assert(
+				effect.from !== "library",
+				"a targeted card change-zone effect must use a public origin",
+			);
+			return [{
+				slot: effect.subject.slot,
+				required: effect.from === "battlefield"
+					? { kind: "permanent", message: "a battlefield change-zone effect requires a permanent target" }
+					: { kind: "card", zone: effect.from, message: "a card change-zone effect requires a target in its origin" },
+			}];
+		case "may-play":
+			return effect.subject.kind === "target"
+				? [{ slot: effect.subject.slot, required: { kind: "card", zone: effect.from, message: "temporary play permission requires a card target in its origin" } }]
+				: [];
+		case "search-library": {
+			const uses: EffectTargetUse[] = [];
+			for (const subject of [effect.searcher, effect.owner]) {
+				if (subject.kind !== "target-player") continue;
+				uses.push({ slot: subject.slot, required: { kind: "player", message: "library search requires a player target" } });
+			}
+			return uses;
+		}
+		case "shuffle-library":
+			return effect.subject.kind === "target-player"
+				? [{ slot: effect.subject.slot, required: { kind: "player", message: "library shuffle requires a player target" } }]
+				: [];
+		case "shuffle-into-library":
+			return effect.owners !== "each-player" && effect.owners.kind === "target-player"
+				? [{ slot: effect.owners.slot, required: { kind: "player", message: "library shuffle requires a player target" } }]
+				: [];
+		case "each player draw":
+		case "create-delayed-trigger":
+		case "choose-from-top":
+		case "discard":
+		case "add-mana":
+		case "create-token":
+			return [];
+		default:
+			return assertNever(effect);
+	}
+}
+
+export function targetSelectorSatisfies(
+	selector: TargetDef["legal"],
+	requirement: TargetRequirement,
+): boolean {
+	if (requirement.kind === "damage-recipient")
+		return selector.kind === "player" || selector.kind === "permanent" || selector.kind === "any-target";
+	if (requirement.kind === "card")
+		return selector.kind === "card" && selector.zone === requirement.zone;
+	return selector.kind === requirement.kind;
+}
+
 /** What an object predicate reads `self`, `you`, and `opponent` relative to. */
 export interface PredicateContext {
 	controller: PlayerId;
@@ -7667,64 +7781,16 @@ function resolveEffects(
 			continue;
 		}
 		let bound: EntityRef | null = null;
-		const damageTarget =
-			effect.kind === "damage" && effect.subject.kind === "target"
-				? effect.subject
-				: null;
-		const sacrificeTarget =
-			effect.kind === "sacrifice" && effect.subject.kind === "target-player"
-				? effect.subject
-				: null;
-		const playerTarget =
-			(effect.kind === "gain-life" ||
-				effect.kind === "lose-life" ||
-				effect.kind === "draw" ||
-				effect.kind === "scry" ||
-				effect.kind === "surveil" ||
-				effect.kind === "mill" ||
-				effect.kind === "exile-top") &&
-			effect.subject.kind === "target-player"
-				? effect.subject
-				: null;
-		const mayPlayTargetSlot =
-			effect.kind === "may-play" && effect.subject.kind === "target"
-				? effect.subject.slot
-				: null;
-		const objectTarget =
-			(effect.kind === "destroy" ||
-				effect.kind === "tap" ||
-				effect.kind === "untap" ||
-				effect.kind === "change-zone" ||
-				effect.kind === "modify-pt" ||
-				effect.kind === "grant-keyword" ||
-				effect.kind === "grant-triggered" ||
-				effect.kind === "add counters") &&
-			effect.subject.kind === "target"
-				? effect.subject
-				: null;
-		const counterTarget = effect.kind === "counter" ? effect.subject : null;
-		if (
-			damageTarget !== null ||
-			objectTarget !== null ||
-			mayPlayTargetSlot !== null ||
-			counterTarget !== null ||
-			sacrificeTarget !== null ||
-			playerTarget !== null
-		) {
-			const targetSlot =
-				damageTarget?.slot ??
-				objectTarget?.slot ??
-				mayPlayTargetSlot ??
-				counterTarget?.slot ??
-				sacrificeTarget?.slot ??
-				playerTarget?.slot;
+		const targetUses = effectTargetUses(effect);
+		if (targetUses.length > 0) {
+			const targetSlot = targetUses[0]?.slot;
 			assertDefined(targetSlot);
-			const binding = item.targets[0];
-			assertDefined(binding, "effect has no target binding");
 			assert(
-				binding.slot === targetSlot,
-				"effect has no matching target binding",
+				targetUses.every((use) => use.slot === targetSlot),
+				"one effect cannot consume multiple target slots",
 			);
+			const binding = item.targets.find(({ slot }) => slot === targetSlot);
+			assertDefined(binding, "effect has no target binding");
 			bound = binding.target;
 		}
 		if (effect.kind === "sacrifice") {
@@ -8497,15 +8563,25 @@ function validateEffectResultFlow(
 }
 
 function validateCardEffectResultFlow(definition: CardDef): void {
-	if (definition.spell) validateEffectResultFlow(definition.spell.effects);
+	if (definition.spell) {
+		validateEffectResultFlow(definition.spell.effects);
+		requiredTargetDefinition(
+			definition.spell.targets,
+			definition.spell.effects,
+		);
+	}
 	for (const ability of definition.abilityDefinitions.activated) {
-		if (ability.effects) validateEffectResultFlow(ability.effects);
+		if (!ability.effects) continue;
+		validateEffectResultFlow(ability.effects);
+		if ("targets" in ability)
+			requiredTargetDefinition(ability.targets, ability.effects);
 	}
 	for (const trigger of definition.abilityDefinitions.triggered) {
 		validateEffectResultFlow(
 			trigger.effects,
 			trigger.condition.kind === "change zone" ? trigger.condition.to : null,
 		);
+		requiredTargetDefinition(trigger.targets, trigger.effects);
 	}
 }
 
@@ -8532,232 +8608,20 @@ function requiredTargetDefinition(
 			for (const inner of effect.effects) check(inner);
 			return;
 		}
-		if (
-			effect.kind === "sacrifice" &&
-			effect.subject.kind === "relative-player"
-		) {
-			assert(
-				effect.amount === 1,
-				"only sacrificing one permanent is implemented",
-			);
-			return;
-		}
-		if (effect.kind === "choose-from-top") return;
-		if (effect.kind === "search-library") {
-			for (const subject of [effect.searcher, effect.owner]) {
-				if (subject.kind === "relative-player") continue;
-				assert(
-					target !== null && subject.slot === target.id,
-					"library search must reference its ability's target player slot",
-				);
-				assert(
-					target.legal.kind === "player",
-					"library search requires a player target",
-				);
-			}
-			return;
-		}
-		if (effect.kind === "shuffle-library") {
-			if (effect.subject.kind === "relative-player") return;
-			assert(
-				target !== null && effect.subject.slot === target.id,
-				"library shuffle must reference its ability's target player slot",
-			);
-			assert(
-				target.legal.kind === "player",
-				"library shuffle requires a player target",
-			);
-			return;
-		}
-		if (effect.kind === "may-play" && effect.subject.kind === "effect-result")
-			return;
-		if (
-			effect.kind === "change-zone" &&
-			effect.subject.kind === "effect-result"
-		)
-			return;
-		if (
-			effect.kind === "change-zone" &&
-			effect.subject.kind === "triggering-zone-change-result"
-		)
-			return;
-		if (
-			effect.kind === "change-zone" &&
-			effect.subject.kind === "chosen-permanent"
-		)
-			return;
-		if (
-			(effect.kind === "gain-life" ||
-				effect.kind === "lose-life" ||
-				effect.kind === "draw" ||
-				effect.kind === "scry" ||
-				effect.kind === "surveil" ||
-				effect.kind === "mill" ||
-				effect.kind === "exile-top") &&
-			effect.subject.kind === "relative-player"
-		)
-			return;
-		// An effect on its own source declares no target, so there is no slot to
-		// check it against.
-		if (
-			(effect.kind === "modify-pt" ||
-				effect.kind === "grant-keyword" ||
-				effect.kind === "grant-triggered" ||
-				effect.kind === "change-zone" ||
-				effect.kind === "add counters") &&
-			effect.subject.kind === "source"
-		)
-			return;
-		const damageTarget =
-			effect.kind === "damage" && effect.subject.kind === "target"
-				? effect.subject
-				: null;
-		if (
-			damageTarget === null &&
-			effect.kind !== "destroy" &&
-			effect.kind !== "tap" &&
-			effect.kind !== "untap" &&
-			effect.kind !== "counter" &&
-			effect.kind !== "change-zone" &&
-			effect.kind !== "modify-pt" &&
-			effect.kind !== "grant-keyword" &&
-			effect.kind !== "grant-triggered" &&
-			effect.kind !== "may-play" &&
-			effect.kind !== "add counters" &&
-			effect.kind !== "sacrifice" &&
-			effect.kind !== "gain-life" &&
-			effect.kind !== "lose-life" &&
-			effect.kind !== "draw" &&
-			effect.kind !== "scry" &&
-			effect.kind !== "surveil" &&
-			effect.kind !== "mill" &&
-			effect.kind !== "exile-top"
-		)
-			return;
-		const sacrificeTarget =
-			effect.kind === "sacrifice" && effect.subject.kind === "target-player"
-				? effect.subject
-				: null;
-		const playerTarget =
-			(effect.kind === "gain-life" ||
-				effect.kind === "lose-life" ||
-				effect.kind === "draw" ||
-				effect.kind === "scry" ||
-				effect.kind === "surveil" ||
-				effect.kind === "mill" ||
-				effect.kind === "exile-top") &&
-			effect.subject.kind === "target-player"
-				? effect.subject
-				: null;
-		const mayPlayTargetSlot =
-			effect.kind === "may-play" && effect.subject.kind === "target"
-				? effect.subject.slot
-				: null;
-		const objectTarget =
-			(effect.kind === "destroy" ||
-				effect.kind === "tap" ||
-				effect.kind === "untap" ||
-				effect.kind === "change-zone" ||
-				effect.kind === "modify-pt" ||
-				effect.kind === "grant-keyword" ||
-				effect.kind === "grant-triggered" ||
-				effect.kind === "add counters") &&
-			effect.subject.kind === "target"
-				? effect.subject
-				: null;
-		const counterTarget = effect.kind === "counter" ? effect.subject : null;
-		const targetSlot =
-			damageTarget?.slot ??
-			objectTarget?.slot ??
-			mayPlayTargetSlot ??
-			counterTarget?.slot ??
-			sacrificeTarget?.slot ??
-			playerTarget?.slot;
-		assertDefined(targetSlot);
-		assert(
-			target !== null && targetSlot === target.id,
-			"effect must reference its ability's target slot",
-		);
-		if (effect.kind === "destroy") {
-			assert(
-				target.legal.kind === "permanent",
-				"destroy requires a permanent target",
-			);
-		}
-		if (effect.kind === "tap" || effect.kind === "untap") {
-			assert(
-				target.legal.kind === "permanent",
-				`${effect.kind} requires a permanent target`,
-			);
-		}
-		if (effect.kind === "counter") {
-			assert(target.legal.kind === "spell", "counter requires a spell target");
-		}
-		if (effect.kind === "change-zone" && effect.subject.kind === "target") {
-			if (effect.from === "battlefield") {
-				assert(
-					target.legal.kind === "permanent",
-					"a battlefield change-zone effect requires a permanent target",
-				);
-			} else {
-				assert(
-					target.legal.kind === "card" && target.legal.zone === effect.from,
-					"a card change-zone effect requires a target in its origin",
-				);
-			}
-		}
-		if (effect.kind === "modify-pt") {
-			assert(
-				target.legal.kind === "permanent",
-				"temporary P/T change requires a permanent target",
-			);
-		}
-		if (effect.kind === "grant-keyword") {
-			assert(
-				target.legal.kind === "permanent",
-				"temporary keyword grant requires a permanent target",
-			);
-		}
-		if (effect.kind === "grant-triggered") {
-			assert(
-				target.legal.kind === "permanent",
-				"temporary triggered-ability grant requires a permanent target",
-			);
-		}
-		if (effect.kind === "may-play") {
-			assert(effect.subject.kind === "target");
-			assert(
-				target.legal.kind === "card" && target.legal.zone === effect.from,
-				"temporary play permission requires a card target in its origin",
-			);
-		}
-		if (effect.kind === "add counters") {
-			assert(
-				target.legal.kind === "permanent",
-				"adding counters requires a permanent target",
-			);
-		}
-		if (
-			effect.kind === "gain-life" ||
-			effect.kind === "lose-life" ||
-			effect.kind === "draw" ||
-			effect.kind === "scry" ||
-			effect.kind === "surveil" ||
-			effect.kind === "mill"
-		) {
-			assert(
-				target.legal.kind === "player",
-				"a targeted player effect requires a player target",
-			);
-		}
 		if (effect.kind === "sacrifice") {
 			assert(
-				target.legal.kind === "player",
-				"a targeted sacrifice effect requires a player target",
-			);
-			assert(
 				effect.amount === 1,
 				"only sacrificing one permanent is implemented",
+			);
+		}
+		for (const use of effectTargetUses(effect)) {
+			assert(
+				target !== null && use.slot === target.id,
+				"effect must reference its ability's target slot",
+			);
+			assert(
+				targetSelectorSatisfies(target.legal, use.required),
+				use.required.message,
 			);
 		}
 	};

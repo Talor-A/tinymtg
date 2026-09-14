@@ -404,3 +404,34 @@ describe("effect-result definition validation", () => {
 		).toThrow("unavailable effect result optional-cards");
 	});
 });
+
+test("targeted exile-top requires a player selector", () => {
+	expect(() =>
+		defineCard({
+			id: "test-targeted-exile-top-selector",
+			name: "Test Targeted Exile Top Selector",
+			types: ["sorcery"],
+			colors: [],
+			manaCost: "zero",
+			spell: {
+				id: "spell",
+				text: "Exile the top card of target player's library.",
+				targets: [
+					{
+						id: "player",
+						min: 1,
+						max: 1,
+						legal: { kind: "permanent" },
+					},
+				],
+				effects: [
+					{
+						kind: "exile-top",
+						subject: { kind: "target-player", slot: "player" },
+						amount: 1,
+					},
+				],
+			},
+		}),
+	).toThrow("a targeted player effect requires a player target");
+});
