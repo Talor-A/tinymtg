@@ -2371,7 +2371,25 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 			kind: "may";
 			decider: RelativeEffectPlayer;
 			effects: EffectDef<AllowedPlayer>[];
-	  };
+		  };
+
+interface DeclaredEffectResult {
+	slot: string;
+	zone: Zone;
+}
+
+/** The named object result produced by one instruction, if it declares one. */
+function declaredEffectResult(
+	effect: Exclude<EffectDef<TriggerEffectPlayer>, { kind: "may" }>,
+): DeclaredEffectResult | null {
+	if (effect.kind === "exile-top" && effect.resultSlot !== undefined)
+		return { slot: effect.resultSlot, zone: "exile" };
+	if (effect.kind === "search-library")
+		return { slot: effect.resultSlot, zone: "library" };
+	if (effect.kind === "change-zone" && effect.resultSlot !== undefined)
+		return { slot: effect.resultSlot, zone: effect.destination.zone };
+	return null;
+}
 
 /** Effects on a triggered ability may refer to the player that triggered it. */
 export type TriggeredEffectDef = EffectDef<TriggerEffectPlayer>;
@@ -7610,6 +7628,16 @@ function resolveEffects(
 				resolveEffects(engine, state, choices, item, effect.effects, scope);
 			continue;
 		}
+		const declaredResult = declaredEffectResult(effect);
+		if (declaredResult) {
+			assert(
+				!scope.bindings.has(declaredResult.slot),
+				`effect result slot ${declaredResult.slot} is already bound`,
+			);
+			// Every producer begins with an empty result. Its specialized execution
+			// replaces this only with objects that reached the declared destination.
+			scope.bindings.set(declaredResult.slot, []);
+		}
 		if (effect.kind === "each player draw") {
 			assert(effect.subjects === "each-player");
 			const active = activePlayer(state);
@@ -7640,13 +7668,6 @@ function resolveEffects(
 			continue;
 		}
 		if (effect.kind === "search-library") {
-			assert(
-				!scope.bindings.has(effect.resultSlot),
-				`effect result slot ${effect.resultSlot} is already bound`,
-			);
-			// Bind the empty result first so an empty library, no eligible card, or
-			// a legal fail-to-find all have the same precise downstream meaning.
-			scope.bindings.set(effect.resultSlot, []);
 			const chosen = choices.searchLibrary(
 				state,
 				resolvePlayer(effect.searcher),
@@ -7826,15 +7847,6 @@ function resolveEffects(
 			continue;
 		}
 		if (effect.kind === "change-zone") {
-			if (effect.resultSlot !== undefined) {
-				assert(
-					!scope.bindings.has(effect.resultSlot),
-					`effect result slot ${effect.resultSlot} is already bound`,
-				);
-				// Bind an empty result before any early exit. A later consumer then
-				// sees that this instruction produced no usable new object.
-				scope.bindings.set(effect.resultSlot, []);
-			}
 			let ref: EntityRef | null;
 			if (effect.subject.kind === "source") ref = null;
 			else if (effect.subject.kind === "target") ref = bound;
@@ -8001,10 +8013,6 @@ function resolveEffects(
 			continue;
 		}
 		if (effect.kind === "exile-top" && effect.resultSlot !== undefined) {
-			assert(
-				!scope.bindings.has(effect.resultSlot),
-				`effect result slot ${effect.resultSlot} is already bound`,
-			);
 			const result = performIn(
 				engine,
 				state,
@@ -8499,28 +8507,17 @@ function validateEffectResultFlow(
 					`change-zone refers to unavailable ${effect.from} effect result ${effect.subject.slot}`,
 				);
 			}
-			if (
-				(effect.kind === "exile-top" ||
-					effect.kind === "change-zone" ||
-					effect.kind === "search-library") &&
-				effect.resultSlot !== undefined
-			) {
+			const declaredResult = declaredEffectResult(effect);
+			if (declaredResult) {
 				assert(
-					effect.resultSlot.length > 0,
+					declaredResult.slot.length > 0,
 					"effect result slot must have a name",
 				);
 				assert(
-					!available.has(effect.resultSlot),
-					`duplicate effect result slot ${effect.resultSlot}`,
+					!available.has(declaredResult.slot),
+					`duplicate effect result slot ${declaredResult.slot}`,
 				);
-				available.set(
-					effect.resultSlot,
-					(() => {
-						if (effect.kind === "exile-top") return "exile";
-						if (effect.kind === "search-library") return "library";
-						return effect.destination.zone;
-					})(),
-				);
+				available.set(declaredResult.slot, declaredResult.zone);
 			}
 			if (
 				effect.kind === "may-play" &&
