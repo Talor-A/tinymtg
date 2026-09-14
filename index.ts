@@ -787,6 +787,8 @@ interface LoseLifeEvent extends EventCommon {
 	player: PlayerId;
 	amount: number;
 	source?: ObjectId;
+	/** Present only when the life loss pays a spell or ability cost. */
+	cost?: "spell" | "activated-ability" | "mana-ability";
 }
 
 interface AddManaEvent extends EventCommon {
@@ -2956,6 +2958,10 @@ export interface DiscardCost {
 	amount: 1;
 }
 
+export interface LifeCost {
+	amount: number;
+}
+
 /**
  * Discarding as an activation cost. The card is chosen from hand while the
  * ability is announced. Cycling instead discards the ability's own source.
@@ -2969,6 +2975,7 @@ export interface ActivationDiscardCost extends DiscardCost {
 export interface AdditionalCosts {
 	sacrifice?: SacrificeCost;
 	discard?: DiscardCost;
+	life?: LifeCost;
 }
 
 interface ActivatedAbilityDefBase {
@@ -2997,6 +3004,7 @@ export interface CyclingAbilityDef extends ActivatedAbilityDefBase {
 		tapSelf: false;
 		sacrifice?: never;
 		discard: { amount: 1; subject: "source" };
+		life?: LifeCost;
 	};
 	targets: [];
 	effects: [
@@ -8967,6 +8975,13 @@ function costPaymentOptions(
 			cost.discard.amount === 1,
 			"only discarding one card is implemented",
 		);
+	if (cost.life) {
+		assert(
+			Number.isSafeInteger(cost.life.amount) && cost.life.amount > 0,
+			"life payment must be a finite positive safe integer",
+		);
+		if (read.state.players[player].life < cost.life.amount) return null;
+	}
 
 	const object = read.state.objects.get(source);
 	if (cost.tapSelf) {
@@ -9051,6 +9066,7 @@ function payCostIn(
 	payment: CostPayment,
 	choices: AnyChoiceController,
 	scope: Scope,
+	lifePaymentKind: "spell" | "activated-ability" | "mana-ability",
 	illegal: (message: string) => Error,
 ): PerformResult | null {
 	const pool = state.players[player].manaPool;
@@ -9065,6 +9081,33 @@ function payCostIn(
 		if (spent > 0) spentMana = true;
 	}
 	if (spentMana) state.revision++;
+
+	if (cost.life) {
+		const life = performIn(
+			engine,
+			state,
+			{
+				kind: "lose life",
+				player,
+				amount: cost.life.amount,
+				source,
+				cost: lifePaymentKind,
+			},
+			choices,
+			scope,
+			0,
+		);
+		if (
+			!life.executed.some(
+				(event) =>
+					event.kind === "lose life" &&
+					event.player === player &&
+					event.amount === cost.life?.amount &&
+					event.cost === lifePaymentKind,
+			)
+		)
+			throw illegal("life cost was not paid");
+	}
 
 	if (cost.tapSelf) {
 		const tap = performIn(
@@ -9733,6 +9776,7 @@ function activateAbilityIn(
 			payment,
 			choices,
 			scope,
+			ability.kind === "mana" ? "mana-ability" : "activated-ability",
 			(message) =>
 				new IllegalAbilityActivationError(
 					`ability ${action.ability}'s ${message}`,
@@ -9851,9 +9895,7 @@ function castSpellIn(
 		tapSelf: false,
 		...definition?.additionalCosts,
 	};
-	if (
-		!costPaymentOptions(read, priorityPlayer, object.id, cost, [object.id])
-	) {
+	if (!costPaymentOptions(read, priorityPlayer, object.id, cost, [object.id])) {
 		throw new IllegalCastError(
 			`P${priorityPlayer} cannot pay ${characteristics.name}'s cost`,
 		);
@@ -9987,8 +10029,8 @@ function castSpellIn(
 			payment,
 			choices,
 			newScope(),
-			(message) =>
-				new IllegalCastError(`${characteristics.name}'s ${message}`),
+			"spell",
+			(message) => new IllegalCastError(`${characteristics.name}'s ${message}`),
 		);
 		log(
 			state,

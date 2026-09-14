@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
+import { loadCardFixture } from "../corpus.ts";
 import {
 	abilityId,
 	ChoiceController,
@@ -44,7 +45,11 @@ const SEARCH_OPPONENT = defineCard({
 	},
 });
 
-const engine = createEngine([...CARDS, SEARCH_OPPONENT]);
+const engine = createEngine([
+	...CARDS,
+	loadCardFixture("w/wooded_foothills"),
+	SEARCH_OPPONENT,
+]);
 
 class SearchAgent extends ScriptedAgent {
 	readonly searches: Extract<ChoiceRequest, { kind: "searchLibrary" }>[] = [];
@@ -219,6 +224,45 @@ describe("search effects", () => {
 		expect(
 			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
 		).toContain("Evolving Wilds");
+	});
+
+	test("Wooded Foothills pays life and finds a land by subtype", () => {
+		const state = setupMain(engine);
+		const chosen = engine.spawnCard(state, "forest", ALICE, "library");
+		const foothills = engine.spawnPermanent(state, "wooded-foothills", ALICE);
+		const alice = new SearchAgent(chosen.id);
+		const agents: [SearchAgent, ScriptedAgent] = [alice, new ScriptedAgent()];
+
+		engine.executeAbilityAction(
+			state,
+			ALICE,
+			{
+				kind: "activate ability",
+				source: foothills.id,
+				ability: abilityId("activated", "wooded-foothills", 0),
+			},
+			agents,
+		);
+		expect(state.players[ALICE].life).toBe(19);
+		expect(
+			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+		).toContain("Wooded Foothills");
+
+		engine.settlePriority(state, agents);
+		expect(
+			alice.searches[0]?.context.cards.map(
+				(card) => card.currentCharacteristics.name,
+			),
+		).toContain("Forest");
+		const forest = state.battlefield
+			.map((id) => engine.buildGameView(state).objects.get(id))
+			.find((object) => object?.currentCharacteristics.name === "Forest");
+		expect(forest).toMatchObject({
+			kind: "permanent",
+			controller: ALICE,
+			tapped: false,
+		});
+		expect(state.log).toContain("  P0 shuffles their library");
 	});
 
 	test("a qualified search may fail to find and still shuffles", () => {

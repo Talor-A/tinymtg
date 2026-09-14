@@ -3156,6 +3156,33 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		});
 	});
 
+	test("fixed life payments lower for spells and activated abilities", () => {
+		const boon = importFixture("w/withering_boon");
+		if (!boon.ok) throw new Error("expected Withering Boon to import");
+		expect(boon.card.spell?.additionalCosts).toEqual({
+			life: { amount: 3 },
+		});
+
+		const wall = importFixture("w/wall_of_blood");
+		if (!wall.ok) throw new Error("expected Wall of Blood to import");
+		expect(wall.card.abilityDefinitions.activated[0]).toMatchObject({
+			kind: "activated",
+			cost: { mana: "zero", tapSelf: false, life: { amount: 1 } },
+		});
+
+		const foothills = importFixture("w/wooded_foothills");
+		if (!foothills.ok) throw new Error("expected Wooded Foothills to import");
+		expect(foothills.card.abilityDefinitions.activated[0]).toMatchObject({
+			kind: "activated",
+			cost: {
+				mana: "zero",
+				tapSelf: true,
+				life: { amount: 1 },
+				sacrifice: { predicate: { kind: "self" }, amount: 1 },
+			},
+		});
+	});
+
 	test("additional sacrifice costs retain their full permanent predicate", () => {
 		const deadlyDispute = importFixture("d/deadly_dispute");
 		if (!deadlyDispute.ok) throw new Error("expected Deadly Dispute to import");
@@ -3793,11 +3820,26 @@ describe("lowerForgeCard: cycling", () => {
 		]);
 	});
 
-	test("rejects cycling costs outside fixed generic and colored mana", () => {
-		for (const fixture of ["s/street_wraith", "a/architects_of_will"]) {
-			const result = importFixture(fixture);
-			expect(result.ok).toBe(false);
-		}
+	test("lowers fixed life cycling and rejects unsupported mana symbols", () => {
+		const lifeCycling = importForgeCard(
+			cardText("b/boon_of_the_wish_giver").replace(
+				"K:Cycling:1",
+				"K:Cycling:PayLife<2>",
+			),
+			{ id: "life-cycling" },
+		);
+		expect(lifeCycling.ok).toBe(true);
+		if (lifeCycling.ok)
+			expect(lifeCycling.card.abilityDefinitions.activated[0]).toMatchObject({
+				kind: "cycling",
+				cost: {
+					mana: "zero",
+					life: { amount: 2 },
+					discard: { amount: 1, subject: "source" },
+				},
+			});
+
+		expect(importFixture("a/architects_of_will").ok).toBe(false);
 	});
 
 	test("lowers ownership-based Cycled triggers from their declared zones", () => {
@@ -4415,7 +4457,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 	});
 
 	test("rejects unsupported activation cost terms without dropping them", () => {
-		for (const term of ["C", "X", "W/U", "W/P", "PayLife<2>"]) {
+		for (const term of ["C", "X", "W/U", "W/P", "PayLife<X>"]) {
 			const result = importText(
 				`${BEARS}A:AB$ GainLife | Cost$ ${term} | Defined$ You | LifeAmount$ 1 | SpellDescription$ You gain 1 life.\n`,
 			);
@@ -4428,6 +4470,22 @@ describe("lowerForgeCard: required negative mutations", () => {
 					}),
 				]);
 			}
+		}
+	});
+
+	test("rejects malformed, duplicate, and unsafe life costs", () => {
+		for (const term of [
+			"PayLife<0>",
+			"PayLife<-1>",
+			"PayLife<1> PayLife<2>",
+			"PayLife<9007199254740992>",
+		]) {
+			const result = importText(
+				`${BEARS}A:AB$ GainLife | Cost$ ${term} | Defined$ You | LifeAmount$ 1 | SpellDescription$ You gain 1 life.\n`,
+			);
+			expect(result.ok, term).toBe(false);
+			if (!result.ok)
+				expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_COST");
 		}
 	});
 

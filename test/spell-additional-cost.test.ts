@@ -123,12 +123,75 @@ const TEST_CARD_4 = defineCard({
 	},
 });
 
+const TEST_CARD_5 = defineCard({
+	id: "test-pay-life-spell",
+	name: "Test Pay Life Spell",
+	types: ["instant"],
+	colors: [],
+	manaCost: "zero",
+	spell: {
+		id: "spell",
+		text: "As an additional cost to cast this spell, pay 3 life. You gain 1 life.",
+		additionalCosts: { life: { amount: 3 } },
+		targets: [],
+		effects: [
+			{
+				kind: "gain-life",
+				subject: { kind: "relative-player", player: "you" },
+				amount: 1,
+			},
+		],
+	},
+});
+
+const TEST_CARD_6 = defineCard({
+	id: "test-cannot-pay-life",
+	name: "Test Cannot Pay Life",
+	types: ["artifact"],
+	colors: [],
+	manaCost: "zero",
+	prohibitions: [
+		{
+			label: "test-cannot-pay-life",
+			text: "Players can't pay life to cast spells or activate abilities.",
+			applies: (event) =>
+				event.kind === "lose life" && event.cost !== undefined,
+		},
+	],
+});
+
+const TEST_CARD_7 = defineCard({
+	id: "test-life-payment-watcher",
+	name: "Test Life Payment Watcher",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	triggers: [
+		{
+			id: "life-payment-watcher",
+			text: "Whenever you lose life, you gain 1 life.",
+			condition: { kind: "lose life", player: "you" },
+			targets: [],
+			effects: [
+				{
+					kind: "gain-life",
+					subject: { kind: "relative-player", player: "you" },
+					amount: 1,
+				},
+			],
+		},
+	],
+});
+
 const engine = createEngine([
 	...CARDS,
 	TEST_CARD_1,
 	TEST_CARD_2,
 	TEST_CARD_3,
 	TEST_CARD_4,
+	TEST_CARD_5,
+	TEST_CARD_6,
+	TEST_CARD_7,
 ]);
 
 function canonicalStateBytes(state: GameState): string {
@@ -466,5 +529,54 @@ describe("spell additional discard cost", () => {
 		expect(state.players[ALICE].hand).toHaveLength(0);
 		expect(state.players[ALICE].graveyard).toHaveLength(1);
 		expect(state.stack).toHaveLength(1);
+	});
+});
+
+describe("spell additional life cost", () => {
+	test("requires enough life and permits paying the player's last life", () => {
+		const state = setupMain(engine);
+		engine.spawnPermanent(state, "test-life-payment-watcher", ALICE);
+		const spell = engine.spawnCard(state, "test-pay-life-spell", ALICE, "hand");
+
+		state.players[ALICE].life = 2;
+		expect(offered(state, spell.id)).toBe(false);
+		state.players[ALICE].life = 3;
+		expect(offered(state, spell.id)).toBe(true);
+
+		engine.executeCastAction(
+			state,
+			ALICE,
+			castAction(spell.id),
+			passingAgents(),
+		);
+		expect(state.players[ALICE].life).toBe(0);
+		expect(state.stack).toHaveLength(1);
+		expect(state.pendingTriggers).toHaveLength(1);
+		expect(state.pendingTriggers[0]?.text).toBe(
+			"Whenever you lose life, you gain 1 life.",
+		);
+	});
+
+	test("a prohibition rejects only cost payment and rewinds the cast", () => {
+		const state = setupMain(engine);
+		engine.spawnPermanent(state, "test-cannot-pay-life", BOB);
+		engine.perform(
+			state,
+			{ kind: "lose life", player: ALICE, amount: 1 },
+			passingAgents(),
+		);
+		expect(state.players[ALICE].life).toBe(19);
+		const spell = engine.spawnCard(state, "test-pay-life-spell", ALICE, "hand");
+		const before = canonicalStateBytes(state);
+
+		expect(() =>
+			engine.executeCastAction(
+				state,
+				ALICE,
+				castAction(spell.id),
+				passingAgents(),
+			),
+		).toThrow(IllegalCastError);
+		expect(canonicalStateBytes(state)).toBe(before);
 	});
 });

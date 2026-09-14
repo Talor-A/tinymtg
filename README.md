@@ -252,9 +252,11 @@ The allowance starts at one and includes finite positive additions from battlefi
 
 Sacrifice effects and costs currently support one permanent at a time. Multiple
 and optional sacrifices are not implemented. Spells and activated abilities
-share fixed mana, tap-self, sacrifice, and discard payment logic; a spell's
-nonmana components are represented as additional costs. Deck construction,
-opening hands, mulligans, and alternative costs are also not implemented yet.
+share fixed mana, life, tap-self, sacrifice, and discard payment logic; a
+spell's nonmana components are represented as additional costs. Fixed positive
+life payments are supported, including combined fetch-land costs. Variable life
+payments, deck construction, opening hands, mulligans, and alternative costs
+are not implemented yet.
 
 Effect definitions call the entity they act on a `subject`. A singular player
 subject can be relative (`you`, `opponent`, or `triggering-player`) or refer to

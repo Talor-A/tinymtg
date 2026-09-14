@@ -43,6 +43,11 @@ const combinedWithSacrifice = {
 		amount: 1,
 	},
 } satisfies ActivationCost;
+const combinedWithLife = {
+	mana: { n: 1 },
+	tapSelf: true,
+	life: { amount: 2 },
+} satisfies ActivationCost;
 
 // "none" describes a card with no mana cost. It is not payable.
 // @ts-expect-error activation costs cannot contain card-only no-mana semantics
@@ -59,10 +64,10 @@ const variableMana: ActivationCost = {
 	mana: { x: 1 },
 	tapSelf: false,
 };
-const lifePayment: ActivationCost = {
+const malformedLifePayment: ActivationCost = {
 	mana: "zero",
 	tapSelf: false,
-	// @ts-expect-error life payment is not an activation cost component
+	// @ts-expect-error life costs have an explicit fixed-amount shape
 	life: 1,
 };
 
@@ -83,7 +88,7 @@ const sourceDiscardSpellCost: AdditionalCosts = {
 void noManaCost;
 void specificallyColorless;
 void variableMana;
-void lifePayment;
+void malformedLifePayment;
 void duplicateComponents;
 void sourceDiscardSpellCost;
 
@@ -107,6 +112,11 @@ describe("payable activation costs", () => {
 			mana: { b: 1 },
 			tapSelf: true,
 			sacrifice: { predicate: { kind: "self" }, amount: 1 },
+		});
+		expect(combinedWithLife).toEqual({
+			mana: { n: 1 },
+			tapSelf: true,
+			life: { amount: 2 },
 		});
 	});
 

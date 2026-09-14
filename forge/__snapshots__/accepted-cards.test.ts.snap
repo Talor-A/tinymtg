@@ -192,6 +192,7 @@ Argivian Find
 Argivian Restoration
 Argothian Enchantress
 Argothian Swine
+Arid Mesa
 Ark of Blight
 Armor of Shadows
 Armored Cancrix
@@ -391,6 +392,7 @@ Blighted Cataract
 Blighted Fen
 Blighted Gorge
 Blighted Shaman
+Blightsoil Druid
 Blind Phantasm
 Blinding Light
 Blinding Mage
@@ -402,6 +404,7 @@ Blisterstick Shaman
 Blitzball Shot
 Blood Artist
 Blood Bairn
+Blood Celebrant
 Blood Divination
 Blood Glutton
 Blood Host
@@ -422,6 +425,8 @@ Bloodlust Inciter
 Bloodpyre Elemental
 Bloodrage Brawler
 Bloodrite Invoker
+Bloodsoaked Altar
+Bloodstained Mire
 Bloodstone Cameo
 Bloodthrone Vampire
 Blooming Stinger
@@ -453,6 +458,7 @@ Bone Splinters
 Bone to Ash
 Bonebreaker Giant
 Bonecaller Cleric
+Book of Rass
 Boomerang
 Boomerang, Blade Flinger
 Boon of the Wish-Giver
@@ -577,6 +583,7 @@ Carrier Thrall
 Carrion Ants
 Carrion Crow
 Carrion Feeder
+Carrion Howler
 Carrion Screecher
 Cartographer
 Carven Caryatid
@@ -597,6 +604,7 @@ Cauldron Familiar
 Caustic Caterpillar
 Caustic Rain
 Cave of Temptation
+Cavern Harpy
 Cavern Thoctar
 Celebrity Fencer
 Celestial Prism
@@ -776,6 +784,7 @@ Crop Rotation
 Crosis's Attendant
 Crossbow Infantry
 Crossroads Watcher
+Crovax, Ascendant Hero
 Crow of Dark Tidings
 Crowd Favorites
 Cruel Celebrant
@@ -982,6 +991,7 @@ Dockside Chef
 Dogged Hunter
 Donatello, Way with Machines
 Doom Blade
+Doom Whisperer
 Doom's Servo-Guards
 Doomed Dissenter
 Doomed Necromancer
@@ -1292,6 +1302,7 @@ Fierce Witchstalker
 Fiery Conclusion
 Fiery Finish
 Fiery Hellhound
+Fiery Islet
 Fighting Drake
 Filigree Crawler
 Filigree Familiar
@@ -1346,6 +1357,7 @@ Flesh Burrower
 Fleshtaker
 Flick a Coin
 Flood Plain
+Flooded Strand
 Floodhound
 Flourishing Fox
 Flowstone Channeler
@@ -1395,12 +1407,14 @@ Fortified Rampart
 Fortifying Provisions
 Fortress Crab
 Forum of Amity
+Foul Familiar
 Foul Imp
 Foul Orchard
 Foundry Street Denizen
 Foundry of the Consuls
 Fountain of Renewal
 Fountain of Youth
+Fountainport
 Fracture
 Fractured Sanity
 Fragmentize
@@ -1514,6 +1528,7 @@ Glittering Massif
 Glittermonger
 Gloom Pangolin
 Gloomhunter
+Glorifier of Dusk
 Glorious Anthem
 Glory Seeker
 Glowing Anemone
@@ -1612,6 +1627,7 @@ Great Hart
 Great-Horn Krushok
 Greater Basilisk
 Greater Forgeling
+Greed
 Greedy Freebooter
 Greenside Watcher
 Greenweaver Druid
@@ -1627,7 +1643,9 @@ Grim Bauble
 Grim Bounty
 Grim Guardian
 Grim Tutor
+Grimclaw Bats
 Griptide
+Griselbrand
 Grisly Ritual
 Gristle Grinner
 Grixis Panorama
@@ -1696,6 +1714,7 @@ Harrier Strix
 Harrowing Journey
 Haru-Onna
 Harvester of Souls
+Hashep Oasis
 Hatching Plans
 Hate Weaver
 Haunted Crossroads
@@ -1792,6 +1811,7 @@ Hoof Skulkin
 Hop to It
 Hopping Automaton
 Hordeling Outburst
+Horizon Canopy
 Horizon Chimera
 Horizon Scholar
 Horn of Ramos
@@ -1919,6 +1939,7 @@ Invasion Reinforcements
 Invasive Species
 Invoke the Divine
 Iona's Judgment
+Ipnu Rivulet
 Irencrag Pyromancer
 Iron Giant
 Iron Man, Tony Stark
@@ -2277,6 +2298,7 @@ Malevolent Chandelier
 Malevolent Noble
 Mammoth Spider
 Man-o'-War
+Mana Confluence
 Mana Cylix
 Mana Geode
 Mana Prism
@@ -2299,6 +2321,7 @@ Maritime Guard
 Marker Beetles
 Markov Dreadknight
 Markov Patrician
+Marsh Flats
 Martyr of Dusk
 Mass Production
 Mass of Ghouls
@@ -2384,6 +2407,7 @@ Mistral Charger
 Mistral Singer
 Mistvault Bridge
 Misty Palms Oasis
+Misty Rainforest
 Mjölnir's Might
 Mnemonic Wall
 Moaning Spirit
@@ -2573,6 +2597,7 @@ Noxious Newt
 Noxious Toad
 Nuisance Engine
 Nullify
+Nurturing Peatland
 Nutrient Block
 Nyx-Fleece Ram
 Nyxborn Brute
@@ -2648,6 +2673,7 @@ Orcish Mechanics
 Orcish Oriflamme
 Orcish Vandal
 Order of the Sacred Bell
+Order of the Sacred Torch
 Ordinary Bear
 Ore Gorger
 Oread of Mountain's Blaze
@@ -2733,7 +2759,9 @@ Phyrexian Arena
 Phyrexian Broodlings
 Phyrexian Gargantua
 Phyrexian Hulk
+Phyrexian Lens
 Phyrexian Rager
+Phyrexian Reclamation
 Phyrexian Tower
 Phyrexian Vault
 Phyrexian Vivisector
@@ -2777,6 +2805,7 @@ Poison the Blade
 Poison-Blade Mentor
 Poison-Tip Archer
 Polluted Dead
+Polluted Delta
 Polluted Mire
 Possessed Skaab
 Potion of Healing
@@ -2810,6 +2839,7 @@ Prince Imrahil the Fair
 Princess Lucrezia
 Prismari Campus
 Prismatic Lens
+Prismatic Vista
 Prismite
 Prized Griffin
 Prized Statue
@@ -2893,6 +2923,7 @@ Rampage of the Valkyries
 Rampaging Baloths
 Rampaging Hippo
 Rampant Growth
+Ramunap Ruins
 Ranger's Guile
 Rapacious Dragon
 Raphael, Tough Turtle
@@ -2917,6 +2948,7 @@ Ravenous Skirge
 Ray of Dissolution
 Ray of Ruin
 Razaketh's Rite
+Razaketh, the Foulblooded
 Raze
 Razorfield Thresher
 Razorfin Hunter
@@ -2931,6 +2963,7 @@ Reassembling Skeleton
 Rebellious Strike
 Rebuke
 Reckless Abandon
+Reckless Assault
 Reckless Barbarian
 Reckless Fireweaver
 Reckless Pangolin
@@ -3012,6 +3045,7 @@ Righteousness
 Rime Tender
 Rimefur Reindeer
 Rimewood Falls
+Ring of the Lucii
 Ringwarden Owl
 Riot Devils
 Rip-Clan Crasher
@@ -3153,6 +3187,7 @@ Savannah Sage
 Savior of the Sleeping
 Sazh's Chocobo
 Scalding Cauldron
+Scalding Tarn
 Scaldkin
 Scaled Behemoth
 Scaled Hulk
@@ -3237,6 +3272,7 @@ Seismic Mage
 Seizan, Perverter of Truth
 Sejiri Refuge
 Sek'Kuar, Deathkeeper
+Selenia, Dark Angel
 Selesnya Cluestone
 Selesnya Guildgate
 Selesnya Sanctuary
@@ -3277,6 +3313,7 @@ Shadow Glider
 Shadow Guildmage
 Shadow-Rite Priest
 Shadowblood Ridge
+Shadowcloak Vampire
 Shadowfeed
 Shadowy Backstreet
 Shaman of Spring
@@ -3341,6 +3378,7 @@ Sign in Blood
 Signpost Scarecrow
 Silent Artisan
 Silent Attendant
+Silent Clearing
 Silent Dart
 Silent Observer
 Silicate Surveyor
@@ -3483,6 +3521,7 @@ Soul of the Harvest
 Soul of the Rapids
 Soul's Attendant
 Soulbound Guardians
+Souldrinker
 Soulknife Spy
 Soulmender
 Soulreaper of Mogis
@@ -3557,6 +3596,7 @@ Staff of the Wild Magus
 Staggering Size
 Stampeding Rhino
 Stand Firm
+Standing Stones
 Standing Troops
 Starfleet Crew
 Stark Industries
@@ -3587,6 +3627,7 @@ Steward of Valeron
 Stimulus Package
 Stinging Barrier
 Stir the Sands
+Stirge
 Stitcher's Apprentice
 Stitcher's Supplier
 Stock Up
@@ -3618,6 +3659,7 @@ Stormscape Apprentice
 Stormwatch Eagle
 Story Seeker
 Strafe
+Strands of Night
 Strangle
 Straw Soldiers
 Stream of Acid
@@ -3626,6 +3668,7 @@ Strip Mine
 Striped Bears
 Striped Riverwinder
 Strix Lookout
+Stromgald Cabal
 Stromkirk Patrol
 Strongarm Thug
 Stronghold Assassin
@@ -3656,6 +3699,7 @@ Sun Sentinel
 Sun-Blessed Peak
 Sun-Collared Raptor
 Sunastian Falconer
+Sunbaked Canyon
 Sunbeam Spellbomb
 Sunder from Within
 Sundial, Dawn Tyrant
@@ -3893,6 +3937,7 @@ Towering Viewpoint
 Toxic Abomination
 Toxic Scorpion
 Toxin Analysis
+Trading Post
 Tragic Poet
 Trail of Evidence
 Trailblazing Historian
@@ -3913,6 +3958,7 @@ Trash for Treasure
 Traveling Minister
 Traveling Philosopher
 Tread Upon
+Treasure Dredger
 Treasure Hunter
 Treasure Trove
 Tree Monkey
@@ -3988,12 +4034,14 @@ Undergrowth Leopard
 Undergrowth Recon
 Undersea Invader
 Undertaker
+Underworld Coinsmith
 Underworld Dreams
 Undying Beast
 Unearth
 Unexplained Disappearance
 Unfathomable Truths
 Unfriendly Fire
+Unfulfilled Desires
 Unhallowed Phalanx
 Unhinge
 Unholy Grotto
@@ -4007,6 +4055,7 @@ Unnatural Predation
 Unnatural Speed
 Unraveling Mummy
 Unruly Mob
+Unspeakable Symbol
 Unstable Obelisk
 Unsubtle Mockery
 Unsummon
@@ -4074,11 +4123,13 @@ Venomous Hierophant
 Venomthrope
 Venser's Sliver
 Verdant Automaton
+Verdant Catacombs
 Verdant Rebirth
 Verdigris
 Verduran Enchantress
 Vermiculos
 Vermin Gorger
+Vesper Ghoul
 Vessel of Endless Rest
 Vessel of Ephemera
 Vessel of Paramnesia
@@ -4157,6 +4208,7 @@ Wakandan Shield Guard
 Walk the Plank
 Walking Corpse
 Wall of Air
+Wall of Blood
 Wall of Blossoms
 Wall of Denial
 Wall of Distortion
@@ -4199,6 +4251,7 @@ Warmth
 Warpath Ghoul
 Warped Landscape
 Warped Tusker
+Warren Soultrader
 Warriors of Wakanda
 Warship Flight Crew
 Warship Scout
@@ -4217,6 +4270,7 @@ Watchwolf
 Water Elemental
 Waterfront Bouncer
 Waterfront District
+Waterlogged Grove
 Wave-Wing Elemental
 Waxen Shapethief
 Wayfarer's Bauble
@@ -4280,6 +4334,7 @@ Windgrace Acolyte
 Windrider Eel
 Windrider Patrol
 Windseeker Centaur
+Windswept Heath
 Windurst, Federation Center
 Wing Commando
 Winged Coatl
@@ -4298,6 +4353,7 @@ Witch's Familiar
 Witching Well
 Witherbloom Campus
 Withered Wretch
+Withering Boon
 Withering Torment
 Without Weakness
 Withstand Death
@@ -4306,6 +4362,7 @@ Witty Roastmaster
 Wizards' School
 Wolf Cove Villager
 Woodcutter's Grit
+Wooded Foothills
 Wooded Ridgeline
 Woodland Bellower
 Woodland Chasm
@@ -4330,6 +4387,7 @@ Wretched Doll
 Wriggling Grub
 Writhing Chrysalis
 Wu Infantry
+Wydwen, the Biting Gale
 Wyluli Wolf
 Xander's Lounge
 Xenobotanist
@@ -4381,4 +4439,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4378`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4436`;

@@ -3749,6 +3749,7 @@ function parseActivationCost(
 	let tapSelf = false;
 	let sacrifice: ActivationCost["sacrifice"];
 	let discard: ActivationCost["discard"];
+	let life: ActivationCost["life"];
 	// `0` is the whole mana cost when it appears, so a term of it may be written
 	// once and never beside another mana term. The terms are counted here and
 	// judged together once the list has been read.
@@ -3839,6 +3840,26 @@ function parseActivationCost(
 			discard = { amount: 1 };
 			continue;
 		}
+		const lifeMatch = term.match(/^PayLife<([1-9]\d*)>$/);
+		if (lifeMatch) {
+			if (life) {
+				return issue(
+					"UNSUPPORTED_COST",
+					"multiple life payment costs are unsupported",
+					where,
+				);
+			}
+			const amount = Number(lifeMatch[1]);
+			if (!Number.isSafeInteger(amount)) {
+				return issue(
+					"UNSUPPORTED_COST",
+					`unsupported life payment cost term ${term}: quantity is not a safe integer`,
+					where,
+				);
+			}
+			life = { amount };
+			continue;
+		}
 		if (/^\d+$/.test(term)) {
 			if (term !== "0" && term.startsWith("0")) {
 				return issue(
@@ -3891,6 +3912,7 @@ function parseActivationCost(
 		tapSelf,
 		...(sacrifice ? { sacrifice } : {}),
 		...(discard ? { discard } : {}),
+		...(life ? { life } : {}),
 	});
 }
 
@@ -4193,7 +4215,7 @@ export function lowerForgeCard(
 
 	const keywords: Keyword[] = [];
 	const keywordReplacements: ReplacementEffectDefinition[] = [];
-	const cyclingCosts: PayableActivationManaCost[] = [];
+	const cyclingCosts: Pick<ActivationCost, "mana" | "life">[] = [];
 	const resolver: SVarResolver = { face, consumed: new Set() };
 	const usedSVarNames = resolver.consumed;
 	const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
@@ -4238,7 +4260,10 @@ export function lowerForgeCard(
 						where,
 					),
 				);
-			cyclingCosts.push(parsed.value.mana);
+			cyclingCosts.push({
+				mana: parsed.value.mana,
+				...(parsed.value.life ? { life: parsed.value.life } : {}),
+			});
 			continue;
 		}
 		if (record.keyword === "ETBReplacement") {
@@ -4346,7 +4371,7 @@ export function lowerForgeCard(
 
 	const activatedAbilities: AnyActivatedAbilityDefinition[] = [];
 	let activatedCount = 0;
-	for (const mana of cyclingCosts) {
+	for (const cyclingCost of cyclingCosts) {
 		activatedCount += 1;
 		activatedAbilities.push({
 			kind: "cycling",
@@ -4354,9 +4379,10 @@ export function lowerForgeCard(
 			text: "Cycling.",
 			functionsFrom: ["hand"],
 			cost: {
-				mana,
+				mana: cyclingCost.mana,
 				tapSelf: false,
 				discard: { amount: 1, subject: "source" },
+				...(cyclingCost.life ? { life: cyclingCost.life } : {}),
 			},
 			targets: [],
 			effects: [
@@ -4625,7 +4651,9 @@ export function lowerForgeCard(
 				if (
 					parsedCost.value.tapSelf ||
 					!restated ||
-					(!parsedCost.value.sacrifice && !parsedCost.value.discard)
+					(!parsedCost.value.sacrifice &&
+						!parsedCost.value.discard &&
+						!parsedCost.value.life)
 				) {
 					return reject(
 						issue(
@@ -4642,6 +4670,7 @@ export function lowerForgeCard(
 					...(parsedCost.value.discard
 						? { discard: parsedCost.value.discard }
 						: {}),
+					...(parsedCost.value.life ? { life: parsedCost.value.life } : {}),
 				};
 			}
 		}

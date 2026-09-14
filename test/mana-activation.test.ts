@@ -215,6 +215,23 @@ const TEST_CARD_7 = defineCard({
 	],
 });
 
+const TEST_CARD_8 = defineCard({
+	id: "test-life-payment-mana-ability",
+	name: "Test Life Payment Mana Ability",
+	types: ["land"],
+	colors: [],
+	manaCost: "none",
+	activatedAbilities: [
+		{
+			kind: "mana",
+			id: "white-for-life",
+			text: "{T}, Pay 1 life: Add {W}.",
+			cost: { mana: "zero", tapSelf: true, life: { amount: 1 } },
+			effects: [{ kind: "add-mana", subject: "you", mana: { w: 1 } }],
+		},
+	],
+});
+
 const engine = createEngine([
 	...CARDS,
 	loadCardFixture("m/merfolk_looter"),
@@ -225,6 +242,7 @@ const engine = createEngine([
 	TEST_CARD_5,
 	TEST_CARD_6,
 	TEST_CARD_7,
+	TEST_CARD_8,
 ]);
 
 const forestMana = abilityId("activated", "forest", 0);
@@ -233,6 +251,7 @@ const twoColorMana = abilityId("activated", "test-two-color-mana-ability", 0);
 const paidTarget = abilityId("activated", "test-paid-activated-abilities", 0);
 const paidTap = abilityId("activated", "test-paid-activated-abilities", 1);
 const paidMana = abilityId("activated", "test-paid-activated-abilities", 2);
+const lifeMana = abilityId("activated", "test-life-payment-mana-ability", 0);
 
 function manaAction(source: ObjectId): ActivateAbilityAction {
 	return { kind: "activate ability", source, ability: forestMana };
@@ -526,7 +545,11 @@ describe("priority-time mana abilities", () => {
 describe("fixed activation payments", () => {
 	function action(
 		source: ObjectId,
-		ability: typeof paidTarget | typeof paidTap | typeof paidMana,
+		ability:
+			| typeof paidTarget
+			| typeof paidTap
+			| typeof paidMana
+			| typeof lifeMana,
 	): ActivateAbilityAction {
 		return { kind: "activate ability", source, ability };
 	}
@@ -599,6 +622,31 @@ describe("fixed activation payments", () => {
 		expect(unaffordable).not.toContainEqual(action(source.id, paidTarget));
 		expect(unaffordable).not.toContainEqual(action(source.id, paidTap));
 		expect(unaffordable).not.toContainEqual(action(source.id, paidMana));
+	});
+
+	test("a mana ability can pay the player's last life", () => {
+		const state = setupMain(engine);
+		const source = engine.spawnPermanent(
+			state,
+			"test-life-payment-mana-ability",
+			ALICE,
+		);
+		const lifeAction = action(source.id, lifeMana);
+		state.players[ALICE].life = 0;
+		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+			lifeAction,
+		);
+
+		state.players[ALICE].life = 1;
+		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+			lifeAction,
+		);
+		engine.executeAbilityAction(state, ALICE, lifeAction, passingAgents());
+
+		expect(state.players[ALICE].life).toBe(0);
+		expect(state.players[ALICE].manaPool.w).toBe(1);
+		expect(state.objects.get(source.id)).toMatchObject({ tapped: true });
+		expect(state.stack).toHaveLength(0);
 	});
 
 	test("chooses a target before paying a mana-only activation on a tapped source", () => {
