@@ -1808,6 +1808,7 @@ Hundroog
 Hungry Ghoul
 Hungry Megasloth
 Hungry Spriggan
+Hunted Lammasu
 Hunted Witness
 Hunting Drake
 Hurler Cyclops
@@ -4147,6 +4148,7 @@ Wanderer's Intervention
 Wandering Ones
 Wandering Tombshell
 Wanted Griffin
+Wanted Scoundrels
 War Chariot
 War Horn
 War Mammoth
@@ -4344,4 +4346,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4341`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4343`;

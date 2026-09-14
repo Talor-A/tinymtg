@@ -2363,7 +2363,7 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	  }
 	| {
 			kind: "create-token";
-			controller: AllowedPlayer;
+			controller: EffectPlayerSubject<AllowedPlayer>;
 			characteristics: CharacteristicsSnapshot;
 			amount: number;
 	  }
@@ -2804,12 +2804,23 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 						},
 					]
 				: [];
+		case "create-token":
+			return effect.controller.kind === "target-player"
+				? [
+						{
+							slot: effect.controller.slot,
+							required: {
+								kind: "player",
+								message: "a targeted token requires a player target",
+							},
+						},
+					]
+				: [];
 		case "each player draw":
 		case "create-delayed-trigger":
 		case "choose-from-top":
 		case "discard":
 		case "add-mana":
-		case "create-token":
 			return [];
 		default:
 			return assertNever(effect);
@@ -8347,7 +8358,7 @@ function effectToEvent(
 			);
 			return {
 				kind: "create token",
-				controller: relativeEffectPlayer(item, effect.controller),
+				controller: effectPlayer(effect.controller),
 				characteristics: cloneCharacteristics(effect.characteristics),
 				amount: effect.amount,
 			};

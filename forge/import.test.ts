@@ -121,7 +121,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "create-token",
-						controller: "you",
+						controller: { kind: "relative-player", player: "you" },
 						amount: 1,
 						characteristics: {
 							name: "Butterfly",
@@ -1340,7 +1340,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			effects: [
 				{
 					kind: "create-token",
-					controller: "you",
+					controller: { kind: "relative-player", player: "you" },
 					characteristics: CLUE_TOKEN,
 					amount: 1,
 				},
@@ -1743,7 +1743,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			effects: [
 				{
 					kind: "create-token",
-					controller: "you",
+					controller: { kind: "relative-player", player: "you" },
 					amount: 1,
 				},
 			],
@@ -2276,13 +2276,75 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		}
 	});
 
+	test("Hunted Lammasu gives the token to the targeted player", () => {
+		const result = importFixture("h/hunted_lammasu");
+		if (!result.ok) throw new Error("expected ok");
+		const trigger = result.card.abilityDefinitions.triggered[0];
+		expect(trigger?.targets).toEqual([
+			{
+				id: "target-1",
+				min: 1,
+				max: 1,
+				legal: { kind: "player", player: "opponent" },
+			},
+		]);
+		expect(trigger?.effects[0]).toMatchObject({
+			kind: "create-token",
+			controller: { kind: "target-player", slot: "target-1" },
+			amount: 1,
+		});
+	});
+
+	test("a targeted token owner has to name a player target", () => {
+		const card = (token: string) =>
+			[
+				"Name:Token Giver",
+				"ManaCost:1 W",
+				"Types:Enchantment",
+				"T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ Trig | TriggerDescription$ x",
+				`SVar:Trig:DB$ Token | TokenScript$ b_4_4_horror | ${token}`,
+				"Oracle:",
+				"",
+			].join("\n");
+
+		// `TargetedController` reads a targeted *object's* controller, which is a
+		// different operand than the targeted player and stays unsupported.
+		const controllerOfTarget = importText(
+			card("ValidTgts$ Creature | TokenOwner$ TargetedController"),
+		);
+		expect(controllerOfTarget.ok).toBe(false);
+		if (!controllerOfTarget.ok)
+			expect(controllerOfTarget.diagnostics[0]?.message).toBe(
+				"unsupported token controller",
+			);
+
+		// The shared target contract catches a targeted owner whose ability
+		// declared an object target instead of a player one.
+		const objectTarget = importText(
+			card("ValidTgts$ Creature | TokenOwner$ Targeted"),
+		);
+		expect(objectTarget.ok).toBe(false);
+		if (!objectTarget.ok)
+			expect(objectTarget.diagnostics[0]?.message).toBe(
+				"a targeted token requires a player target",
+			);
+
+		// ...and a targeted owner on an ability that declares no target at all.
+		const noTarget = importText(card("TokenOwner$ Targeted"));
+		expect(noTarget.ok).toBe(false);
+		if (!noTarget.ok)
+			expect(noTarget.diagnostics[0]?.message).toBe(
+				"targeted effects must reference the declared target slot",
+			);
+	});
+
 	test("Third Path Iconoclast embeds characteristics from its token script", () => {
 		const result = importFixture("t/third_path_iconoclast");
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
 			{
 				kind: "create-token",
-				controller: "you",
+				controller: { kind: "relative-player", player: "you" },
 				amount: 1,
 				characteristics: {
 					kind: "creature",
@@ -2582,7 +2644,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					expect.objectContaining({
 						kind: "create-token",
-						controller: "you",
+						controller: { kind: "relative-player", player: "you" },
 						amount: 1,
 						characteristics: expect.objectContaining({
 							name: "Treasure Token",
@@ -2686,7 +2748,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
 			{
 				kind: "create-token",
-				controller: "you",
+				controller: { kind: "relative-player", player: "you" },
 				amount: 1,
 				characteristics: expect.objectContaining({
 					name: "Food Token",
@@ -2887,7 +2949,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "create-token",
-						controller: "you",
+						controller: { kind: "relative-player", player: "you" },
 						amount: 1,
 						characteristics: {
 							kind: "creature",
@@ -3620,7 +3682,7 @@ describe("lowerForgeCard: shuffle cards into libraries", () => {
 				effects: [
 					{
 						kind: "create-token",
-						controller: "you",
+						controller: { kind: "relative-player", player: "you" },
 						amount: 3,
 					},
 				],

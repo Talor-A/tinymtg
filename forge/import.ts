@@ -1166,7 +1166,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			return ok([
 				{
 					kind: "create-token",
-					controller,
+					controller: { kind: "relative-player", player: controller },
 					characteristics: cloneCharacteristics(CLUE_TOKEN),
 					amount: 1,
 				},
@@ -1851,7 +1851,13 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			]);
 		}
 		case "token": {
-			const badParams = claim("tokenscript", "tokenowner", "tokenamount");
+			const badParams = claim(
+				"tokenscript",
+				"tokenowner",
+				"tokenamount",
+				"validtgts",
+				"tgtprompt",
+			);
 			if (!badParams.ok) return badParams;
 			const scriptId = getForgeParam(params, "TokenScript");
 			if (!scriptId)
@@ -1860,14 +1866,25 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 					"Token requires TokenScript$",
 					where,
 				);
+			// Forge names the token's owner with its own key rather than
+			// `Defined$`, and an absent one means the source's controller. Both
+			// targeted spellings name the player this ability targets;
+			// `TargetedController` instead reads a targeted *object's*
+			// controller, which is a different operand and still rejects.
 			const owner = getForgeParam(params, "TokenOwner");
-			const controller = parsePlayer(owner);
-			if (!controller)
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"unsupported token controller",
-					where,
-				);
+			let controller: EffectPlayerSubject<Player>;
+			if (owner === "Targeted" || owner === "TargetedPlayer") {
+				controller = { kind: "target-player", slot: TARGET_SLOT };
+			} else {
+				const relative = parsePlayer(owner);
+				if (relative === null)
+					return issue(
+						"UNSUPPORTED_PARAMETER",
+						"unsupported token controller",
+						where,
+					);
+				controller = { kind: "relative-player", player: relative };
+			}
 			const amount = positiveInteger(getForgeParam(params, "TokenAmount"), 1);
 			if (!amount)
 				return issue(
