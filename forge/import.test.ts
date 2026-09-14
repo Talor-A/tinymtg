@@ -1426,6 +1426,51 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("Pegasus Courser targets another attacking creature", () => {
+		const result = importFixture("p/pegasus_courser");
+		if (!result.ok) throw new Error("expected Pegasus Courser to import");
+		expect(result.card).toMatchObject({
+			name: "Pegasus Courser",
+			manaCost: { n: 2, w: 1 },
+			power: 1,
+			toughness: 3,
+			keywords: ["flying"],
+		});
+		expect(result.card.abilityDefinitions.triggered).toEqual([
+			{
+				id: "TrigPump",
+				text: expect.any(String),
+				condition: { kind: "declare attackers", predicate: { kind: "self" } },
+				targets: [
+					{
+						id: "target-1",
+						min: 1,
+						max: 1,
+						legal: {
+							kind: "permanent",
+							predicate: {
+								kind: "and",
+								predicates: [
+									{ kind: "type", type: "creature" },
+									{ kind: "not", predicate: { kind: "self" } },
+									{ kind: "attacking" },
+								],
+							},
+						},
+					},
+				],
+				effects: [
+					{
+						kind: "grant-keyword",
+						subject: { kind: "target", slot: "target-1" },
+						keyword: "flying",
+						duration: "until-end-of-turn",
+					},
+				],
+			},
+		]);
+	});
+
 	test("Stealer of Secrets keeps its self combat-damage trigger", () => {
 		const result = importFixture("s/stealer_of_secrets");
 		if (!result.ok) throw new Error("expected ok");
@@ -2771,7 +2816,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 	test("Sacrifice rejects unsupported mutations of Diabolic Edict", () => {
 		const definition = cardText("d/diabolic_edict");
 		for (const mutated of [
-			definition.replace("SacValid$ Creature", "SacValid$ Creature.attacking"),
+			definition.replace("SacValid$ Creature", "SacValid$ Creature.phasedOut"),
 			definition.replace(
 				"SacValid$ Creature",
 				"SacValid$ Creature | Amount$ 2",
@@ -3173,7 +3218,7 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 
 	test("a bare `+` segment outside the modifier vocabulary rejects", () => {
 		const result = importForgeCard(
-			hostile.replaceAll("%TARGET%", "Creature.YouCtrl+attacking"),
+			hostile.replaceAll("%TARGET%", "Creature.YouCtrl+haunted"),
 			{ id: "hostile-witness" },
 		);
 		expect(result.ok).toBe(false);
@@ -3387,7 +3432,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 
 	test("rejects a selector restriction outside the supported vocabulary", () => {
 		const result = importText(
-			BOLT.replace("ValidTgts$ Any", "ValidTgts$ Creature.attacking"),
+			BOLT.replace("ValidTgts$ Any", "ValidTgts$ Creature.haunted"),
 		);
 		expect(result.ok).toBe(false);
 		if (result.ok) return;

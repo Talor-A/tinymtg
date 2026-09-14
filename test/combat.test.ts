@@ -785,7 +785,48 @@ describe("declaring attackers during normal progression", () => {
 		expect(state.pendingTriggers).toHaveLength(0);
 		expect(state.stack).toHaveLength(0);
 	});
-});
+
+	test("Pegasus Courser grants flying only to another attacking creature", () => {
+		const state = engine.newGame();
+		const courser = engine.spawnPermanent(state, "pegasus-courser", ALICE);
+		const wingmate = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const stayedHome = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const groundBlocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		engine.spawnCard(state, "forest", ALICE, "library");
+		engine.spawnCard(state, "forest", BOB, "library");
+
+		const alice = new ScriptedAgent(
+			[],
+			[],
+			[],
+			[[courser.id, wingmate.id]],
+			[],
+			[{ type: "permanent", id: wingmate.id }],
+		);
+		const agents: Agents = [alice, new ScriptedAgent()];
+		advanceUntil(engine, state, agents, (next) => isAt(next, "declare blockers"));
+
+		expect(alice.targetChoices).toHaveLength(0);
+		expect(
+			getSnapshot(engine.createReadContext(state), wingmate.id)
+				.currentCharacteristics.keywords,
+		).toContain("flying");
+		expect(
+			getSnapshot(engine.createReadContext(state), stayedHome.id)
+				.currentCharacteristics.keywords,
+		).not.toContain("flying");
+		expect(engine.eligibleBlockers(state, BOB, wingmate.id)).not.toContain(
+			groundBlocker.id,
+		);
+
+		playOneTurn(engine, state, agents);
+		expect(
+			getSnapshot(engine.createReadContext(state), wingmate.id)
+				.currentCharacteristics.keywords,
+		).not.toContain("flying");
+		expect(state.temporaryEffects).toHaveLength(0);
+	});
+	});
 
 describe("dealing combat damage", () => {
 	test("a blocked attacker damages its blocker instead of the defending player", () => {

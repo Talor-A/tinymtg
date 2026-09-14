@@ -78,6 +78,7 @@ const CORPUS_CARDS = [
 	loadCardFixture("w/wrenns_resolve"),
 	loadCardFixture("c/cloudshift"),
 	loadCardFixture("r/restoration_angel"),
+	loadCardFixture("p/pegasus_courser"),
 ] as const;
 
 /**

@@ -443,6 +443,7 @@ function parseDrawnPlayer(value: string | undefined): ValidPlayer | null {
 
 function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	if (modifier === "Other") return { kind: "not", predicate: { kind: "self" } };
+	if (modifier === "attacking") return { kind: "attacking" };
 	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
 	if (modifier === "YouOwn") return { kind: "owner", player: "you" };
@@ -3078,9 +3079,13 @@ function lowerTrigger(
 			});
 		}
 		case "Attacks": {
-			const badParams = claim("validcard");
+			const badParams = claim("validcard", "triggerzones");
 			if (!badParams.ok) return badParams;
-			if (getForgeParam(params, "ValidCard") !== "Card.Self")
+			if (
+				getForgeParam(params, "ValidCard") !== "Card.Self" ||
+				(getForgeParam(params, "TriggerZones") !== undefined &&
+					getForgeParam(params, "TriggerZones") !== "Battlefield")
+			)
 				return issue(
 					"UNSUPPORTED_EFFECT",
 					"unsupported Attacks trigger shape",
