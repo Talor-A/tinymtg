@@ -73,6 +73,7 @@ const CORPUS_CARDS = [
 	loadCardFixture("t/thor_odinson"),
 	loadCardFixture("j/jewel_thief"),
 	loadCardFixture("d/deadly_dispute"),
+	loadCardFixture("d/desolation_twin"),
 	loadCardFixture("g/gilded_goose"),
 	loadCardFixture("s/sweettooth_witch"),
 	loadCardFixture("b/blood_servitor"),

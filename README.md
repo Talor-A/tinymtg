@@ -142,8 +142,8 @@ type, a subtype, `Card`, or `Permanent`, followed by `YouCtrl`, `OppCtrl`,
 supertype word that may carry Forge's `non` prefix; the exact target form
 `Creature.Other+YouCtrl` is also supported — so it and `Creature.nonBlack` lower, while
 `Creature.attacking` does not); simple self-entry,
-upkeep, self-attack, card-drawn, and bushido's blocks-or-becomes-blocked
-triggers, including one optional (`may`) wrapper around
+upkeep, self-attack, self-cast from the stack, card-drawn, and bushido's
+blocks-or-becomes-blocked triggers, including one optional (`may`) wrapper around
 a trigger's whole (possibly multi-step) effect sequence; fixed temporary P/T
 changes; temporary keyword grants; and direct or `Defined$ ParentTarget`
 `Animate` effects that grant a supported self-dies trigger until end of turn,
@@ -166,7 +166,7 @@ domain: for example, `not creature` over permanents can match a land, but it
 cannot introduce a player, spell, or card in another zone.
 
 `forge/accepted-cards.test.ts` snapshots the display name of every card in
-`cards/cardsfolder` that the bridge currently lowers — 4,277 of 33,664 — so the
+`cards/cardsfolder` that the bridge currently lowers — 4,281 of 33,664 — so the
 diff on `forge/__snapshots__/accepted-cards.test.ts.snap` is how a change to the
 supported subset reports what it bought or lost. Regenerate it with
 `bun test --update-snapshots forge/accepted-cards.test.ts`.

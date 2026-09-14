@@ -3294,19 +3294,29 @@ function lowerTrigger(
 				"optionaldecider",
 			);
 			if (!badParams.ok) return badParams;
-			if (getForgeParam(params, "TriggerZones") !== "Battlefield")
-				return issue(
-					"UNSUPPORTED_EFFECT",
-					"only battlefield SpellCast triggers are supported",
-					where,
-				);
-
+			const triggerZones = getForgeParam(params, "TriggerZones");
+			const rawSelector = getForgeParam(params, "ValidCard");
 			const rawPlayer = getForgeParam(params, "ValidActivatingPlayer");
-			const castPlayer = rawPlayer ? parseValidPlayer(rawPlayer) : null;
-			if (castPlayer === null)
+			const selfCast = rawSelector === "Card.Self" || rawSelector === "Self";
+			const castPlayer = rawPlayer
+				? parseValidPlayer(rawPlayer)
+				: selfCast
+					? "you"
+					: null;
+			if (castPlayer === null || (selfCast && castPlayer !== "you"))
 				return issue(
 					"UNSUPPORTED_PARAMETER",
 					"SpellCast requires a supported ValidActivatingPlayer$",
+					where,
+				);
+			if (
+				selfCast
+					? triggerZones !== undefined && triggerZones !== "Stack"
+					: triggerZones !== "Battlefield"
+			)
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"SpellCast triggers must function from the battlefield, or be an exact self-cast trigger from the stack",
 					where,
 				);
 
@@ -3314,7 +3324,6 @@ function lowerTrigger(
 			// spell cast, so the condition carries no selector. Bare `Permanent`
 			// would need to exclude instant and sorcery spells, which the selector
 			// vocabulary cannot express, so it still rejects.
-			const rawSelector = getForgeParam(params, "ValidCard");
 			let selector: ObjectPredicateDef | undefined;
 			if (rawSelector !== undefined && rawSelector !== "Card") {
 				const parsed = parseSelector(rawSelector);
@@ -3330,6 +3339,7 @@ function lowerTrigger(
 			return ok({
 				id: execute,
 				text,
+				...(selfCast ? { functionsFrom: ["stack"] as ["stack"] } : {}),
 				condition:
 					selector === undefined
 						? { kind: "cast", player: castPlayer }

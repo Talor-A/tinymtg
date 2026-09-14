@@ -1682,6 +1682,52 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("a card can watch itself being cast from the stack", () => {
+		const result = importFixture("d/desolation_twin");
+		if (!result.ok) throw new Error("expected Desolation Twin to import");
+		expect(result.card.abilityDefinitions.triggered[0]).toMatchObject({
+			functionsFrom: ["stack"],
+			condition: {
+				kind: "cast",
+				player: "you",
+				predicate: { kind: "self" },
+			},
+			effects: [
+				{
+					kind: "create-token",
+					controller: "you",
+					amount: 1,
+				},
+			],
+		});
+
+		const explicit = importForgeCard(
+			cardText("d/desolation_twin").replace(
+				"ValidCard$ Card.Self |",
+				"ValidCard$ Card.Self | TriggerZones$ Stack |",
+			),
+			{ id: "explicit-stack-desolation-twin" },
+		);
+		expect(explicit.ok).toBe(true);
+		if (!explicit.ok) return;
+		expect(
+			explicit.card.abilityDefinitions.triggered[0]?.functionsFrom,
+		).toEqual(["stack"]);
+	});
+
+	test("a self-cast trigger cannot claim to function from the battlefield", () => {
+		const result = importForgeCard(
+			cardText("d/desolation_twin").replace(
+				"ValidCard$ Card.Self |",
+				"ValidCard$ Card.Self | TriggerZones$ Battlefield |",
+			),
+			{ id: "mutated-desolation-twin" },
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
 	test("self PutCounter lowers to a source-counter effect", () => {
 		const result = importFixture("d/deeproot_champion");
 		if (!result.ok) throw new Error("expected ok");
