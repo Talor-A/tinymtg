@@ -1340,6 +1340,7 @@ function buildFilteredGameView(
 ): GameView {
 	const copiable = new Map<ObjectId, CharacteristicsSnapshot>();
 	const characteristics = new Map<ObjectId, CharacteristicsSnapshot>();
+	const effectContext: ContinuousEffectContext = { characteristics };
 	const abilities: Partial<
 		Record<
 			ContinuousEffectLayer,
@@ -1424,7 +1425,7 @@ function buildFilteredGameView(
 					}
 					if (!applies) continue;
 					const next = cloneCharacteristics(current);
-					slice.modify(next, state, source);
+					slice.modify(next, state, source, effectContext);
 					if (layer === "1a-copiable-values") {
 						copiable.set(objectId, next);
 						characteristics.set(objectId, cloneCharacteristics(next));
@@ -4251,6 +4252,7 @@ export interface CharacteristicStaticEffectSliceDefinition {
 		view: CharacteristicsSnapshot,
 		state: ReadonlyGameState,
 		source: DeepReadOnly<GameObject>,
+		context: ContinuousEffectContext,
 	): void;
 }
 
@@ -4279,6 +4281,14 @@ export interface CharacteristicStaticAbilityDefinition {
 		CharacteristicStaticEffectSliceDefinition,
 		...CharacteristicStaticEffectSliceDefinition[],
 	];
+}
+
+/** Characteristics as evaluated through the current point in the layer walk. */
+export interface ContinuousEffectContext {
+	readonly characteristics: ReadonlyMap<
+		ObjectId,
+		DeepReadOnly<CharacteristicsSnapshot>
+	>;
 }
 
 /**

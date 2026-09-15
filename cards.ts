@@ -13,6 +13,7 @@ import type {
 	ReadonlyGameState,
 } from "./index.ts";
 import {
+	abilityId,
 	activePlayer,
 	cloneCharacteristics,
 	defineCard,
@@ -149,6 +150,208 @@ export const ABBOT_OF_KERAL_KEEP = defineCard({
 			],
 		},
 	],
+});
+
+/**
+ * Oracle, Forge corpus: "{T}: Add {C}. If you control an Urza's Power-Plant
+ * and an Urza's Tower, add {C}{C} instead."
+ *
+ * The two mana abilities are implementations hosted by the card, not printed
+ * abilities. Its layer-6 static ability grants exactly the one that matches
+ * the controller's current battlefield.
+ */
+export const URZAS_MINE = defineCard({
+	id: "urzas-mine",
+	name: "Urza's Mine",
+	types: ["land"],
+	subtypes: ["Urza's", "Mine"],
+	colors: [],
+	manaCost: "none",
+	activatedAbilities: [
+		{
+			kind: "mana",
+			id: "add-c",
+			text: "Add {C}.",
+			cost: { mana: "zero", tapSelf: true },
+			effects: [{ kind: "add-mana", subject: "you", mana: { c: 1 } }],
+		},
+		{
+			kind: "mana",
+			id: "add-cc",
+			text: "Add {C}{C}.",
+			cost: { mana: "zero", tapSelf: true },
+			effects: [{ kind: "add-mana", subject: "you", mana: { c: 2 } }],
+		},
+	],
+	statics: [
+		{
+			kind: "characteristic",
+			text: "{T}: Add {C}. If you control an Urza's Power-Plant and an Urza's Tower, add {C}{C} instead.",
+			applies: (view, _state, source) =>
+				source.kind === "permanent" &&
+				source.zone === "battlefield" &&
+				view.objectId === source.id,
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify(view, state, source, context) {
+						assert(source.kind === "permanent");
+						let hasPowerPlant = false;
+						let hasTower = false;
+						for (const id of state.battlefield) {
+							const object = state.objects.get(id);
+							assertDefined(object);
+							assert(object.kind === "permanent");
+							if (object.controller !== source.controller) continue;
+							const name: string | undefined =
+								context.characteristics.get(id)?.name;
+							assertDefined(name);
+							hasPowerPlant ||= name === "Urza's Power Plant";
+							hasTower ||= name === "Urza's Tower";
+						}
+						view.abilities.activated.push(
+							abilityId(
+								"activated",
+								"urzas-mine",
+								hasPowerPlant && hasTower ? 1 : 0,
+							),
+						);
+					},
+				},
+			],
+		},
+	],
+	printed: { activated: [] },
+});
+
+/** Forge corpus Oracle; implemented with the same conditional grant as Mine. */
+export const URZAS_POWER_PLANT = defineCard({
+	id: "urzas-power-plant",
+	name: "Urza's Power Plant",
+	types: ["land"],
+	subtypes: ["Urza's", "Power-Plant"],
+	colors: [],
+	manaCost: "none",
+	activatedAbilities: [
+		{
+			kind: "mana",
+			id: "add-c",
+			text: "Add {C}.",
+			cost: { mana: "zero", tapSelf: true },
+			effects: [{ kind: "add-mana", subject: "you", mana: { c: 1 } }],
+		},
+		{
+			kind: "mana",
+			id: "add-cc",
+			text: "Add {C}{C}.",
+			cost: { mana: "zero", tapSelf: true },
+			effects: [{ kind: "add-mana", subject: "you", mana: { c: 2 } }],
+		},
+	],
+	statics: [
+		{
+			kind: "characteristic",
+			text: "{T}: Add {C}. If you control an Urza's Mine and an Urza's Tower, add {C}{C} instead.",
+			applies: (view, _state, source) =>
+				source.kind === "permanent" &&
+				source.zone === "battlefield" &&
+				view.objectId === source.id,
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify(view, state, source, context) {
+						assert(source.kind === "permanent");
+						let hasMine = false;
+						let hasTower = false;
+						for (const id of state.battlefield) {
+							const object = state.objects.get(id);
+							assertDefined(object);
+							assert(object.kind === "permanent");
+							if (object.controller !== source.controller) continue;
+							const name: string | undefined =
+								context.characteristics.get(id)?.name;
+							assertDefined(name);
+							hasMine ||= name === "Urza's Mine";
+							hasTower ||= name === "Urza's Tower";
+						}
+						view.abilities.activated.push(
+							abilityId(
+								"activated",
+								"urzas-power-plant",
+								hasMine && hasTower ? 1 : 0,
+							),
+						);
+					},
+				},
+			],
+		},
+	],
+	printed: { activated: [] },
+});
+
+/** Forge corpus Oracle; Tower produces three colorless while Tron is present. */
+export const URZAS_TOWER = defineCard({
+	id: "urzas-tower",
+	name: "Urza's Tower",
+	types: ["land"],
+	subtypes: ["Urza's", "Tower"],
+	colors: [],
+	manaCost: "none",
+	activatedAbilities: [
+		{
+			kind: "mana",
+			id: "add-c",
+			text: "Add {C}.",
+			cost: { mana: "zero", tapSelf: true },
+			effects: [{ kind: "add-mana", subject: "you", mana: { c: 1 } }],
+		},
+		{
+			kind: "mana",
+			id: "add-ccc",
+			text: "Add {C}{C}{C}.",
+			cost: { mana: "zero", tapSelf: true },
+			effects: [{ kind: "add-mana", subject: "you", mana: { c: 3 } }],
+		},
+	],
+	statics: [
+		{
+			kind: "characteristic",
+			text: "{T}: Add {C}. If you control an Urza's Mine and an Urza's Power-Plant, add {C}{C}{C} instead.",
+			applies: (view, _state, source) =>
+				source.kind === "permanent" &&
+				source.zone === "battlefield" &&
+				view.objectId === source.id,
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify(view, state, source, context) {
+						assert(source.kind === "permanent");
+						let hasMine = false;
+						let hasPowerPlant = false;
+						for (const id of state.battlefield) {
+							const object = state.objects.get(id);
+							assertDefined(object);
+							assert(object.kind === "permanent");
+							if (object.controller !== source.controller) continue;
+							const name: string | undefined =
+								context.characteristics.get(id)?.name;
+							assertDefined(name);
+							hasMine ||= name === "Urza's Mine";
+							hasPowerPlant ||= name === "Urza's Power Plant";
+						}
+						view.abilities.activated.push(
+							abilityId(
+								"activated",
+								"urzas-tower",
+								hasMine && hasPowerPlant ? 1 : 0,
+							),
+						);
+					},
+				},
+			],
+		},
+	],
+	printed: { activated: [] },
 });
 
 /* ------------------------------------------------------------------ *
@@ -883,6 +1086,9 @@ export const CARDS = [
 	...CORPUS_CARDS,
 	CLUE_CARD,
 	ABBOT_OF_KERAL_KEEP,
+	URZAS_MINE,
+	URZAS_POWER_PLANT,
+	URZAS_TOWER,
 	HARDENED_SCALES,
 	DOUBLING_SEASON,
 	TEST_ENTERS_WITH_COUNTERS,

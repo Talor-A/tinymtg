@@ -2587,7 +2587,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			"6-ability-changing",
 		]);
 		const body = { keywords: [] as string[] };
-		ability.effects[0].modify(body as never, {} as never, {} as never);
+		ability.effects[0].modify(body as never, {} as never, {} as never, {
+			characteristics: new Map(),
+		});
 		expect(body.keywords).toEqual(["vigilance", "reach"]);
 	});
 
@@ -4371,6 +4373,7 @@ describe("lowerForgeCard: one-sided pump statics", () => {
 			body as unknown as Parameters<typeof effect.modify>[0],
 			{} as never,
 			{} as never,
+			{ characteristics: new Map() },
 		);
 		return body;
 	}
@@ -5404,7 +5407,9 @@ describe("lowerForgeCard: bridge contract", () => {
 
 		const rawView = { power: 2, toughness: 2 };
 		const view = rawView as unknown as Parameters<typeof effect.modify>[0];
-		effect.modify(view, {} as never, {} as never);
+		effect.modify(view, {} as never, {} as never, {
+			characteristics: new Map(),
+		});
 		expect(rawView).toEqual({ power: 3, toughness: 3 });
 	});
 
