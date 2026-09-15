@@ -25,6 +25,14 @@ import {
 import { assert, assertDefined } from "./lib/assert.ts";
 import { CLUE_CARD } from "./tokens.ts";
 
+/**
+ * Re-exported because `Investigate` lowers to a token whose ability is a
+ * reference into the registry: a deck holding any card that investigates must
+ * register this definition alongside it or creating the Clue throws
+ * `unknown card: clue-token`.
+ */
+export { CLUE_CARD } from "./tokens.ts";
+
 /* ------------------------------------------------------------------ *
  * Cards sourced from the Forge corpus
  *
