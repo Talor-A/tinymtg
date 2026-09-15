@@ -436,6 +436,18 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		}
 	});
 
+	test("AITgts affects only Forge's AI target preference", () => {
+		const source = cardText("i/ixallis_keeper");
+		const withHint = importForgeCard(source, { id: "ixallis-keeper" });
+		const withoutHint = importForgeCard(
+			source.replace(" | AITgts$ Creature.Other", ""),
+			{ id: "ixallis-keeper" },
+		);
+		if (!withHint.ok || !withoutHint.ok)
+			throw new Error("expected both Ixalli's Keeper forms to import");
+		expect(withHint.card).toEqual(withoutHint.card);
+	});
+
 	test("Firebrand Archer and Kessig Flamebreather lower opponent damage recipients", () => {
 		for (const fixture of ["f/firebrand_archer", "k/kessig_flamebreather"]) {
 			const result = importFixture(fixture);

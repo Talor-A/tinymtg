@@ -275,7 +275,8 @@ const ALLOWED_CARD_DIRECTIVES = new Set([
  *
  * `AILogic` names a strategy class that Forge's automated player consults when
  * deciding whether and when to use an ability. `AINoRecursiveCheck` controls
- * that player's search. Neither changes instructions, costs, or targets, so the
+ * that player's search, and `AITgts` narrows its preferred legal targets.
+ * None changes instructions, costs, target legality, or resolution, so the
  * engine's lowering of a record is identical with and without them. `ast.ts`
  * already classifies them as non-SVar-referencing display-ish keys for the same
  * reason.
@@ -283,6 +284,7 @@ const ALLOWED_CARD_DIRECTIVES = new Set([
 const IGNORED_PARAMS: ReadonlySet<string> = new Set([
 	"ailogic",
 	"ainorecursivecheck",
+	"aitgts",
 ]);
 
 /**

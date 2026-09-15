@@ -820,6 +820,7 @@ Coral Commando
 Coral Eel
 Coral Merfolk
 Corpse Blockade
+Corpse Hauler
 Corpse Knight
 Corpsehatch
 Corridor Monitor
@@ -926,6 +927,7 @@ Dakmor Scorpion
 Damnation
 Dampening Pulse
 Dancing Scimitar
+Daraja Griffin
 Darigaaz's Attendant
 Daring Demolition
 Daring Mechanic
@@ -1101,6 +1103,7 @@ Dissenter's Deliverance
 Distract
 Dive Bomber
 Dive Down
+Divebomber Griffin
 Divination
 Divine Arrow
 Divine Verdict
@@ -2169,6 +2172,7 @@ Isolate
 Ithilien Kingfisher
 Ivory Mask
 Ivy Lane Denizen
+Ixalli's Keeper
 Izzet Boilerworks
 Izzet Chronarch
 Izzet Cluestone
@@ -2255,6 +2259,7 @@ Kambal, Consul of Allocation
 Kami of Ancient Law
 Kami of Old Stone
 Kami of Tattered Shoji
+Kami of Twisted Reflection
 Kami of the Hunt
 Kapsho Kitefins
 Karakas
@@ -2276,6 +2281,7 @@ Keldon Necropolis
 Kelinore Bat
 Kemba's Skyguard
 Kemuri-Onna
+Kenrith, the Returned King
 Kessig Flamebreather
 Kessig Recluse
 Ketria Crystal
@@ -2632,6 +2638,7 @@ Minamo, School at Water's Edge
 Mind Sculpt
 Mind Stone
 Mindeye Drake
+Mine Bearer
 Miner's Bane
 Minor Misstep
 Minotaur Abomination
@@ -3801,6 +3808,7 @@ Skymarch Bloodletter
 Skyraker Giant
 Skyscanner
 Skyshaper
+Skyshooter
 Skyshroud Blessing
 Skyshroud Elf
 Skyshroud Falcon
@@ -4896,4 +4904,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4893`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4901`;
