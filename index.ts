@@ -2171,24 +2171,34 @@ export interface MatchingPermanentSubjects {
 	predicate: ObjectPredicateDef;
 }
 
-export type DamageAllRecipientDef<AllowedPlayer extends TriggerEffectPlayer> =
+export type DamageRecipientSelector<AllowedPlayer extends TriggerEffectPlayer> =
 	| MatchingPermanentSubjects
 	| { kind: "relative-player"; player: AllowedPlayer }
+	| TargetEffectRef
 	| { kind: "each-player" };
 
-type DestroyEffectDef =
-	| {
-			kind: "destroy";
-			subject: TargetEffectRef;
-			/** Present only when regeneration cannot replace this destruction. */
-			noRegen?: true;
-	  }
-	| {
-			kind: "destroy-all";
-			subjects: MatchingPermanentSubjects;
-			/** Present only when regeneration cannot replace these destructions. */
-			noRegen?: true;
-	  };
+type PermanentSelector = TargetEffectRef | MatchingPermanentSubjects;
+
+interface DestroyEffectDef {
+	kind: "destroy";
+	subjects: PermanentSelector;
+	/** Present only when regeneration cannot replace this destruction. */
+	noRegen?: true;
+}
+
+interface DamageEffectDef<AllowedPlayer extends TriggerEffectPlayer> {
+	kind: "damage";
+	recipients: [
+		DamageRecipientSelector<AllowedPlayer>,
+		...DamageRecipientSelector<AllowedPlayer>[],
+	];
+	amount: number;
+}
+
+interface TapEffectDef {
+	kind: "tap";
+	subjects: PermanentSelector;
+}
 
 export type MayPlaySubjectRef = TargetEffectRef | EffectResultObjectRef;
 
@@ -2304,7 +2314,7 @@ type CreateDelayedTriggerEffectDef = {
 	ability: TriggeredAbilityId;
 };
 
-export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
+type AtomicEventEffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	| {
 			kind: "gain-life" | "lose-life" | "scry" | "surveil" | "mill";
 			/** A relative player, or the player bound to a target slot. */
@@ -2312,25 +2322,12 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 			amount: number;
 	  }
 	| {
-			kind: "draw";
-			/** One player, the player bound to a target slot, or the table. */
-			subject: EffectPlayerSet<AllowedPlayer>;
-			amount: number;
-	  }
-	| CreateDelayedTriggerEffectDef
-	| ExileTopEffectDef<AllowedPlayer>
-	| SearchLibraryEffectDef<AllowedPlayer>
-	| ShuffleIntoLibraryEffectDef<AllowedPlayer>
-	| {
-			kind: "shuffle-library";
-			subject: EffectPlayerSubject<AllowedPlayer>;
-	  }
-	| {
 			kind: "choose-from-top";
 			subject: AllowedPlayer;
 			amount: number;
 			keep: number;
 	  }
+	| ExileTopEffectDef<AllowedPlayer>
 	| {
 			kind: "discard";
 			selector: "any" | "random";
@@ -2338,22 +2335,45 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 			/** A relative player, or the player bound to a target slot. */
 			subject: EffectPlayerSubject<AllowedPlayer>;
 	  }
-	| {
-			kind: "damage";
-			subject:
-				| { kind: "relative-player"; player: AllowedPlayer }
-				| TargetEffectRef;
-			amount: number;
-	  }
-	| {
-			kind: "damage-all";
-			recipients: DamageAllRecipientDef<AllowedPlayer>[];
-			amount: number;
-	  }
-	| DestroyEffectDef
-	| { kind: "tap" | "untap"; subject: TargetEffectRef }
-	| { kind: "tap-all"; subjects: MatchingPermanentSubjects }
+	| { kind: "untap"; subject: TargetEffectRef }
 	| { kind: "counter"; subject: TargetEffectRef }
+	| {
+			kind: "add-mana";
+			subject: "you";
+			mana: ManaAmount;
+	  }
+	| {
+			kind: "create-token";
+			controller: EffectPlayerSubject<AllowedPlayer>;
+			representation:
+				| {
+						kind: "from characteristics";
+						characteristics: CharacteristicsSnapshot;
+				  }
+				| {
+						kind: "permanent copy";
+						subject: SourceEffectRef | TargetEffectRef;
+				  };
+			amount: number;
+	  };
+
+type ResolvingEffectDef<AllowedPlayer extends TriggerEffectPlayer> =
+	| {
+			kind: "draw";
+			/** One player, the player bound to a target slot, or the table. */
+			subject: EffectPlayerSet<AllowedPlayer>;
+			amount: number;
+	  }
+	| CreateDelayedTriggerEffectDef
+	| SearchLibraryEffectDef<AllowedPlayer>
+	| ShuffleIntoLibraryEffectDef<AllowedPlayer>
+	| {
+			kind: "shuffle-library";
+			subject: EffectPlayerSubject<AllowedPlayer>;
+	  }
+	| DamageEffectDef<AllowedPlayer>
+	| DestroyEffectDef
+	| TapEffectDef
 	| {
 			kind: "add counters";
 			/** The permanent receiving the counters. */
@@ -2409,29 +2429,14 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 			duration: TemporaryEffectDuration;
 	  }
 	| {
-			kind: "add-mana";
-			subject: "you";
-			mana: ManaAmount;
-	  }
-	| {
-			kind: "create-token";
-			controller: EffectPlayerSubject<AllowedPlayer>;
-			representation:
-				| {
-						kind: "from characteristics";
-						characteristics: CharacteristicsSnapshot;
-				  }
-				| {
-						kind: "permanent copy";
-						subject: SourceEffectRef | TargetEffectRef;
-				  };
-			amount: number;
-	  }
-	| {
 			kind: "may";
 			decider: RelativeEffectPlayer;
 			effects: EffectDef<AllowedPlayer>[];
 	  };
+
+export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
+	| AtomicEventEffectDef<AllowedPlayer>
+	| ResolvingEffectDef<AllowedPlayer>;
 
 interface DeclaredEffectResult {
 	slot: string;
@@ -2715,18 +2720,20 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 ): EffectTargetUse[] {
 	switch (effect.kind) {
 		case "damage":
-			return effect.subject.kind === "target"
-				? [
-						{
-							slot: effect.subject.slot,
-							required: {
-								kind: "damage-recipient",
-								message:
-									"damage requires a player, permanent, or any-target selector",
+			return effect.recipients.flatMap((recipient): EffectTargetUse[] =>
+				recipient.kind === "target"
+					? [
+							{
+								slot: recipient.slot,
+								required: {
+									kind: "damage-recipient",
+									message:
+										"damage requires a player, permanent, or any-target selector",
+								},
 							},
-						},
-					]
-				: [];
+						]
+					: [],
+			);
 		case "gain-life":
 		case "lose-life":
 		case "scry":
@@ -2749,19 +2756,19 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 					]
 				: [];
 		case "destroy":
-			return [
-				{
-					slot: effect.subject.slot,
-					required: {
-						kind: "permanent",
-						message: "destroy requires a permanent target",
-					},
-				},
-			];
-		case "destroy-all":
-		case "tap-all":
+		case "tap":
+			return effect.subjects.kind === "target"
+				? [
+						{
+							slot: effect.subjects.slot,
+							required: {
+								kind: "permanent",
+								message: `${effect.kind} requires a permanent target`,
+							},
+						},
+					]
+				: [];
 		case "pump-all":
-		case "damage-all":
 			return [];
 		case "counter":
 			return [
@@ -2773,7 +2780,6 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 					},
 				},
 			];
-		case "tap":
 		case "untap":
 			return [
 				{
@@ -7902,8 +7908,25 @@ function resolveEffects(
 			// replaces this only with objects that reached the declared destination.
 			scope.bindings.set(declaredResult.slot, []);
 		}
-		if (effect.kind === "draw" && effect.subject === "each-player") {
-			for (const player of playersInTurnOrder(state, "draw")) {
+		let bound: EntityRef | null = null;
+		const targetUses = effectTargetUses(effect);
+		if (targetUses.length > 0) {
+			const targetSlot = targetUses[0]?.slot;
+			assertDefined(targetSlot);
+			assert(
+				targetUses.every((use) => use.slot === targetSlot),
+				"one effect cannot consume multiple target slots",
+			);
+			const binding = item.targets.find(({ slot }) => slot === targetSlot);
+			assertDefined(binding, "effect has no target binding");
+			bound = binding.target;
+		}
+		if (effect.kind === "draw") {
+			const players =
+				effect.subject === "each-player"
+					? playersInTurnOrder(state, "draw")
+					: [resolvePlayer(effect.subject)];
+			for (const player of players) {
 				performIn(
 					engine,
 					state,
@@ -7915,17 +7938,23 @@ function resolveEffects(
 			}
 			continue;
 		}
-		if (effect.kind === "tap-all") {
-			assert(effect.subjects.kind === "matching-permanents");
-			const read = createReadContext(engine, state);
-			const subjects = state.battlefield.filter((id) => {
-				const object = getSnapshot(read, id);
-				assert(object.kind === "permanent");
-				return objectMatchesPredicate(effect.subjects.predicate, object, {
-					controller: item.controller,
-					source: item.source,
+		if (effect.kind === "tap") {
+			const selector = effect.subjects;
+			let subjects: ObjectId[];
+			if (selector.kind === "target") {
+				assert(bound?.type === "permanent", "tap requires a permanent target");
+				subjects = maybePermanent(state, bound.id) ? [bound.id] : [];
+			} else {
+				const read = createReadContext(engine, state);
+				subjects = state.battlefield.filter((id) => {
+					const object = getSnapshot(read, id);
+					assert(object.kind === "permanent");
+					return objectMatchesPredicate(selector.predicate, object, {
+						controller: item.controller,
+						source: item.source,
+					});
 				});
-			});
+			}
 			if (subjects.length > 0) {
 				performIn(
 					engine,
@@ -7938,17 +7967,26 @@ function resolveEffects(
 			}
 			continue;
 		}
-		if (effect.kind === "destroy-all") {
-			assert(effect.subjects.kind === "matching-permanents");
-			const read = createReadContext(engine, state);
-			const subjects = state.battlefield.filter((id) => {
-				const object = getSnapshot(read, id);
-				assert(object.kind === "permanent");
-				return objectMatchesPredicate(effect.subjects.predicate, object, {
-					controller: item.controller,
-					source: item.source,
+		if (effect.kind === "destroy") {
+			const selector = effect.subjects;
+			let subjects: ObjectId[];
+			if (selector.kind === "target") {
+				assert(
+					bound?.type === "permanent",
+					"destroy requires a permanent target",
+				);
+				subjects = maybePermanent(state, bound.id) ? [bound.id] : [];
+			} else {
+				const read = createReadContext(engine, state);
+				subjects = state.battlefield.filter((id) => {
+					const object = getSnapshot(read, id);
+					assert(object.kind === "permanent");
+					return objectMatchesPredicate(selector.predicate, object, {
+						controller: item.controller,
+						source: item.source,
+					});
 				});
-			});
+			}
 			performSimultaneousIn(
 				engine,
 				state,
@@ -7991,11 +8029,11 @@ function resolveEffects(
 			}
 			continue;
 		}
-		if (effect.kind === "damage-all") {
-			assert(effect.recipients.length > 0, "damage-all requires recipients");
+		if (effect.kind === "damage") {
+			assert(effect.recipients.length > 0, "damage requires recipients");
 			assert(
 				Number.isSafeInteger(effect.amount) && effect.amount > 0,
-				"damage-all amount must be a positive safe integer",
+				"damage amount must be a positive safe integer",
 			);
 			const read = createReadContext(engine, state);
 			const recipients: DamageRecipientRef[] = [];
@@ -8029,6 +8067,17 @@ function resolveEffects(
 						for (const player of playersInTurnOrder(state, "damage"))
 							recipients.push({ type: "player", player });
 						break;
+					case "target":
+						assert(
+							bound?.type === "player" || bound?.type === "permanent",
+							"damage requires a player or permanent target",
+						);
+						if (
+							bound.type === "player" ||
+							maybePermanent(state, bound.id) !== null
+						)
+							recipients.push(bound);
+						break;
 					default:
 						assertNever(recipient);
 				}
@@ -8040,7 +8089,7 @@ function resolveEffects(
 			);
 			assert(
 				new Set(recipientKeys).size === recipientKeys.length,
-				"damage-all contains duplicate recipients",
+				"damage contains duplicate recipients",
 			);
 			const source = sourceInformation(engine, state, item);
 			performSimultaneousIn(
@@ -8187,19 +8236,6 @@ function resolveEffects(
 			}
 			continue;
 		}
-		let bound: EntityRef | null = null;
-		const targetUses = effectTargetUses(effect);
-		if (targetUses.length > 0) {
-			const targetSlot = targetUses[0]?.slot;
-			assertDefined(targetSlot);
-			assert(
-				targetUses.every((use) => use.slot === targetSlot),
-				"one effect cannot consume multiple target slots",
-			);
-			const binding = item.targets.find(({ slot }) => slot === targetSlot);
-			assertDefined(binding, "effect has no target binding");
-			bound = binding.target;
-		}
 		if (effect.kind === "sacrifice") {
 			assert(
 				effect.amount === 1,
@@ -8238,16 +8274,26 @@ function resolveEffects(
 			);
 			continue;
 		}
-		if (effect.kind === "add counters" && effect.subject.kind === "source") {
-			// A source that has left the battlefield cannot receive counters.
-			const source = maybePermanent(state, item.source);
-			if (!source) continue;
+		if (effect.kind === "add counters") {
+			let subject: EntityRef;
+			if (effect.subject.kind === "source") {
+				// A source that has left the battlefield cannot receive counters.
+				const source = maybePermanent(state, item.source);
+				if (!source) continue;
+				subject = { type: "permanent", id: source.id };
+			} else {
+				assert(
+					bound?.type === "permanent",
+					"add counters requires a permanent target",
+				);
+				subject = bound;
+			}
 			performIn(
 				engine,
 				state,
 				{
 					kind: "add counters",
-					permanent: { type: "permanent", id: source.id },
+					permanent: subject,
 					counter: effect.counter,
 					amount: effect.amount,
 					source: item.source,
@@ -8347,19 +8393,27 @@ function resolveEffects(
 					"a nonbattlefield change-zone subject must be a card",
 				);
 			}
+			const destination: ZoneChangeDestination =
+				effect.destination.zone === "battlefield"
+					? {
+							zone: "battlefield",
+							controller:
+								effect.destination.controller === "owner"
+									? object.owner
+									: relativeEffectPlayer(item, effect.destination.controller),
+							...(effect.destination.tapped ? { tapped: true } : {}),
+						}
+					: { ...effect.destination };
 			const result = performIn(
 				engine,
 				state,
-				effectToEvent(
-					engine,
-					state,
-					item,
-					effect,
-					ref ??
-						(effect.from === "battlefield"
-							? { type: "permanent", id }
-							: { type: "card", id }),
-				),
+				{
+					kind: "change zone",
+					from: effect.from,
+					destination,
+					cause: "effect",
+					object: id,
+				},
 				choices,
 				scope,
 				0,
@@ -8428,7 +8482,7 @@ function resolveEffects(
 			const result = performIn(
 				engine,
 				state,
-				effectToEvent(engine, state, item, effect, bound),
+				atomicEffectToEvent(item, effect, bound),
 				choices,
 				scope,
 				0,
@@ -8480,7 +8534,7 @@ function resolveEffects(
 		performIn(
 			engine,
 			state,
-			effectToEvent(engine, state, item, effect, bound),
+			atomicEffectToEvent(item, effect, bound),
 			choices,
 			scope,
 			0,
@@ -8488,11 +8542,6 @@ function resolveEffects(
 	}
 }
 
-/**
- * Turns one definition-time instruction into the event it performs. `subject`
- * is the entity resolved for the instruction's semantic operand, when it has
- * one; it can come from either a target slot or the ability's source.
- */
 function relativeEffectPlayer(
 	item: ResolutionSource,
 	relative: TriggerEffectPlayer,
@@ -8510,14 +8559,10 @@ function relativeEffectPlayer(
 	return item.ability.triggeringEvent.player;
 }
 
-function effectToEvent(
-	engine: Engine,
-	state: GameState,
+/** Turns an instruction that always performs one event into that event. */
+function atomicEffectToEvent(
 	item: ResolutionSource,
-	effect: Exclude<
-		EffectDef<TriggerEffectPlayer>,
-		{ kind: "may" | "destroy-all" | "tap-all" } | CreateDelayedTriggerEffectDef
-	>,
+	effect: AtomicEventEffectDef<TriggerEffectPlayer>,
 	subject: EntityRef | null,
 ): GameEvent {
 	/**
@@ -8545,18 +8590,6 @@ function effectToEvent(
 		case "lose-life":
 			return {
 				kind: "lose life",
-				player: effectPlayer(effect.subject),
-				amount: effect.amount,
-			};
-		case "draw":
-			// An each-player draw performs one event per player, so it is expanded
-			// before it reaches this point.
-			assert(
-				effect.subject !== "each-player",
-				"each-player draw resolves directly",
-			);
-			return {
-				kind: "draw cards",
 				player: effectPlayer(effect.subject),
 				amount: effect.amount,
 			};
@@ -8625,49 +8658,6 @@ function effectToEvent(
 			}
 			throw new Error("unexpected discard effect kind");
 		}
-		case "damage": {
-			const recipient =
-				effect.subject.kind === "relative-player"
-					? {
-							type: "player" as const,
-							player: relativeEffectPlayer(item, effect.subject.player),
-						}
-					: subject;
-			assertDefined(recipient, "damage recipient must be defined");
-			assert(
-				recipient.type === "player" || recipient.type === "permanent",
-				"damage recipient must be a player or permanent",
-			);
-			// CR 119.3: lifelink life goes to the controller of the damage source,
-			// which need not be the controller of the ability.
-			const source = sourceInformation(engine, state, item);
-			return {
-				kind: "damage",
-				source: item.source,
-				sourceController: source.controller,
-				sourceColors: source.colors,
-				recipient,
-				amount: effect.amount,
-				combat: false,
-				deathtouch: source.deathtouch,
-				lifelink: source.lifelink,
-				unpreventable: false,
-			};
-		}
-		case "damage-all":
-			throw new Error("set-based damage resolves as simultaneous events");
-		case "destroy":
-			assert(
-				subject !== null && subject.type === "permanent",
-				"destroy requires a bound permanent target",
-			);
-			return {
-				kind: "destroy",
-				object: subject.id,
-				source: item.source,
-				noRegen: effect.noRegen ?? false,
-			};
-		case "tap":
 		case "untap":
 			assert(
 				subject !== null && subject.type === "permanent",
@@ -8687,81 +8677,6 @@ function effectToEvent(
 				spell: subject.id,
 				source: item.source,
 			};
-		case "add counters":
-			assert(
-				subject !== null && subject.type === "permanent",
-				"add counters requires a permanent object",
-			);
-			return {
-				kind: "add counters",
-				permanent: subject,
-				counter: effect.counter,
-				amount: effect.amount,
-				source: item.source,
-			};
-		case "change-zone": {
-			assert(
-				subject !== null &&
-					"id" in subject &&
-					(effect.from === "battlefield"
-						? subject.type === "permanent"
-						: subject.type === "card"),
-				"change-zone subject type disagrees with its origin",
-			);
-			const object = state.objects.get(subject.id);
-			assert(
-				object !== undefined && object.zone === effect.from,
-				"change-zone subject is not in its declared origin",
-			);
-			const destination: ZoneChangeDestination =
-				effect.destination.zone === "battlefield"
-					? {
-							zone: "battlefield",
-							controller:
-								effect.destination.controller === "owner"
-									? object.owner
-									: relativeEffectPlayer(item, effect.destination.controller),
-							...(effect.destination.tapped ? { tapped: true } : {}),
-						}
-					: { ...effect.destination };
-			return {
-				kind: "change zone",
-				from: effect.from,
-				destination,
-				cause: "effect",
-				object: subject.id,
-			};
-		}
-		case "sacrifice":
-			throw new Error("sacrifice effects are resolved with a player choice");
-		case "modify-pt":
-			throw new Error(
-				"temporary P/T effects resolve without creating an event",
-			);
-		case "pump-all":
-			throw new Error(
-				"set-based temporary characteristic effects resolve without creating an event",
-			);
-		case "grant-keyword":
-			throw new Error(
-				"temporary keyword effects resolve without creating an event",
-			);
-		case "grant-triggered":
-			throw new Error(
-				"temporary triggered-ability grants resolve without creating an event",
-			);
-		case "may-play":
-			throw new Error(
-				"temporary play permissions resolve without creating an event",
-			);
-		case "search-library":
-			throw new Error("library searches resolve without creating an event");
-		case "shuffle-library":
-			throw new Error("library shuffles resolve without creating an event");
-		case "shuffle-into-library":
-			throw new Error(
-				"shuffling cards into libraries resolves without one aggregate event",
-			);
 		case "add-mana":
 			return {
 				kind: "add mana",
@@ -9838,11 +9753,8 @@ function activateAbilityIn(
 				effect.kind === "gain-life" ||
 				effect.kind === "lose-life" ||
 				effect.kind === "damage" ||
-				effect.kind === "damage-all" ||
 				effect.kind === "destroy" ||
-				effect.kind === "destroy-all" ||
 				effect.kind === "tap" ||
-				effect.kind === "tap-all" ||
 				effect.kind === "untap" ||
 				effect.kind === "counter" ||
 				effect.kind === "change-zone" ||

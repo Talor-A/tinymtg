@@ -88,7 +88,7 @@ const TEST_CARD_1 = defineCard({
 			effects: [
 				{
 					kind: "damage",
-					subject: { kind: "target", slot: "target-1" },
+					recipients: [{ kind: "target", slot: "target-1" }],
 					amount: 2,
 				},
 			],
@@ -174,7 +174,7 @@ const TEST_CARD_4 = defineCard({
 				},
 			],
 			effects: [
-				{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+				{ kind: "destroy", subjects: { kind: "target", slot: "target-1" } },
 				{
 					kind: "gain-life",
 					subject: { kind: "relative-player", player: "you" },
@@ -206,10 +206,10 @@ const TEST_CARD_5 = defineCard({
 			cost: { mana: "zero", tapSelf: true },
 			targets: [artifactTarget],
 			effects: [
-				{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+				{ kind: "destroy", subjects: { kind: "target", slot: "target-1" } },
 				{
 					kind: "damage",
-					subject: { kind: "target", slot: "target-1" },
+					recipients: [{ kind: "target", slot: "target-1" }],
 					amount: 2,
 				},
 			],
@@ -251,7 +251,7 @@ const TEST_CARD_6 = defineCard({
 				},
 			],
 			effects: [
-				{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+				{ kind: "destroy", subjects: { kind: "target", slot: "target-1" } },
 			],
 		},
 	],
@@ -331,7 +331,7 @@ const TEST_CARD_9 = defineCard({
 			effects: [
 				{
 					kind: "damage",
-					subject: { kind: "target", slot: "target-1" },
+					recipients: [{ kind: "target", slot: "target-1" }],
 					amount: 2,
 				},
 			],
@@ -359,7 +359,7 @@ const TEST_CARD_10 = defineCard({
 			effects: [
 				{
 					kind: "damage",
-					subject: { kind: "target", slot: "target-1" },
+					recipients: [{ kind: "target", slot: "target-1" }],
 					amount: 1,
 				},
 			],
@@ -790,7 +790,7 @@ describe("captured stack items", () => {
 		expect(item.effects).toEqual([
 			{
 				kind: "damage",
-				subject: { kind: "target", slot: "target-1" },
+				recipients: [{ kind: "target", slot: "target-1" }],
 				amount: 2,
 			},
 		]);

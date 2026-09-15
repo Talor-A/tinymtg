@@ -50,7 +50,7 @@ import type {
 	CharacteristicStaticEffectSliceDefinition,
 	CharacteristicsSnapshot,
 	Color,
-	DamageAllRecipientDef,
+	DamageRecipientSelector,
 	EffectDef,
 	EffectPlayerSubject,
 	GameEvent,
@@ -1302,7 +1302,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				return ok([
 					{
 						kind: "damage",
-						subject: { kind: "target", slot: TARGET_SLOT },
+						recipients: [{ kind: "target", slot: TARGET_SLOT }],
 						amount,
 					},
 				]);
@@ -1316,7 +1316,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			return ok([
 				{
 					kind: "damage",
-					subject: { kind: "relative-player", player },
+					recipients: [{ kind: "relative-player", player }],
 					amount,
 				},
 			]);
@@ -1333,7 +1333,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			if (!amount)
 				return issue("UNSUPPORTED_PARAMETER", "unsupported NumDmg", where);
 
-			const recipients: DamageAllRecipientDef<Player>[] = [];
+			const recipients: DamageRecipientSelector<Player>[] = [];
 			const validCards = getForgeParam(params, "ValidCards");
 			if (validCards !== undefined) {
 				const onlyCreatures = validCards.split(",").every((part) => {
@@ -1377,7 +1377,9 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 					"DamageAll requires ValidCards$ or ValidPlayers$ recipients",
 					where,
 				);
-			return ok([{ kind: "damage-all", recipients, amount }]);
+			const [first, ...rest] = recipients;
+			assert(first !== undefined);
+			return ok([{ kind: "damage", recipients: [first, ...rest], amount }]);
 		}
 		case "destroy": {
 			const badParams = claim("validtgts", "tgtprompt", "noregen");
@@ -1392,7 +1394,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			return ok([
 				{
 					kind: "destroy",
-					subject: { kind: "target", slot: TARGET_SLOT },
+					subjects: { kind: "target", slot: TARGET_SLOT },
 					...(noRegen === "True" ? { noRegen: true as const } : {}),
 				},
 			]);
@@ -1417,7 +1419,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				);
 			return ok([
 				{
-					kind: "destroy-all",
+					kind: "destroy",
 					subjects: { kind: "matching-permanents", predicate },
 					...(noRegen === "True" ? { noRegen: true as const } : {}),
 				},
@@ -1427,9 +1429,16 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 		case "untap": {
 			const badParams = claim("validtgts", "tgtprompt");
 			if (!badParams.ok) return badParams;
+			if (api === "tap")
+				return ok([
+					{
+						kind: "tap",
+						subjects: { kind: "target", slot: TARGET_SLOT },
+					},
+				]);
 			return ok([
 				{
-					kind: api,
+					kind: "untap",
 					subject: { kind: "target", slot: TARGET_SLOT },
 				},
 			]);
@@ -1447,7 +1456,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				);
 			return ok([
 				{
-					kind: "tap-all",
+					kind: "tap",
 					subjects: { kind: "matching-permanents", predicate },
 				},
 			]);

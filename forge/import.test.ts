@@ -395,7 +395,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			expect(result.card.abilityDefinitions.triggered[0]?.effects).toEqual([
 				{
 					kind: "damage",
-					subject: { kind: "relative-player", player: "opponent" },
+					recipients: [{ kind: "relative-player", player: "opponent" }],
 					amount: 1,
 				},
 			]);
@@ -417,7 +417,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			effects: [
 				{
 					kind: "damage",
-					subject: { kind: "target", slot: "target-1" },
+					recipients: [{ kind: "target", slot: "target-1" }],
 					amount: 3,
 				},
 			],
@@ -438,7 +438,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				},
 			],
 			effects: [
-				{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+				{ kind: "destroy", subjects: { kind: "target", slot: "target-1" } },
 			],
 		});
 	});
@@ -448,7 +448,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		if (!suns.ok) throw new Error("expected Sweltering Suns to import");
 		expect(suns.card.spell?.effects).toEqual([
 			{
-				kind: "damage-all",
+				kind: "damage",
 				recipients: [
 					{
 						kind: "matching-permanents",
@@ -463,7 +463,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		if (!rift.ok) throw new Error("expected Flame Rift to import");
 		expect(rift.card.spell?.effects).toEqual([
 			{
-				kind: "damage-all",
+				kind: "damage",
 				recipients: [{ kind: "each-player" }],
 				amount: 4,
 			},
@@ -474,7 +474,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		const result = importFixture("v/vindictive_vampire");
 		if (!result.ok) throw new Error("expected Vindictive Vampire to import");
 		expect(result.card.abilityDefinitions.triggered[0]?.effects[0]).toEqual({
-			kind: "damage-all",
+			kind: "damage",
 			recipients: [{ kind: "relative-player", player: "opponent" }],
 			amount: 1,
 		});
@@ -610,7 +610,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				effects: [
 					{
 						kind: "damage",
-						subject: { kind: "target", slot: "target-1" },
+						recipients: [{ kind: "target", slot: "target-1" }],
 						amount: 1,
 					},
 				],
@@ -653,7 +653,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				],
 				effects: [
-					{ kind: "tap", subject: { kind: "target", slot: "target-1" } },
+					{ kind: "tap", subjects: { kind: "target", slot: "target-1" } },
 				],
 			},
 		]);
@@ -693,7 +693,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			targets: [],
 			effects: [
 				{
-					kind: "tap-all",
+					kind: "tap",
 					subjects: {
 						kind: "matching-permanents",
 						predicate: { kind: "type", type: "artifact" },
@@ -736,7 +736,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			targets: [],
 			effects: [
 				{
-					kind: "destroy-all",
+					kind: "destroy",
 					subjects: {
 						kind: "matching-permanents",
 						predicate: { kind: "type", type: "creature" },
@@ -801,7 +801,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				],
 				effects: [
-					{ kind: "tap", subject: { kind: "target", slot: "target-1" } },
+					{ kind: "tap", subjects: { kind: "target", slot: "target-1" } },
 				],
 			},
 		]);
@@ -828,7 +828,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 			effects: [
 				{
 					kind: "damage",
-					subject: { kind: "target", slot: "target-1" },
+					recipients: [{ kind: "target", slot: "target-1" }],
 					amount: 4,
 				},
 			],
@@ -847,7 +847,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				},
 			],
 			effects: [
-				{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+				{ kind: "destroy", subjects: { kind: "target", slot: "target-1" } },
 			],
 		});
 	});
@@ -1365,7 +1365,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.spell?.effects).toEqual([
 			{
 				kind: "damage",
-				subject: { kind: "target", slot: "target-1" },
+				recipients: [{ kind: "target", slot: "target-1" }],
 				amount: 2,
 			},
 			{
@@ -3038,7 +3038,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				],
 				effects: [
-					{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+					{ kind: "destroy", subjects: { kind: "target", slot: "target-1" } },
 				],
 			},
 		]);
@@ -3084,7 +3084,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					},
 				],
 				effects: [
-					{ kind: "destroy", subject: { kind: "target", slot: "target-1" } },
+					{ kind: "destroy", subjects: { kind: "target", slot: "target-1" } },
 				],
 			},
 		]);

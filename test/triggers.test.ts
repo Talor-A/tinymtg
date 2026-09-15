@@ -62,7 +62,7 @@ const TEST_CARD_1 = defineCard({
 			effects: [
 				{
 					kind: "damage",
-					subject: { kind: "target", slot: "target-1" },
+					recipients: [{ kind: "target", slot: "target-1" }],
 					amount: 2,
 				},
 			],
