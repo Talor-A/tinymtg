@@ -2899,7 +2899,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					mana: { n: 1 },
 					tapSelf: true,
 					sacrifice: { predicate: { kind: "self" }, amount: 1 },
-					discard: { amount: 1 },
+					discard: { kind: "chosen-card", amount: 1 },
 				},
 				targets: [],
 				effects: [
@@ -2921,15 +2921,14 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		expect(result.card.abilityDefinitions.activated[0]?.cost).toEqual({
 			mana: { n: 1 },
 			tapSelf: false,
-			discard: { amount: 1 },
+			discard: { kind: "chosen-card", amount: 1 },
 		});
 	});
 
-	test("only Forge's one-card-of-any-kind discard cost is supported", () => {
+	test("rejects unsupported discard cost shapes", () => {
 		for (const cost of [
 			"Discard<2/Card>",
 			"Discard<1/Creature>",
-			"Discard<1/CARDNAME>",
 			"Discard<1/Random>",
 			"Discard<1>",
 			"Discard<1/Card> Discard<1/Card>",
@@ -4058,18 +4057,68 @@ describe("lowerForgeCard: shuffle cards into libraries", () => {
 });
 
 describe("lowerForgeCard: cycling", () => {
+	test("lowers Ash Barrens basic landcycling as a generic cycling activation", () => {
+		const result = importFixture("a/ash_barrens");
+		if (!result.ok) throw new Error("expected Ash Barrens to import");
+		expect(result.card.abilityDefinitions.activated[0]).toMatchObject({
+			kind: "activated",
+			functionsFrom: ["hand"],
+			activationEvent: { kind: "cycle" },
+			cost: {
+				mana: { n: 1 },
+				discard: { kind: "source", amount: 1 },
+			},
+			effects: [
+				{
+					kind: "search-library",
+					predicate: {
+						kind: "and",
+						predicates: [
+							{ kind: "type", type: "land" },
+							{ kind: "supertype", supertype: "basic" },
+						],
+					},
+				},
+				{ kind: "reveal" },
+				{ kind: "change-zone", destination: { zone: "hand" } },
+				{ kind: "shuffle-library" },
+			],
+		});
+		expect(result.card.abilityDefinitions.activated[1]).toMatchObject({
+			kind: "mana",
+			cost: { tapSelf: true },
+		});
+	});
+
+	test("lowers channel through the same generic hand-activation path", () => {
+		const result = importFixture("i/ironhoof_boar");
+		if (!result.ok) throw new Error("expected Ironhoof Boar to import");
+		expect(result.card.abilityDefinitions.activated[0]).toMatchObject({
+			kind: "activated",
+			functionsFrom: ["hand"],
+			cost: {
+				mana: { n: 1, r: 1 },
+				discard: { kind: "source", amount: 1 },
+			},
+		});
+		expect(result.card.abilityDefinitions.activated[0]).not.toHaveProperty(
+			"activationEvent",
+		);
+	});
+
 	test("lowers fixed cycling costs into exact hand abilities", () => {
 		const generic = importFixture("b/boon_of_the_wish_giver");
 		if (!generic.ok) throw new Error("expected Boon to import");
 		expect(generic.card.abilityDefinitions.activated[0]).toEqual({
-			kind: "cycling",
+			kind: "activated",
 			id: "activated-1",
 			text: "Cycling.",
 			functionsFrom: ["hand"],
+			activationEvent: { kind: "cycle" },
 			cost: {
 				mana: { n: 1 },
 				tapSelf: false,
-				discard: { amount: 1, subject: "source" },
+				discard: { kind: "source", amount: 1 },
 			},
 			targets: [],
 			effects: [
@@ -4084,7 +4133,8 @@ describe("lowerForgeCard: cycling", () => {
 		const colored = importFixture("h/hieroglyphic_illumination");
 		if (!colored.ok) throw new Error("expected Illumination to import");
 		expect(colored.card.abilityDefinitions.activated[0]).toMatchObject({
-			kind: "cycling",
+			kind: "activated",
+			activationEvent: { kind: "cycle" },
 			cost: { mana: { u: 1 } },
 		});
 	});
@@ -4093,7 +4143,11 @@ describe("lowerForgeCard: cycling", () => {
 		const result = importFixture("b/barren_moor");
 		if (!result.ok) throw new Error("expected Barren Moor to import");
 		expect(result.card.abilityDefinitions.activated).toMatchObject([
-			{ kind: "cycling", functionsFrom: ["hand"] },
+			{
+				kind: "activated",
+				functionsFrom: ["hand"],
+				activationEvent: { kind: "cycle" },
+			},
 			{ kind: "mana", cost: { tapSelf: true } },
 		]);
 	});
@@ -4109,11 +4163,12 @@ describe("lowerForgeCard: cycling", () => {
 		expect(lifeCycling.ok).toBe(true);
 		if (lifeCycling.ok)
 			expect(lifeCycling.card.abilityDefinitions.activated[0]).toMatchObject({
-				kind: "cycling",
+				kind: "activated",
+				activationEvent: { kind: "cycle" },
 				cost: {
 					mana: "zero",
 					life: { amount: 2 },
-					discard: { amount: 1, subject: "source" },
+					discard: { kind: "source", amount: 1 },
 				},
 			});
 
@@ -4667,7 +4722,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.card.spell?.additionalCosts).toEqual({
-			discard: { amount: 1 },
+			discard: { kind: "chosen-card", amount: 1 },
 		});
 	});
 

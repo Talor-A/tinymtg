@@ -47,7 +47,6 @@ import {
 const FIXTURE_CARDS = [
 	"m/murder",
 	"l/lightning_bolt",
-	"s/swamp",
 	"s/sorins_thirst",
 	"d/doom_blade",
 	"p/prodigal_sorcerer",

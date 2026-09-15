@@ -132,15 +132,16 @@ battlefield, graveyard, or exile to hand, graveyard, exile, the top or bottom
 of a library, or the battlefield; single-card library searches, lowered as an
 explicit search choice followed by a result-bound zone change and a shuffle,
 with the searcher and library owner represented independently. Qualified
-searches may fail to find. A qualified search into a hand still rejects because
-the engine does not yet represent revealing the found card to every player;
-predicate-filtered cards can be shuffled from one or more hand, graveyard, or
-exile zones into their owners' libraries, including the each-player form used
-by Timetwister and the triggering-card form used by Worldspine Wurm; cycling
-with fixed generic and/or colored mana costs, represented as a hand-only
-activated ability that discards its own source and draws on resolution; `Cycled`
-triggers that either watch ownership-based cycling from the battlefield or the
-cycled source card from its new graveyard object; Devoid as a
+searches may fail to find. A qualified search into a hand rejects unless a
+supported keyword defines the required reveal. Basic landcycling and
+typecycling include this reveal. Predicate-filtered cards can be shuffled from
+one or more hand, graveyard, or exile zones into their owners' libraries. This
+includes the each-player form used by Timetwister and the triggering-card form
+used by Worldspine Wurm. Cycling
+and typecycling use fixed generic mana, colored mana, or both. These hand-only
+activated abilities discard their own sources. `Cycled` triggers watch either
+ownership-based cycling from the battlefield or the
+cycled source card from its new graveyard object. Devoid is a
 characteristic-defining ability that makes the card colorless; spells,
 activated abilities, and triggered abilities with at most one required target
 (`Any`, `Player`, `Opponent`, a spell (`TargetType$ Spell`) optionally narrowed
@@ -199,10 +200,11 @@ Normal progression through `advance()` currently supports:
 - casting from hand with mana already in the pool, including supported single-target instants and sorceries;
 - activated abilities with fixed generic/WUBRG mana, optional tap-self, and optional single-permanent sacrifice costs, with or without a target;
 - activated abilities that explicitly function from a public graveyard or exile zone, with that card's owner as the activator;
+- hand-activated abilities with a source-discard cost, including cycling, typecycling, and supported channel abilities;
 - relative-player and targeted-player sacrifice effects in which that player chooses one matching permanent;
 - single-card library searches whose eligible cards are exposed only in a dedicated replay-safe search choice, followed by result-bound movement and shuffling;
 - predicate-filtered shuffling from hands, graveyards, and exile into owners' libraries, including each-player effects;
-- cycling cards from hand for fixed generic and/or colored mana costs;
+- cycling and typecycling cards from hand for fixed generic and/or colored mana costs;
 - battlefield and graveyard triggers caused by cycling;
 - the supported gain-life triggers, including parsed self-attack triggers (e.g. Herald of Faith), and targeted triggers (e.g. Flametongue Kavu, Manic Vandal);
 - declaring attackers, blockers, and two-player combat damage, including trample; and

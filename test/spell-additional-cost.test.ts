@@ -117,7 +117,7 @@ const TEST_CARD_4 = defineCard({
 	spell: {
 		id: "spell",
 		text: "As an additional cost to cast this spell, discard a card. You gain 1 life.",
-		additionalCosts: { discard: { amount: 1 } },
+		additionalCosts: { discard: { kind: "chosen-card", amount: 1 } },
 		targets: [],
 		effects: [
 			{

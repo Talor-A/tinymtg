@@ -2113,7 +2113,6 @@ export function temporaryEffectDefinition(
 		const ability = engine.getAbilityDefinition("activated", source.abilityId);
 		switch (ability.kind) {
 			case "activated":
-			case "cycling":
 				return ability.effects;
 			case "mana":
 				throw new Error("mana ability cannot create a temporary effect");
@@ -2288,6 +2287,12 @@ type SearchLibraryEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
 	resultSlot: string;
 };
 
+/** Reveal a card bound by an earlier hidden-zone instruction. */
+type RevealEffectDef = {
+	kind: "reveal";
+	subject: EffectResultObjectRef;
+};
+
 type ExileTopEffectDef<AllowedPlayer extends TriggerEffectPlayer> = {
 	kind: "exile-top";
 	/** A relative player, or the player bound to a target slot. */
@@ -2366,6 +2371,7 @@ type ResolvingEffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	  }
 	| CreateDelayedTriggerEffectDef
 	| SearchLibraryEffectDef<AllowedPlayer>
+	| RevealEffectDef
 	| ShuffleIntoLibraryEffectDef<AllowedPlayer>
 	| {
 			kind: "shuffle-library";
@@ -2857,6 +2863,8 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 			}
 			return uses;
 		}
+		case "reveal":
+			return [];
 		case "shuffle-library":
 			return effect.subject.kind === "target-player"
 				? [
@@ -3087,6 +3095,7 @@ export interface SacrificeCost {
 }
 
 export interface DiscardCost {
+	kind: "chosen-card";
 	amount: 1;
 }
 
@@ -3094,14 +3103,17 @@ export interface LifeCost {
 	amount: number;
 }
 
-/**
- * Discarding as an activation cost. The card is chosen from hand while the
- * ability is announced. Cycling instead discards the ability's own source.
- */
-export interface ActivationDiscardCost extends DiscardCost {
-	/** Cycling discards its source; omitted means the player chooses a card. */
-	subject?: "source";
-}
+/** Discarding as an activation cost. */
+export type ActivationDiscardCost =
+	| {
+			kind: "chosen-card";
+			amount: 1;
+	  }
+	| {
+			/** Cycling and channel discard the ability's own source. */
+			kind: "source";
+			amount: 1;
+	  };
 
 /** Nonmana cost components shared by spells and activated abilities. */
 export interface AdditionalCosts {
@@ -3116,10 +3128,10 @@ interface ActivatedAbilityDefBase {
 	cost: ActivationCost;
 }
 
-export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
+interface ActivatedAbilityDefCommon {
+	id: string;
+	text: string;
 	kind: "activated";
-	/** Defaults to the battlefield. Hand is supported for cycling abilities. */
-	functionsFrom?: [PublicObjectZone | "hand"];
 	targets: TargetDef[];
 	effects: ActivatedEffectDef[];
 	restrictions?: {
@@ -3127,26 +3139,25 @@ export interface ActivatedAbilityDef extends ActivatedAbilityDefBase {
 	};
 }
 
-/** The exact keyword ability defined by CR 702.29a. */
-export interface CyclingAbilityDef extends ActivatedAbilityDefBase {
-	kind: "cycling";
-	functionsFrom: ["hand"];
-	cost: {
-		mana: PayableActivationManaCost;
-		tapSelf: false;
-		sacrifice?: never;
-		discard: { amount: 1; subject: "source" };
-		life?: LifeCost;
-	};
-	targets: [];
-	effects: [
-		{
-			kind: "draw";
-			subject: { kind: "relative-player"; player: "you" };
-			amount: 1;
-		},
-	];
-}
+export type ActivatedAbilityDef = ActivatedAbilityDefCommon &
+	(
+		| {
+				cost: ActivationCost;
+				/** Defaults to the battlefield. Hand supports channel and similar abilities. */
+				functionsFrom?: [PublicObjectZone | "hand"];
+				activationEvent?: never;
+		  }
+		| {
+				/** Cycling is a normal hand activation with one activation-time event. */
+				functionsFrom: ["hand"];
+				activationEvent: { kind: "cycle" };
+				cost: ActivationCost & {
+					tapSelf: false;
+					sacrifice?: never;
+					discard: { kind: "source"; amount: 1 };
+				};
+		  }
+	);
 
 /** A mana ability whose instructions always produce the same mana. */
 export interface ManaAbilityDef extends ActivatedAbilityDefBase {
@@ -3159,7 +3170,6 @@ export interface ManaAbilityDef extends ActivatedAbilityDefBase {
 /** Every ability definition possessed through an activated-ability reference. */
 export type AnyActivatedAbilityDefinition =
 	| ActivatedAbilityDef
-	| CyclingAbilityDef
 	| ManaAbilityDef;
 
 /** A finite fixed mana cost. Omitted symbols require zero mana. */
@@ -3199,10 +3209,12 @@ export type PayableActivationManaCost =
 	| "zero";
 
 /** Every fixed cost component the engine knows how to pay. */
-export interface PayableCost extends AdditionalCosts {
+export interface PayableCost {
 	mana: PayableManaCost;
 	tapSelf: boolean;
+	sacrifice?: SacrificeCost;
 	discard?: ActivationDiscardCost;
+	life?: LifeCost;
 }
 
 /** The fixed components supported for one activation cost. */
@@ -8238,6 +8250,19 @@ function resolveEffects(
 			}
 			continue;
 		}
+		if (effect.kind === "reveal") {
+			const revealed = scope.bindings.get(effect.subject.slot) ?? [];
+			assert(
+				revealed.length <= 1,
+				`reveal result ${effect.subject.slot} contains multiple objects`,
+			);
+			const subject = revealed[0];
+			if (subject) {
+				assert(subject.type === "card", "reveal requires a bound card");
+				log(state, `  [reveal] ${name(engine, state, subject.id)}`);
+			}
+			continue;
+		}
 		if (effect.kind === "shuffle-library") {
 			shuffleLibrary(state, resolvePlayer(effect.subject));
 			continue;
@@ -9261,7 +9286,7 @@ function costPaymentOptions(
 	if (sacrifices?.length === 0) return null;
 
 	let discards: ObjectId[] | null = null;
-	if (cost.discard?.subject === "source") {
+	if (cost.discard?.kind === "source") {
 		if (
 			object?.kind !== "card" ||
 			object.zone !== "hand" ||
@@ -9280,7 +9305,7 @@ function costPaymentOptions(
 		mana,
 		sacrifices,
 		discards,
-		discardIsSource: cost.discard?.subject === "source",
+		discardIsSource: cost.discard?.kind === "source",
 	};
 }
 
@@ -9858,6 +9883,7 @@ function activateAbilityIn(
 				effect.kind === "create-token" ||
 				effect.kind === "create-delayed-trigger" ||
 				effect.kind === "search-library" ||
+				effect.kind === "reveal" ||
 				effect.kind === "shuffle-library"
 			) {
 				continue;
@@ -9967,25 +9993,30 @@ function activateAbilityIn(
 		);
 		if (ability.cost.discard) {
 			assertDefined(discard);
-			if (ability.kind === "cycling") {
-				assert(
-					payment.discard === object.id,
-					"cycling must discard its source card",
-				);
-				const cycledCard = discard.created[0];
-				assertDefined(cycledCard, "cycling discard created no card object");
-				assert(
-					discard.created.length === 1,
-					"cycling discard created more than one card object",
-				);
-				performIn(
-					engine,
-					state,
-					{ kind: "cycle", player: priorityPlayer, card: cycledCard },
-					choices,
-					scope,
-					0,
-				);
+			if (ability.kind === "activated" && ability.activationEvent) {
+				switch (ability.activationEvent.kind) {
+					case "cycle": {
+						assert(
+							payment.discard === object.id,
+							"cycling must discard its source card",
+						);
+						const cycledCard = discard.created[0];
+						assertDefined(cycledCard, "cycling discard created no card object");
+						assert(
+							discard.created.length === 1,
+							"cycling discard created more than one card object",
+						);
+						performIn(
+							engine,
+							state,
+							{ kind: "cycle", player: priorityPlayer, card: cycledCard },
+							choices,
+							scope,
+							0,
+						);
+						break;
+					}
+				}
 			}
 		}
 	} catch (error) {

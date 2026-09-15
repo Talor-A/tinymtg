@@ -81,7 +81,7 @@ const sourceDiscardSpellCost: AdditionalCosts = {
 	discard: {
 		amount: 1,
 		// @ts-expect-error a spell is on the stack and cannot discard itself
-		subject: "source",
+		kind: "source",
 	},
 };
 

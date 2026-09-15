@@ -41,7 +41,6 @@ const TEST_CARD_1 = defineCard({
 
 const engine = createEngine([
 	...CARDS,
-	loadCardFixture("i/island"),
 	loadCardFixture("e/ertai_wizard_adept"),
 	TEST_CARD_1,
 ]);

@@ -30,6 +30,7 @@ Abjure
 Abnormal Endurance
 Abraded Bluffs
 Absorb
+Absorb Vis
 Abzan Banner
 Academy Ruins
 Accelerate
@@ -243,6 +244,7 @@ Arvad the Cursed
 Ascendant Evincar
 Ascended Lawmage
 Asgardian Citadel
+Ash Barrens
 Ashcoat Bear
 Ashen Firebeast
 Ashen Powder
@@ -318,6 +320,7 @@ Bad River
 Badlands
 Baffling End
 Bake into a Pie
+Balamb T-Rexaur
 Balduvian Barbarians
 Balduvian Bears
 Baleful Strix
@@ -327,6 +330,7 @@ Balmor, Battlemage Captain
 Baloth Woodcrasher
 Balshan Collaborator
 Balshan Griffin
+Bamboo Grove Archer
 Bane Alley Blackguard
 Banehound
 Banishing Betrayal
@@ -527,6 +531,7 @@ Boros Cluestone
 Boros Garrison
 Boros Guildgate
 Boros Signet
+Borough Backup
 Botanical Plaza
 Bottle Gnomes
 Boulderborn Dragon
@@ -618,6 +623,7 @@ Canopy Baloth
 Canopy Gorger
 Canopy Spider
 Canopy Tactician
+Canyon Crawler
 Canyon Jerboa
 Canyon Minotaur
 Canyon Slough
@@ -703,6 +709,7 @@ Charging Paladin
 Charging Strifeknight
 Charismatic Vanguard
 Charity Extractor
+Chartooth Cougar
 Chase Inspiration
 Chasm Drake
 Chasm Guide
@@ -918,6 +925,7 @@ Dagger Caster
 Daggerback Basilisk
 Daggerclaw Imp
 Daggerdrome Imp
+Daggermaw Megalodon
 Daily Bugle Newspaper
 Dakmor Bat
 Dakmor Ghoul
@@ -1091,6 +1099,7 @@ Disenchant
 Disentomb
 Dismal Backwater
 Dismiss
+Dismissive Denial
 Dismissive Pyromancer
 Dispel
 Dispeller's Capsule
@@ -1262,6 +1271,7 @@ Elven Cache
 Elven Fortress
 Elven Lyre
 Elven Palisade
+Elvish Aberration
 Elvish Doomsayer
 Elvish Herder
 Elvish Lookout
@@ -1450,6 +1460,7 @@ Fields of Strife
 Fierce Witchstalker
 Fiery Cannonade
 Fiery Conclusion
+Fiery Fall
 Fiery Finish
 Fiery Hellhound
 Fiery Islet
@@ -1582,6 +1593,7 @@ Fracture
 Fractured Sanity
 Fragmentize
 Frazzle
+Free Borg Revolutionaries
 Frenzied Devils
 Frenzied Raptor
 Frenzied Tilling
@@ -1603,6 +1615,7 @@ Frozen Shade
 Fuel the Flames
 Fugitive Wizard
 Funeral Rites
+Furnace Host Charger
 Furnace Spirit
 Furnace Whelp
 Furtive Analyst
@@ -1635,6 +1648,7 @@ Geist of the Archives
 Geist of the Moors
 Geistcatcher's Rig
 Gempalm Sorcerer
+Generous Ent
 Generous Stray
 Generous Visitor
 Genghis Frog
@@ -1651,6 +1665,9 @@ Ghirapur Osprey
 Ghitu War Cry
 Ghost Tactician
 Ghost Warden
+Ghost-Lit Nourisher
+Ghost-Lit Raider
+Ghost-Lit Redeemer
 Ghostly Sentinel
 Ghostly Visit
 Giant Caterpillar
@@ -1976,6 +1993,7 @@ Highspire Mantis
 Highway Robber
 Hill Giant
 Hill Giant Herdgorger
+Hill Gigas
 Hinterland Sanctifier
 Hippo-Cows
 Hired Blade
@@ -1986,6 +2004,7 @@ Hithlain Knots
 Hive Stirrings
 Hoar Shade
 Hoard Robber
+Hobbit Hole
 Hobblefiend
 Hold the Line
 Hollow Dogs
@@ -2018,6 +2037,7 @@ Hornswoggle
 Horrid Vigor
 Horrifying Revelation
 Horror of the Dim
+Horta
 Hostile Minotaur
 Hotfoot Gnome
 Hour of Defeat
@@ -2066,6 +2086,7 @@ Icy Manipulator
 Idyllic Beachfront
 Igneous Cur
 Igneous Golem
+Igneous Pouncer
 Iguana Parrot
 Il Mheg Pixie
 Ill-Gotten Inheritance
@@ -2159,6 +2180,7 @@ Iron Tusk Elephant
 Iron Will
 Iron-Barb Hellion
 Ironclad Krovod
+Ironhoof Boar
 Ironpaw Aspirant
 Ironroot Treefolk
 Ironshell Beetle
@@ -2204,6 +2226,7 @@ Jedit Ojanen
 Jedit's Dragoons
 Jelenn Sphinx
 Jenara, Asura of War
+Jennika, Bad Apple Big Sister
 Jerrard of the Closed Fist
 Jeskai Banner
 Jeskai Barricade
@@ -2355,6 +2378,7 @@ Kraul Stinger
 Kraul Warrior
 Kraul Whipcracker
 Kree Commandos
+Kree Sentinel
 Krenko's Command
 Kris Mage
 Krosan Archer
@@ -2365,6 +2389,7 @@ Kruin Striker
 Kujar Seedsculptor
 Kuldotha Rebirth
 Kulrath Mystic
+Kulrath Zealot
 Kurgadon
 Kykar, Wind's Fury
 Kyoshi Village
@@ -2377,6 +2402,7 @@ Lady Caleria
 Lady Orca
 Lagac Lizard
 Lampad of Death's Vigil
+Landscaper Colos
 Languish
 Lantern Kami
 Lantern Scout
@@ -2504,6 +2530,7 @@ Lush Portico
 Lys Alana Bowmaster
 Lys Alana Huntmaster
 Lys Alana Informant
+Lórien Revealed
 M.O.D.O.K., Evil Intellect
 Maalfeld Twins
 Machine Man, Model X-51
@@ -2572,6 +2599,7 @@ Markov Patrician
 Marsh Flats
 Marsh Gas
 Martyr of Dusk
+Marvelous Melee
 Mass Calcify
 Mass Production
 Mass of Ghouls
@@ -2598,6 +2626,7 @@ Memory Erosion
 Meng Huo's Horde
 Meng Huo, Barbarian King
 Mental Discipline
+Mental Journey
 Mental Note
 Mephitic Vapors
 Merchant of Many Hats
@@ -2631,6 +2660,7 @@ Might of Oaks
 Mightstone
 Mighty Leap
 Migrating Ketradon
+Migratory Route
 Mikokoro, Center of the Sea
 Millennial Gargoyle
 Millstone
@@ -2662,6 +2692,7 @@ Mistvault Bridge
 Misty Palms Oasis
 Misty Rainforest
 Mjölnir's Might
+Mnemonic Sphere
 Mnemonic Wall
 Moaning Spirit
 Moaning Wall
@@ -2837,6 +2868,7 @@ Nimbus of the Isles
 Nine-Tail White Fox
 Ninth Bridge Patrol
 Niv-Mizzet, the Firemind
+Noble Templar
 Nocturnal Feeder
 Nocturnal Raid
 Nomad Outpost
@@ -2862,6 +2894,7 @@ Noxious Newt
 Noxious Toad
 Nuisance Engine
 Nullify
+Nurturing Bristleback
 Nurturing Peatland
 Nutrient Block
 Nylea's Forerunner
@@ -2906,6 +2939,7 @@ Ogre Taskmaster
 Ogre Warrior
 Okina, Temple to the Grandfathers
 Oko's Accomplices
+Oliphaunt
 Olivia's Bloodsworn
 Olivia's Dragoon
 Oltec Cloud Guard
@@ -2940,6 +2974,7 @@ Oran-Rief Invoker
 Oran-Rief Survivalist
 Orazca Frillback
 Orazca Raptor
+Orchard Strider
 Orcish Bloodpainter
 Orcish Mechanics
 Orcish Oriflamme
@@ -2983,6 +3018,7 @@ Painsmith
 Painted Bluffs
 Palace Familiar
 Paladin of the Bloodstained
+Pale Recluse
 Palladium Myr
 Panicked Altisaur
 Panther Warriors
@@ -3193,6 +3229,7 @@ Quiet Purity
 Quilled Slagwurm
 Quirion Dryad
 Rabanastre, Royal City
+Rabaroo Troop
 Raccoon Rallier
 Racers' Ring
 Radha, Heir to Keld
@@ -3229,6 +3266,7 @@ Rambunctious Mutt
 Rampage of the Valkyries
 Rampaging Baloths
 Rampaging Hippo
+Rampaging Spiketail
 Rampant Growth
 Ramunap Ruins
 Ranger's Guile
@@ -3457,6 +3495,7 @@ Ruthless Deathfang
 Ruthless Winnower
 Ryusei, the Falling Star
 S.H.I.E.L.D. Deployment Drone
+Saber-Tooth Moose-Lion
 Sabotender
 Sacellum Archers
 Sacred Armory
@@ -3485,6 +3524,7 @@ Samut's Sprint
 Sanctify
 Sanctuary Cat
 Sanctum Gargoyle
+Sanctum Plowbeast
 Sandbar Merfolk
 Sandbar Serpent
 Sandblast
@@ -3503,6 +3543,7 @@ Satyr Grovedancer
 Satyr Hedonist
 Satyr Rambler
 Savage Gorilla
+Savage Land Dinosaur
 Savage Lands
 Savage Mansion
 Savai Crystal
@@ -3606,6 +3647,7 @@ Seething Landscape
 Seething Song
 Segovian Angel
 Seismic Mage
+Seismic Monstrosaur
 Seismic Rupture
 Seismic Shudder
 Seismic Spike
@@ -3670,6 +3712,7 @@ Shamble Back
 Shambling Ghoul
 Shape the Sands
 Shard Volley
+Shardless Outlander
 Shared Roots
 Sharlayan, Nation of Scholars
 Sharuum the Hegemon
@@ -3687,10 +3730,13 @@ Shelob's Ambush
 Sheltered Thicket
 Sheltering Landscape
 Sheltering Light
+Shepherding Spirits
 Shield Mate
 Shield Wall
 Shimmering Grotto
 Shimmerscale Drake
+Shinen of Flight's Wings
+Shinen of Fury's Fire
 Shining Aerosaur
 Shinra Reinforcements
 Shipwreck Dowser
@@ -3709,6 +3755,7 @@ Shopkeeper's Bane
 Shore Keeper
 Shore Lurker
 Shorecomber Crab
+Shoreline Ranger
 Show of Valor
 Shower of Arrows
 Shrapnel Blast
@@ -3822,6 +3869,7 @@ Slagwoods Bridge
 Slash of Talons
 Slash, Reptile Rampager
 Slaughter Specialist
+Slavering Branchsnapper
 Slay
 Slayers' Stronghold
 Sledding Otter-Penguin
@@ -3866,6 +3914,7 @@ Snow-Covered Swamp
 Snow-Covered Wastes
 Snowfield Sinkhole
 Soaring Drake
+Soaring Sandwing
 Soaring Seacliff
 Soaring Show-Off
 Social Climber
@@ -4021,6 +4070,7 @@ Stirge
 Stitcher's Apprentice
 Stitcher's Supplier
 Stock Up
+Stockman, Mad Fly-entist
 Stoic Builder
 Stolen Grain
 Stomper Cub
@@ -4052,6 +4102,7 @@ Story Seeker
 Strafe
 Strands of Night
 Strangle
+Stratosoarer
 Straw Soldiers
 Stream of Acid
 Streetbreaker Wurm
@@ -4137,6 +4188,7 @@ Swordwise Centaur
 Sworn Companions
 Sworn Guardian
 Sylvan Anthem
+Sylvan Bounty
 Sylvan Brushstrider
 Sylvan Caryatid
 Sylvan Safekeeper
@@ -4306,6 +4358,7 @@ Tidespout Tyrant
 Tidings
 Tigereye Cameo
 Timber Gorge
+Timberland Ancient
 Timberland Guide
 Timberland Ruins
 Time Ebb
@@ -4338,6 +4391,7 @@ Tome Raider
 Tome Scour
 Tonic Peddler
 Tooth of Ramos
+Topiary Panther
 Tor Giant
 Tor Wauki
 Torch Courier
@@ -4383,6 +4437,7 @@ Transdimensional Bovine
 Transluminant
 Transmogrant Altar
 Trash for Treasure
+Traumatic Visions
 Traveling Minister
 Traveling Philosopher
 Tread Upon
@@ -4441,6 +4496,7 @@ Turtle-Seals
 Tusked Colossodon
 Twilight Panther
 Twin-Silk Spider
+Twinshot Sniper
 Twisted Landscape
 Typhoid Rats
 Tyrant's Machine
@@ -4522,6 +4578,7 @@ Valgavoth's Faithful
 Valiant Guard
 Valkyrior Skyrider
 Valley Mightcaller
+Valley Rannet
 Valor in Akros
 Valorous Charge
 Valorous Steed
@@ -4549,6 +4606,7 @@ Vault of Whispers
 Vault of the Archangel
 Vectis Silencers
 Vector, Imperial Capital
+Vedalken Aethermage
 Vedalken Archmage
 Vedalken Blademaster
 Vedalken Dismisser
@@ -4807,6 +4865,7 @@ Winter's Grasp
 Winter's Intervention
 Wipe Clean
 Wirewood Elf
+Wirewood Guardian
 Wirewood Hivemaster
 Wirewood Lodge
 Wirewood Savage
@@ -4904,4 +4963,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4901`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4960`;

@@ -1094,6 +1094,17 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 	abilityHost: AbilityHost,
 	triggeringZoneChangeDestination: PublicObjectZone | null,
 ): Result<NonMayEffect<Player>[], ImportIssue> {
+	const precostDescription = getForgeParam(params, "PrecostDesc");
+	if (
+		discriminatorLower === "ab" &&
+		precostDescription !== undefined &&
+		precostDescription !== "Channel —"
+	)
+		return issue(
+			"UNSUPPORTED_PARAMETER",
+			"PrecostDesc$ is supported only for Channel — abilities",
+			where,
+		);
 	// Every branch claims this record's whole parameter list, and every branch's
 	// list opens with its own discriminator and closes with the keys common to
 	// all effects. `claim` supplies those invariant ends, so a branch states
@@ -1105,7 +1116,9 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				discriminatorLower,
 				...keys,
 				...COMMON_EFFECT_PARAMS,
-				...(discriminatorLower === "ab" ? ["sorceryspeed"] : []),
+				...(discriminatorLower === "ab"
+					? ["sorceryspeed", "precostdesc", "activationzone"]
+					: []),
 			]),
 			where,
 		);
@@ -4182,11 +4195,14 @@ function parseActivationCost(
 			};
 			continue;
 		}
-		// Forge writes the printed "Discard a card" as one card of any kind,
-		// with an optional trailing description as in Sac<1/CARDNAME/this token>.
-		// Nothing narrower (a type, a named card, more than one) is supported.
+		// Forge writes either an independently chosen card or the ability's own
+		// source. The latter is how channel and similar hand abilities pay their
+		// discard cost.
 		if (term.startsWith("Discard<")) {
-			if (!/^Discard<1\/Card(?:\/[^>]*)?>$/.test(term)) {
+			const chosenCard = /^Discard<1\/Card(?:\/[^>]*)?>$/.test(term);
+			const sourceCard =
+				/^Discard<1\/(?:Card\.Self|CARDNAME|NICKNAME)(?:\/[^>]*)?>$/.test(term);
+			if (!chosenCard && !sourceCard) {
 				return issue(
 					"UNSUPPORTED_COST",
 					`unsupported discard activation cost term ${term}`,
@@ -4200,7 +4216,10 @@ function parseActivationCost(
 					where,
 				);
 			}
-			discard = { amount: 1 };
+			discard = {
+				kind: sourceCard ? "source" : "chosen-card",
+				amount: 1,
+			};
 			continue;
 		}
 		const lifeMatch = term.match(/^PayLife<([1-9]\d*)>$/);
@@ -4578,7 +4597,11 @@ export function lowerForgeCard(
 
 	const keywords: Keyword[] = [];
 	const keywordReplacements: ReplacementEffectDefinition[] = [];
-	const cyclingCosts: Pick<ActivationCost, "mana" | "life">[] = [];
+	const cyclingAbilities: {
+		cost: Pick<ActivationCost, "mana" | "life">;
+		text: string;
+		effects: ActivatedEffectDef[];
+	}[] = [];
 	const resolver: SVarResolver = { face, consumed: new Set() };
 	const usedSVarNames = resolver.consumed;
 	const entersWith: Partial<Record<"+1/+1" | "-1/-1", number>> = {};
@@ -4623,9 +4646,96 @@ export function lowerForgeCard(
 						where,
 					),
 				);
-			cyclingCosts.push({
-				mana: parsed.value.mana,
-				...(parsed.value.life ? { life: parsed.value.life } : {}),
+			cyclingAbilities.push({
+				cost: {
+					mana: parsed.value.mana,
+					...(parsed.value.life ? { life: parsed.value.life } : {}),
+				},
+				text: "Cycling.",
+				effects: [
+					{
+						kind: "draw",
+						subject: { kind: "relative-player", player: "you" },
+						amount: 1,
+					},
+				],
+			});
+			continue;
+		}
+		if (record.keyword === "TypeCycling") {
+			const [, searchedType, costText] = record.segments;
+			if (record.segments.length !== 3 || !searchedType || !costText)
+				return reject(
+					issue(
+						"UNSUPPORTED_KEYWORD",
+						`unsupported keyword: ${record.raw}`,
+						where,
+					),
+				);
+			const parsed = parseActivationCost(costText, where);
+			if (!parsed.ok) return reject(parsed);
+			if (
+				parsed.value.tapSelf ||
+				parsed.value.sacrifice !== undefined ||
+				parsed.value.discard !== undefined
+			)
+				return reject(
+					issue(
+						"UNSUPPORTED_COST",
+						`unsupported typecycling cost ${costText}`,
+						where,
+					),
+				);
+
+			const predicate: ObjectPredicateDef =
+				searchedType === "Basic"
+					? {
+							kind: "and",
+							predicates: [
+								{ kind: "type", type: "land" },
+								{ kind: "supertype", supertype: "basic" },
+							],
+						}
+					: { kind: "subtype", subtype: searchedType };
+			const description =
+				searchedType === "Basic"
+					? "Basic landcycling."
+					: `${searchedType}cycling.`;
+			cyclingAbilities.push({
+				cost: {
+					mana: parsed.value.mana,
+					...(parsed.value.life ? { life: parsed.value.life } : {}),
+				},
+				text: description,
+				effects: [
+					{
+						kind: "search-library",
+						searcher: { kind: "relative-player", player: "you" },
+						owner: { kind: "relative-player", player: "you" },
+						predicate,
+						resultSlot: SEARCHED_LIBRARY_SLOT,
+					},
+					{
+						kind: "reveal",
+						subject: {
+							kind: "effect-result",
+							slot: SEARCHED_LIBRARY_SLOT,
+						},
+					},
+					{
+						kind: "change-zone",
+						subject: {
+							kind: "effect-result",
+							slot: SEARCHED_LIBRARY_SLOT,
+						},
+						from: "library",
+						destination: { zone: "hand" },
+					},
+					{
+						kind: "shuffle-library",
+						subject: { kind: "relative-player", player: "you" },
+					},
+				],
 			});
 			continue;
 		}
@@ -4734,27 +4844,22 @@ export function lowerForgeCard(
 
 	const activatedAbilities: AnyActivatedAbilityDefinition[] = [];
 	let activatedCount = 0;
-	for (const cyclingCost of cyclingCosts) {
+	for (const cycling of cyclingAbilities) {
 		activatedCount += 1;
 		activatedAbilities.push({
-			kind: "cycling",
+			kind: "activated",
 			id: `activated-${activatedCount}`,
-			text: "Cycling.",
+			text: cycling.text,
 			functionsFrom: ["hand"],
+			activationEvent: { kind: "cycle" },
 			cost: {
-				mana: cyclingCost.mana,
+				mana: cycling.cost.mana,
 				tapSelf: false,
-				discard: { amount: 1, subject: "source" },
-				...(cyclingCost.life ? { life: cyclingCost.life } : {}),
+				discard: { kind: "source", amount: 1 },
+				...(cycling.cost.life ? { life: cycling.cost.life } : {}),
 			},
 			targets: [],
-			effects: [
-				{
-					kind: "draw",
-					subject: { kind: "relative-player", player: "you" },
-					amount: 1,
-				},
-			],
+			effects: cycling.effects,
 		});
 	}
 	const triggers: TriggeredAbilityDefinition[] = [];
@@ -4984,16 +5089,17 @@ export function lowerForgeCard(
 			continue;
 		}
 
-		let functionsFrom: [PublicObjectZone] | undefined;
+		let functionsFrom: [PublicObjectZone | "hand"] | undefined;
 		if (disc.token === "AB") {
 			const activationZone = getForgeParam(params, "ActivationZone");
 			if (activationZone !== undefined) {
-				const zone = PUBLIC_ZONES.get(activationZone);
+				const zone =
+					activationZone === "Hand" ? "hand" : PUBLIC_ZONES.get(activationZone);
 				if (!zone)
 					return reject(
 						issue(
 							"UNSUPPORTED_PARAMETER",
-							"ActivationZone$ must be Battlefield, Graveyard, or Exile",
+							"ActivationZone$ must be Battlefield, Hand, Graveyard, or Exile",
 							where,
 						),
 					);
@@ -5014,6 +5120,7 @@ export function lowerForgeCard(
 				if (
 					parsedCost.value.tapSelf ||
 					!restated ||
+					parsedCost.value.discard?.kind === "source" ||
 					(!parsedCost.value.sacrifice &&
 						!parsedCost.value.discard &&
 						!parsedCost.value.life)
