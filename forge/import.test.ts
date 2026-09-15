@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { abilityId, createEngine } from "../index.ts";
+import { assert } from "../lib/assert.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
 import { parseForgeCardScript } from "./ast.ts";
 import { importForgeCard, lowerForgeCard } from "./import.ts";
@@ -123,12 +124,15 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						kind: "create-token",
 						controller: { kind: "relative-player", player: "you" },
 						amount: 1,
-						characteristics: {
-							name: "Butterfly",
-							colors: ["g"],
-							keywords: ["flying"],
-							power: 1,
-							toughness: 1,
+						representation: {
+							kind: "from characteristics",
+							characteristics: {
+								name: "Butterfly",
+								colors: ["g"],
+								keywords: ["flying"],
+								power: 1,
+								toughness: 1,
+							},
 						},
 					},
 				],
@@ -1435,7 +1439,10 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				{
 					kind: "create-token",
 					controller: { kind: "relative-player", player: "you" },
-					characteristics: CLUE_TOKEN,
+					representation: {
+						kind: "from characteristics",
+						characteristics: CLUE_TOKEN,
+					},
 					amount: 1,
 				},
 			],
@@ -1443,7 +1450,10 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		if (trigger?.effects[0]?.kind !== "create-token") {
 			throw new Error("expected a create-token effect");
 		}
-		expect(trigger.effects[0].characteristics).not.toBe(CLUE_TOKEN);
+		assert(trigger.effects[0].representation.kind === "from characteristics");
+		expect(trigger.effects[0].representation.characteristics).not.toBe(
+			CLUE_TOKEN,
+		);
 	});
 
 	test("Investigate rejects parameters outside the supported one-Clue form", () => {
@@ -2461,24 +2471,27 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				kind: "create-token",
 				controller: { kind: "relative-player", player: "you" },
 				amount: 1,
-				characteristics: {
-					kind: "creature",
-					name: "Soldier Token",
-					manaCost: "none",
-					colors: [],
-					supertypes: [],
-					types: ["artifact", "creature"],
-					subtypes: ["Soldier"],
-					keywords: [],
-					abilities: {
-						static: [],
-						activated: [],
-						triggered: [],
-						replacement: [],
-						prohibition: [],
+				representation: {
+					kind: "from characteristics",
+					characteristics: {
+						kind: "creature",
+						name: "Soldier Token",
+						manaCost: "none",
+						colors: [],
+						supertypes: [],
+						types: ["artifact", "creature"],
+						subtypes: ["Soldier"],
+						keywords: [],
+						abilities: {
+							static: [],
+							activated: [],
+							triggered: [],
+							replacement: [],
+							prohibition: [],
+						},
+						power: 1,
+						toughness: 1,
 					},
-					power: 1,
-					toughness: 1,
 				},
 			},
 		]);
@@ -2761,14 +2774,17 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						kind: "create-token",
 						controller: { kind: "relative-player", player: "you" },
 						amount: 1,
-						characteristics: expect.objectContaining({
-							name: "Treasure Token",
-							types: ["artifact"],
-							subtypes: ["Treasure"],
-							abilities: expect.objectContaining({
-								activated: ["jewel-thief:0"],
+						representation: {
+							kind: "from characteristics",
+							characteristics: expect.objectContaining({
+								name: "Treasure Token",
+								types: ["artifact"],
+								subtypes: ["Treasure"],
+								abilities: expect.objectContaining({
+									activated: ["jewel-thief:0"],
+								}),
 							}),
-						}),
+						},
 					}),
 				],
 			}),
@@ -2865,14 +2881,17 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				kind: "create-token",
 				controller: { kind: "relative-player", player: "you" },
 				amount: 1,
-				characteristics: expect.objectContaining({
-					name: "Food Token",
-					types: ["artifact"],
-					subtypes: ["Food"],
-					abilities: expect.objectContaining({
-						activated: ["sweettooth-witch:0"],
+				representation: {
+					kind: "from characteristics",
+					characteristics: expect.objectContaining({
+						name: "Food Token",
+						types: ["artifact"],
+						subtypes: ["Food"],
+						abilities: expect.objectContaining({
+							activated: ["sweettooth-witch:0"],
+						}),
 					}),
-				}),
+				},
 			},
 		]);
 	});
@@ -3066,24 +3085,27 @@ describe("lowerForgeCard: accepted card lowering", () => {
 						kind: "create-token",
 						controller: { kind: "relative-player", player: "you" },
 						amount: 1,
-						characteristics: {
-							kind: "creature",
-							name: "Soldier Token",
-							manaCost: "none",
-							colors: ["w"],
-							supertypes: [],
-							types: ["creature"],
-							subtypes: ["Soldier"],
-							keywords: [],
-							abilities: {
-								static: [],
-								activated: [],
-								triggered: [],
-								replacement: [],
-								prohibition: [],
+						representation: {
+							kind: "from characteristics",
+							characteristics: {
+								kind: "creature",
+								name: "Soldier Token",
+								manaCost: "none",
+								colors: ["w"],
+								supertypes: [],
+								types: ["creature"],
+								subtypes: ["Soldier"],
+								keywords: [],
+								abilities: {
+									static: [],
+									activated: [],
+									triggered: [],
+									replacement: [],
+									prohibition: [],
+								},
+								power: 1,
+								toughness: 1,
 							},
-							power: 1,
-							toughness: 1,
 						},
 					},
 				],

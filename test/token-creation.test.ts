@@ -110,7 +110,10 @@ describe("token creation", () => {
 			{
 				kind: "create token",
 				controller: ALICE,
-				characteristics: TEST_ARTIFACT_TOKEN,
+				representation: {
+					kind: "from characteristics",
+					characteristics: TEST_ARTIFACT_TOKEN,
+				},
 				amount: 1,
 			},
 			passingAgents(),
@@ -136,7 +139,10 @@ describe("token creation", () => {
 			{
 				kind: "create token",
 				controller: ALICE,
-				characteristics: TEST_TRIGGER_TOKEN,
+				representation: {
+					kind: "from characteristics",
+					characteristics: TEST_TRIGGER_TOKEN,
+				},
 				amount: 1,
 			},
 			passingAgents(),
@@ -160,7 +166,10 @@ describe("token creation", () => {
 			{
 				kind: "create token",
 				controller: ALICE,
-				characteristics: COPY_TOKEN,
+				representation: {
+					kind: "from characteristics",
+					characteristics: COPY_TOKEN,
+				},
 				amount: 1,
 			},
 			passingAgents(),
@@ -187,7 +196,10 @@ describe("token creation", () => {
 			{
 				kind: "create token",
 				controller: ALICE,
-				characteristics: TEST_ARTIFACT_TOKEN,
+				representation: {
+					kind: "from characteristics",
+					characteristics: TEST_ARTIFACT_TOKEN,
+				},
 				amount: 1,
 			},
 			passingAgents(),

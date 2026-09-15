@@ -1184,7 +1184,10 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				{
 					kind: "create-token",
 					controller: { kind: "relative-player", player: controller },
-					characteristics: cloneCharacteristics(CLUE_TOKEN),
+					representation: {
+						kind: "from characteristics",
+						characteristics: cloneCharacteristics(CLUE_TOKEN),
+					},
 					amount: 1,
 				},
 			]);
@@ -2017,7 +2020,10 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				{
 					kind: "create-token",
 					controller,
-					characteristics: characteristics.value,
+					representation: {
+						kind: "from characteristics",
+						characteristics: characteristics.value,
+					},
 					amount,
 				},
 			]);

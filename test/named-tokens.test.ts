@@ -61,7 +61,10 @@ describe("named artifact tokens", () => {
 			{
 				kind: "create token",
 				controller: ALICE,
-				characteristics: CLUE_TOKEN,
+				representation: {
+					kind: "from characteristics",
+					characteristics: CLUE_TOKEN,
+				},
 				amount: 1,
 			},
 			passingAgents(),

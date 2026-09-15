@@ -831,8 +831,16 @@ interface BeginStepEvent extends EventCommon {
 interface CreateTokenEvent extends EventCommon {
 	kind: "create token";
 	controller: PlayerId;
+	representation:
+		| {
+				kind: "from characteristics";
+				characteristics: CharacteristicsSnapshot;
+		  }
+		| {
+				kind: "permanent copy";
+				permanent: PermanentRef;
+		  };
 	/** The characteristics stated by the token-creating instruction (CR 111.4). */
-	characteristics: CharacteristicsSnapshot;
 	amount: number;
 }
 
@@ -2426,7 +2434,15 @@ export type EffectDef<AllowedPlayer extends TriggerEffectPlayer> =
 	| {
 			kind: "create-token";
 			controller: EffectPlayerSubject<AllowedPlayer>;
-			characteristics: CharacteristicsSnapshot;
+			representation:
+				| {
+						kind: "from characteristics";
+						characteristics: CharacteristicsSnapshot;
+				  }
+				| {
+						kind: "permanent copy";
+						subject: SourceEffectRef | TargetEffectRef;
+				  };
 			amount: number;
 	  }
 	| {
@@ -5655,7 +5671,8 @@ function describeEvent(
 		case "begin phase":
 			return `beginPhase(P${ev.player}, ${ev.phase})`;
 		case "create token":
-			return `token(${ev.amount}x ${ev.characteristics.name} for P${ev.controller})`;
+			assert(ev.representation.kind === "from characteristics");
+			return `token(${ev.amount}x ${ev.representation.characteristics.name} for P${ev.controller})`;
 		case "lose game":
 			return `loseGame(P${ev.player}: ${ev.reason})`;
 		case "declare attackers":
@@ -6974,6 +6991,7 @@ function executeIn(
 			break;
 
 		case "create token": {
+			assert(ev.representation.kind === "from characteristics");
 			for (let i = 0; i < ev.amount; i++) {
 				const tokenId = state.nextObjectId++ as ObjectId;
 				childResults.push(
@@ -6988,7 +7006,7 @@ function executeIn(
 							cause: "effect",
 
 							createdToken: {
-								values: cloneCharacteristics(ev.characteristics),
+								values: cloneCharacteristics(ev.representation.characteristics),
 								effectData: {},
 							},
 						},
@@ -8736,10 +8754,16 @@ function effectToEvent(
 				Number.isSafeInteger(effect.amount) && effect.amount >= 1,
 				"token amount must be a positive safe integer",
 			);
+			assert(effect.representation.kind === "from characteristics");
 			return {
 				kind: "create token",
 				controller: effectPlayer(effect.controller),
-				characteristics: cloneCharacteristics(effect.characteristics),
+				representation: {
+					kind: "from characteristics",
+					characteristics: cloneCharacteristics(
+						effect.representation.characteristics,
+					),
+				},
 				amount: effect.amount,
 			};
 		case "discard": {
