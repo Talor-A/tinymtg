@@ -1,0 +1,7 @@
+Name:Saddleback Lagac
+ManaCost:3 G
+Types:Creature Lizard
+PT:3/1
+T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigPut | TriggerDescription$ When CARDNAME enters, support 2. (Put a +1/+1 counter on each of up to two other target creatures.)
+SVar:TrigPut:DB$ PutCounter | Support$ 2
+Oracle:When Saddleback Lagac enters, support 2. (Put a +1/+1 counter on each of up to two other target creatures.)

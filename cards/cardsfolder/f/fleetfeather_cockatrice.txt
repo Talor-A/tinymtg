@@ -1,0 +1,10 @@
+Name:Fleetfeather Cockatrice
+ManaCost:3 G U
+Types:Creature Cockatrice
+PT:3/3
+K:Flash
+K:Flying
+K:Deathtouch
+A:AB$ PutCounter | Cost$ 5 G U | Monstrosity$ 3
+DeckHas:Ability$Counters
+Oracle:Flash (You may cast this spell any time you could cast an instant.)\nFlying, deathtouch\n{5}{G}{U}: Monstrosity 3. (If this creature isn't monstrous, put three +1/+1 counters on it and it becomes monstrous.)

@@ -1,0 +1,8 @@
+Name:Sandcrafter Mage
+ManaCost:2 W
+Types:Creature Human Wizard
+PT:2/2
+T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigBolster | TriggerDescription$ When CARDNAME enters, bolster 1. (Choose a creature with the least toughness among creatures you control and put a +1/+1 counter on it.)
+SVar:TrigBolster:DB$ PutCounter | Bolster$ 1
+DeckHas:Ability$Counters
+Oracle:When Sandcrafter Mage enters, bolster 1. (Choose a creature with the least toughness among creatures you control and put a +1/+1 counter on it.)

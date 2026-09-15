@@ -1,0 +1,5 @@
+Name:Overflowing Insight
+ManaCost:4 U U U
+Types:Sorcery
+A:SP$ Draw | NumCards$ 7 | ValidTgts$ Player | SpellDescription$ Target player draws seven cards.
+Oracle:Target player draws seven cards.

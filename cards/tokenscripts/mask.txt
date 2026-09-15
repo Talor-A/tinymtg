@@ -1,0 +1,8 @@
+Name:Mask
+ManaCost:no cost
+Colors:white
+Types:Enchantment Aura
+K:Enchant:Permanent:permanent
+SVar:AttachAILogic:Pump
+K:Umbra armor
+Oracle:Enchant permanent\nUmbra armor
