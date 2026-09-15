@@ -13,7 +13,9 @@ import {
 	createEngine,
 	createReadContext,
 	defineCard,
+	type EffectSubjectView,
 	type EntityRef,
+	effectSubjectFromSnapshot,
 	executeCastAction,
 	type GameState,
 	getObservableActions,
@@ -34,6 +36,7 @@ import {
 	type TargetDef,
 	turnLocation,
 } from "../index.ts";
+import { assert, assertDefined } from "./../lib/assert.ts";
 import {
 	advanceUntil,
 	loadCardFixture,
@@ -103,7 +106,11 @@ describe("target predicates", () => {
 
 		const matches = (predicate: ObjectPredicateDef, id: ObjectId) => {
 			const snapshot = getSnapshot(createReadContext(engine, state), id);
-			return objectMatchesPredicate(predicate, snapshot, mine);
+			return objectMatchesPredicate(
+				predicate,
+				effectSubjectFromSnapshot(snapshot),
+				mine,
+			);
 		};
 
 		expect(matches({ kind: "self" }, bears.id)).toBe(true);
@@ -180,6 +187,104 @@ describe("target predicates", () => {
 				swamp.id,
 			),
 		).toBe(true);
+	});
+
+	test("the token predicate reads each object kind's representation", () => {
+		const state = newGame();
+		const cardPermanent = spawnPermanent(engine, state, "grizzly-bears", 0);
+		const tokenPermanent = spawnPermanent(engine, state, "grizzly-bears", 0, {
+			token: true,
+		});
+		const leavingToken = spawnPermanent(engine, state, "grizzly-bears", 0, {
+			token: true,
+		});
+		const graveyardCard = spawnCard(state, "grizzly-bears", 0, "graveyard");
+		const spellCard = spawnCard(state, "murder", 0, "hand");
+
+		// A token keeps being a token off the battlefield, until the state-based
+		// action that removes it (CR 704.5d) gets a chance to run.
+		perform(
+			engine,
+			state,
+			{
+				kind: "change zone",
+				object: leavingToken.id,
+				from: "battlefield",
+				destination: { zone: "graveyard" },
+				cause: "destroy",
+			},
+			passingAgents(),
+		);
+		const graveyardToken = state.players[0].graveyard.at(-1);
+		assertDefined(graveyardToken);
+
+		perform(
+			engine,
+			state,
+			{
+				kind: "change zone",
+				object: spellCard.id,
+				from: "hand",
+				destination: {
+					zone: "stack",
+					controller: 0,
+					targets: [
+						{
+							slot: "target-1",
+							target: { type: "permanent", id: cardPermanent.id },
+						},
+					],
+				},
+				cause: "cast",
+			},
+			passingAgents(),
+		);
+		const spell = state.stack.at(-1);
+		assert(spell?.kind === "spell", "expected a spell on the stack");
+
+		const isToken = (id: ObjectId) =>
+			objectMatchesPredicate(
+				{ kind: "token" },
+				effectSubjectFromSnapshot(
+					getSnapshot(createReadContext(engine, state), id),
+				),
+				{ controller: 0, source: null },
+			);
+
+		expect(isToken(tokenPermanent.id)).toBe(true);
+		expect(isToken(graveyardToken)).toBe(true);
+		expect(isToken(cardPermanent.id)).toBe(false);
+		expect(isToken(graveyardCard.id)).toBe(false);
+		expect(isToken(spell.objectId)).toBe(false);
+	});
+
+	test("the layer walk sees the same subject facts as a finished snapshot", () => {
+		const state = newGame();
+		spawnPermanent(engine, state, "target-test-subject-observer", 0);
+		const attacker = spawnPermanent(engine, state, "grizzly-bears", 0, {
+			token: true,
+		});
+		const blocker = spawnPermanent(engine, state, "grizzly-bears", 1);
+		permanent(state, attacker.id).attacking = true;
+		permanent(state, blocker.id).blocking = true;
+
+		OBSERVED_LAYER_SUBJECTS.clear();
+		const read = createReadContext(engine, state);
+		for (const id of [attacker.id, blocker.id]) {
+			// The read context evaluates characteristics lazily, so the observer only
+			// runs once this object's snapshot is demanded.
+			const fromSnapshot = effectSubjectFromSnapshot(getSnapshot(read, id));
+			const duringLayer = OBSERVED_LAYER_SUBJECTS.get(id);
+			assertDefined(duringLayer, "the layer walk never offered this object");
+			expect({ ...duringLayer, currentCharacteristics: undefined }).toEqual({
+				...fromSnapshot,
+				currentCharacteristics: undefined,
+			});
+		}
+		expect(OBSERVED_LAYER_SUBJECTS.get(attacker.id)?.attacking).toBe(true);
+		expect(OBSERVED_LAYER_SUBJECTS.get(blocker.id)?.blocking).toBe(true);
+		expect(OBSERVED_LAYER_SUBJECTS.get(attacker.id)?.token).toBe(true);
+		expect(OBSERVED_LAYER_SUBJECTS.get(blocker.id)?.token).toBe(false);
 	});
 });
 
@@ -354,6 +459,33 @@ const TEST_CARD_5 = defineCard({
 	],
 });
 
+// Records the subject view the layer walk offers for every battlefield object,
+// so a test can compare it against the view built from a finished snapshot.
+const OBSERVED_LAYER_SUBJECTS = new Map<ObjectId, EffectSubjectView>();
+const TEST_CARD_6 = defineCard({
+	id: "target-test-subject-observer",
+	name: "Test subject observer",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	statics: [
+		{
+			kind: "characteristic",
+			text: "Observes each subject offered to it and changes nothing.",
+			applies: (subject) => {
+				OBSERVED_LAYER_SUBJECTS.set(subject.objectId, subject);
+				return false;
+			},
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify: () => {},
+				},
+			],
+		},
+	],
+});
+
 const engine = createEngine([
 	...CARDS,
 	...FIXTURE_CARDS,
@@ -362,6 +494,7 @@ const engine = createEngine([
 	TEST_CARD_3,
 	TEST_CARD_4,
 	TEST_CARD_5,
+	TEST_CARD_6,
 ]);
 
 function setupCast(cardId = "murder") {

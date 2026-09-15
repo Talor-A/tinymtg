@@ -1379,7 +1379,7 @@ function buildFilteredGameView(
 					let applies: boolean;
 					if (entry.firstSlice) {
 						applies = entry.applies(
-							continuousEffectEvaluation(subject, current),
+							effectSubjectDuringLayer(subject, current),
 							state,
 							source,
 						);
@@ -2918,6 +2918,79 @@ export function targetSelectorSatisfies(
 	return selector.kind === requirement.kind;
 }
 
+/**
+ * The normalized facts an object predicate or a characteristic static ability
+ * reads about one object. Predicates run both against finished snapshots and
+ * against objects midway through the layer walk, where only part of the
+ * characteristics are evaluated, so both boundaries build this same shape.
+ */
+export interface EffectSubjectView {
+	readonly objectId: ObjectId;
+	/** Printed identity, or null for a token or a copy with no card behind it. */
+	readonly cardId: string | null;
+	readonly owner: PlayerId;
+	/** Null where the object's zone gives it no controller (CR 109.4). */
+	readonly controller: PlayerId | null;
+	readonly token: boolean;
+	readonly attacking: boolean;
+	readonly blocking: boolean;
+	readonly currentCharacteristics: DeepReadOnly<CharacteristicsSnapshot>;
+}
+
+/** The subject view for an object whose characteristics are fully evaluated. */
+export function effectSubjectFromSnapshot(
+	snapshot: DeepReadOnly<GameObjectSnapshot>,
+): EffectSubjectView {
+	const common = {
+		objectId: snapshot.objectId,
+		owner: snapshot.owner,
+		currentCharacteristics: snapshot.currentCharacteristics,
+		// Only a permanent can be in combat.
+		attacking: false,
+		blocking: false,
+	};
+	switch (snapshot.kind) {
+		case "card":
+			return {
+				...common,
+				cardId: snapshot.cardId,
+				controller: null,
+				token: false,
+			};
+		case "spell":
+			return {
+				...common,
+				cardId:
+					snapshot.representation.kind === "card"
+						? snapshot.representation.cardId
+						: null,
+				controller: snapshot.controller,
+				// A copy of a spell is not a token; only permanents can be tokens.
+				token: false,
+			};
+		case "permanent":
+			return {
+				...common,
+				cardId:
+					snapshot.representation.kind === "card"
+						? snapshot.representation.cardId
+						: null,
+				controller: snapshot.controller,
+				token: snapshot.representation.kind === "token",
+				attacking: snapshot.attacking,
+				blocking: snapshot.blocking,
+			};
+		case "nonbattlefield-token":
+			return {
+				...common,
+				cardId: null,
+				controller: null,
+				token: true,
+			};
+	}
+	return assertNever(snapshot);
+}
+
 /** What an object predicate reads `self`, `you`, and `opponent` relative to. */
 export interface PredicateContext {
 	controller: PlayerId;
@@ -2930,17 +3003,17 @@ export interface PredicateContext {
  */
 export function objectMatchesPredicate(
 	predicate: DeepReadOnly<ObjectPredicateDef>,
-	object: DeepReadOnly<GameObjectSnapshot | ContinuousEffectEvaluation>,
+	subject: EffectSubjectView,
 	context: PredicateContext,
 ): boolean {
-	const characteristics = object.currentCharacteristics;
+	const characteristics = subject.currentCharacteristics;
 	switch (predicate.kind) {
 		case "self":
-			return context.source !== null && object.objectId === context.source;
+			return context.source !== null && subject.objectId === context.source;
 		case "attacking":
-			return "attacking" in object && object.attacking;
+			return subject.attacking;
 		case "blocking":
-			return "blocking" in object && object.blocking;
+			return subject.blocking;
 		case "type":
 			return characteristics.types.includes(predicate.type);
 		case "supertype":
@@ -2952,26 +3025,17 @@ export function objectMatchesPredicate(
 		case "keyword":
 			return characteristics.keywords.includes(predicate.keyword);
 		case "token":
-			if (object.kind === "nonbattlefield-token") return true;
-			if (object.kind === "permanent") {
-				return object.representation.kind === "token";
-			} else if (
-				object.kind === undefined ||
-				object.kind === "continuous effect evaluation"
-			) {
-				return object.token;
-			}
-			return false;
+			return subject.token;
 		case "owner":
 			return predicate.player === "you"
-				? object.owner === context.controller
-				: object.owner !== context.controller;
+				? subject.owner === context.controller
+				: subject.owner !== context.controller;
 		case "controller":
 			// An object with no controller matches neither "you" nor "opponent".
-			if (object.controller === null) return false;
+			if (subject.controller === null) return false;
 			return predicate.player === "you"
-				? object.controller === context.controller
-				: object.controller !== context.controller;
+				? subject.controller === context.controller
+				: subject.controller !== context.controller;
 		case "mana value": {
 			// CR 202.3: mana value is the total amount of mana in the cost, and
 			// an object with no mana cost has mana value 0 (CR 202.3a).
@@ -2998,14 +3062,14 @@ export function objectMatchesPredicate(
 		}
 		case "and":
 			return predicate.predicates.every((part) =>
-				objectMatchesPredicate(part, object, context),
+				objectMatchesPredicate(part, subject, context),
 			);
 		case "or":
 			return predicate.predicates.some((part) =>
-				objectMatchesPredicate(part, object, context),
+				objectMatchesPredicate(part, subject, context),
 			);
 		case "not":
-			return !objectMatchesPredicate(predicate.predicate, object, context);
+			return !objectMatchesPredicate(predicate.predicate, subject, context);
 	}
 }
 
@@ -4079,7 +4143,7 @@ export interface CharacteristicStaticAbilityDefinition {
 
 	/** `source` is the concrete object granting the effect. */
 	applies(
-		snapshot: DeepReadOnly<ContinuousEffectEvaluation>,
+		subject: EffectSubjectView,
 		state: ReadonlyGameState,
 		source: DeepReadOnly<GameObject>,
 	): boolean;
@@ -4491,34 +4555,23 @@ export function effectiveCharacteristics(
 	return snapshot.currentCharacteristics;
 }
 
-// TODO: this duplicates info and does not discriminate by category of game object.
-export interface ContinuousEffectEvaluation {
-	readonly kind?: "continuous effect evaluation";
-	readonly token: boolean;
-	readonly objectId: ObjectId;
-	readonly cardId: string | null;
-	readonly owner: PlayerId;
-	readonly controller: PlayerId | null;
-	readonly zone: Zone;
-	readonly attacking: boolean;
-	readonly blocking: boolean;
-	readonly currentCharacteristics: DeepReadOnly<CharacteristicsSnapshot>;
-}
-
-function continuousEffectEvaluation(
+/**
+ * The subject view for an object partway through the layer walk, whose
+ * characteristics are the ones evaluated so far rather than a finished
+ * snapshot's.
+ */
+function effectSubjectDuringLayer(
 	object: DeepReadOnly<GameObject>,
 	characteristics: DeepReadOnly<CharacteristicsSnapshot>,
-): ContinuousEffectEvaluation {
-	const cardId = physicalCardId(object);
+): EffectSubjectView {
 	return {
 		objectId: object.id,
-		cardId,
+		cardId: physicalCardId(object),
+		owner: object.owner,
+		controller: controllerOf(object),
 		token:
 			object.kind === "nonbattlefield-token" ||
 			(object.kind === "permanent" && object.representation.kind === "token"),
-		owner: object.owner,
-		controller: controllerOf(object),
-		zone: object.zone,
 		attacking: object.kind === "permanent" && object.attacking,
 		blocking: object.kind === "permanent" && object.blocking,
 		currentCharacteristics: characteristics,
@@ -7121,10 +7174,14 @@ function triggerSubjectsMatch(
 	// the player "you" means for a trigger that functions from there.
 	const controller = controllerOf(source) ?? source.owner;
 	return subjects.some((subject) =>
-		objectMatchesPredicate(predicate, getSnapshot(read, subject.id), {
-			controller,
-			source: source.id,
-		}),
+		objectMatchesPredicate(
+			predicate,
+			effectSubjectFromSnapshot(getSnapshot(read, subject.id)),
+			{
+				controller,
+				source: source.id,
+			},
+		),
 	);
 }
 
@@ -7271,10 +7328,14 @@ function triggerMatches(
 			)
 				return false;
 			const controller = controllerOf(source) ?? source.owner;
-			return objectMatchesPredicate(condition.predicate, sacrificed, {
-				controller,
-				source: source.id,
-			});
+			return objectMatchesPredicate(
+				condition.predicate,
+				effectSubjectFromSnapshot(sacrificed),
+				{
+					controller,
+					source: source.id,
+				},
+			);
 		}
 	}
 }
@@ -7393,10 +7454,14 @@ function leavesBattlefieldTriggerCandidates(
 			if (condition.to !== "any" && condition.to !== ev.destination.zone)
 				continue;
 			if (
-				!objectMatchesPredicate(condition.predicate, departed, {
-					controller,
-					source: source.objectId,
-				})
+				!objectMatchesPredicate(
+					condition.predicate,
+					effectSubjectFromSnapshot(departed),
+					{
+						controller,
+						source: source.objectId,
+					},
+				)
 			)
 				continue;
 
@@ -7949,10 +8014,14 @@ function resolveEffects(
 				subjects = state.battlefield.filter((id) => {
 					const object = getSnapshot(read, id);
 					assert(object.kind === "permanent");
-					return objectMatchesPredicate(selector.predicate, object, {
-						controller: item.controller,
-						source: item.source,
-					});
+					return objectMatchesPredicate(
+						selector.predicate,
+						effectSubjectFromSnapshot(object),
+						{
+							controller: item.controller,
+							source: item.source,
+						},
+					);
 				});
 			}
 			if (subjects.length > 0) {
@@ -7981,10 +8050,14 @@ function resolveEffects(
 				subjects = state.battlefield.filter((id) => {
 					const object = getSnapshot(read, id);
 					assert(object.kind === "permanent");
-					return objectMatchesPredicate(selector.predicate, object, {
-						controller: item.controller,
-						source: item.source,
-					});
+					return objectMatchesPredicate(
+						selector.predicate,
+						effectSubjectFromSnapshot(object),
+						{
+							controller: item.controller,
+							source: item.source,
+						},
+					);
 				});
 			}
 			performSimultaneousIn(
@@ -8009,10 +8082,14 @@ function resolveEffects(
 			const subjects = state.battlefield.filter((id) => {
 				const object = getSnapshot(read, id);
 				assert(object.kind === "permanent");
-				return objectMatchesPredicate(effect.subjects.predicate, object, {
-					controller: item.controller,
-					source: item.source,
-				});
+				return objectMatchesPredicate(
+					effect.subjects.predicate,
+					effectSubjectFromSnapshot(object),
+					{
+						controller: item.controller,
+						source: item.source,
+					},
+				);
 			});
 			for (const subject of subjects) {
 				addTemporaryEffect(
@@ -8044,10 +8121,14 @@ function resolveEffects(
 							const object = getSnapshot(read, id);
 							assert(object.kind === "permanent");
 							if (
-								!objectMatchesPredicate(recipient.predicate, object, {
-									controller: item.controller,
-									source: item.source,
-								})
+								!objectMatchesPredicate(
+									recipient.predicate,
+									effectSubjectFromSnapshot(object),
+									{
+										controller: item.controller,
+										source: item.source,
+									},
+								)
 							)
 								continue;
 							assert(
@@ -8202,7 +8283,7 @@ function resolveEffects(
 						if (effect.predicate === undefined) return true;
 						return objectMatchesPredicate(
 							effect.predicate,
-							getSnapshot(read, id),
+							effectSubjectFromSnapshot(getSnapshot(read, id)),
 							{ controller: item.controller, source: predicateSource },
 						);
 					}),
@@ -8347,7 +8428,7 @@ function resolveEffects(
 				const candidates = state.battlefield.filter((id) =>
 					objectMatchesPredicate(
 						predicate.definition,
-						getSnapshot(read, id),
+						effectSubjectFromSnapshot(getSnapshot(read, id)),
 						predicate.context,
 					),
 				);
@@ -9004,10 +9085,14 @@ function isLegalTarget(
 			target.id !== ctx.source &&
 			snapshot?.kind === "spell" &&
 			(definition.legal.predicate === undefined ||
-				objectMatchesPredicate(definition.legal.predicate, snapshot, {
-					controller: ctx.controller,
-					source: ctx.source,
-				}))
+				objectMatchesPredicate(
+					definition.legal.predicate,
+					effectSubjectFromSnapshot(snapshot),
+					{
+						controller: ctx.controller,
+						source: ctx.source,
+					},
+				))
 		);
 	}
 	if (target.type === "card") {
@@ -9017,10 +9102,14 @@ function isLegalTarget(
 			snapshot?.kind === "card" &&
 			snapshot.zone === definition.legal.zone &&
 			(definition.legal.predicate === undefined ||
-				objectMatchesPredicate(definition.legal.predicate, snapshot, {
-					controller: ctx.controller,
-					source: ctx.source,
-				}))
+				objectMatchesPredicate(
+					definition.legal.predicate,
+					effectSubjectFromSnapshot(snapshot),
+					{
+						controller: ctx.controller,
+						source: ctx.source,
+					},
+				))
 		);
 	}
 	if (definition.legal.kind === "player" || definition.legal.kind === "spell")
@@ -9051,10 +9140,14 @@ function isLegalTarget(
 	}
 	return (
 		definition.legal.predicate === undefined ||
-		objectMatchesPredicate(definition.legal.predicate, snapshot, {
-			controller: ctx.controller,
-			source: ctx.source,
-		})
+		objectMatchesPredicate(
+			definition.legal.predicate,
+			effectSubjectFromSnapshot(snapshot),
+			{
+				controller: ctx.controller,
+				source: ctx.source,
+			},
+		)
 	);
 }
 
@@ -9097,7 +9190,7 @@ function legalSacrifices(
 		return (
 			snapshot?.kind === "permanent" &&
 			snapshot.controller === player &&
-			objectMatchesPredicate(predicate, snapshot, {
+			objectMatchesPredicate(predicate, effectSubjectFromSnapshot(snapshot), {
 				controller: context.controller,
 				source: context.source,
 			})

@@ -81,6 +81,7 @@ import {
 	cloneCharacteristics,
 	controllerOf,
 	defineCard,
+	effectSubjectFromSnapshot,
 	effectTargetUses,
 	etbPreview,
 	getSnapshot,
@@ -3150,10 +3151,14 @@ function lowerCopyEtbKeyword(
 					const object = getSnapshot(ctx.read, id);
 					return (
 						object.kind === "permanent" &&
-						objectMatchesPredicate(selector, object, {
-							controller: ctx.controller,
-							source: ctx.self?.id ?? null,
-						})
+						objectMatchesPredicate(
+							selector,
+							effectSubjectFromSnapshot(object),
+							{
+								controller: ctx.controller,
+								source: ctx.self?.id ?? null,
+							},
+						)
 					);
 				})
 			);
@@ -3286,7 +3291,7 @@ function lowerGraveyardExileReplacement(
 			// reads (CR 608.2h's last known information is not needed yet).
 			return objectMatchesPredicate(
 				selector,
-				getSnapshot(ctx.read, ev.object),
+				effectSubjectFromSnapshot(getSnapshot(ctx.read, ev.object)),
 				{
 					controller: ctx.controller,
 					source: ctx.self.id,
@@ -3442,7 +3447,7 @@ function lowerReplacement(
 				return false;
 			return objectMatchesPredicate(
 				selector,
-				etbPreview(ctx.read.engine, ctx.state, ev),
+				effectSubjectFromSnapshot(etbPreview(ctx.read.engine, ctx.state, ev)),
 				{
 					controller: ctx.controller,
 					source: ctx.self.id,
