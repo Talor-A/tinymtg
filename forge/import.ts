@@ -2990,6 +2990,59 @@ type ReplacementLowering =
 	| { kind: "self-entry" }
 	| { kind: "global"; def: ReplacementEffectDefinition };
 
+/**
+ * Forge calls the start of a step `BeginPhase`. The engine represents the same
+ * turn-based action as `begin step`, so skipping a draw step is an ordinary
+ * replacement that replaces that event with nothing (CR 614.10).
+ */
+function lowerSkipDrawStepReplacement(
+	params: ForgeParamList,
+	where: { nodeId: string; line: number },
+): Result<ReplacementLowering, ImportIssue> {
+	const badParams = consumeParams(
+		params,
+		new Set([
+			"event",
+			"activezones",
+			"validplayer",
+			"phase",
+			"skip",
+			"description",
+		]),
+		where,
+	);
+	if (!badParams.ok) return badParams;
+	if (
+		getForgeParam(params, "Event") !== "BeginPhase" ||
+		getForgeParam(params, "ActiveZones") !== "Battlefield" ||
+		getForgeParam(params, "ValidPlayer") !== "You" ||
+		getForgeParam(params, "Phase") !== "Draw" ||
+		getForgeParam(params, "Skip") !== "True"
+	)
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"unsupported skip-step replacement shape",
+			where,
+		);
+
+	const description =
+		getForgeParam(params, "Description") ?? "Skip your draw step.";
+	const def: ReplacementEffectDefinition = {
+		label: `import:${where.nodeId}`,
+		text: description,
+		layer: "other",
+		applies(ev, ctx) {
+			return (
+				ev.kind === "begin step" &&
+				ev.step === "draw" &&
+				ev.player === ctx.controller
+			);
+		},
+		replace: () => [],
+	};
+	return ok({ kind: "global", def });
+}
+
 function lowerCopyEtbKeyword(
 	resolver: SVarResolver,
 	record: ForgeKeywordRecord,
@@ -3230,6 +3283,8 @@ function lowerReplacement(
 ): Result<ReplacementLowering, ImportIssue> {
 	const params = record.params;
 	const where = { nodeId: record.source.nodeId, line: record.source.line };
+	if (getForgeParam(params, "Event") === "BeginPhase")
+		return lowerSkipDrawStepReplacement(params, where);
 	const badParams = consumeParams(
 		params,
 		new Set([

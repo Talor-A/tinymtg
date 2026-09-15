@@ -4442,6 +4442,55 @@ describe("lowerForgeCard: strict Clone shape", () => {
 	});
 });
 
+describe("lowerForgeCard: skip your draw step", () => {
+	const skipDrawStep = `Name:Skip Draw Step
+ManaCost:B B B
+Types:Enchantment
+R:Event$ BeginPhase | ActiveZones$ Battlefield | ValidPlayer$ You | Phase$ Draw | Skip$ True | Description$ Skip your draw step.
+Oracle:Skip your draw step.
+`;
+
+	test("Dragon Appeasement lowers the canonical Forge replacement", () => {
+		const result = importFixture("d/dragon_appeasement");
+		if (!result.ok) throw new Error("expected Dragon Appeasement to lower");
+		const replacement = result.card.abilityDefinitions.replacement[0];
+		expect(replacement).toMatchObject({
+			text: "Skip your draw step.",
+			layer: "other",
+		});
+		expect(result.card.abilityDefinitions.replacement).toHaveLength(1);
+		expect(
+			replacement?.applies(
+				{ kind: "begin step", step: "draw", player: 0 } as never,
+				{ controller: 0 } as never,
+			),
+		).toBe(true);
+		expect(
+			replacement?.applies(
+				{ kind: "begin step", step: "draw", player: 1 } as never,
+				{ controller: 0 } as never,
+			),
+		).toBe(false);
+		expect(replacement?.replace({} as never, {} as never)).toEqual([]);
+	});
+
+	for (const [name, from, to] of [
+		["another player", "ValidPlayer$ You", "ValidPlayer$ Opponent"],
+		["another step", "Phase$ Draw", "Phase$ Upkeep"],
+		["a false skip flag", "Skip$ True", "Skip$ False"],
+		["another source zone", "ActiveZones$ Battlefield", "ActiveZones$ Hand"],
+	] as const) {
+		test(`rejects ${name}`, () => {
+			const result = importForgeCard(skipDrawStep.replace(from, to), {
+				id: "mutated-skip-draw-step",
+			});
+			expect(result.ok).toBe(false);
+			if (!result.ok)
+				expect(result.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+		});
+	}
+});
+
 /* ------------------------------------------------------------------------- */
 /* Mutation-based negative tests (implementation order, step 1 gate)         */
 /* ------------------------------------------------------------------------- */

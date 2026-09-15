@@ -1112,6 +1112,7 @@ Douser of Lights
 Dowsing Shaman
 Draconic Disciple
 Drag Under
+Dragon Appeasement
 Dragon Bell Monk
 Dragon Blood
 Dragon Egg
@@ -4867,4 +4868,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4864`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `4865`;

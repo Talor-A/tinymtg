@@ -93,7 +93,8 @@ scoped by `ActiveZones$ Battlefield`, e.g. Root Maze) lowers to a registered
 replacement, honoring CR 614.12's own-entry guard; the graveyard-to-exile `R:` form (`Origin$ Battlefield |
 Destination$ Graveyard` with a `ReplaceWith$` body that moves `ReplacedCard`
 to exile, e.g. Samurai of the Pale Curtain), which does apply to its own
-source; the exact optional Clone
+source; the canonical battlefield-scoped `Skip your draw step` replacement;
+the exact optional Clone
 form (`K:ETBReplacement:Copy:DBCopy:Optional` with `DB$ Clone | Choices$
 Creature.Other`) lowers to a replay-safe, non-targeting choice; basic-land mana abilities
 are synthesized from subtype (Forge omits explicit `A:` lines for those); mana
