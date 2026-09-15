@@ -3440,9 +3440,6 @@ export function defineCard(input: CardDefInput | CardDef): CardDef {
 	return definition;
 }
 
-/** Name used at the source/compiler boundary; identical to the engine CardDef. */
-export type OracleCardDef = CardDef;
-
 /** An immutable registry of normalized card and ability definitions. */
 export class Engine {
 	readonly #cards: ReadonlyMap<string, CardDef>;
