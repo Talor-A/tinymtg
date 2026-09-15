@@ -186,12 +186,26 @@ export class RandomAgent implements SyncAgent {
 	choose(_view: PlayerView, request: ChoiceRequest): ChoiceAnswer {
 		switch (request.kind) {
 			case "declareAttackers":
-			case "declareBlockers":
 				return {
 					optionIds: request.options
 						.filter(() => Math.random() < 0.5)
 						.map((option) => option.id),
 				};
+			case "declareBlockers": {
+				// A blocker appears in one option per attacker it may block, and
+				// may be assigned to only one of them, so take the first coin flip
+				// that comes up for each blocker and skip that blocker's rest.
+				const assigned = new Set<ObjectId>();
+				const optionIds: string[] = [];
+				for (const option of request.options) {
+					const { blocker } = option.assignment;
+					if (assigned.has(blocker)) continue;
+					if (Math.random() >= 0.5) continue;
+					assigned.add(blocker);
+					optionIds.push(option.id);
+				}
+				return { optionIds };
+			}
 			case "triggerOrder":
 				return {
 					optionIds: request.options

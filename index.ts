@@ -16,6 +16,8 @@ import { includes } from "./lib/array.ts";
 export {
 	type Agent,
 	type AgentPair,
+	type AttackerChoiceOption,
+	type BlockAssignmentChoiceOption,
 	type ChoiceAnswer,
 	ChoiceController,
 	ChoicePendingError,
@@ -23,6 +25,8 @@ export {
 	type ChoiceRequest,
 	type ChoiceSource,
 	type ChoiceTranscript,
+	type DeclareAttackersChoiceRequest,
+	type DeclareBlockersChoiceRequest,
 	InvalidChoiceAnswerError,
 	type ObjectChoiceReason,
 	type ObjectChoiceRequest,

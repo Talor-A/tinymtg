@@ -221,7 +221,12 @@ of eligible creatures and commits it atomically:
 Other attack restrictions, requirements, and costs, and non-player defenders
 (e.g. planeswalkers and battles) are not implemented. The defending player may
 assign each untapped creature they control to at most one attacker, with multiple
-blockers allowed on one attacker. Aesthir Glider's unconditional self
+blockers allowed on one attacker. The choice offers one option per legal
+(blocker, attacker) pair, and each option carries that pair as
+`option.assignment`, so an agent can see which options share a blocker and
+choose at most one of them; an answer that assigns a blocker twice is rejected
+as an invalid answer rather than reaching the declare-blockers event.
+`declareAttackers` options likewise carry `option.attacker`. Aesthir Glider's unconditional self
 restriction changes blocker eligibility. A creature with flying can be blocked
 only by a creature with flying or reach. Other blocking requirements, costs,
 and evasion abilities are not implemented.

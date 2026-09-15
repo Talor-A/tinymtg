@@ -61,6 +61,29 @@ export interface ChoiceOption {
 	label: string;
 }
 
+/**
+ * The attacker one `declareAttackers` option declares.
+ *
+ * The object id is carried rather than left for an agent to recover from the
+ * option id or the display label: an agent picks attackers by looking at the
+ * board, and a label is for humans.
+ */
+export interface AttackerChoiceOption extends ChoiceOption {
+	attacker: ObjectId;
+}
+
+/**
+ * The blocker-to-attacker assignment one `declareBlockers` option declares.
+ *
+ * One option per legal pair, so a blocker able to block three attackers
+ * appears in three options — and an answer may contain at most one of them
+ * (CR 509.1a). Without this field an agent cannot tell which options share a
+ * blocker, so it cannot construct a legal answer without parsing the label.
+ */
+export interface BlockAssignmentChoiceOption extends ChoiceOption {
+	assignment: BlockAssignment;
+}
+
 interface ChoiceRequestBase {
 	version: 1;
 	id: string;
@@ -174,6 +197,7 @@ export interface TriggerOrderChoiceRequest extends ChoiceRequestBase {
 export interface DeclareAttackersChoiceRequest extends ChoiceRequestBase {
 	kind: "declareAttackers";
 	player: PlayerId;
+	options: AttackerChoiceOption[];
 	context: {
 		eligibleAttackers: ObjectId[];
 	};
@@ -187,6 +211,7 @@ export interface DeclareAttackersChoiceRequest extends ChoiceRequestBase {
 export interface DeclareBlockersChoiceRequest extends ChoiceRequestBase {
 	kind: "declareBlockers";
 	player: PlayerId;
+	options: BlockAssignmentChoiceOption[];
 	context: {
 		attackers: ObjectId[];
 		eligibleBlockers: ObjectId[];
@@ -402,10 +427,10 @@ function normalizeAnswer(
 	request: ChoiceRequest,
 	answer: ChoiceAnswer,
 ): ChoiceAnswer {
-	if (
-		request.kind === "declareAttackers" ||
-		request.kind === "declareBlockers"
-	) {
+	if (request.kind === "declareBlockers") {
+		return normalizeBlockerAnswer(request, answer);
+	}
+	if (request.kind === "declareAttackers") {
 		return normalizeMultiAnswer(request, answer);
 	}
 	if (request.kind === "triggerOrder") {
@@ -562,6 +587,35 @@ function normalizeMultiAnswer(
 		.map((option) => option.id)
 		.filter((id) => seen.has(id));
 	return { optionIds: normalized };
+}
+
+/**
+ * A blocker blocks at most one attacker (CR 509.1a), and the request offers one
+ * option per legal pair, so two options naming the same blocker conflict.
+ *
+ * Rejecting that here reports it as what it is — a bad answer to this choice —
+ * rather than letting it reach the declare-blockers event, which throws
+ * `IllegalBlockDeclarationError` from deep inside the turn-based actions and
+ * tells an agent author nothing about which choice produced it.
+ */
+function normalizeBlockerAnswer(
+	request: DeclareBlockersChoiceRequest,
+	answer: ChoiceAnswer,
+): { optionIds: string[] } {
+	const normalized = normalizeMultiAnswer(request, answer);
+	const blockers = new Set<ObjectId>();
+	for (const id of normalized.optionIds) {
+		const option = request.options.find((option) => option.id === id);
+		assertDefined(option);
+		const { blocker } = option.assignment;
+		if (blockers.has(blocker)) {
+			throw new InvalidChoiceAnswerError(
+				`agent assigned blocker ${blocker} to more than one attacker for choice ${request.id}`,
+			);
+		}
+		blockers.add(blocker);
+	}
+	return normalized;
 }
 
 export function priorityOptionId(action: PriorityAction): string {
@@ -1115,6 +1169,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			options: eligibleAttackers.map((id) => ({
 				id: String(id),
 				label: `${objectLabel(this.engine, state, id)}#${id}`,
+				attacker: id,
 			})),
 		});
 		return this.chooseMulti(state, request, candidates);
@@ -1160,6 +1215,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			options: candidates.map((candidate) => ({
 				id: candidate.id,
 				label: `${objectLabel(this.engine, state, candidate.value.blocker)}#${candidate.value.blocker} blocks ${objectLabel(this.engine, state, candidate.value.attacker)}#${candidate.value.attacker}`,
+				assignment: candidate.value,
 			})),
 		});
 		return this.chooseMulti(state, request, candidates);
