@@ -28,10 +28,15 @@ import type {
 	SyncAgent,
 } from "./index.ts";
 import {
+	advance,
 	createEngine,
+	createReadContext,
 	gameOver,
 	getSnapshot,
+	newGame,
 	permanent,
+	spawnCard,
+	spawnPermanent,
 	turnLocation,
 	winner,
 } from "./index.ts";
@@ -111,7 +116,7 @@ function lifeBar(life: number, max = 20): string {
 
 function creatureBadge(state: GameState, id: ObjectId): string {
 	const p = permanent(state, id);
-	const snapshot = getSnapshot(engine.createReadContext(state), id);
+	const snapshot = getSnapshot(createReadContext(engine, state), id);
 	if (snapshot.kind !== "permanent") throw new Error("expected a permanent");
 	const characteristics = snapshot.currentCharacteristics;
 	if (characteristics.kind !== "creature")
@@ -137,7 +142,7 @@ function printBoard(state: GameState): void {
 		console.log(`  ${name}  ${lifeBar(player.life)}`);
 		const creatures = state.battlefield.filter((id) => {
 			const perm = permanent(state, id);
-			const snapshot = getSnapshot(engine.createReadContext(state), id);
+			const snapshot = getSnapshot(createReadContext(engine, state), id);
 			return (
 				perm.controller === pid &&
 				snapshot.currentCharacteristics.types.includes("creature")
@@ -145,7 +150,7 @@ function printBoard(state: GameState): void {
 		});
 		const permanents = state.battlefield.filter((id) => {
 			const perm = permanent(state, id);
-			const snapshot = getSnapshot(engine.createReadContext(state), id);
+			const snapshot = getSnapshot(createReadContext(engine, state), id);
 			return (
 				perm.controller === pid &&
 				!snapshot.currentCharacteristics.types.includes("creature")
@@ -158,7 +163,7 @@ function printBoard(state: GameState): void {
 			console.log(`    ${creatureBadge(state, id)}`);
 		}
 		for (const id of permanents) {
-			const snapshot = getSnapshot(engine.createReadContext(state), id);
+			const snapshot = getSnapshot(createReadContext(engine, state), id);
 			console.log(`    ${dim(snapshot.currentCharacteristics.name)}`);
 		}
 	}
@@ -203,7 +208,7 @@ async function advanceUntil(
 	let logPos = state.log.length;
 	for (let i = 0; i < maxAdvances; i++) {
 		if (done(state) || gameOver(state)) return;
-		engine.advance(state, agents);
+		advance(engine, state, agents);
 		logPos = await printLogSince(state, logPos);
 	}
 	throw new Error("engine did not reach the expected state in time");
@@ -211,7 +216,7 @@ async function advanceUntil(
 
 async function advanceOnce(state: GameState, agents: Agents): Promise<void> {
 	const logPos = state.log.length;
-	engine.advance(state, agents);
+	advance(engine, state, agents);
 	await printLogSince(state, logPos);
 }
 
@@ -223,8 +228,7 @@ const ALICE = 0 as PlayerId;
 const BOB = 1 as PlayerId;
 
 function fillLibrary(state: GameState, player: PlayerId, n: number): void {
-	for (let i = 0; i < n; i++)
-		engine.spawnCard(state, "forest", player, "library");
+	for (let i = 0; i < n; i++) spawnCard(state, "forest", player, "library");
 }
 
 // TODO: every act stages its board with spawnPermanent (index.ts:1759), which
@@ -288,11 +292,11 @@ async function main(): Promise<void> {
 	);
 
 	{
-		const state = engine.newGame();
+		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
-		engine.spawnPermanent(state, "furnace-of-rath", ALICE);
-		const bear = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		spawnPermanent(engine, state, "furnace-of-rath", ALICE);
+		const bear = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 
 		const agents: Agents = [
 			new ScriptedAgent([], [], [], [[bear.id]]),
@@ -310,7 +314,7 @@ async function main(): Promise<void> {
 
 	/* ---------------------------- Act II --------------------------- */
 	// TODO: "learns his lesson" / "next attack" implies this continues Act I,
-	// but every act calls engine.newGame() and throws the previous board away. That is
+	// but every act calls newGame() and throws the previous board away. That is
 	// why Bob is back at 20 here rather than the 16 Act I left him on. Either
 	// reword the narration to stop implying continuity, or thread one game
 	// through the acts (which would mean spawning the Giant mid-game rather
@@ -328,11 +332,11 @@ async function main(): Promise<void> {
 	);
 
 	{
-		const state = engine.newGame();
+		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
-		const bear = engine.spawnPermanent(state, "grizzly-bears", ALICE);
-		engine.spawnPermanent(state, "palisade-giant", BOB);
+		const bear = spawnPermanent(engine, state, "grizzly-bears", ALICE);
+		spawnPermanent(engine, state, "palisade-giant", BOB);
 
 		const agents: Agents = [
 			new ScriptedAgent([], [], [], [[bear.id]]),
@@ -374,11 +378,11 @@ async function main(): Promise<void> {
 	);
 
 	{
-		const state = engine.newGame();
+		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
-		engine.spawnPermanent(state, "furnace-of-rath", BOB);
-		const myr = engine.spawnPermanent(state, "darksteel-myr", ALICE);
+		spawnPermanent(engine, state, "furnace-of-rath", BOB);
+		const myr = spawnPermanent(engine, state, "darksteel-myr", ALICE);
 
 		const agents: Agents = [
 			new ScriptedAgent([], [], [], [[myr.id]]),
@@ -403,11 +407,11 @@ async function main(): Promise<void> {
 	await beat("Rhox War Monk connects, and Alice climbs back up as Bob bleeds.");
 
 	{
-		const state = engine.newGame();
+		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
 		state.players[ALICE].life = 10;
-		const monk = engine.spawnPermanent(state, "rhox-war-monk", ALICE);
+		const monk = spawnPermanent(engine, state, "rhox-war-monk", ALICE);
 
 		const agents: Agents = [
 			new ScriptedAgent([], [], [], [[monk.id]]),
@@ -440,11 +444,11 @@ async function main(): Promise<void> {
 	);
 
 	{
-		const state = engine.newGame();
+		const state = newGame();
 		fillLibrary(state, ALICE, 3);
 		fillLibrary(state, BOB, 3);
-		engine.spawnPermanent(state, "test-kalitas-replacement", ALICE);
-		const doomed = engine.spawnPermanent(state, "eager-cadet", BOB);
+		spawnPermanent(engine, state, "test-kalitas-replacement", ALICE);
+		const doomed = spawnPermanent(engine, state, "eager-cadet", BOB);
 		permanent(state, doomed.id).damage = 1; // 1/1 with 1 damage marked = lethal at SBA
 
 		const agents = passing();
@@ -479,13 +483,13 @@ async function main(): Promise<void> {
 	);
 
 	{
-		const state = engine.newGame();
+		const state = newGame();
 		fillLibrary(state, ALICE, 40);
 		fillLibrary(state, BOB, 40);
 		state.players[ALICE].life = 6;
 		state.players[BOB].life = 6;
-		const aliceBear = engine.spawnPermanent(state, "grizzly-bears", ALICE);
-		const bobBear = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const aliceBear = spawnPermanent(engine, state, "grizzly-bears", ALICE);
+		const bobBear = spawnPermanent(engine, state, "grizzly-bears", BOB);
 
 		class SwingingAgent implements SyncAgent {
 			constructor(
@@ -524,7 +528,7 @@ async function main(): Promise<void> {
 		let logPos = state.log.length;
 		let safety = 0;
 		while (!gameOver(state) && safety++ < 500) {
-			engine.advance(state, agents);
+			advance(engine, state, agents);
 			logPos = await printLogSince(state, logPos);
 		}
 

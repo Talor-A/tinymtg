@@ -7,19 +7,27 @@ import {
 	type AnyActivatedAbilityDefinition,
 	abilityId,
 	addTemporaryEffect,
+	advanceWithReplay,
 	ChoiceController,
 	type ChoiceRequest,
 	createEngine,
+	createReadContext,
 	defineCard,
 	type EntityRef,
+	executeAbilityAction,
 	type GameState,
+	getObservableActions,
 	getSnapshot,
 	IllegalAbilityActivationError,
 	InvalidChoiceAnswerError,
 	type ObjectId,
 	type PlayerId,
 	type PlayerView,
+	perform,
 	type SyncAgent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
 	turnLocation,
 } from "../index.ts";
 import {
@@ -384,8 +392,7 @@ function assertActivated(
 function mainPhaseGame(): GameState {
 	const state = newInProgressGame(engine);
 	for (const player of [0, 1] as const) {
-		for (let i = 0; i < 5; i++)
-			engine.spawnCard(state, "forest", player, "library");
+		for (let i = 0; i < 5; i++) spawnCard(state, "forest", player, "library");
 	}
 	advanceUntil(
 		engine,
@@ -404,7 +411,8 @@ function activateAt(
 ): void {
 	const agents = passingAgents();
 	agents[0].targetChoices.push(target);
-	engine.executeAbilityAction(
+	executeAbilityAction(
+		engine,
 		state,
 		0,
 		{ kind: "activate ability", source, ability },
@@ -416,16 +424,17 @@ function activateAt(
 describe("self-pumping activated abilities", () => {
 	test("Zof Shade's activated pump applies through the layer system", () => {
 		const state = mainPhaseGame();
-		const shade = engine.spawnPermanent(state, "zof-shade", 0);
+		const shade = spawnPermanent(engine, state, "zof-shade", 0);
 		state.players[0].manaPool.b = 1;
 		state.players[0].manaPool.c = 2;
 
 		const read = () =>
-			getSnapshot(engine.createReadContext(state), shade.id)
+			getSnapshot(createReadContext(engine, state), shade.id)
 				.currentCharacteristics;
 		expect(read()).toMatchObject({ power: 2, toughness: 2 });
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			0,
 			{
@@ -435,7 +444,7 @@ describe("self-pumping activated abilities", () => {
 			},
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		// The bonus comes from the ability's own definition, reached through the
 		// temporary effect's reference to it.
@@ -450,20 +459,21 @@ describe("self-pumping activated abilities", () => {
 describe("targeted activated abilities", () => {
 	test("Prodigal Sorcerer offers every any-target and damages the one chosen", () => {
 		const state = mainPhaseGame();
-		const sorcerer = engine.spawnPermanent(state, "prodigal-sorcerer", 0, {
+		const sorcerer = spawnPermanent(engine, state, "prodigal-sorcerer", 0, {
 			summoningSick: false,
 		});
-		const bears = engine.spawnPermanent(state, "grizzly-bears", 1);
-		engine.spawnPermanent(state, "forest", 1);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", 1);
+		spawnPermanent(engine, state, "forest", 1);
 
-		expect(engine.getObservableActions(state, 0)).toContainEqual({
+		expect(getObservableActions(engine, state, 0)).toContainEqual({
 			kind: "activate ability",
 			source: sorcerer.id,
 			ability: PRODIGAL_SORCERER_TAP,
 		});
 
 		const choices = ChoiceController.record(engine, passingAgents());
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			0,
 			{
@@ -484,24 +494,25 @@ describe("targeted activated abilities", () => {
 		expect(state.stack).toHaveLength(1);
 		expect(sorcerer.tapped).toBe(true);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[1].life).toBe(20);
 		expect(state.players[0].life).toBe(19);
 	});
 
 	test("a restricted activation is not offered and cannot be forced without a target", () => {
 		const state = mainPhaseGame();
-		const pinger = engine.spawnPermanent(state, "test-artifact-pinger", 0, {
+		const pinger = spawnPermanent(engine, state, "test-artifact-pinger", 0, {
 			summoningSick: false,
 		});
-		expect(engine.getObservableActions(state, 0)).not.toContainEqual({
+		expect(getObservableActions(engine, state, 0)).not.toContainEqual({
 			kind: "activate ability",
 			source: pinger.id,
 			ability: ARTIFACT_PINGER_TAP,
 		});
 		const before = structuredClone(state);
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				0,
 				{
@@ -514,8 +525,8 @@ describe("targeted activated abilities", () => {
 		).toThrow(IllegalAbilityActivationError);
 		expect(state).toEqual(before);
 
-		engine.spawnPermanent(state, "darksteel-relic", 1);
-		expect(engine.getObservableActions(state, 0)).toContainEqual({
+		spawnPermanent(engine, state, "darksteel-relic", 1);
+		expect(getObservableActions(engine, state, 0)).toContainEqual({
 			kind: "activate ability",
 			source: pinger.id,
 			ability: ARTIFACT_PINGER_TAP,
@@ -524,12 +535,13 @@ describe("targeted activated abilities", () => {
 
 	test("an invalid target answer leaves the source untapped and the stack empty", () => {
 		const state = mainPhaseGame();
-		const sorcerer = engine.spawnPermanent(state, "prodigal-sorcerer", 0, {
+		const sorcerer = spawnPermanent(engine, state, "prodigal-sorcerer", 0, {
 			summoningSick: false,
 		});
 		const before = structuredClone(state);
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				0,
 				{
@@ -549,14 +561,15 @@ describe("targeted activated abilities", () => {
 
 	test("a controller restriction is rechecked, and only the opponent's creatures qualify", () => {
 		const state = mainPhaseGame();
-		const assassin = engine.spawnPermanent(state, "test-assassin", 0, {
+		const assassin = spawnPermanent(engine, state, "test-assassin", 0, {
 			summoningSick: false,
 		});
-		const mine = engine.spawnPermanent(state, "grizzly-bears", 0);
-		const theirs = engine.spawnPermanent(state, "grizzly-bears", 1);
+		const mine = spawnPermanent(engine, state, "grizzly-bears", 0);
+		const theirs = spawnPermanent(engine, state, "grizzly-bears", 1);
 
 		const choices = ChoiceController.record(engine, passingAgents());
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			0,
 			{
@@ -576,7 +589,7 @@ describe("targeted activated abilities", () => {
 		// state one would leave behind.
 		theirs.controller = 0;
 		state.revision++;
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.objects.has(theirs.id)).toBe(true);
 		expect(state.log.some((line) => line.includes("[illegal target]"))).toBe(
 			true,
@@ -585,20 +598,21 @@ describe("targeted activated abilities", () => {
 
 	test("an illegal target at resolution stops the ability", () => {
 		const state = mainPhaseGame();
-		const sorcerer = engine.spawnPermanent(state, "prodigal-sorcerer", 0, {
+		const sorcerer = spawnPermanent(engine, state, "prodigal-sorcerer", 0, {
 			summoningSick: false,
 		});
-		const bears = engine.spawnPermanent(state, "grizzly-bears", 1);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", 1);
 		activateAt(state, sorcerer.id, PRODIGAL_SORCERER_TAP, {
 			type: "permanent",
 			id: bears.id,
 		});
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.stack).toHaveLength(0);
 		expect(state.log.some((line) => line.includes("[illegal target]"))).toBe(
 			true,
@@ -609,26 +623,27 @@ describe("targeted activated abilities", () => {
 describe("an ability outliving its source", () => {
 	test("lifelink and the life's recipient come from the source's last existence", () => {
 		const state = mainPhaseGame();
-		const pinger = engine.spawnPermanent(state, "test-pinger", 0, {
+		const pinger = spawnPermanent(engine, state, "test-pinger", 0, {
 			summoningSick: false,
 		});
 		// P0 controls the ability and points it at themself, so the damage and the
 		// lifelink life go to different players and cannot be confused.
 		activateAt(state, pinger.id, PINGER_TAP, { type: "player", player: 0 });
 
-		engine.spawnPermanent(state, "test-lifelink-grant", 0);
+		spawnPermanent(engine, state, "test-lifelink-grant", 0);
 		// Control-changing effects are not implemented; this is the canonical
 		// state one would leave behind.
 		pinger.controller = 1;
 		state.revision++;
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "destroy", object: pinger.id, noRegen: false },
 			passingAgents(),
 		);
 		expect(state.objects.has(pinger.id)).toBe(false);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[0].life).toBe(18);
 		// Lifelink was granted, and control moved, after the ability was
 		// activated: both are read as the source last existed.
@@ -637,29 +652,30 @@ describe("an ability outliving its source", () => {
 
 	test("the departed source's colors still decide whether prevention applies", () => {
 		const state = mainPhaseGame();
-		const pinger = engine.spawnPermanent(state, "test-pinger", 0, {
+		const pinger = spawnPermanent(engine, state, "test-pinger", 0, {
 			summoningSick: false,
 		});
 		activateAt(state, pinger.id, PINGER_TAP, { type: "player", player: 1 });
 
 		// The source is blue when activated and red when it leaves.
-		engine.spawnPermanent(state, "test-red-creatures", 0);
+		spawnPermanent(engine, state, "test-red-creatures", 0);
 		// "Prevent all damage red sources would deal this turn."
 		addTemporaryEffect(state, 1, prismaticStrands("r"));
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "destroy", object: pinger.id, noRegen: false },
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[1].life).toBe(20);
 	});
 
 	test("paying the tap cost can remove the source, and the ability still resolves", () => {
 		const state = mainPhaseGame();
-		engine.spawnPermanent(state, "test-tap-backlash", 1);
-		engine.spawnPermanent(state, "test-lifelink-grant", 1);
-		const pinger = engine.spawnPermanent(state, "test-pinger", 0, {
+		spawnPermanent(engine, state, "test-tap-backlash", 1);
+		spawnPermanent(engine, state, "test-lifelink-grant", 1);
+		const pinger = spawnPermanent(engine, state, "test-pinger", 0, {
 			summoningSick: false,
 		});
 
@@ -668,7 +684,7 @@ describe("an ability outliving its source", () => {
 		expect(state.objects.has(pinger.id)).toBe(false);
 		expect(state.stack).toHaveLength(1);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[1].life).toBe(18);
 		// The lifelink the source had when it left still applies, so the ability
 		// resolved from the information captured during its own cost payment.
@@ -677,8 +693,8 @@ describe("an ability outliving its source", () => {
 
 	test("an unpayable tap cost rewinds the announcement and everything with it", () => {
 		const state = mainPhaseGame();
-		engine.spawnPermanent(state, "test-tap-fizzle", 1);
-		const pinger = engine.spawnPermanent(state, "test-pinger", 0, {
+		spawnPermanent(engine, state, "test-tap-fizzle", 1);
+		const pinger = spawnPermanent(engine, state, "test-pinger", 0, {
 			summoningSick: false,
 		});
 		const before = structuredClone(state);
@@ -686,7 +702,8 @@ describe("an ability outliving its source", () => {
 		const agents = passingAgents();
 		agents[0].targetChoices.push({ type: "player", player: 1 });
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				0,
 				{ kind: "activate ability", source: pinger.id, ability: PINGER_TAP },
@@ -702,15 +719,16 @@ describe("an ability outliving its source", () => {
 	test("a rejected choice while paying rewinds the announcement too", () => {
 		const state = mainPhaseGame();
 		// Two copies make the tap replacement a real decision for P0.
-		engine.spawnPermanent(state, "test-tap-fizzle", 1);
-		engine.spawnPermanent(state, "test-tap-fizzle", 1);
-		const pinger = engine.spawnPermanent(state, "test-pinger", 0, {
+		spawnPermanent(engine, state, "test-tap-fizzle", 1);
+		spawnPermanent(engine, state, "test-tap-fizzle", 1);
+		const pinger = spawnPermanent(engine, state, "test-pinger", 0, {
 			summoningSick: false,
 		});
 		const before = structuredClone(state);
 
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				0,
 				{ kind: "activate ability", source: pinger.id, ability: PINGER_TAP },
@@ -730,14 +748,14 @@ describe("an ability outliving its source", () => {
 
 	test("a source that destroys itself mid-resolution still finishes the ability", () => {
 		const state = mainPhaseGame();
-		const destroyer = engine.spawnPermanent(state, "test-self-destroyer", 0, {
+		const destroyer = spawnPermanent(engine, state, "test-self-destroyer", 0, {
 			summoningSick: false,
 		});
 		activateAt(state, destroyer.id, SELF_DESTROYER_TAP, {
 			type: "permanent",
 			id: destroyer.id,
 		});
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		// The destroy leaves; the damage that follows finds no target, so it does
 		// nothing and gains nobody life, but it still reads its departed source.
 		expect(state.objects.has(destroyer.id)).toBe(false);
@@ -750,7 +768,7 @@ describe("an ability outliving its source", () => {
 describe("captured stack items", () => {
 	test("a stack item survives its card definition changing under it", () => {
 		const state = mainPhaseGame();
-		const probe = engine.spawnPermanent(state, "test-registry-probe", 0, {
+		const probe = spawnPermanent(engine, state, "test-registry-probe", 0, {
 			summoningSick: false,
 		});
 		const ability = abilityId("activated", "test-registry-probe", 0);
@@ -781,7 +799,7 @@ describe("captured stack items", () => {
 		// only what was captured.
 		const cloned = structuredClone(state);
 		expect(cloned.stack[0]).toEqual(item);
-		engine.settlePriority(cloned, passingAgents());
+		settlePriority(engine, cloned, passingAgents());
 		expect(cloned.players[1].life).toBe(18);
 		expect(cloned.players[0].life).toBe(20);
 	});
@@ -790,9 +808,10 @@ describe("captured stack items", () => {
 describe("targeted triggered abilities", () => {
 	test("Flametongue Kavu's trigger targets and damages a creature on resolution", () => {
 		const state = mainPhaseGame();
-		const bears = engine.spawnPermanent(state, "grizzly-bears", 1);
-		const kavu = engine.spawnCard(state, "flametongue-kavu", 0, "hand");
-		engine.perform(
+		const bears = spawnPermanent(engine, state, "grizzly-bears", 1);
+		const kavu = spawnCard(state, "flametongue-kavu", 0, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -809,14 +828,15 @@ describe("targeted triggered abilities", () => {
 
 		const agents = passingAgents();
 		agents[0].targetChoices.push({ type: "permanent", id: bears.id });
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.objects.has(bears.id)).toBe(false);
 	});
 
 	test("a trigger with no legal target is removed instead of waiting on the stack", () => {
 		const state = mainPhaseGame();
-		const vandal = engine.spawnCard(state, "manic-vandal", 0, "hand");
-		engine.perform(
+		const vandal = spawnCard(state, "manic-vandal", 0, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -828,7 +848,7 @@ describe("targeted triggered abilities", () => {
 			passingAgents(),
 		);
 		expect(state.pendingTriggers).toHaveLength(1);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.stack).toHaveLength(0);
 		expect(state.log.some((line) => line.includes("[illegal target]"))).toBe(
 			true,
@@ -837,9 +857,10 @@ describe("targeted triggered abilities", () => {
 
 	test("Manic Vandal destroys the artifact it targeted", () => {
 		const state = mainPhaseGame();
-		const diamond = engine.spawnPermanent(state, "charcoal-diamond", 1);
-		const vandal = engine.spawnCard(state, "manic-vandal", 0, "hand");
-		engine.perform(
+		const diamond = spawnPermanent(engine, state, "charcoal-diamond", 1);
+		const vandal = spawnCard(state, "manic-vandal", 0, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -852,22 +873,24 @@ describe("targeted triggered abilities", () => {
 		);
 		const agents = passingAgents();
 		agents[0].targetChoices.push({ type: "permanent", id: diamond.id });
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.objects.has(diamond.id)).toBe(false);
 		expect(state.players[1].graveyard).toHaveLength(1);
 	});
 
 	test("an illegal target at resolution also stops the trigger's untargeted effect", () => {
 		const state = mainPhaseGame();
-		const bears = engine.spawnPermanent(state, "grizzly-bears", 1);
-		const bolt = engine.spawnCard(state, "lightning-bolt", 1, "hand");
-		engine.perform(
+		const bears = spawnPermanent(engine, state, "grizzly-bears", 1);
+		const bolt = spawnCard(state, "lightning-bolt", 1, "hand");
+		perform(
+			engine,
 			state,
 			{ kind: "add mana", source: bolt.id, player: 1, mana: { r: 1 } },
 			passingAgents(),
 		);
-		const herald = engine.spawnCard(state, "test-vengeful-herald", 0, "hand");
-		engine.perform(
+		const herald = spawnCard(state, "test-vengeful-herald", 0, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -883,7 +906,7 @@ describe("targeted triggered abilities", () => {
 		agents[0].targetChoices.push({ type: "permanent", id: bears.id });
 		agents[1].priorityActions.push({ kind: "cast", card: bolt.id });
 		agents[1].targetChoices.push({ type: "permanent", id: bears.id });
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(agents[1].priorityActions).toHaveLength(0);
 		expect(state.objects.has(bears.id)).toBe(false);
@@ -895,9 +918,10 @@ describe("targeted triggered abilities", () => {
 
 	test("targets are chosen when the trigger goes on the stack, not when it triggered", () => {
 		const state = mainPhaseGame();
-		const first = engine.spawnPermanent(state, "grizzly-bears", 1);
-		const kavu = engine.spawnCard(state, "flametongue-kavu", 0, "hand");
-		engine.perform(
+		const first = spawnPermanent(engine, state, "grizzly-bears", 1);
+		const kavu = spawnCard(state, "flametongue-kavu", 0, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -909,10 +933,10 @@ describe("targeted triggered abilities", () => {
 			passingAgents(),
 		);
 		// Added after the trigger event, before any player would receive priority.
-		const late = engine.spawnPermanent(state, "eager-cadet", 1);
+		const late = spawnPermanent(engine, state, "eager-cadet", 1);
 
 		const choices = ChoiceController.record(engine, passingAgents());
-		engine.settlePriority(state, choices);
+		settlePriority(engine, state, choices);
 		const request = choices
 			.transcript()
 			.choices.find((choice) => choice.request.kind === "target")?.request;
@@ -926,17 +950,18 @@ describe("targeted triggered abilities", () => {
 
 	test("the non-active player orders and targets after the active player's triggers are on the stack", () => {
 		const state = mainPhaseGame();
-		engine.spawnPermanent(state, "grizzly-bears", 1);
+		spawnPermanent(engine, state, "grizzly-bears", 1);
 		// Two triggers each: both players make a real ordering decision, and the
 		// non-active player makes theirs second.
 		const sources = [
-			engine.spawnCard(state, "flametongue-kavu", 0, "hand"),
-			engine.spawnCard(state, "flametongue-kavu", 0, "hand"),
-			engine.spawnCard(state, "flametongue-kavu", 1, "hand"),
-			engine.spawnCard(state, "flametongue-kavu", 1, "hand"),
+			spawnCard(state, "flametongue-kavu", 0, "hand"),
+			spawnCard(state, "flametongue-kavu", 0, "hand"),
+			spawnCard(state, "flametongue-kavu", 1, "hand"),
+			spawnCard(state, "flametongue-kavu", 1, "hand"),
 		];
 		for (const source of sources) {
-			engine.perform(
+			perform(
+				engine,
 				state,
 				{
 					kind: "change zone",
@@ -964,7 +989,7 @@ describe("targeted triggered abilities", () => {
 				return new ScriptedAgent().choose(view, request);
 			},
 		});
-		engine.settlePriority(state, [observer(0), observer(1)]);
+		settlePriority(engine, state, [observer(0), observer(1)]);
 		// The active player targets an empty stack and then their own first item;
 		// the non-active player orders and targets only after both are on it, with
 		// their targets already chosen.
@@ -977,11 +1002,12 @@ describe("targeted triggered abilities", () => {
 describe("asynchronous target selection", () => {
 	test("two targeted triggers replay without repeating an earlier choice", async () => {
 		const state = mainPhaseGame();
-		engine.spawnPermanent(state, "grizzly-bears", 1);
-		engine.spawnPermanent(state, "eager-cadet", 1);
+		spawnPermanent(engine, state, "grizzly-bears", 1);
+		spawnPermanent(engine, state, "eager-cadet", 1);
 		for (const cardId of ["flametongue-kavu", "flametongue-kavu"]) {
-			const card = engine.spawnCard(state, cardId, 0, "hand");
-			engine.perform(
+			const card = spawnCard(state, cardId, 0, "hand");
+			perform(
+				engine,
 				state,
 				{
 					kind: "change zone",
@@ -1007,7 +1033,7 @@ describe("asynchronous target selection", () => {
 				return Promise.resolve({ optionId: option.id });
 			},
 		};
-		const result = await engine.advanceWithReplay(state, [
+		const result = await advanceWithReplay(engine, state, [
 			agent,
 			new ScriptedAgent(),
 		]);
@@ -1027,7 +1053,7 @@ describe("asynchronous target selection", () => {
 
 	test("a targeted activation replays without paying its tap cost twice", async () => {
 		const state = mainPhaseGame();
-		const sorcerer = engine.spawnPermanent(state, "prodigal-sorcerer", 0, {
+		const sorcerer = spawnPermanent(engine, state, "prodigal-sorcerer", 0, {
 			summoningSick: false,
 		});
 		const activate = {
@@ -1045,7 +1071,7 @@ describe("asynchronous target selection", () => {
 				return Promise.resolve({ optionId: "player:1" });
 			},
 		};
-		const result = await engine.advanceWithReplay(state, [
+		const result = await advanceWithReplay(engine, state, [
 			agent,
 			new ScriptedAgent(),
 		]);

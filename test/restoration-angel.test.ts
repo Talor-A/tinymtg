@@ -3,9 +3,15 @@ import { CARDS } from "../cards.ts";
 import {
 	ChoiceController,
 	createEngine,
+	createReadContext,
+	executeCastAction,
 	type GameState,
 	getSnapshot,
 	type ObjectId,
+	perform,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
 } from "../index.ts";
 import {
 	ALICE,
@@ -24,13 +30,15 @@ const engine = createEngine(CARDS);
  */
 function flickerBoard() {
 	const state = setupMain(engine);
-	const reinforcements = engine.spawnPermanent(
+	const reinforcements = spawnPermanent(
+		engine,
 		state,
 		"resolute-reinforcements",
 		ALICE,
 	);
-	const angel = engine.spawnCard(state, "restoration-angel", ALICE, "hand");
-	engine.perform(
+	const angel = spawnCard(state, "restoration-angel", ALICE, "hand");
+	perform(
+		engine,
 		state,
 		{
 			kind: "add mana",
@@ -45,7 +53,7 @@ function flickerBoard() {
 
 /** The battlefield's Soldier tokens, by object id. */
 function soldiers(state: GameState): ObjectId[] {
-	const read = engine.createReadContext(state);
+	const read = createReadContext(engine, state);
 	return state.battlefield.filter((id) => {
 		const snapshot = getSnapshot(read, id);
 		return snapshot.currentCharacteristics.name === "Soldier Token";
@@ -57,7 +65,8 @@ describe("Restoration Angel", () => {
 		const { state, reinforcements, angel } = flickerBoard();
 		expect(soldiers(state)).toHaveLength(0);
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: angel.id },
@@ -65,11 +74,11 @@ describe("Restoration Angel", () => {
 		);
 		// The trigger's may-answer defaults to yes, and its target choice
 		// falls to the first offered option: only the reinforcements qualify.
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		// CR 400.7: the returned card is a new permanent object, and it
 		// entered, so its ETB created a soldier token.
-		const read = engine.createReadContext(state);
+		const read = createReadContext(engine, state);
 		const returned = state.battlefield.find((id) => {
 			const snapshot = getSnapshot(read, id);
 			return (
@@ -99,17 +108,23 @@ describe("Restoration Angel", () => {
 		// The cast angel is an Angel once it resolves, and so is this one
 		// already standing on the battlefield; BOB's bear is a legal creature
 		// but not ALICE's to target.
-		const otherAngel = engine.spawnPermanent(state, "restoration-angel", ALICE);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const otherAngel = spawnPermanent(
+			engine,
+			state,
+			"restoration-angel",
+			ALICE,
+		);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", BOB);
 
 		const choices = ChoiceController.record(engine, passingAgents());
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: angel.id },
 			choices,
 		);
-		engine.settlePriority(state, choices);
+		settlePriority(engine, state, choices);
 
 		const targetRequest = choices
 			.transcript()
@@ -132,13 +147,14 @@ describe("Restoration Angel", () => {
 		// The next optional choice the controller faces — the trigger's may —
 		// is answered no.
 		declining[0].optionalChoices.push(false);
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: angel.id },
 			declining,
 		);
-		engine.settlePriority(state, declining);
+		settlePriority(engine, state, declining);
 
 		expect(state.battlefield).toContain(reinforcements.id);
 		expect(soldiers(state)).toHaveLength(0);

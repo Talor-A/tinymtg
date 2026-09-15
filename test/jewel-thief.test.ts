@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
-import { abilityId, createEngine, getSnapshot, permanent } from "../index.ts";
+import {
+	abilityId,
+	createEngine,
+	createReadContext,
+	executeAbilityAction,
+	getSnapshot,
+	perform,
+	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import {
 	ALICE,
 	advanceUntil,
@@ -20,9 +31,10 @@ const TREASURE_MANA = abilityId("activated", "jewel-thief", 0);
 describe("Jewel Thief", () => {
 	test("enters with its full printed characteristics and creates an activatable Treasure", () => {
 		const state = setupMain(engine);
-		const jewelCard = engine.spawnCard(state, "jewel-thief", ALICE, "hand");
+		const jewelCard = spawnCard(state, "jewel-thief", ALICE, "hand");
 		const agents = passingAgents();
-		const entry = engine.perform(
+		const entry = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -36,7 +48,7 @@ describe("Jewel Thief", () => {
 		const jewel = created(entry);
 
 		expect(
-			getSnapshot(engine.createReadContext(state), jewel)
+			getSnapshot(createReadContext(engine, state), jewel)
 				.currentCharacteristics,
 		).toMatchObject({
 			kind: "creature",
@@ -51,13 +63,13 @@ describe("Jewel Thief", () => {
 		});
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		const treasure = state.battlefield.find(
 			(id) => permanent(state, id).representation.kind === "token",
 		);
 		if (treasure === undefined) throw new Error("Jewel Thief created no token");
 		expect(
-			getSnapshot(engine.createReadContext(state), treasure)
+			getSnapshot(createReadContext(engine, state), treasure)
 				.currentCharacteristics,
 		).toEqual({
 			kind: "non-creature",
@@ -77,7 +89,8 @@ describe("Jewel Thief", () => {
 			},
 		});
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -99,10 +112,10 @@ describe("Jewel Thief", () => {
 
 	test("attacks without tapping and tramples over a blocker", () => {
 		const state = setupMain(engine);
-		const jewel = engine.spawnPermanent(state, "jewel-thief", ALICE, {
+		const jewel = spawnPermanent(engine, state, "jewel-thief", ALICE, {
 			summoningSick: false,
 		});
-		const blocker = engine.spawnPermanent(state, "eager-cadet", BOB);
+		const blocker = spawnPermanent(engine, state, "eager-cadet", BOB);
 		const agents: SyncAgents = [
 			new ScriptedAgent([], [], [], [[jewel.id]]),
 			new ScriptedAgent(

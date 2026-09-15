@@ -5,6 +5,9 @@ import { blockAssignmentOptionId, priorityOptionId } from "../choices.ts";
 import {
 	type Agent,
 	abilityId,
+	advance,
+	advanceWithReplay,
+	buildPlayerView,
 	type ChoiceAnswer,
 	ChoiceController,
 	ChoicePendingError,
@@ -14,12 +17,18 @@ import {
 	type GameState,
 	InvalidChoiceAnswerError,
 	isTurnStep,
+	newGame,
 	type ObjectId,
 	type PhaseId,
 	type PlayerView,
+	perform,
 	type StackItemId,
 	type StepId,
 	type SyncAgent,
+	spawnCard,
+	spawnPermanent,
+	spawnToken,
+	startGame,
 	type TurnId,
 } from "../index.ts";
 import { loadCardFixture, newInProgressGame } from "./utils/engine-helpers.ts";
@@ -43,7 +52,7 @@ describe("ScriptedAgent priority actions", () => {
 		};
 
 		expect(
-			agent.choose(engine.buildPlayerView(engine.newGame(), 0), {
+			agent.choose(buildPlayerView(engine, newGame(), 0), {
 				...base,
 				kind: "priorityAction",
 				id: "before",
@@ -54,7 +63,7 @@ describe("ScriptedAgent priority actions", () => {
 
 		const actionOptionId = priorityOptionId(action);
 		expect(
-			agent.choose(engine.buildPlayerView(engine.newGame(), 0), {
+			agent.choose(buildPlayerView(engine, newGame(), 0), {
 				...base,
 				kind: "priorityAction",
 				id: "available",
@@ -70,10 +79,10 @@ describe("ScriptedAgent priority actions", () => {
 
 describe("choice transcripts", () => {
 	test("object choices filter a mixed object set with a predicate", () => {
-		const state = engine.newGame();
-		const land = engine.spawnCard(state, "forest", 0, "hand");
-		const card = engine.spawnCard(state, "flying-men", 0, "hand");
-		const permanent = engine.spawnPermanent(state, "grizzly-bears", 0);
+		const state = newGame();
+		const land = spawnCard(state, "forest", 0, "hand");
+		const card = spawnCard(state, "flying-men", 0, "hand");
+		const permanent = spawnPermanent(engine, state, "grizzly-bears", 0);
 		const choosing: SyncAgent = {
 			choose(_view, request) {
 				if (request.kind !== "object")
@@ -110,8 +119,8 @@ describe("choice transcripts", () => {
 				return { optionIds: [request.options[0]?.id ?? ""] };
 			},
 		};
-		const state = engine.newGame();
-		const token = engine.spawnToken(state, 0, {
+		const state = newGame();
+		const token = spawnToken(state, 0, {
 			kind: "creature",
 			name: "Unregistered Replay Bear",
 			manaCost: "zero",
@@ -153,12 +162,13 @@ describe("choice transcripts", () => {
 				return { optionId: option.id };
 			},
 		};
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "hardened-scales", 0);
-		engine.spawnPermanent(state, "doubling-season", 0);
-		const creature = engine.spawnPermanent(state, "grizzly-bears", 0);
+		const state = newGame();
+		spawnPermanent(engine, state, "hardened-scales", 0);
+		spawnPermanent(engine, state, "doubling-season", 0);
+		const creature = spawnPermanent(engine, state, "grizzly-bears", 0);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "add counters",
@@ -182,10 +192,10 @@ describe("choice transcripts", () => {
 			resolveAnswer = resolve;
 		});
 		const agent: Agent = { choose: () => pending };
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "hardened-scales", 0);
-		engine.spawnPermanent(state, "doubling-season", 0);
-		const creature = engine.spawnPermanent(state, "grizzly-bears", 0);
+		const state = newGame();
+		spawnPermanent(engine, state, "hardened-scales", 0);
+		spawnPermanent(engine, state, "doubling-season", 0);
+		const creature = spawnPermanent(engine, state, "grizzly-bears", 0);
 		const choices = ChoiceController.suspending(engine, [agent, agent]);
 
 		let suspension: ChoicePendingError | undefined;
@@ -235,11 +245,11 @@ describe("choice transcripts", () => {
 
 	test("advanceWithReplay completes synchronous agents in one attempt", async () => {
 		const checkpoint = newInProgressGame(engine);
-		engine.spawnPermanent(checkpoint, "ajanis-mantra", 0);
-		engine.startGame(checkpoint, agents());
+		spawnPermanent(engine, checkpoint, "ajanis-mantra", 0);
+		startGame(engine, checkpoint, agents());
 		const snapshot = structuredClone(checkpoint);
 
-		const result = await engine.advanceWithReplay(checkpoint, agents());
+		const result = await advanceWithReplay(engine, checkpoint, agents());
 
 		expect(result.attempts).toBe(1);
 		expect(result.transcript.choices.length).toBeGreaterThan(0);
@@ -254,9 +264,9 @@ describe("choice transcripts", () => {
 
 	test("advanceWithReplay rewinds one transition around an async choice", async () => {
 		const checkpoint = newInProgressGame(engine);
-		engine.spawnPermanent(checkpoint, "ajanis-mantra", 0);
+		spawnPermanent(engine, checkpoint, "ajanis-mantra", 0);
 		const setupAgents = agents();
-		engine.startGame(checkpoint, setupAgents);
+		startGame(engine, checkpoint, setupAgents);
 		const snapshot = structuredClone(checkpoint);
 
 		let priorityCalls = 0;
@@ -274,7 +284,10 @@ describe("choice transcripts", () => {
 			},
 		};
 
-		const result = await engine.advanceWithReplay(checkpoint, [hybrid, hybrid]);
+		const result = await advanceWithReplay(engine, checkpoint, [
+			hybrid,
+			hybrid,
+		]);
 
 		expect(result.attempts).toBe(2);
 		expect(optionalCalls).toBe(1);
@@ -298,15 +311,15 @@ describe("choice transcripts", () => {
 		expect(checkpoint).toEqual(snapshot);
 
 		const expected = structuredClone(checkpoint);
-		engine.advance(expected, agents());
+		advance(engine, expected, agents());
 		expect(result.state).toEqual(expected);
 	});
 
 	test("advanceWithReplay propagates async rejection without mutating checkpoint", async () => {
 		const checkpoint = newInProgressGame(engine);
-		engine.spawnPermanent(checkpoint, "ajanis-mantra", 0);
+		spawnPermanent(engine, checkpoint, "ajanis-mantra", 0);
 		const setupAgents = agents();
-		engine.startGame(checkpoint, setupAgents);
+		startGame(engine, checkpoint, setupAgents);
 		const snapshot = structuredClone(checkpoint);
 		const failure = new Error("agent unavailable");
 		const rejecting: Agent = {
@@ -320,7 +333,7 @@ describe("choice transcripts", () => {
 		};
 
 		expect(
-			engine.advanceWithReplay(checkpoint, [rejecting, rejecting]),
+			advanceWithReplay(engine, checkpoint, [rejecting, rejecting]),
 		).rejects.toBe(failure);
 		expect(checkpoint).toEqual(snapshot);
 	});
@@ -328,12 +341,12 @@ describe("choice transcripts", () => {
 	test("replays multiple pending cleanup choices", async () => {
 		const checkpoint = newInProgressGame(engine);
 		for (let i = 0; i < 10; i++) {
-			engine.spawnCard(checkpoint, "forest", 0, "hand");
-			engine.spawnCard(checkpoint, "forest", 0, "library");
-			engine.spawnCard(checkpoint, "forest", 1, "library");
+			spawnCard(checkpoint, "forest", 0, "hand");
+			spawnCard(checkpoint, "forest", 0, "library");
+			spawnCard(checkpoint, "forest", 1, "library");
 		}
 		while (!isTurnStep(checkpoint, "end")) {
-			engine.advance(checkpoint, agents());
+			advance(engine, checkpoint, agents());
 		}
 		const snapshot = structuredClone(checkpoint);
 		let calls = 0;
@@ -351,7 +364,7 @@ describe("choice transcripts", () => {
 			},
 		};
 
-		const result = await engine.advanceWithReplay(checkpoint, [
+		const result = await advanceWithReplay(engine, checkpoint, [
 			asyncLast,
 			asyncLast,
 		]);
@@ -372,15 +385,15 @@ describe("choice transcripts", () => {
 
 	test("rejects an invalid fulfilled answer without mutating the checkpoint", async () => {
 		const checkpoint = newInProgressGame(engine);
-		engine.spawnPermanent(checkpoint, "ajanis-mantra", 0);
-		engine.startGame(checkpoint, agents());
+		spawnPermanent(engine, checkpoint, "ajanis-mantra", 0);
+		startGame(engine, checkpoint, agents());
 		const snapshot = structuredClone(checkpoint);
 		const invalid: Agent = {
 			choose: () => Promise.resolve({ optionId: "not-an-option" }),
 		};
 
 		expect(
-			engine.advanceWithReplay(checkpoint, [invalid, invalid]),
+			advanceWithReplay(engine, checkpoint, [invalid, invalid]),
 		).rejects.toBeInstanceOf(InvalidChoiceAnswerError);
 		expect(checkpoint).toEqual(snapshot);
 	});
@@ -390,7 +403,7 @@ describe("choice transcripts", () => {
 			choose: () => Promise.resolve({ optionId: "yes" }),
 		};
 		const choices = ChoiceController.suspending(engine, [agent, agent]);
-		const state = engine.newGame();
+		const state = newGame();
 		let pending: ChoicePendingError | undefined;
 		try {
 			choices.chooseOptional(state, {
@@ -440,9 +453,9 @@ describe("choice transcripts", () => {
 
 	test("records synchronous choices and replays without agents", () => {
 		const checkpoint = newInProgressGame(engine);
-		engine.spawnPermanent(checkpoint, "hardened-scales", 0);
-		engine.spawnPermanent(checkpoint, "doubling-season", 0);
-		const creature = engine.spawnPermanent(checkpoint, "grizzly-bears", 0);
+		spawnPermanent(engine, checkpoint, "hardened-scales", 0);
+		spawnPermanent(engine, checkpoint, "doubling-season", 0);
+		const creature = spawnPermanent(engine, checkpoint, "grizzly-bears", 0);
 		const event = {
 			kind: "add counters" as const,
 			permanent: { type: "permanent" as const, id: creature.id },
@@ -455,7 +468,7 @@ describe("choice transcripts", () => {
 			engine,
 			agents(new ScriptedAgent(["doubling season"])),
 		);
-		engine.perform(recordedState, event, recorder);
+		perform(engine, recordedState, event, recorder);
 		const transcript = recorder.transcript();
 
 		expect(transcript.choices.length).toBeGreaterThan(0);
@@ -463,14 +476,14 @@ describe("choice transcripts", () => {
 
 		const replayedState = structuredClone(checkpoint);
 		const replay = ChoiceController.replay(engine, transcript);
-		engine.perform(replayedState, event, replay);
+		perform(engine, replayedState, event, replay);
 		replay.assertComplete();
 
 		expect(replayedState).toEqual(recordedState);
 	});
 
 	test("fails when replay needs a choice the transcript does not contain", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const choices = ChoiceController.replay(engine, {
 			version: 1,
 			choices: [],
@@ -515,11 +528,12 @@ describe("choice transcripts", () => {
 
 	test("rejects a transcript when the request changes", () => {
 		const checkpoint = newInProgressGame(engine);
-		engine.spawnPermanent(checkpoint, "hardened-scales", 0);
-		engine.spawnPermanent(checkpoint, "doubling-season", 0);
-		const creature = engine.spawnPermanent(checkpoint, "grizzly-bears", 0);
+		spawnPermanent(engine, checkpoint, "hardened-scales", 0);
+		spawnPermanent(engine, checkpoint, "doubling-season", 0);
+		const creature = spawnPermanent(engine, checkpoint, "grizzly-bears", 0);
 		const recorder = ChoiceController.record(engine, agents());
-		engine.perform(
+		perform(
+			engine,
 			structuredClone(checkpoint),
 			{
 				kind: "add counters",
@@ -532,7 +546,8 @@ describe("choice transcripts", () => {
 
 		const replay = ChoiceController.replay(engine, recorder.transcript());
 		expect(() =>
-			engine.perform(
+			perform(
+				engine,
 				structuredClone(checkpoint),
 				{
 					kind: "add counters",
@@ -548,14 +563,14 @@ describe("choice transcripts", () => {
 
 describe("chooseAttackers", () => {
 	function eligibleCreatures(state: GameState): [ObjectId, ObjectId, ObjectId] {
-		const a = engine.spawnPermanent(state, "grizzly-bears", 0).id;
-		const b = engine.spawnPermanent(state, "grizzly-bears", 0).id;
-		const c = engine.spawnPermanent(state, "grizzly-bears", 0).id;
+		const a = spawnPermanent(engine, state, "grizzly-bears", 0).id;
+		const b = spawnPermanent(engine, state, "grizzly-bears", 0).id;
+		const c = spawnPermanent(engine, state, "grizzly-bears", 0).id;
 		return [a, b, c];
 	}
 
 	test("empty eligible list returns [] with no request", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const recorder = ChoiceController.record(engine, agents());
 		const result = recorder.chooseAttackers(state, 0, []);
 		expect(result).toEqual([]);
@@ -563,7 +578,7 @@ describe("chooseAttackers", () => {
 	});
 
 	test("selecting no attackers", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = eligibleCreatures(state);
 		const agent: Agent = { choose: () => ({ optionIds: [] }) };
 		const recorder = ChoiceController.record(engine, [
@@ -579,7 +594,7 @@ describe("chooseAttackers", () => {
 	});
 
 	test("selecting multiple attackers", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = eligibleCreatures(state);
 		const agent: Agent = {
 			choose: (_state, request) => ({
@@ -597,7 +612,7 @@ describe("chooseAttackers", () => {
 	});
 
 	test("reverse-order answer normalizes result and transcript to request order", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = eligibleCreatures(state);
 		const agent: Agent = {
 			choose: () => ({ optionIds: [String(c), String(a)] }),
@@ -613,7 +628,7 @@ describe("chooseAttackers", () => {
 	});
 
 	test("duplicate, unknown, and wrong-shape answers throw InvalidChoiceAnswerError", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = eligibleCreatures(state);
 
 		const duplicate: Agent = {
@@ -648,7 +663,7 @@ describe("chooseAttackers", () => {
 	});
 
 	test("JSON round trip and replay reproduce IDs", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = eligibleCreatures(state);
 		const agent: Agent = {
 			choose: () => ({ optionIds: [String(b)] }),
@@ -668,7 +683,7 @@ describe("chooseAttackers", () => {
 	});
 
 	test("promise answer throws ChoicePendingError; recordAnswer normalizes and replay consumes exactly once", async () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = eligibleCreatures(state);
 		let resolveAnswer: ((answer: ChoiceAnswer) => void) | undefined;
 		const pending = new Promise<ChoiceAnswer>((resolve) => {
@@ -711,15 +726,15 @@ describe("chooseBlockers", () => {
 		blockerA: ObjectId;
 		blockerB: ObjectId;
 	} {
-		const attacker = engine.spawnPermanent(state, "grizzly-bears", 0).id;
-		const blockerA = engine.spawnPermanent(state, "grizzly-bears", 1).id;
-		const blockerB = engine.spawnPermanent(state, "eager-cadet", 1).id;
+		const attacker = spawnPermanent(engine, state, "grizzly-bears", 0).id;
+		const blockerA = spawnPermanent(engine, state, "grizzly-bears", 1).id;
+		const blockerB = spawnPermanent(engine, state, "eager-cadet", 1).id;
 		return { attacker, blockerA, blockerB };
 	}
 
 	test("empty attacker list returns [] with no request", () => {
-		const state = engine.newGame();
-		const blocker = engine.spawnPermanent(state, "grizzly-bears", 1).id;
+		const state = newGame();
+		const blocker = spawnPermanent(engine, state, "grizzly-bears", 1).id;
 		const recorder = ChoiceController.record(engine, agents());
 		const result = recorder.chooseBlockers(state, 1, [], [blocker]);
 		expect(result).toEqual([]);
@@ -727,8 +742,8 @@ describe("chooseBlockers", () => {
 	});
 
 	test("empty eligible blocker list returns [] with no request", () => {
-		const state = engine.newGame();
-		const attacker = engine.spawnPermanent(state, "grizzly-bears", 0).id;
+		const state = newGame();
+		const attacker = spawnPermanent(engine, state, "grizzly-bears", 0).id;
 		const recorder = ChoiceController.record(engine, agents());
 		const result = recorder.chooseBlockers(state, 1, [attacker], []);
 		expect(result).toEqual([]);
@@ -736,10 +751,10 @@ describe("chooseBlockers", () => {
 	});
 
 	test("does not offer a ground creature as a blocker for a flying attacker", () => {
-		const state = engine.newGame();
-		const attacker = engine.spawnPermanent(state, "flying-men", 0).id;
-		const ground = engine.spawnPermanent(state, "grizzly-bears", 1).id;
-		const flying = engine.spawnPermanent(state, "flying-men", 1).id;
+		const state = newGame();
+		const attacker = spawnPermanent(engine, state, "flying-men", 0).id;
+		const ground = spawnPermanent(engine, state, "grizzly-bears", 1).id;
+		const flying = spawnPermanent(engine, state, "flying-men", 1).id;
 		const agent: Agent = {
 			choose(_state, request) {
 				expect(request.options.map((option) => option.id)).toEqual([
@@ -763,9 +778,9 @@ describe("chooseBlockers", () => {
 	});
 
 	test("does not request a choice when no creature can block a flying attacker", () => {
-		const state = engine.newGame();
-		const attacker = engine.spawnPermanent(state, "flying-men", 0).id;
-		const ground = engine.spawnPermanent(state, "grizzly-bears", 1).id;
+		const state = newGame();
+		const attacker = spawnPermanent(engine, state, "flying-men", 0).id;
+		const ground = spawnPermanent(engine, state, "grizzly-bears", 1).id;
 		const recorder = ChoiceController.record(engine, agents());
 
 		expect(recorder.chooseBlockers(state, 1, [attacker], [ground])).toEqual([]);
@@ -773,7 +788,7 @@ describe("chooseBlockers", () => {
 	});
 
 	test("selecting no blockers", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const { attacker, blockerA, blockerB } = combatants(state);
 		const agent: Agent = { choose: () => ({ optionIds: [] }) };
 		const recorder = ChoiceController.record(engine, [
@@ -794,7 +809,7 @@ describe("chooseBlockers", () => {
 	});
 
 	test("selecting multiple blocker assignments, including multi-blockers", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const { attacker, blockerA, blockerB } = combatants(state);
 		const agent: Agent = {
 			choose(_state, request) {
@@ -827,7 +842,7 @@ describe("chooseBlockers", () => {
 	});
 
 	test("reverse-order answer normalizes result and transcript to request order", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const { attacker, blockerA, blockerB } = combatants(state);
 		const agent: Agent = {
 			choose: () => ({
@@ -861,7 +876,7 @@ describe("chooseBlockers", () => {
 	});
 
 	test("duplicate option IDs and wrong-shape answers throw InvalidChoiceAnswerError", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const { attacker, blockerA } = combatants(state);
 
 		const duplicate: Agent = {
@@ -891,7 +906,7 @@ describe("chooseBlockers", () => {
 	});
 
 	test("JSON round trip and replay reproduce assignments", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const { attacker, blockerA, blockerB } = combatants(state);
 		const agent: Agent = {
 			choose: () => ({
@@ -923,7 +938,7 @@ describe("chooseBlockers", () => {
 	});
 
 	test("promise answer throws ChoicePendingError; recordAnswer normalizes and replay consumes exactly once", async () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const { attacker, blockerA, blockerB } = combatants(state);
 		let resolveAnswer: ((answer: ChoiceAnswer) => void) | undefined;
 		const pending = new Promise<ChoiceAnswer>((resolve) => {

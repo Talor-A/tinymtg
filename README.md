@@ -18,16 +18,20 @@ bun run fix         # autofix all files
 
 ## Advancing a game
 
-`advance()` executes one synchronous scheduler transition and mutates the supplied state. It accepts only synchronous agents:
+`createEngine()` builds an immutable card registry. Rules operations are module
+functions that take that registry explicitly; `Engine` methods are reserved for
+registry lookup and extension.
+
+`advance()` executes one synchronous scheduler transition and mutates the supplied state. Pass the immutable engine registry explicitly; the choice source must be synchronous:
 
 ```ts
-advance(state, [new ScriptedAgent(), new RandomAgent()]);
+advance(engine, state, [new ScriptedAgent(), new RandomAgent()]);
 ```
 
 `advanceWithReplay()` is the safe entry point for agents that may return promises. It treats the supplied state as an immutable checkpoint, runs each attempt against a clone, and returns the authoritative advanced state:
 
 ```ts
-const result = await advanceWithReplay(checkpoint, agents);
+const result = await advanceWithReplay(engine, checkpoint, agents);
 checkpoint = result.state;
 ```
 

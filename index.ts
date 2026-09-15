@@ -193,22 +193,8 @@ export type GameProgress =
 			location: TurnLocation | null;
 	  };
 
-type SchedulerCommand =
-	| { kind: "advancePreGameStep" }
-	| { kind: "advanceTurn" }
-	| { kind: "advancePhase"; turn: TurnOccurrence }
-	| {
-			kind: "advanceStep";
-			turn: TurnOccurrence;
-			phase: PhaseOccurrence;
-	  };
-
 interface TurnScheduler {
-	/**
-	 * what the turn scheduler should do next.
-	 */
-	nextAction: SchedulerCommand;
-	/** The only externally observable turn locations. */
+	/** The current rules-defined location and sole scheduler authority. */
 	progress: GameProgress;
 	/** Only exceptional turns are queued. The front is taken next. */
 	pendingTurns: TurnOccurrence[];
@@ -947,29 +933,6 @@ export function abilityId<C extends AbilityCategory>(
 	return `${cardId}:${index}` as AbilityId<C>;
 }
 
-function abilityDefinition<C extends AbilityCategory>(
-	engine: Engine,
-	category: C,
-	id: AbilityId<C>,
-): AbilityDef<C> {
-	/**
-	 * Card ids may themselves contain colons (`card:id:with:colons`), so the index
-	 * is always the segment after the *last* colon.
-	 */
-	const separator = id.lastIndexOf(":");
-	assert(separator > 0, `invalid ${category} ability id: ${id}`);
-	const indexText = id.slice(separator + 1);
-	assert(/^\d+$/.test(indexText), `invalid ${category} ability id: ${id}`);
-	const cardId = id.slice(0, separator);
-	const index = Number(indexText);
-
-	const definitions: AbilityDef<C>[] =
-		engine.cardDefinition(cardId).abilityDefinitions[category];
-	const definition = definitions[index];
-	assertDefined(definition, `unknown ${category} ability: ${id}`);
-	return definition;
-}
-
 /**
  * What an object currently *has*. Purely references, so this survives
  * `structuredClone` and can be copied, granted, or removed without touching the
@@ -1307,7 +1270,10 @@ export interface ReadContext {
  * Build all derived object information for one mutation-free rules window.
  * Callers must discard this view as soon as they mutate `state`.
  */
-function buildGameView(engine: Engine, state: ReadonlyGameState): GameView {
+export function buildGameView(
+	engine: Engine,
+	state: ReadonlyGameState,
+): GameView {
 	return buildFilteredGameView(engine, state);
 }
 
@@ -1363,7 +1329,7 @@ function buildFilteredGameView(
 		}
 
 		for (const id of initial.abilities.static) {
-			const ability = abilityDefinition(engine, "static", id);
+			const ability = engine.getAbilityDefinition("static", id);
 			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
 			if (!isCharacteristicStaticAbility(ability)) continue;
 			const lockedSubjects = new Set<ObjectId>();
@@ -2055,12 +2021,10 @@ type ScheduledTemporaryEffectDuration =
  */
 export type TemporaryEffectSource =
 	| { origin: "spell-effect"; cardId: string; effectIndex: number }
-	| {
-			origin: "ability-effect";
-			category: "triggered" | "activated";
-			abilityId: AbilityId<"triggered" | "activated">;
-			effectIndex: number;
-	  }
+	| ({ origin: "ability-effect"; effectIndex: number } & (
+			| { category: "triggered"; abilityId: TriggeredAbilityId }
+			| { category: "activated"; abilityId: ActivatedAbilityId }
+	  ))
 	| { origin: "builtin"; builtin: BuiltinTemporaryEffect };
 
 export type BuiltinTemporaryEffect =
@@ -2129,7 +2093,7 @@ export function addTemporaryEffect(
  *
  * Returns null for builtin effects, which have no card definition behind them.
  */
-function temporaryEffectDefinition(
+export function temporaryEffectDefinition(
 	engine: Engine,
 	effect: TemporaryEffect,
 ): EffectDef<TriggerEffectPlayer> | null {
@@ -2144,15 +2108,18 @@ function temporaryEffectDefinition(
 			);
 			return spell.effects;
 		}
-		const ability = abilityDefinition(
-			engine,
-			source.category,
-			source.abilityId,
-		);
-		// Mana abilities declare `effects?: never`, so they cannot be the source
-		// of a temporary effect.
-		assertDefined(ability.effects, "ability source has no effects");
-		return ability.effects;
+		if (source.category === "triggered")
+			return engine.getAbilityDefinition("triggered", source.abilityId).effects;
+		const ability = engine.getAbilityDefinition("activated", source.abilityId);
+		switch (ability.kind) {
+			case "activated":
+			case "cycling":
+				return ability.effects;
+			case "mana":
+				throw new Error("mana ability cannot create a temporary effect");
+			default:
+				return assertNever(ability);
+		}
 	})();
 	const definition = effects[source.effectIndex];
 	assertDefined(definition, "unknown temporary effect definition");
@@ -3112,24 +3079,12 @@ export interface CyclingAbilityDef extends ActivatedAbilityDefBase {
 }
 
 /** A mana ability whose instructions always produce the same mana. */
-export interface FixedManaAbilityDef extends ActivatedAbilityDefBase {
+export interface ManaAbilityDef extends ActivatedAbilityDefBase {
 	kind: "mana";
-	effects: ActivatedEffectDef[];
-	manaOptions?: never;
+	/** CR 605.1a mana abilities cannot require targets. */
+	/** One outcome is fixed; multiple outcomes require one modal choice. */
+	manaOptions: [ManaAmount, ...ManaAmount[]];
 }
-
-/**
- * A single mana ability that requires its controller to choose exactly one
- * mutually exclusive outcome as it is activated.
- */
-export interface ModalManaAbilityDef extends ActivatedAbilityDefBase {
-	kind: "mana";
-	effects?: never;
-	manaOptions: [ManaAmount, ManaAmount, ...ManaAmount[]];
-}
-
-/** CR 605.1a mana abilities cannot require targets. */
-export type ManaAbilityDef = FixedManaAbilityDef | ModalManaAbilityDef;
 
 /** Every ability definition possessed through an activated-ability reference. */
 export type AnyActivatedAbilityDefinition =
@@ -3418,7 +3373,7 @@ export function defineCard(input: CardDefInput | CardDef): CardDef {
 /** Name used at the source/compiler boundary; identical to the engine CardDef. */
 export type OracleCardDef = CardDef;
 
-/** Rules operations bound to one immutable set of card definitions. */
+/** An immutable registry of normalized card and ability definitions. */
 export class Engine {
 	readonly #cards: ReadonlyMap<string, CardDef>;
 
@@ -3446,173 +3401,18 @@ export class Engine {
 		category: C,
 		id: AbilityId<C>,
 	): AbilityDef<C> {
-		return abilityDefinition(this, category, id);
-	}
-
-	newGame(seed = 0): GameState {
-		return newGame(seed);
-	}
-
-	spawnCard(
-		state: GameState,
-		cardId: string,
-		owner: PlayerId,
-		zone: "library" | "hand" | "graveyard" | "exile",
-	): CardObject {
-		return spawnCard(state, cardId, owner, zone);
-	}
-
-	spawnPermanent(
-		state: GameState,
-		cardId: string,
-		owner: PlayerId,
-		opts: {
-			tapped?: boolean;
-			summoningSick?: boolean;
-			counters?: PermanentCounterBag;
-			token?: boolean;
-		} = {},
-	): PermanentObject {
-		return spawnPermanent(this, state, cardId, owner, opts);
-	}
-
-	spawnToken(
-		state: GameState,
-		owner: PlayerId,
-		characteristics: CharacteristicsSnapshot,
-	): PermanentObject {
-		return spawnToken(state, owner, characteristics);
-	}
-
-	name(state: ReadonlyGameState, id: ObjectId): string {
-		return name(this, state, id);
-	}
-
-	buildGameView(state: ReadonlyGameState): GameView {
-		return buildGameView(this, state);
-	}
-
-	createReadContext(state: ReadonlyGameState): ReadContext {
-		return createReadContext(this, state);
-	}
-
-	buildPlayerView(state: ReadonlyGameState, viewer: PlayerId): PlayerView {
-		return buildPlayerView(this, state, viewer);
-	}
-
-	eligibleAttackers(state: ReadonlyGameState, player: PlayerId): ObjectId[] {
-		return eligibleAttackers(this, state, player);
-	}
-
-	eligibleBlockers(
-		state: ReadonlyGameState,
-		player: PlayerId,
-		attacker?: ObjectId,
-	): ObjectId[] {
-		return eligibleBlockers(this, state, player, attacker);
-	}
-
-	etbPreview(state: ReadonlyGameState, ev: ZoneChangeEvent): PermanentSnapshot {
-		return etbPreview(this, state, ev);
-	}
-
-	temporaryEffectDefinition(
-		effect: TemporaryEffect,
-	): EffectDef<TriggerEffectPlayer> | null {
-		return temporaryEffectDefinition(this, effect);
-	}
-
-	lethalDamage(
-		stateOrRead: ReadonlyGameState | ReadContext,
-		id: ObjectId,
-	): boolean {
-		return lethalDamage(this, stateOrRead, id);
-	}
-
-	prepareEffectData(state: GameState): void {
-		prepareEffectData(this, state);
-	}
-
-	collectReplacements(
-		state: ReadonlyGameState,
-		ev?: GameEvent,
-	): BoundReplacement[] {
-		return collectReplacements(this, state, ev);
-	}
-
-	describeEvent(state: ReadonlyGameState, ev: GameEvent): string {
-		return describeEvent(this, state, ev);
-	}
-
-	checkStateBasedActions(state: GameState, source: ChoiceSource): void {
-		checkStateBasedActions(this, state, source);
-	}
-
-	perform(
-		state: GameState,
-		event: GameEvent,
-		source: ChoiceSource,
-	): PerformResult {
-		return perform(this, state, event, source);
-	}
-
-	getObservableActions(state: GameState, player: PlayerId): PriorityAction[] {
-		return getObservableActions(this, state, player);
-	}
-
-	executeAbilityAction(
-		state: GameState,
-		priorityPlayer: PlayerId,
-		action: ActivateAbilityAction,
-		source: ChoiceSource,
-	): void {
-		executeAbilityAction(this, state, priorityPlayer, action, source);
-	}
-
-	executeCastAction(
-		state: GameState,
-		priorityPlayer: PlayerId,
-		action: CastAction,
-		source: ChoiceSource,
-	): void {
-		executeCastAction(this, state, priorityPlayer, action, source);
-	}
-
-	executeLandAction(
-		state: GameState,
-		priorityPlayer: PlayerId,
-		action: PlayLandAction,
-		source: ChoiceSource,
-	): void {
-		executeLandAction(this, state, priorityPlayer, action, source);
-	}
-
-	settlePriority(state: GameState, source: ChoiceSource): void {
-		settlePriority(this, state, source);
-	}
-
-	advanceWithReplay(
-		checkpoint: GameState,
-		agents: AgentPair,
-		transcript: ChoiceTranscript = { version: 1, choices: [] },
-	): Promise<AdvanceWithReplayResult> {
-		return advanceWithReplay(this, checkpoint, agents, transcript);
-	}
-
-	startGame(state: GameState, source: ChoiceSource): void {
-		startGame(this, state, source);
-	}
-
-	advance(state: GameState, source: ChoiceSource): void {
-		advance(this, state, source);
-	}
-
-	gameOver(state: GameState): boolean {
-		return gameOver(state);
-	}
-
-	winner(state: GameState): PlayerId | "draw" | null {
-		return winner(state);
+		/** Card ids may contain colons, so the index follows the last colon. */
+		const separator = id.lastIndexOf(":");
+		assert(separator > 0, `invalid ${category} ability id: ${id}`);
+		const indexText = id.slice(separator + 1);
+		assert(/^\d+$/.test(indexText), `invalid ${category} ability id: ${id}`);
+		const cardId = id.slice(0, separator);
+		const index = Number(indexText);
+		const definitions: AbilityDef<C>[] =
+			this.cardDefinition(cardId).abilityDefinitions[category];
+		const definition = definitions[index];
+		assertDefined(definition, `unknown ${category} ability: ${id}`);
+		return definition;
 	}
 }
 
@@ -3788,7 +3588,7 @@ function emptyManaPools(state: GameState): void {
  * on purpose: tests and the fuzzer depend on `newGame()` being reproducible.
  * Callers that want a different game each run pass their own seed.
  */
-function newGame(seed = 0): GameState {
+export function newGame(seed = 0): GameState {
 	return {
 		revision: 0,
 		objects: new Map(),
@@ -3801,7 +3601,6 @@ function newGame(seed = 0): GameState {
 		blockAssignments: [],
 		completedTurns: 0,
 		turnScheduler: {
-			nextAction: { kind: "advancePreGameStep" },
 			progress: { kind: "notStarted" },
 			pendingTurns: [],
 			nextRegularPlayer: 0 as PlayerId,
@@ -3822,7 +3621,7 @@ function newGame(seed = 0): GameState {
  * Object creation
  * ------------------------------------------------------------------ */
 
-function spawnCard(
+export function spawnCard(
 	state: GameState,
 	cardId: string,
 	owner: PlayerId,
@@ -3879,7 +3678,7 @@ function spawnOnBattlefield(
 	return obj;
 }
 
-function spawnPermanent(
+export function spawnPermanent(
 	engine: Engine,
 	state: GameState,
 	cardId: string,
@@ -3902,7 +3701,7 @@ function spawnPermanent(
 	return spawnOnBattlefield(state, owner, representation, opts);
 }
 
-function spawnToken(
+export function spawnToken(
 	state: GameState,
 	owner: PlayerId,
 	characteristics: CharacteristicsSnapshot,
@@ -4083,7 +3882,11 @@ function mutableZoneList(
 	}
 }
 
-function name(engine: Engine, state: ReadonlyGameState, id: ObjectId): string {
+export function name(
+	engine: Engine,
+	state: ReadonlyGameState,
+	id: ObjectId,
+): string {
 	const object = maybeObject(state, id);
 	return object ? initialCharacteristics(engine, object).name : `<gone#${id}>`;
 }
@@ -4108,7 +3911,7 @@ export function permanentsInPlay(
  * battlefield, without defender, and not affected by summoning sickness.
  * Battlefield order is preserved.
  */
-function eligibleAttackers(
+export function eligibleAttackers(
 	engine: Engine,
 	state: ReadonlyGameState,
 	player: PlayerId,
@@ -4137,7 +3940,7 @@ function eligibleAttackers(
  * can be blocked only by a creature with flying or reach (CR 702.9b). Blocking
  * does not tap the blocker. Battlefield order is preserved.
  */
-function eligibleBlockers(
+export function eligibleBlockers(
 	engine: Engine,
 	state: ReadonlyGameState,
 	player: PlayerId,
@@ -4169,7 +3972,7 @@ function eligibleBlockers(
 			return false;
 		return !snapshot.currentCharacteristics.abilities.static.some(
 			(abilityId) => {
-				const ability = abilityDefinition(engine, "static", abilityId);
+				const ability = engine.getAbilityDefinition("static", abilityId);
 				return ability.kind === "cant-block-self";
 			},
 		);
@@ -4394,7 +4197,7 @@ export type ContinuousEffectLayer = (typeof CONTINUOUS_EFFECT_LAYERS)[number];
  * already applied. So Root Maze ("artifacts and lands enter tapped") has to see
  * a card that Mycosynth Lattice has turned into an artifact.
  */
-function etbPreview(
+export function etbPreview(
 	engine: Engine,
 	state: ReadonlyGameState,
 	ev: ZoneChangeEvent,
@@ -4495,7 +4298,7 @@ function cachedGameView(
 	return view;
 }
 
-function createReadContext(
+export function createReadContext(
 	engine: Engine,
 	state: ReadonlyGameState,
 ): ReadContext {
@@ -4561,7 +4364,7 @@ function deepFreeze<T>(value: T): DeepReadOnly<T> {
 }
 
 /** Build a detached player-specific projection from one stable read window. */
-function buildPlayerView(
+export function buildPlayerView(
 	engine: Engine,
 	state: ReadonlyGameState,
 	viewer: PlayerId,
@@ -4782,7 +4585,7 @@ function anyPossessedCharacteristicStatic(
 ): boolean {
 	for (const object of state.objects.values()) {
 		for (const id of baseCharacteristics(engine, object).abilities.static) {
-			const ability = abilityDefinition(engine, "static", id);
+			const ability = engine.getAbilityDefinition("static", id);
 			if (!isCharacteristicStaticAbility(ability)) continue;
 			if (ability.effects.some(predicate)) return true;
 		}
@@ -4813,7 +4616,7 @@ function replacementsOf(
 ): { id: ReplacementAbilityId; def: ReplacementEffectDefinition }[] {
 	return abilityReferencesOf(view, object).replacement.map((id) => ({
 		id,
-		def: abilityDefinition(engine, "replacement", id),
+		def: engine.getAbilityDefinition("replacement", id),
 	}));
 }
 
@@ -4980,7 +4783,7 @@ function collectReplacements(
 				ev.destination.copiableOverride?.name ??
 				(ev.from === null ? ev.createdToken.values.name : viewName(view, o.id));
 			for (const id of incomingReplacementRefs(view, o, ev)) {
-				const def = abilityDefinition(engine, "replacement", id);
+				const def = engine.getAbilityDefinition("replacement", id);
 				if (!functionsHere(def.functionsFrom, "battlefield")) continue;
 				out.push({
 					id: `${o.id}:${id}` as EffectId,
@@ -5261,7 +5064,7 @@ function collectProhibitions(read: ReadContext): BoundProhibition[] {
 		const definitions: ProhibitionDef[] = [
 			...prohibitionsFromKeywords(snapshot.currentCharacteristics.keywords),
 			...abilityReferencesOf(read.view, object).prohibition.map((id) =>
-				abilityDefinition(read.engine, "prohibition", id),
+				read.engine.getAbilityDefinition("prohibition", id),
 			),
 		];
 		for (const def of definitions) {
@@ -5728,7 +5531,7 @@ function describeEvent(
  * State-based actions
  * ------------------------------------------------------------------ */
 
-function checkStateBasedActions(
+export function checkStateBasedActions(
 	engine: Engine,
 	state: GameState,
 	source: ChoiceSource,
@@ -6080,7 +5883,7 @@ interface EventOccurrence {
 }
 
 /** Public entry point. Replace, then execute. Callers must run SBAs separately. */
-function perform(
+export function perform(
 	engine: Engine,
 	state: GameState,
 	event: GameEvent,
@@ -7478,7 +7281,7 @@ function detectTriggers(state: GameState, occurrence: EventOccurrence): void {
 		assertDefined(snapshot, `no derived view for object ${abilitySource.id}`);
 		for (const triggerId of snapshot.currentCharacteristics.abilities
 			.triggered) {
-			const trigger = abilityDefinition(read.engine, "triggered", triggerId);
+			const trigger = read.engine.getAbilityDefinition("triggered", triggerId);
 			const functionsFrom = trigger.functionsFrom ?? ["battlefield"];
 			if (!functionsFrom.includes(abilitySource.zone)) continue;
 			if (triggerMatches(occurrence, abilitySource, trigger.condition)) {
@@ -7504,7 +7307,7 @@ function enqueueMatchingDelayedTriggers(
 ): void {
 	const remaining: DelayedTrigger[] = [];
 	for (const delayed of state.delayedTriggers) {
-		const trigger = abilityDefinition(engine, "triggered", delayed.triggerId);
+		const trigger = engine.getAbilityDefinition("triggered", delayed.triggerId);
 		const condition = trigger.condition;
 		assert(
 			condition.kind === "begin step",
@@ -7576,7 +7379,7 @@ function leavesBattlefieldTriggerCandidates(
 		);
 
 		for (const triggerId of source.currentCharacteristics.abilities.triggered) {
-			const trigger = abilityDefinition(engine, "triggered", triggerId);
+			const trigger = engine.getAbilityDefinition("triggered", triggerId);
 			if (!functionsHere(trigger.functionsFrom, "battlefield")) continue;
 			const condition = trigger.condition;
 			if (condition.kind !== "change zone" || condition.from !== "battlefield")
@@ -8011,16 +7814,24 @@ function resolvingEffectSource(
 ): TemporaryEffectSource {
 	const ability = item.ability;
 	if (ability) {
-		return {
-			origin: "ability-effect",
-			category:
-				ability.kind === "triggered ability" ? "triggered" : "activated",
-			abilityId:
-				ability.kind === "triggered ability"
-					? ability.triggerId
-					: ability.abilityId,
-			effectIndex,
-		};
+		switch (ability.kind) {
+			case "triggered ability":
+				return {
+					origin: "ability-effect",
+					category: "triggered",
+					abilityId: ability.triggerId,
+					effectIndex,
+				};
+			case "activated ability":
+				return {
+					origin: "ability-effect",
+					category: "activated",
+					abilityId: ability.abilityId,
+					effectIndex,
+				};
+			default:
+				return assertNever(ability);
+		}
 	}
 	const object = maybeObject(state, item.source);
 	assert(
@@ -9162,10 +8973,33 @@ function validateCardEffectResultFlow(definition: CardDef): void {
 		);
 	}
 	for (const ability of definition.abilityDefinitions.activated) {
-		if (!ability.effects) continue;
+		if (ability.kind === "mana") {
+			assert(ability.manaOptions.length > 0, "mana ability has no outcomes");
+			for (const mana of ability.manaOptions) {
+				assert(
+					typeof mana === "object" && mana !== null && !Array.isArray(mana),
+					"mana ability has an invalid outcome",
+				);
+				for (const type of Object.keys(mana))
+					assert(
+						MANA_TYPES.includes(type as ManaType),
+						`mana ability produces invalid mana type ${type}`,
+					);
+				let total = 0;
+				for (const type of MANA_TYPES) {
+					const amount = mana[type] ?? 0;
+					assert(
+						Number.isSafeInteger(amount) && amount >= 0,
+						`mana ability produces an invalid ${type} quantity`,
+					);
+					total += amount;
+				}
+				assert(total > 0, "mana ability outcome produces no mana");
+			}
+			continue;
+		}
 		validateEffectResultFlow(ability.effects);
-		if ("targets" in ability)
-			requiredTargetDefinition(ability.targets, ability.effects);
+		requiredTargetDefinition(ability.targets, ability.effects);
 	}
 	for (const trigger of definition.abilityDefinitions.triggered) {
 		validateEffectResultFlow(
@@ -9721,7 +9555,7 @@ function landPlayAllowance(read: ReadContext, player: PlayerId): number {
 		// changes whether this object generates the rule effect. The allowance is
 		// not an input to characteristic derivation, so this does not recurse.
 		for (const id of abilityReferencesOf(read.view, object).static) {
-			const ability = abilityDefinition(read.engine, "static", id);
+			const ability = read.engine.getAbilityDefinition("static", id);
 			if (ability.kind !== "adjust-land-plays") continue;
 			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
 			assert(
@@ -9778,7 +9612,7 @@ function activatedAbilityActions(
 		const snapshot = getSnapshot(read, object.id);
 		const actions: ActivateAbilityAction[] = [];
 		for (const ability of snapshot.currentCharacteristics.abilities.activated) {
-			const definition = abilityDefinition(read.engine, "activated", ability);
+			const definition = read.engine.getAbilityDefinition("activated", ability);
 			const functionsFrom =
 				definition.kind === "mana" ? undefined : definition.functionsFrom;
 			if (!functionsHere(functionsFrom, object.zone)) continue;
@@ -9814,7 +9648,7 @@ function activatedAbilityActions(
 }
 
 /** Actions currently offered to a player receiving priority. */
-function getObservableActions(
+export function getObservableActions(
 	engine: Engine,
 	state: GameState,
 	player: PlayerId,
@@ -9854,7 +9688,7 @@ function getObservableActions(
  * Activating an ability
  * ------------------------------------------------------------------ */
 
-function executeAbilityAction(
+export function executeAbilityAction(
 	engine: Engine,
 	state: GameState,
 	priorityPlayer: PlayerId,
@@ -9934,7 +9768,7 @@ function activateAbilityIn(
 			`object ${action.source} does not have ability ${action.ability}`,
 		);
 	}
-	const ability = abilityDefinition(engine, "activated", action.ability);
+	const ability = engine.getAbilityDefinition("activated", action.ability);
 	const functionsFrom =
 		ability.kind === "mana" ? undefined : ability.functionsFrom;
 	if (!functionsHere(functionsFrom, object.zone)) {
@@ -9963,106 +9797,32 @@ function activateAbilityIn(
 		);
 	}
 
-	const context: ResolutionSource = {
-		source: object.id,
-		controller: priorityPlayer,
-		ability: null,
-		targets: [],
-	};
 	let events: GameEvent[] = [];
 	if (ability.kind === "mana") {
-		if ("manaOptions" in ability) {
-			if (
-				!Array.isArray(ability.manaOptions) ||
-				ability.manaOptions.length < 2
-			) {
-				throw new IllegalAbilityActivationError(
-					`modal mana ability ${action.ability} must have at least two options`,
-				);
-			}
-			if ("effects" in ability) {
-				throw new IllegalAbilityActivationError(
-					`modal mana ability ${action.ability} cannot also have fixed effects`,
-				);
-			}
-			for (const option of ability.manaOptions) {
-				if (
-					typeof option !== "object" ||
-					option === null ||
-					Array.isArray(option)
-				) {
-					throw new IllegalAbilityActivationError(
-						`mana ability ${action.ability} has an invalid option`,
+		const [fixed] = ability.manaOptions;
+		assertDefined(fixed, "validated mana ability has no outcome");
+		const chosen =
+			ability.manaOptions.length === 1
+				? fixed
+				: choices.chooseManaAmount(
+						state,
+						priorityPlayer,
+						object.id,
+						action.ability,
+						ability.manaOptions,
 					);
-				}
-				for (const type of Object.keys(option)) {
-					if (!MANA_TYPES.includes(type as ManaType)) {
-						throw new IllegalAbilityActivationError(
-							`mana ability ${action.ability} produces an invalid mana type`,
-						);
-					}
-				}
-				let total = 0;
-				for (const type of MANA_TYPES) {
-					const amount = option[type] ?? 0;
-					if (!Number.isSafeInteger(amount) || amount < 0) {
-						throw new IllegalAbilityActivationError(
-							`mana ability ${action.ability} produces an invalid quantity`,
-						);
-					}
-					total += amount;
-				}
-				if (total <= 0) {
-					throw new IllegalAbilityActivationError(
-						`mana ability ${action.ability} produces no mana`,
-					);
-				}
-			}
-			const chosen = choices.chooseManaAmount(
-				state,
-				priorityPlayer,
-				object.id,
-				action.ability,
-				ability.manaOptions,
-			);
-			assert(
-				ability.manaOptions.includes(chosen),
-				"chooseManaAmount returned an option outside its own candidate list",
-			);
-			events = [
-				effectToEvent(
-					engine,
-					state,
-					context,
-					{ kind: "add-mana", subject: "you", mana: { ...chosen } },
-					null,
-				),
-			];
-		} else {
-			events = ability.effects.map((effect) => {
-				if (effect.kind !== "add-mana") {
-					throw new IllegalAbilityActivationError(
-						"only fixed mana production is supported for mana abilities",
-					);
-				}
-				let total = 0;
-				for (const type of MANA_TYPES) {
-					const amount = effect.mana[type] ?? 0;
-					if (!Number.isSafeInteger(amount) || amount < 0) {
-						throw new IllegalAbilityActivationError(
-							`mana ability ${action.ability} produces an invalid quantity`,
-						);
-					}
-					total += amount;
-				}
-				if (total <= 0) {
-					throw new IllegalAbilityActivationError(
-						`mana ability ${action.ability} produces no mana`,
-					);
-				}
-				return effectToEvent(engine, state, context, effect, null);
-			});
-		}
+		assert(
+			ability.manaOptions.includes(chosen),
+			"chooseManaAmount returned an outcome outside its own candidate list",
+		);
+		events = [
+			{
+				kind: "add mana",
+				player: priorityPlayer,
+				source: object.id,
+				mana: { ...chosen },
+			},
+		];
 	}
 	let targets: TargetBindings = [];
 	let targetDefinitions: TargetDef[] = [];
@@ -10249,7 +10009,7 @@ function activateAbilityIn(
  * Casting a spell
  * ------------------------------------------------------------------ */
 
-function executeCastAction(
+export function executeCastAction(
 	engine: Engine,
 	state: GameState,
 	priorityPlayer: PlayerId,
@@ -10492,7 +10252,7 @@ function castSpellIn(
  * Playing a land
  * ------------------------------------------------------------------ */
 
-function executeLandAction(
+export function executeLandAction(
 	engine: Engine,
 	state: GameState,
 	priorityPlayer: PlayerId,
@@ -10595,7 +10355,7 @@ function playLandIn(
  * Passing priority
  * ------------------------------------------------------------------ */
 
-function settlePriority(
+export function settlePriority(
 	engine: Engine,
 	state: GameState,
 	source: ChoiceSource,
@@ -11014,7 +10774,7 @@ export interface AdvanceWithReplayResult {
  * async choices unwind the synchronous engine; their answers are recorded and
  * the same advancement is replayed from the untouched checkpoint.
  */
-async function advanceWithReplay(
+export async function advanceWithReplay(
 	engine: Engine,
 	checkpoint: GameState,
 	agents: AgentPair,
@@ -11047,7 +10807,7 @@ async function advanceWithReplay(
  * first turn begins, so nothing is decided by stopping in between: this
  * consumes every pre-game transition in one call.
  */
-function startGame(
+export function startGame(
 	engine: Engine,
 	state: GameState,
 	source: ChoiceSource,
@@ -11061,9 +10821,24 @@ function startGame(
 	throw new Error("the pre-game did not reach the first turn");
 }
 
-function advance(engine: Engine, state: GameState, source: ChoiceSource): void {
+export function advance(
+	engine: Engine,
+	state: GameState,
+	source: ChoiceSource,
+): void {
 	advanceIn(engine, state, asChoiceController(engine, source));
 }
+
+/** Structural work performed locally while one scheduler transition advances. */
+type SchedulerCommand =
+	| { kind: "advancePreGameStep" }
+	| { kind: "advanceTurn" }
+	| { kind: "advancePhase"; turn: TurnOccurrence }
+	| {
+			kind: "advanceStep";
+			turn: TurnOccurrence;
+			phase: PhaseOccurrence;
+	  };
 
 function advanceIn(
 	engine: Engine,
@@ -11076,19 +10851,35 @@ function advanceIn(
 	// executeIn, so invalidate any read window held by the caller up front.
 	state.revision++;
 	const scheduler = state.turnScheduler;
+	let command: SchedulerCommand;
+	switch (scheduler.progress.kind) {
+		case "notStarted":
+		case "pregame":
+			command = { kind: "advancePreGameStep" };
+			break;
+		case "inTurn":
+			command =
+				scheduler.progress.location?.kind === "step"
+					? {
+							kind: "advanceStep",
+							turn: scheduler.progress.turn,
+							phase: scheduler.progress.location.phase,
+						}
+					: { kind: "advancePhase", turn: scheduler.progress.turn };
+			break;
+		default:
+			assertNever(scheduler.progress);
+	}
 	for (let transition = 0; transition < 64; transition++) {
-		const command = scheduler.nextAction;
-
 		switch (command.kind) {
 			case "advancePreGameStep": {
 				const step = scheduler.remainingPregameSteps.shift();
 				if (!step) {
-					scheduler.nextAction = { kind: "advanceTurn" };
+					command = { kind: "advanceTurn" };
 					continue;
 				}
 				scheduler.progress = { kind: "pregame", step };
 				performPreGameActions(engine, state, choices, step);
-				scheduler.nextAction = { kind: "advancePreGameStep" };
 				return;
 			}
 
@@ -11115,7 +10906,7 @@ function advanceIn(
 						(ev) => ev.kind === "begin turn" && ev.turnId === turn.id,
 					)
 				) {
-					scheduler.nextAction = { kind: "advanceTurn" };
+					command = { kind: "advanceTurn" };
 					continue;
 				}
 
@@ -11145,17 +10936,17 @@ function advanceIn(
 				// players: an opponent can draw during your turn.
 				for (const p of state.players) p.stats.drawn.thisTurn = 0;
 				scheduler.remainingSteps = [];
-				scheduler.nextAction = { kind: "advancePhase", turn };
+				command = { kind: "advancePhase", turn };
 				continue;
 			}
 
 			case "advancePhase": {
-				const { turn } = command;
+				const turn: TurnOccurrence = command.turn;
 				const phase = turn.remainingPhases.shift();
 				if (!phase) {
 					scheduler.remainingSteps = [];
 					state.completedTurns++;
-					scheduler.nextAction = { kind: "advanceTurn" };
+					command = { kind: "advanceTurn" };
 					continue;
 				}
 
@@ -11186,7 +10977,7 @@ function advanceIn(
 						(ev) => ev.kind === "begin phase" && ev.phaseId === phase.id,
 					)
 				) {
-					scheduler.nextAction = { kind: "advancePhase", turn };
+					command = { kind: "advancePhase", turn };
 					continue;
 				}
 
@@ -11200,20 +10991,20 @@ function advanceIn(
 					};
 					priority(engine, state, choices);
 					if (!gameOver(state)) emptyManaPools(state);
-					scheduler.nextAction = { kind: "advancePhase", turn };
 					return;
 				}
 
 				scheduler.remainingSteps = makeSteps(state, phase);
-				scheduler.nextAction = { kind: "advanceStep", turn, phase };
+				command = { kind: "advanceStep", turn, phase };
 				continue;
 			}
 
 			case "advanceStep": {
-				const { turn, phase } = command;
+				const turn: TurnOccurrence = command.turn;
+				const phase: PhaseOccurrence = command.phase;
 				const step = scheduler.remainingSteps.shift();
 				if (!step) {
-					scheduler.nextAction = { kind: "advancePhase", turn };
+					command = { kind: "advancePhase", turn };
 					continue;
 				}
 
@@ -11237,7 +11028,7 @@ function advanceIn(
 						(ev) => ev.kind === "begin step" && ev.stepId === step.id,
 					)
 				) {
-					scheduler.nextAction = { kind: "advanceStep", turn, phase };
+					command = { kind: "advanceStep", turn, phase };
 					continue;
 				}
 
@@ -11251,7 +11042,6 @@ function advanceIn(
 				// priority helper opens one if something triggered.
 				priority(engine, state, choices);
 				if (!gameOver(state)) emptyManaPools(state);
-				scheduler.nextAction = { kind: "advanceStep", turn, phase };
 				return;
 			}
 

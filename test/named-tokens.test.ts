@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS } from "../cards.ts";
-import { abilityId, createEngine, getSnapshot } from "../index.ts";
+import {
+	abilityId,
+	createEngine,
+	createReadContext,
+	executeAbilityAction,
+	getSnapshot,
+	perform,
+	settlePriority,
+} from "../index.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
 import {
 	ALICE,
@@ -56,7 +64,8 @@ describe("named artifact tokens", () => {
 		const state = setupMain(engine);
 		const handSize = state.players[ALICE].hand.length;
 		const librarySize = state.players[ALICE].library.length;
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{
 				kind: "create token",
@@ -70,12 +79,13 @@ describe("named artifact tokens", () => {
 			passingAgents(),
 		);
 		const clue = created(result);
-		const snapshot = getSnapshot(engine.createReadContext(state), clue);
+		const snapshot = getSnapshot(createReadContext(engine, state), clue);
 		expect(snapshot.currentCharacteristics).toEqual(CLUE_TOKEN);
 
 		state.players[ALICE].manaPool.c = 2;
 		const agents = passingAgents();
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -92,7 +102,7 @@ describe("named artifact tokens", () => {
 		expect(state.players[ALICE].hand).toHaveLength(handSize);
 		expect(state.players[ALICE].library).toHaveLength(librarySize);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(state.players[ALICE].hand).toHaveLength(handSize + 1);
 		expect(state.players[ALICE].library).toHaveLength(librarySize - 1);

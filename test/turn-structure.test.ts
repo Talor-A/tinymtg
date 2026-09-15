@@ -1,11 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS } from "../cards.ts";
-import type { Engine, GameState, PlayerId } from "../index.ts";
+import type { GameState, PlayerId } from "../index.ts";
 import {
 	activePlayer,
+	advance,
 	createEngine,
 	gameOver,
+	newGame,
 	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
 	turnLocation,
 	winner,
 } from "../index.ts";
@@ -24,18 +29,18 @@ const engine = createEngine(CARDS);
 
 describe("turn progress", () => {
 	test("notStarted is visible only before the first advance", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents = passingAgents();
 		for (let i = 0; i < 10; i++) {
-			engine.spawnCard(state, "forest", ALICE, "library");
-			engine.spawnCard(state, "forest", BOB, "library");
+			spawnCard(state, "forest", ALICE, "library");
+			spawnCard(state, "forest", BOB, "library");
 		}
 
 		expect(state.turnScheduler.progress).toEqual({ kind: "notStarted" });
 
-		// CR 103 runs before the first turn, one step per engine.advance().
+		// CR 103 runs before the first turn, one step per advance(engine, ).
 		for (const step of ["shuffle", "opening hand"] as const) {
-			engine.advance(state, agents);
+			advance(engine, state, agents);
 			expect(state.turnScheduler.progress).toEqual({ kind: "pregame", step });
 		}
 		expect(state.players[ALICE].hand).toHaveLength(7);
@@ -45,40 +50,40 @@ describe("turn progress", () => {
 
 		// Once a turn is installed the game never leaves inTurn.
 		for (let i = 0; i < 30; i++) {
-			engine.advance(state, agents);
+			advance(engine, state, agents);
 			expect(state.turnScheduler.progress.kind).toBe("inTurn");
 		}
 	});
 
 	test("has no active player before the first turn begins", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents = passingAgents();
 
 		expect(activePlayer(state)).toBe(null);
 		// Nothing in the rules is defined relative to "the active player" yet,
 		// so asking for a priority window here is a bug, not player 0's turn.
-		expect(() => engine.settlePriority(state, agents)).toThrow(
+		expect(() => settlePriority(engine, state, agents)).toThrow(
 			"no player receives priority outside a turn",
 		);
 
 		// The pre-game is not a turn, so it does not answer "whose turn is it"
 		// either -- the whole of CR 103 passes with no active player.
 		for (let i = 0; i < 2; i++) {
-			engine.advance(state, agents);
+			advance(engine, state, agents);
 			expect(state.turnScheduler.progress.kind).toBe("pregame");
 			expect(activePlayer(state)).toBe(null);
 		}
 
-		engine.advance(state, agents);
+		advance(engine, state, agents);
 		expect(activePlayer(state)).toBe(ALICE);
 	});
 
 	test("represents a main phase as a phase with its combat role", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents = passingAgents();
 		for (let i = 0; i < 10; i++) {
-			engine.spawnCard(state, "forest", ALICE, "library");
-			engine.spawnCard(state, "forest", BOB, "library");
+			spawnCard(state, "forest", ALICE, "library");
+			spawnCard(state, "forest", BOB, "library");
 		}
 
 		advanceUntil(engine, state, agents, (next) => isAt(next, "main"));
@@ -99,17 +104,18 @@ describe("playing a normal turn", () => {
 		amount: number,
 	): void {
 		for (let i = 0; i < amount; i++) {
-			engine.spawnCard(state, "forest", player, zone);
+			spawnCard(state, "forest", player, zone);
 		}
 	}
 
 	function setupNormalTurn(): {
 		state: GameState;
 		agents: Agents;
-		tappedPermanent: ReturnType<Engine["spawnPermanent"]>;
+		tappedPermanent: ReturnType<typeof spawnPermanent>;
 	} {
 		const state = newInProgressGame(engine);
-		const tappedPermanent = engine.spawnPermanent(
+		const tappedPermanent = spawnPermanent(
+			engine,
 			state,
 			"grizzly-bears",
 			ALICE,
@@ -190,10 +196,10 @@ describe("draw steps and game endings", () => {
 
 	test("the skip-draw-step fixture skips only its controller's normal draw", () => {
 		const { state, agents } = setupDrawStep();
-		engine.spawnPermanent(state, "test-skip-draw-step", ALICE);
+		spawnPermanent(engine, state, "test-skip-draw-step", ALICE);
 		for (let i = 0; i < 2; i++) {
-			engine.spawnCard(state, "forest", ALICE, "library");
-			engine.spawnCard(state, "forest", BOB, "library");
+			spawnCard(state, "forest", ALICE, "library");
+			spawnCard(state, "forest", BOB, "library");
 		}
 
 		playOneTurn(engine, state, agents);
@@ -218,7 +224,7 @@ describe("draw steps and game endings", () => {
 
 	test("Laboratory Maniac wins when its controller would draw from an empty library", () => {
 		const { state, agents } = setupDrawStep();
-		engine.spawnPermanent(state, "laboratory-maniac", ALICE);
+		spawnPermanent(engine, state, "laboratory-maniac", ALICE);
 
 		advanceUntil(engine, state, agents, gameOver);
 
@@ -232,7 +238,7 @@ describe("draw steps and game endings", () => {
 
 	test("Platinum Angel lets the game continue after an empty-library draw", () => {
 		const { state, agents } = setupDrawStep();
-		engine.spawnPermanent(state, "platinum-angel", ALICE);
+		spawnPermanent(engine, state, "platinum-angel", ALICE);
 
 		advanceUntil(engine, state, agents, (next) => isAt(next, "main"));
 

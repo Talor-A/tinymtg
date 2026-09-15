@@ -1,3 +1,13 @@
+import {
+	createReadContext,
+	executeAbilityAction,
+	getObservableActions,
+	name,
+	perform,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 /**
  * blood-token.test.ts — the Blood token and its discard activation cost.
  *
@@ -41,7 +51,8 @@ function emptyHand(
 	agents: SyncAgents,
 ): void {
 	while (state.players[player].hand.length > 0) {
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "discard", player, cards: { kind: "any" } },
 			agents,
@@ -55,8 +66,9 @@ function enterServitor(
 	controller: PlayerId,
 	agents: SyncAgents,
 ): { servitor: ObjectId; blood: ObjectId } {
-	const card = engine.spawnCard(state, "blood-servitor", controller, "hand");
-	const entry = engine.perform(
+	const card = spawnCard(state, "blood-servitor", controller, "hand");
+	const entry = perform(
+		engine,
 		state,
 		{
 			kind: "change zone",
@@ -68,10 +80,10 @@ function enterServitor(
 		agents,
 	);
 	expect(state.pendingTriggers).toHaveLength(1);
-	engine.settlePriority(state, agents);
+	settlePriority(engine, state, agents);
 
 	const tokens = state.battlefield.filter(
-		(id) => engine.name(state, id) === "Blood Token",
+		(id) => name(engine, state, id) === "Blood Token",
 	);
 	const blood = tokens[0];
 	if (blood === undefined || tokens.length !== 1)
@@ -89,7 +101,7 @@ describe("Blood token", () => {
 			token: true,
 		});
 		expect(
-			getSnapshot(engine.createReadContext(state), blood)
+			getSnapshot(createReadContext(engine, state), blood)
 				.currentCharacteristics,
 		).toEqual({
 			kind: "non-creature",
@@ -115,8 +127,8 @@ describe("Blood token", () => {
 		const agents = passingAgents();
 		const { blood } = enterServitor(state, ALICE, agents);
 		emptyHand(state, ALICE, agents);
-		const pitched = engine.spawnCard(state, "forest", ALICE, "hand");
-		const kept = engine.spawnCard(state, "grizzly-bears", ALICE, "hand");
+		const pitched = spawnCard(state, "forest", ALICE, "hand");
+		const kept = spawnCard(state, "grizzly-bears", ALICE, "hand");
 		state.players[ALICE].manaPool.g = 1;
 		const libraryBefore = state.players[ALICE].library.length;
 		const graveyardBefore = state.players[ALICE].graveyard.length;
@@ -124,13 +136,14 @@ describe("Blood token", () => {
 		// ScriptedAgent takes the first option offered, and the discard choice
 		// offers the hand in order, so the Forest is the card it pitches.
 		expect(state.players[ALICE].hand).toEqual([pitched.id, kept.id]);
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: blood, ability: BLOOD_DRAW },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(state.players[ALICE].manaPool.g, "{1} was paid").toBe(0);
 		expect(state.objects.has(blood), "the token sacrificed itself").toBe(false);
@@ -141,7 +154,7 @@ describe("Blood token", () => {
 		expect(state.players[ALICE].graveyard).toHaveLength(graveyardBefore + 1);
 		const discarded = state.players[ALICE].graveyard[graveyardBefore];
 		if (discarded === undefined) throw new Error("nothing was discarded");
-		expect(engine.name(state, discarded)).toBe("Forest");
+		expect(name(engine, state, discarded)).toBe("Forest");
 		expect(
 			state.players[ALICE].hand,
 			"the kept card stayed, and the draw replaced the discard",
@@ -155,8 +168,8 @@ describe("Blood token", () => {
 		const agents = passingAgents();
 		const { blood } = enterServitor(state, ALICE, agents);
 		emptyHand(state, ALICE, agents);
-		engine.spawnPermanent(state, "baby-leyline-of-the-void", BOB);
-		const pitched = engine.spawnCard(state, "forest", ALICE, "hand");
+		spawnPermanent(engine, state, "baby-leyline-of-the-void", BOB);
+		const pitched = spawnCard(state, "forest", ALICE, "hand");
 		state.players[ALICE].manaPool.g = 1;
 		const libraryBefore = state.players[ALICE].library.length;
 		const graveyardBefore = state.players[ALICE].graveyard.length;
@@ -164,13 +177,14 @@ describe("Blood token", () => {
 		// CR 701.8a: the card is still discarded when a replacement sends it
 		// somewhere other than the graveyard, so the cost is paid and the
 		// ability resolves. Only the discarded card's destination changes.
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: blood, ability: BLOOD_DRAW },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(state.objects.has(blood), "the token sacrificed itself").toBe(false);
 		expect(state.objects.has(pitched.id)).toBe(false);
@@ -179,7 +193,7 @@ describe("Blood token", () => {
 			"the discarded card never reached the graveyard",
 		).toHaveLength(graveyardBefore);
 		expect(
-			state.players[ALICE].exile.map((id) => engine.name(state, id)),
+			state.players[ALICE].exile.map((id) => name(engine, state, id)),
 		).toEqual(["Forest"]);
 		expect(
 			state.players[ALICE].library,
@@ -196,7 +210,7 @@ describe("Blood token", () => {
 		emptyHand(state, ALICE, agents);
 
 		expect(
-			engine.getObservableActions(state, ALICE),
+			getObservableActions(engine, state, ALICE),
 			"an unpayable discard cost is not offered",
 		).not.toContainEqual({
 			kind: "activate ability",
@@ -204,7 +218,8 @@ describe("Blood token", () => {
 			ability: BLOOD_DRAW,
 		});
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				ALICE,
 				{ kind: "activate ability", source: blood, ability: BLOOD_DRAW },

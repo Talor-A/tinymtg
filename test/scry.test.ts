@@ -12,24 +12,27 @@ import {
 	createEngine,
 	type GameState,
 	InvalidChoiceAnswerError,
+	newGame,
 	type ObjectId,
 	type PlayerView,
+	perform,
 	type SyncAgent,
+	spawnCard,
 } from "../index.ts";
 
 const engine = createEngine(CARDS);
 
 function cards(state: GameState): ObjectId[] {
 	return [
-		engine.spawnCard(state, "forest", 0, "library").id,
-		engine.spawnCard(state, "grizzly-bears", 0, "library").id,
-		engine.spawnCard(state, "eager-cadet", 0, "library").id,
+		spawnCard(state, "forest", 0, "library").id,
+		spawnCard(state, "grizzly-bears", 0, "library").id,
+		spawnCard(state, "eager-cadet", 0, "library").id,
 	];
 }
 
 describe("scry choices", () => {
 	test("returns an ordered partition and replays it exactly", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected three cards");
@@ -69,7 +72,7 @@ describe("scry choices", () => {
 	});
 
 	test("reports a corrupt recorded answer as a replay mismatch", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected three cards");
@@ -104,7 +107,7 @@ describe("scry choices", () => {
 	});
 
 	test("rejects missing, duplicate, and unknown cards", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b] = cards(state);
 		if (a === undefined || b === undefined) throw new Error("expected cards");
 		const answers: ChoiceAnswer[] = [
@@ -127,7 +130,7 @@ describe("scry choices", () => {
 	});
 
 	test("supports suspension without recording a speculative answer", async () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b] = cards(state);
 		if (a === undefined || b === undefined) throw new Error("expected cards");
 		let resolveAnswer: ((answer: ChoiceAnswer) => void) | undefined;
@@ -165,8 +168,8 @@ describe("scry choices", () => {
 
 describe("scry events", () => {
 	test("applies top and bottom order to the library atomically", () => {
-		const state = engine.newGame();
-		const untouched = engine.spawnCard(state, "darksteel-myr", 0, "library").id;
+		const state = newGame();
+		const untouched = spawnCard(state, "darksteel-myr", 0, "library").id;
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected cards");
@@ -181,7 +184,8 @@ describe("scry events", () => {
 			},
 		};
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "scry", player: 0, amount: 3 },
 			[agent, agent],
@@ -194,7 +198,7 @@ describe("scry events", () => {
 	});
 
 	test("positive scry on an empty library happens, while scry 0 does not", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		let choices = 0;
 		const agent: SyncAgent = {
 			choose() {
@@ -204,13 +208,13 @@ describe("scry events", () => {
 		};
 
 		expect(
-			engine.perform(state, { kind: "scry", player: 0, amount: 3 }, [
+			perform(engine, state, { kind: "scry", player: 0, amount: 3 }, [
 				agent,
 				agent,
 			]).executed,
 		).toEqual([{ kind: "scry", player: 0, amount: 3 }]);
 		expect(
-			engine.perform(state, { kind: "scry", player: 0, amount: 0 }, [
+			perform(engine, state, { kind: "scry", player: 0, amount: 0 }, [
 				agent,
 				agent,
 			]).executed,
@@ -219,8 +223,8 @@ describe("scry events", () => {
 	});
 
 	test("looks at every available card when the library has fewer than X", () => {
-		const state = engine.newGame();
-		const only = engine.spawnCard(state, "forest", 0, "library").id;
+		const state = newGame();
+		const only = spawnCard(state, "forest", 0, "library").id;
 		let seen: ObjectId[] | undefined;
 		const agent: SyncAgent = {
 			choose(_view, request) {
@@ -231,7 +235,7 @@ describe("scry events", () => {
 			},
 		};
 
-		engine.perform(state, { kind: "scry", player: 0, amount: 5 }, [
+		perform(engine, state, { kind: "scry", player: 0, amount: 5 }, [
 			agent,
 			agent,
 		]);

@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS } from "../cards.ts";
 import { loadCardFixture } from "../corpus.ts";
-import { createEngine, getSnapshot } from "../index.ts";
+import {
+	createEngine,
+	createReadContext,
+	executeCastAction,
+	getSnapshot,
+	perform,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import { assert } from "../lib/assert.ts";
 import {
 	ALICE,
@@ -22,7 +31,7 @@ function castAndResolve(
 	card: string,
 	mana: { w?: number; b?: number },
 ): void {
-	const spell = engine.spawnCard(state, card, ALICE, "hand");
+	const spell = spawnCard(state, card, ALICE, "hand");
 	state.players[ALICE].manaPool = {
 		w: mana.w ?? 0,
 		u: 0,
@@ -31,20 +40,21 @@ function castAndResolve(
 		g: 0,
 		c: 0,
 	};
-	engine.executeCastAction(
+	executeCastAction(
+		engine,
 		state,
 		ALICE,
 		{ kind: "cast", card: spell.id },
 		passingAgents(),
 	);
-	engine.settlePriority(state, passingAgents());
+	settlePriority(engine, state, passingAgents());
 }
 
 function powerAndToughness(
 	state: ReturnType<typeof setupMain>,
-	object: ReturnType<typeof engine.spawnPermanent>,
+	object: ReturnType<typeof spawnPermanent>,
 ): [number, number] {
-	const snapshot = getSnapshot(engine.createReadContext(state), object.id);
+	const snapshot = getSnapshot(createReadContext(engine, state), object.id);
 	assert(snapshot.kind === "permanent");
 	assert(snapshot.currentCharacteristics.kind === "creature");
 	return [
@@ -56,22 +66,22 @@ function powerAndToughness(
 describe("set-based temporary effects", () => {
 	test("Glorious Charge captures only controlled creatures present at resolution", () => {
 		const state = setupMain(engine);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
-		const opponent = engine.spawnPermanent(state, "eager-cadet", BOB);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", ALICE);
+		const opponent = spawnPermanent(engine, state, "eager-cadet", BOB);
 
 		castAndResolve(state, "glorious-charge", { w: 2 });
 
 		expect(powerAndToughness(state, bears)).toEqual([3, 3]);
 		expect(powerAndToughness(state, opponent)).toEqual([1, 1]);
-		const later = engine.spawnPermanent(state, "eager-cadet", ALICE);
+		const later = spawnPermanent(engine, state, "eager-cadet", ALICE);
 		expect(powerAndToughness(state, later)).toEqual([1, 1]);
 	});
 
 	test("Languish reduces every creature and bypasses indestructible", () => {
 		const state = setupMain(engine);
-		const relic = engine.spawnPermanent(state, "darksteel-relic", ALICE);
-		engine.spawnPermanent(state, "darksteel-myr", ALICE);
-		engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const relic = spawnPermanent(engine, state, "darksteel-relic", ALICE);
+		spawnPermanent(engine, state, "darksteel-myr", ALICE);
+		spawnPermanent(engine, state, "grizzly-bears", BOB);
 
 		castAndResolve(state, "languish", { b: 4 });
 
@@ -80,10 +90,11 @@ describe("set-based temporary effects", () => {
 
 	test("Make a Stand grants indestructible to its captured creatures", () => {
 		const state = setupMain(engine);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 
 		castAndResolve(state, "make-a-stand", { w: 3 });
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			passingAgents(),

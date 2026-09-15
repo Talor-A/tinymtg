@@ -17,10 +17,19 @@ import type {
 import {
 	abilityId,
 	activePlayer,
+	advanceWithReplay,
 	createEngine,
 	defineCard,
+	executeCastAction,
+	executeLandAction,
+	getObservableActions,
 	IllegalLandPlayError,
+	newGame,
+	perform,
 	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
 	turnLocation,
 } from "../index.ts";
 import {
@@ -135,13 +144,13 @@ function expectAtomicLandRejection(
 	if (action.kind !== "play land") throw new Error("expected land action");
 	const before = structuredClone(state);
 	expect(() =>
-		engine.executeLandAction(state, player, action, passingAgents()),
+		executeLandAction(engine, state, player, action, passingAgents()),
 	).toThrow(IllegalLandPlayError);
 	expect(state).toEqual(before);
 }
 
 function occupyStack(state: GameState): void {
-	const source = engine.spawnPermanent(state, "ajanis-mantra", ALICE);
+	const source = spawnPermanent(engine, state, "ajanis-mantra", ALICE);
 	state.stack.push({
 		id: state.nextStackItemId++ as StackItemId,
 		kind: "triggered ability",
@@ -178,17 +187,17 @@ describe("land action observability", () => {
 			const alreadyDrawn = state.players[ALICE].hand[0];
 			if (alreadyDrawn === undefined)
 				throw new Error("expected the normal draw");
-			const first = engine.spawnCard(state, "forest", ALICE, "hand");
-			const second = engine.spawnCard(state, "test-etb-land", ALICE, "hand");
-			engine.spawnCard(state, "grizzly-bears", ALICE, "hand");
+			const first = spawnCard(state, "forest", ALICE, "hand");
+			const second = spawnCard(state, "test-etb-land", ALICE, "hand");
+			spawnCard(state, "grizzly-bears", ALICE, "hand");
 
-			expect(engine.getObservableActions(state, ALICE)).toEqual([
+			expect(getObservableActions(engine, state, ALICE)).toEqual([
 				{ kind: "pass" },
 				landAction(alreadyDrawn),
 				landAction(first.id),
 				landAction(second.id),
 			]);
-			expect(engine.getObservableActions(state, BOB)).toEqual([
+			expect(getObservableActions(engine, state, BOB)).toEqual([
 				{ kind: "pass" },
 			]);
 		}
@@ -196,41 +205,42 @@ describe("land action observability", () => {
 
 	test("is hidden after the ordinary limit is used or while the stack is nonempty", () => {
 		const state = setupMain(engine);
-		engine.spawnCard(state, "forest", ALICE, "hand");
+		spawnCard(state, "forest", ALICE, "hand");
 		state.players[ALICE].stats.lands.played = 1;
-		expect(engine.getObservableActions(state, ALICE)).toEqual([
+		expect(getObservableActions(engine, state, ALICE)).toEqual([
 			{ kind: "pass" },
 		]);
 		state.players[ALICE].stats.lands.played = 0;
 		occupyStack(state);
-		expect(engine.getObservableActions(state, ALICE)).toEqual([
+		expect(getObservableActions(engine, state, ALICE)).toEqual([
 			{ kind: "pass" },
 		]);
 	});
 
 	test("uses finite additive land-play effects from the current controller", () => {
 		const state = setupMain(engine);
-		const land = engine.spawnCard(state, "forest", ALICE, "hand");
-		engine.spawnPermanent(state, "exploration", ALICE);
+		const land = spawnCard(state, "forest", ALICE, "hand");
+		spawnPermanent(engine, state, "exploration", ALICE);
 
 		state.players[ALICE].stats.lands.played = 1;
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(
 			landAction(land.id),
 		);
 
 		state.players[ALICE].stats.lands.played = 2;
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual(
 			landAction(land.id),
 		);
 	});
 
 	test("adds multiple finite adjustments and ignores sources not functioning for that player", () => {
 		const state = setupMain(engine);
-		const land = engine.spawnCard(state, "forest", ALICE, "hand");
-		engine.spawnPermanent(state, "exploration", ALICE);
-		engine.spawnPermanent(state, "azusa-lost-but-seeking", ALICE);
-		engine.spawnCard(state, "exploration", ALICE, "graveyard");
-		const opponentExploration = engine.spawnPermanent(
+		const land = spawnCard(state, "forest", ALICE, "hand");
+		spawnPermanent(engine, state, "exploration", ALICE);
+		spawnPermanent(engine, state, "azusa-lost-but-seeking", ALICE);
+		spawnCard(state, "exploration", ALICE, "graveyard");
+		const opponentExploration = spawnPermanent(
+			engine,
 			state,
 			"exploration",
 			ALICE,
@@ -239,38 +249,39 @@ describe("land action observability", () => {
 		state.revision++;
 
 		state.players[ALICE].stats.lands.played = 3;
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(
 			landAction(land.id),
 		);
 
 		state.players[ALICE].stats.lands.played = 4;
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual(
 			landAction(land.id),
 		);
 	});
 
 	test("uses rule abilities granted through the derived layer-6 view", () => {
 		const state = setupMain(engine);
-		const land = engine.spawnCard(state, "forest", ALICE, "hand");
-		engine.spawnPermanent(state, "test-grant-exploration-static", ALICE);
-		engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const land = spawnCard(state, "forest", ALICE, "hand");
+		spawnPermanent(engine, state, "test-grant-exploration-static", ALICE);
+		spawnPermanent(engine, state, "grizzly-bears", ALICE);
 		state.players[ALICE].stats.lands.played = 1;
 
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(
 			landAction(land.id),
 		);
 	});
 
 	test("loses the additional allowance as soon as Exploration leaves", () => {
 		const state = setupMain(engine);
-		const exploration = engine.spawnPermanent(state, "exploration", ALICE);
-		const land = engine.spawnCard(state, "forest", ALICE, "hand");
+		const exploration = spawnPermanent(engine, state, "exploration", ALICE);
+		const land = spawnCard(state, "forest", ALICE, "hand");
 		state.players[ALICE].stats.lands.played = 1;
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(
 			landAction(land.id),
 		);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -282,7 +293,7 @@ describe("land action observability", () => {
 			passingAgents(),
 		);
 
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual(
 			landAction(land.id),
 		);
 	});
@@ -293,7 +304,7 @@ describe("playing a land through priority", () => {
 		for (const role of ["precombat", "postcombat"] as const) {
 			const state = newInProgressGame(engine);
 			seedLibraries(engine, state);
-			const land = engine.spawnCard(state, "forest", ALICE, "hand");
+			const land = spawnCard(state, "forest", ALICE, "hand");
 			const priorityPlayers: PlayerId[] = [];
 			let played = false;
 			const active: SyncAgent = {
@@ -334,8 +345,8 @@ describe("playing a land through priority", () => {
 	test("runs ETB replacements and triggers through the existing event pipeline", () => {
 		const state = newInProgressGame(engine);
 		seedLibraries(engine, state);
-		engine.spawnPermanent(state, "root-maze", BOB);
-		const land = engine.spawnCard(state, "test-etb-land", ALICE, "hand");
+		spawnPermanent(engine, state, "root-maze", BOB);
+		const land = spawnCard(state, "test-etb-land", ALICE, "hand");
 		const agents: Agents = [
 			new ScriptedAgent([], [], [landAction(land.id)]),
 			new ScriptedAgent(),
@@ -355,7 +366,7 @@ describe("playing a land through priority", () => {
 	test("replays an async card-specific priority choice without mutating its checkpoint", async () => {
 		let checkpoint = newInProgressGame(engine);
 		seedLibraries(engine, checkpoint);
-		const land = engine.spawnCard(checkpoint, "forest", ALICE, "hand");
+		const land = spawnCard(checkpoint, "forest", ALICE, "hand");
 		const snapshot = structuredClone(checkpoint);
 		let suspended = false;
 		const active: Agent = {
@@ -381,7 +392,7 @@ describe("playing a land through priority", () => {
 			count++
 		) {
 			const before = structuredClone(checkpoint);
-			const result = await engine.advanceWithReplay(checkpoint, [
+			const result = await advanceWithReplay(engine, checkpoint, [
 				active,
 				passive,
 			]);
@@ -400,8 +411,8 @@ describe("playing a land through priority", () => {
 describe("temporary permission to play one land from exile", () => {
 	test("offers and plays the bound land for the effect controller", () => {
 		const state = setupMain(engine);
-		const exiled = engine.spawnCard(state, "forest", BOB, "exile");
-		const permission = engine.spawnCard(
+		const exiled = spawnCard(state, "forest", BOB, "exile");
+		const permission = spawnCard(
 			state,
 			"test-may-play-land-from-exile",
 			ALICE,
@@ -410,18 +421,20 @@ describe("temporary permission to play one land from exile", () => {
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: permission.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(
 			landAction(exiled.id),
 		);
-		engine.executeLandAction(
+		executeLandAction(
+			engine,
 			state,
 			ALICE,
 			landAction(exiled.id),
@@ -439,9 +452,9 @@ describe("temporary permission to play one land from exile", () => {
 
 	test("applies only to the bound exile object", () => {
 		const state = setupMain(engine);
-		const bound = engine.spawnCard(state, "forest", ALICE, "exile");
-		const unbound = engine.spawnCard(state, "forest", ALICE, "exile");
-		const permission = engine.spawnCard(
+		const bound = spawnCard(state, "forest", ALICE, "exile");
+		const unbound = spawnCard(state, "forest", ALICE, "exile");
+		const permission = spawnCard(
 			state,
 			"test-may-play-land-from-exile",
 			ALICE,
@@ -449,23 +462,25 @@ describe("temporary permission to play one land from exile", () => {
 		);
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "card", id: bound.id });
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: permission.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(
 			landAction(bound.id),
 		);
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual(
 			landAction(unbound.id),
 		);
 		expectAtomicLandRejection(state, ALICE, landAction(unbound.id));
 
-		const graveyard = engine.perform(
+		const graveyard = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -478,7 +493,8 @@ describe("temporary permission to play one land from exile", () => {
 		);
 		const graveyardId = graveyard.created[0];
 		if (graveyardId === undefined) throw new Error("expected graveyard card");
-		const returned = engine.perform(
+		const returned = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -492,7 +508,7 @@ describe("temporary permission to play one land from exile", () => {
 		const returnedId = returned.created[0];
 		if (returnedId === undefined) throw new Error("expected exiled card");
 		expect(returnedId).not.toBe(bound.id);
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual(
 			landAction(returnedId),
 		);
 		expectAtomicLandRejection(state, ALICE, landAction(returnedId));
@@ -500,8 +516,8 @@ describe("temporary permission to play one land from exile", () => {
 
 	test("does not bypass the land-per-turn allowance", () => {
 		const state = setupMain(engine);
-		const exiled = engine.spawnCard(state, "forest", ALICE, "exile");
-		const permission = engine.spawnCard(
+		const exiled = spawnCard(state, "forest", ALICE, "exile");
+		const permission = spawnCard(
 			state,
 			"test-may-play-land-from-exile",
 			ALICE,
@@ -509,16 +525,17 @@ describe("temporary permission to play one land from exile", () => {
 		);
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: permission.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		state.players[ALICE].stats.lands.played = 1;
 
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual(
 			landAction(exiled.id),
 		);
 		expectAtomicLandRejection(state, ALICE, landAction(exiled.id));
@@ -526,8 +543,8 @@ describe("temporary permission to play one land from exile", () => {
 
 	test("expires during cleanup before the controller's next turn", () => {
 		const state = setupMain(engine);
-		const exiled = engine.spawnCard(state, "forest", ALICE, "exile");
-		const permission = engine.spawnCard(
+		const exiled = spawnCard(state, "forest", ALICE, "exile");
+		const permission = spawnCard(
 			state,
 			"test-may-play-land-from-exile",
 			ALICE,
@@ -535,14 +552,15 @@ describe("temporary permission to play one land from exile", () => {
 		);
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "card", id: exiled.id });
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: permission.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+		settlePriority(engine, state, agents);
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(
 			landAction(exiled.id),
 		);
 
@@ -556,7 +574,7 @@ describe("temporary permission to play one land from exile", () => {
 				activePlayer(next) === ALICE &&
 				turnLocation(next)?.kind === "mainPhase",
 		);
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual(
 			landAction(exiled.id),
 		);
 		expectAtomicLandRejection(state, ALICE, landAction(exiled.id));
@@ -566,22 +584,17 @@ describe("temporary permission to play one land from exile", () => {
 describe("authoritative land-play rejection", () => {
 	test("rejects a second land, a nonland, and a stale or alternate-zone object", () => {
 		const secondState = setupMain(engine);
-		const second = engine.spawnCard(secondState, "forest", ALICE, "hand");
+		const second = spawnCard(secondState, "forest", ALICE, "hand");
 		secondState.players[ALICE].stats.lands.played = 1;
 		expectAtomicLandRejection(secondState, ALICE, landAction(second.id));
 
 		const nonlandState = setupMain(engine);
-		const nonland = engine.spawnCard(
-			nonlandState,
-			"grizzly-bears",
-			ALICE,
-			"hand",
-		);
+		const nonland = spawnCard(nonlandState, "grizzly-bears", ALICE, "hand");
 		expectAtomicLandRejection(nonlandState, ALICE, landAction(nonland.id));
 
 		for (const zone of ["library", "graveyard", "exile"] as const) {
 			const state = setupMain(engine);
-			const land = engine.spawnCard(state, "forest", ALICE, zone);
+			const land = spawnCard(state, "forest", ALICE, zone);
 			expectAtomicLandRejection(state, ALICE, landAction(land.id));
 		}
 		const staleState = setupMain(engine);
@@ -590,10 +603,11 @@ describe("authoritative land-play rejection", () => {
 
 	test("accepts the additional land but atomically rejects one beyond the derived allowance", () => {
 		const state = setupMain(engine);
-		engine.spawnPermanent(state, "exploration", ALICE);
+		spawnPermanent(engine, state, "exploration", ALICE);
 		state.players[ALICE].stats.lands.played = 1;
-		const second = engine.spawnCard(state, "forest", ALICE, "hand");
-		engine.executeLandAction(
+		const second = spawnCard(state, "forest", ALICE, "hand");
+		executeLandAction(
+			engine,
 			state,
 			ALICE,
 			landAction(second.id),
@@ -601,25 +615,25 @@ describe("authoritative land-play rejection", () => {
 		);
 		expect(state.players[ALICE].stats.lands.played).toBe(2);
 
-		const third = engine.spawnCard(state, "forest", ALICE, "hand");
+		const third = spawnCard(state, "forest", ALICE, "hand");
 		expectAtomicLandRejection(state, ALICE, landAction(third.id));
 	});
 
 	test("rejects the opponent's hand, the nonactive player, non-main timing, and a nonempty stack", () => {
 		const opponentHand = setupMain(engine);
-		const theirs = engine.spawnCard(opponentHand, "forest", BOB, "hand");
+		const theirs = spawnCard(opponentHand, "forest", BOB, "hand");
 		expectAtomicLandRejection(opponentHand, ALICE, landAction(theirs.id));
 
 		const nonactive = setupMain(engine);
-		const own = engine.spawnCard(nonactive, "forest", BOB, "hand");
+		const own = spawnCard(nonactive, "forest", BOB, "hand");
 		expectAtomicLandRejection(nonactive, BOB, landAction(own.id));
 
-		const outsideMain = engine.newGame();
-		const early = engine.spawnCard(outsideMain, "forest", ALICE, "hand");
+		const outsideMain = newGame();
+		const early = spawnCard(outsideMain, "forest", ALICE, "hand");
 		expectAtomicLandRejection(outsideMain, ALICE, landAction(early.id));
 
 		const stacked = setupMain(engine);
-		const blocked = engine.spawnCard(stacked, "forest", ALICE, "hand");
+		const blocked = spawnCard(stacked, "forest", ALICE, "hand");
 		occupyStack(stacked);
 		expectAtomicLandRejection(stacked, ALICE, landAction(blocked.id));
 	});

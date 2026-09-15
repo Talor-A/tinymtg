@@ -3,6 +3,7 @@ import { CARDS } from "../cards.ts";
 import {
 	activePlayer,
 	addTemporaryEffect,
+	advance,
 	createEngine,
 	type GameState,
 	type PlayerId,
@@ -84,7 +85,7 @@ describe("temporary effect durations", () => {
 		expect(hasEffect(state, endOfTurn)).toBe(true);
 		expect(hasEffect(state, nextTurn)).toBe(true);
 
-		engine.advance(state, passingAgents());
+		advance(engine, state, passingAgents());
 		const cleanup = turnLocation(state);
 		expect(cleanup?.kind === "step" && cleanup.step.kind).toBe("cleanup");
 		expect(hasEffect(state, endOfTurn)).toBe(false);
@@ -102,7 +103,7 @@ describe("temporary effect durations", () => {
 			expiresAtEndOfTurn: currentTurnId(state),
 		});
 
-		engine.advance(state, passingAgents());
+		advance(engine, state, passingAgents());
 		expect(hasEffect(state, nextTurn)).toBe(false);
 	});
 
@@ -130,7 +131,7 @@ describe("temporary effect durations", () => {
 		});
 		expect(hasEffect(state, nextTurn)).toBe(true);
 
-		engine.advance(state, passingAgents());
+		advance(engine, state, passingAgents());
 		expect(hasEffect(state, nextTurn)).toBe(false);
 	});
 });

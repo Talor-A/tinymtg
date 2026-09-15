@@ -82,6 +82,7 @@ import {
 	controllerOf,
 	defineCard,
 	effectTargetUses,
+	etbPreview,
 	getSnapshot,
 	MANA_COST_TYPES,
 	objectMatchesPredicate,
@@ -3330,7 +3331,7 @@ function lowerReplacement(
 				return false;
 			return objectMatchesPredicate(
 				selector,
-				ctx.read.engine.etbPreview(ctx.state, ev),
+				etbPreview(ctx.read.engine, ctx.state, ev),
 				{
 					controller: ctx.controller,
 					source: ctx.self.id,
@@ -4858,7 +4859,7 @@ export function lowerForgeCard(
 					getForgeParam(params, "SpellDescription") ??
 					`Add ${producedSymbols.map((symbol) => `{${symbol}}`).join("")}.`,
 				cost: activationCost,
-				effects: [{ kind: "add-mana", subject: "you", mana }],
+				manaOptions: [mana],
 			});
 			continue;
 		}
@@ -5016,18 +5017,12 @@ export function lowerForgeCard(
 			const exactDuplicate = activatedAbilities.some(
 				(ability) =>
 					ability.kind === "mana" &&
-					!("manaOptions" in ability) &&
 					ability.cost.mana === "zero" &&
 					ability.cost.tapSelf &&
-					ability.effects.length === 1 &&
-					ability.effects[0]?.kind === "add-mana" &&
+					ability.manaOptions.length === 1 &&
 					(() => {
-						const mana = (
-							ability.effects[0] as Extract<
-								ActivatedEffectDef,
-								{ kind: "add-mana" }
-							>
-						).mana;
+						const mana = ability.manaOptions[0];
+						assertDefined(mana);
 						return (
 							mana[color] === 1 &&
 							(["w", "u", "b", "r", "g", "c"] as const)
@@ -5043,7 +5038,7 @@ export function lowerForgeCard(
 				id: `intrinsic-mana-${color}`,
 				text: `Add {${color.toUpperCase()}}.`,
 				cost: { mana: "zero", tapSelf: true },
-				effects: [{ kind: "add-mana", subject: "you", mana: fullMana(color) }],
+				manaOptions: [fullMana(color)],
 			});
 		}
 	}

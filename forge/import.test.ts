@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { abilityId, createEngine } from "../index.ts";
+import { abilityId, createEngine, name, newGame, spawnCard } from "../index.ts";
 import { assert } from "../lib/assert.ts";
 import { CLUE_TOKEN } from "../tokens.ts";
 import { parseForgeCardScript } from "./ast.ts";
@@ -242,13 +242,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				id: "activated-1",
 				text: "Add {W}{U}.",
 				cost: { mana: "zero", tapSelf: true },
-				effects: [
-					{
-						kind: "add-mana",
-						subject: "you",
-						mana: { w: 1, u: 1, b: 0, r: 0, g: 0, c: 0 },
-					},
-				],
+				manaOptions: [{ w: 1, u: 1, b: 0, r: 0, g: 0, c: 0 }],
 			},
 		]);
 	});
@@ -263,13 +257,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				id: "activated-1",
 				text: "Add {W}{U}{B}{R}{G}.",
 				cost: { mana: "zero", tapSelf: true },
-				effects: [
-					{
-						kind: "add-mana",
-						subject: "you",
-						mana: { w: 1, u: 1, b: 1, r: 1, g: 1, c: 0 },
-					},
-				],
+				manaOptions: [{ w: 1, u: 1, b: 1, r: 1, g: 1, c: 0 }],
 			},
 		]);
 	});
@@ -284,13 +272,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				id: "activated-1",
 				text: "Add {C}.",
 				cost: { mana: "zero", tapSelf: true },
-				effects: [
-					{
-						kind: "add-mana",
-						subject: "you",
-						mana: { w: 0, u: 0, b: 0, r: 0, g: 0, c: 1 },
-					},
-				],
+				manaOptions: [{ w: 0, u: 0, b: 0, r: 0, g: 0, c: 1 }],
 			},
 		]);
 	});
@@ -367,13 +349,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				id: "activated-1",
 				text: "Add {B}{G}.",
 				cost: { mana: "zero", tapSelf: true },
-				effects: [
-					{
-						kind: "add-mana",
-						subject: "you",
-						mana: { w: 0, u: 0, b: 1, r: 0, g: 1, c: 0 },
-					},
-				],
+				manaOptions: [{ w: 0, u: 0, b: 1, r: 0, g: 1, c: 0 }],
 			},
 		]);
 	});
@@ -392,13 +368,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 					id: expect.stringContaining("intrinsic-mana"),
 					text: expect.any(String),
 					cost: { mana: "zero", tapSelf: true },
-					effects: [
-						{
-							kind: "add-mana",
-							subject: "you",
-							mana: expect.objectContaining({ [color]: 1 }),
-						},
-					],
+					manaOptions: [expect.objectContaining({ [color]: 1 })],
 				},
 			]);
 		}
@@ -413,13 +383,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				id: "activated-1",
 				text: expect.any(String),
 				cost: { mana: "zero", tapSelf: true },
-				effects: [
-					{
-						kind: "add-mana",
-						subject: "you",
-						mana: expect.objectContaining({ g: 1 }),
-					},
-				],
+				manaOptions: [expect.objectContaining({ g: 1 })],
 			},
 		]);
 	});
@@ -3561,7 +3525,9 @@ describe("lowerForgeCard: accepted card lowering", () => {
 	test("Honor Guard lowers NumDef$ alone as +0/+1", () => {
 		const result = importFixture("h/honor_guard");
 		if (!result.ok) throw new Error("expected ok");
-		expect(result.card.abilityDefinitions.activated[0]?.effects).toEqual([
+		const ability = result.card.abilityDefinitions.activated[0];
+		assert(ability?.kind === "activated");
+		expect(ability.effects).toEqual([
 			{
 				kind: "modify-pt",
 				subject: { kind: "source" },
@@ -3755,7 +3721,9 @@ describe("lowerForgeCard: one-object ChangeZone", () => {
 
 		const wilds = importFixture("e/evolving_wilds");
 		if (!wilds.ok) throw new Error("expected Evolving Wilds to import");
-		expect(wilds.card.abilityDefinitions.activated[0]?.effects).toEqual([
+		const ability = wilds.card.abilityDefinitions.activated[0];
+		assert(ability?.kind === "activated");
+		expect(ability.effects).toEqual([
 			{
 				kind: "search-library",
 				searcher: { kind: "relative-player", player: "you" },
@@ -3847,9 +3815,12 @@ describe("lowerForgeCard: one-object ChangeZone", () => {
 		] as const) {
 			const result = importFixture(fixture);
 			if (!result.ok) throw new Error(`expected ${fixture} to import`);
-			const effects =
-				result.card.spell?.effects ??
-				result.card.abilityDefinitions.activated[0]?.effects;
+			const activated = result.card.abilityDefinitions.activated[0];
+			let effects = result.card.spell?.effects;
+			if (!effects && activated) {
+				assert(activated.kind === "activated");
+				effects = activated.effects;
+			}
 			expect(effects?.[0]).toMatchObject({
 				kind: "change-zone",
 				from: "graveyard",
@@ -4931,13 +4902,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 			id: "intrinsic-mana-g",
 			text: "Add {G}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [
-				{
-					kind: "add-mana",
-					subject: "you",
-					mana: { w: 0, u: 0, b: 0, r: 0, g: 1, c: 0 },
-				},
-			],
+			manaOptions: [{ w: 0, u: 0, b: 0, r: 0, g: 1, c: 0 }],
 		});
 	});
 });
@@ -5213,23 +5178,11 @@ describe("lowerForgeCard: hardening regressions", () => {
 		expect(result.card.abilityDefinitions.activated).toEqual([
 			expect.objectContaining({
 				id: "activated-1",
-				effects: [
-					{
-						kind: "add-mana",
-						subject: "you",
-						mana: expect.objectContaining({ g: 2 }),
-					},
-				],
+				manaOptions: [expect.objectContaining({ g: 2 })],
 			}),
 			expect.objectContaining({
 				id: "intrinsic-mana-g",
-				effects: [
-					{
-						kind: "add-mana",
-						subject: "you",
-						mana: expect.objectContaining({ g: 1 }),
-					},
-				],
+				manaOptions: [expect.objectContaining({ g: 1 })],
 			}),
 		]);
 	});
@@ -5425,9 +5378,9 @@ describe("lowerForgeCard: bridge contract", () => {
 		const result = importForgeCard(BEARS, { id: "unregistered-bears-probe" });
 		expect(result.ok).toBe(true);
 		const engine = createEngine([]);
-		const state = engine.newGame();
-		const obj = engine.spawnCard(state, "unregistered-bears-probe", 0, "hand");
-		expect(() => engine.name(state, obj.id)).toThrow(/unknown card/);
+		const state = newGame();
+		const obj = spawnCard(state, "unregistered-bears-probe", 0, "hand");
+		expect(() => name(engine, state, obj.id)).toThrow(/unknown card/);
 	});
 });
 

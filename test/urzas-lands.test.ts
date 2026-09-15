@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS, URZAS_MINE, URZAS_POWER_PLANT, URZAS_TOWER } from "../cards.ts";
 import type { ObjectId, PlayerId } from "../index.ts";
-import { abilityId, createEngine, getSnapshot } from "../index.ts";
+import {
+	abilityId,
+	createEngine,
+	createReadContext,
+	executeAbilityAction,
+	getSnapshot,
+	perform,
+	spawnPermanent,
+	spawnToken,
+} from "../index.ts";
 import {
 	ALICE,
 	BOB,
@@ -19,8 +28,8 @@ const TOWER_BASE = abilityId("activated", URZAS_TOWER.id, 0);
 const TOWER_TRON = abilityId("activated", URZAS_TOWER.id, 1);
 
 function activatedAbilities(state: ReturnType<typeof setupMain>, id: ObjectId) {
-	return getSnapshot(engine.createReadContext(state), id).currentCharacteristics
-		.abilities.activated;
+	return getSnapshot(createReadContext(engine, state), id)
+		.currentCharacteristics.abilities.activated;
 }
 
 function activate(
@@ -29,7 +38,8 @@ function activate(
 	source: ObjectId,
 	ability: typeof MINE_BASE,
 ): void {
-	engine.executeAbilityAction(
+	executeAbilityAction(
+		engine,
 		state,
 		player,
 		{ kind: "activate ability", source, ability },
@@ -75,7 +85,7 @@ describe("Urza's lands", () => {
 			[URZAS_TOWER, TOWER_BASE],
 		] as const) {
 			const state = setupMain(engine);
-			const land = engine.spawnPermanent(state, card.id, ALICE);
+			const land = spawnPermanent(engine, state, card.id, ALICE);
 			expect(activatedAbilities(state, land.id)).toEqual([ability]);
 
 			activate(state, ALICE, land.id, ability);
@@ -86,9 +96,9 @@ describe("Urza's lands", () => {
 
 	test("grants only the enhanced abilities while its controller has Tron", () => {
 		const state = setupMain(engine);
-		const mine = engine.spawnPermanent(state, URZAS_MINE.id, ALICE);
-		const plant = engine.spawnPermanent(state, URZAS_POWER_PLANT.id, ALICE);
-		const tower = engine.spawnPermanent(state, URZAS_TOWER.id, ALICE);
+		const mine = spawnPermanent(engine, state, URZAS_MINE.id, ALICE);
+		const plant = spawnPermanent(engine, state, URZAS_POWER_PLANT.id, ALICE);
+		const tower = spawnPermanent(engine, state, URZAS_TOWER.id, ALICE);
 
 		expect(activatedAbilities(state, mine.id)).toEqual([MINE_TRON]);
 		expect(activatedAbilities(state, plant.id)).toEqual([POWER_PLANT_TRON]);
@@ -102,16 +112,17 @@ describe("Urza's lands", () => {
 
 	test("opposing lands do not complete Tron, and losing one swaps back immediately", () => {
 		const state = setupMain(engine);
-		const mine = engine.spawnPermanent(state, URZAS_MINE.id, ALICE);
-		engine.spawnPermanent(state, URZAS_POWER_PLANT.id, ALICE);
-		const opposingTower = engine.spawnPermanent(state, URZAS_TOWER.id, BOB);
+		const mine = spawnPermanent(engine, state, URZAS_MINE.id, ALICE);
+		spawnPermanent(engine, state, URZAS_POWER_PLANT.id, ALICE);
+		const opposingTower = spawnPermanent(engine, state, URZAS_TOWER.id, BOB);
 
 		expect(activatedAbilities(state, mine.id)).toEqual([MINE_BASE]);
 
-		const ownTower = engine.spawnPermanent(state, URZAS_TOWER.id, ALICE);
+		const ownTower = spawnPermanent(engine, state, URZAS_TOWER.id, ALICE);
 		expect(activatedAbilities(state, mine.id)).toEqual([MINE_TRON]);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -128,13 +139,13 @@ describe("Urza's lands", () => {
 
 	test("a copy uses its copied name and static ability to recognize Tron", () => {
 		const state = setupMain(engine);
-		const original = engine.spawnPermanent(state, URZAS_MINE.id, ALICE);
+		const original = spawnPermanent(engine, state, URZAS_MINE.id, ALICE);
 		const copiedValues = structuredClone(
-			getSnapshot(engine.createReadContext(state), original.id).copiableValues,
+			getSnapshot(createReadContext(engine, state), original.id).copiableValues,
 		);
-		const copy = engine.spawnToken(state, ALICE, copiedValues);
-		engine.spawnPermanent(state, URZAS_POWER_PLANT.id, ALICE);
-		engine.spawnPermanent(state, URZAS_TOWER.id, ALICE);
+		const copy = spawnToken(state, ALICE, copiedValues);
+		spawnPermanent(engine, state, URZAS_POWER_PLANT.id, ALICE);
+		spawnPermanent(engine, state, URZAS_TOWER.id, ALICE);
 
 		expect(activatedAbilities(state, copy.id)).toEqual([MINE_TRON]);
 		activate(state, ALICE, copy.id, MINE_TRON);

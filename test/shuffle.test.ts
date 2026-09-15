@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS } from "../cards.ts";
-import { createEngine, type GameState, type PlayerId } from "../index.ts";
+import {
+	advance,
+	createEngine,
+	type GameState,
+	newGame,
+	type PlayerId,
+	spawnCard,
+} from "../index.ts";
 import { ALICE, BOB, passingAgents } from "./utils/engine-helpers.ts";
 
 const engine = createEngine(CARDS);
@@ -20,10 +27,9 @@ const DECK = [
 ] as const;
 
 function seededGame(seed: number): GameState {
-	const state = engine.newGame(seed);
+	const state = newGame(seed);
 	for (const player of [ALICE, BOB]) {
-		for (const cardId of DECK)
-			engine.spawnCard(state, cardId, player, "library");
+		for (const cardId of DECK) spawnCard(state, cardId, player, "library");
 	}
 	return state;
 }
@@ -40,7 +46,7 @@ function libraryCardIds(state: GameState, player: PlayerId): string[] {
 /** Runs the shuffle step without continuing into the opening-hand draw. */
 function shuffled(seed: number): GameState {
 	const state = seededGame(seed);
-	engine.advance(state, passingAgents());
+	advance(engine, state, passingAgents());
 	return state;
 }
 
@@ -86,9 +92,9 @@ describe("CR 103.2 shuffling", () => {
 	});
 
 	test("an empty or single-card library survives shuffling", () => {
-		const state = engine.newGame(7);
-		engine.spawnCard(state, "forest", ALICE, "library");
-		engine.advance(state, passingAgents());
+		const state = newGame(7);
+		spawnCard(state, "forest", ALICE, "library");
+		advance(engine, state, passingAgents());
 
 		expect(libraryCardIds(state, ALICE)).toEqual(["forest"]);
 		expect(libraryCardIds(state, BOB)).toEqual([]);

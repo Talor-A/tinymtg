@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS } from "../cards.ts";
 import {
+	advance,
 	ChoiceController,
 	createEngine,
 	type GameState,
 	gameOver,
+	newGame,
 	type SyncAgent,
+	spawnCard,
+	spawnPermanent,
 } from "../index.ts";
 import { FuzzAgent } from "./utils/fuzz-agent.ts";
 
@@ -54,29 +58,29 @@ function pick<T>(rng: () => number, values: readonly T[]): T {
 }
 
 /**
- * Builds varied but scheduler-valid games. The fuzzer only calls engine.advance(); it
+ * Builds varied but scheduler-valid games. The fuzzer only calls advance(engine, ); it
  * does not inject arbitrary events into states where their preconditions may
  * not hold.
  */
 function startingState(seed: number): GameState {
 	const rng = mulberry32(seed);
-	const state = engine.newGame();
+	const state = newGame();
 
 	for (const player of [0, 1] as const) {
 		const librarySize = 8 + Math.floor(rng() * 8);
 		for (let i = 0; i < librarySize; i++) {
-			engine.spawnCard(state, pick(rng, LIBRARY_CARDS), player, "library");
+			spawnCard(state, pick(rng, LIBRARY_CARDS), player, "library");
 		}
 
 		// Some games begin above maximum hand size so cleanup produces choices.
 		const handSize = Math.floor(rng() * 11);
 		for (let i = 0; i < handSize; i++) {
-			engine.spawnCard(state, pick(rng, LIBRARY_CARDS), player, "hand");
+			spawnCard(state, pick(rng, LIBRARY_CARDS), player, "hand");
 		}
 
 		const permanentCount = 1 + Math.floor(rng() * 8);
 		for (let i = 0; i < permanentCount; i++) {
-			engine.spawnPermanent(state, pick(rng, PERMANENTS), player);
+			spawnPermanent(engine, state, pick(rng, PERMANENTS), player);
 		}
 	}
 
@@ -90,7 +94,7 @@ function runAdvances(
 ): number {
 	let advances = 0;
 	while (advances < limit && !gameOver(state)) {
-		engine.advance(state, choices);
+		advance(engine, state, choices);
 		advances++;
 	}
 	return advances;

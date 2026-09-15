@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
-import { abilityId, createEngine, defineCard } from "../index.ts";
+import {
+	abilityId,
+	createEngine,
+	defineCard,
+	executeAbilityAction,
+	newGame,
+	perform,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import { ALICE, BOB, setupMain } from "./utils/engine-helpers.ts";
 
 const TEST_CARD_1 = defineCard({
@@ -56,7 +66,7 @@ const TEST_CARD_2 = defineCard({
 					amount: 1,
 				},
 			},
-			effects: [{ kind: "add-mana", subject: "you", mana: { c: 2 } }],
+			manaOptions: [{ c: 2 }],
 		},
 	],
 });
@@ -184,10 +194,11 @@ const agents = (): [ScriptedAgent, ScriptedAgent] => [
 
 describe("sacrifice action", () => {
 	test("moves a battlefield permanent to its owner's graveyard", () => {
-		const state = engine.newGame();
-		const creature = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const state = newGame();
+		const creature = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "sacrifice", object: creature.id },
 			agents(),
@@ -208,12 +219,13 @@ describe("sacrifice action", () => {
 	});
 
 	test("is successful through Samurai of the Pale Curtain, but does not produce a dies trigger", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
-		engine.spawnPermanent(state, "test-death-watcher", ALICE);
-		const creature = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const state = newGame();
+		spawnPermanent(engine, state, "samurai-of-the-pale-curtain", BOB);
+		spawnPermanent(engine, state, "test-death-watcher", ALICE);
+		const creature = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "sacrifice", object: creature.id },
 			agents(),
@@ -236,9 +248,14 @@ describe("sacrifice action", () => {
 describe("sacrifice as an effect", () => {
 	test("the affected player chooses a matching permanent without targeting it", () => {
 		const state = setupMain(engine);
-		const source = engine.spawnPermanent(state, "test-sacrifice-effect", ALICE);
-		const first = engine.spawnPermanent(state, "grizzly-bears", BOB);
-		const chosen = engine.spawnPermanent(state, "eager-cadet", BOB);
+		const source = spawnPermanent(
+			engine,
+			state,
+			"test-sacrifice-effect",
+			ALICE,
+		);
+		const first = spawnPermanent(engine, state, "grizzly-bears", BOB);
+		const chosen = spawnPermanent(engine, state, "eager-cadet", BOB);
 		const alice = new ScriptedAgent(
 			[],
 			[],
@@ -249,7 +266,8 @@ describe("sacrifice as an effect", () => {
 		);
 		const bob = new ScriptedAgent([], [], [], [], [], [], [], [chosen.id]);
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -259,7 +277,7 @@ describe("sacrifice as an effect", () => {
 			},
 			[alice, bob],
 		);
-		engine.settlePriority(state, [alice, bob]);
+		settlePriority(engine, state, [alice, bob]);
 
 		expect(state.battlefield).toContain(first.id);
 		expect(state.battlefield).not.toContain(chosen.id);
@@ -268,12 +286,18 @@ describe("sacrifice as an effect", () => {
 
 	test("can instruct a relative player to sacrifice without a player target", () => {
 		const state = setupMain(engine);
-		const source = engine.spawnPermanent(state, "test-sacrifice-effect", ALICE);
-		const chosen = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const source = spawnPermanent(
+			engine,
+			state,
+			"test-sacrifice-effect",
+			ALICE,
+		);
+		const chosen = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [chosen.id]);
 		const bob = new ScriptedAgent();
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -283,7 +307,7 @@ describe("sacrifice as an effect", () => {
 			},
 			[alice, bob],
 		);
-		engine.settlePriority(state, [alice, bob]);
+		settlePriority(engine, state, [alice, bob]);
 
 		expect(state.battlefield).not.toContain(chosen.id);
 		expect(state.players[ALICE].graveyard).toHaveLength(1);
@@ -293,7 +317,8 @@ describe("sacrifice as an effect", () => {
 describe("sacrifice as an activated ability cost", () => {
 	test("pays mana, then taps and sacrifices the source atomically", () => {
 		const state = setupMain(engine);
-		const source = engine.spawnPermanent(
+		const source = spawnPermanent(
+			engine,
 			state,
 			"test-combined-activation-cost",
 			ALICE,
@@ -303,7 +328,8 @@ describe("sacrifice as an activated ability cost", () => {
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [source.id]);
 		const bob = new ScriptedAgent();
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -317,14 +343,19 @@ describe("sacrifice as an activated ability cost", () => {
 		expect(state.players[ALICE].manaPool.b).toBe(0);
 		expect(state.battlefield).not.toContain(source.id);
 		expect(state.stack).toHaveLength(1);
-		engine.settlePriority(state, [alice, bob]);
+		settlePriority(engine, state, [alice, bob]);
 		expect(state.players[ALICE].life).toBe(21);
 	});
 
 	test("can sacrifice the ability's source and the ability still resolves", () => {
 		const state = setupMain(engine);
-		const top = engine.spawnCard(state, "forest", ALICE, "library");
-		const outlet = engine.spawnPermanent(state, "test-sacrifice-outlet", ALICE);
+		const top = spawnCard(state, "forest", ALICE, "library");
+		const outlet = spawnPermanent(
+			engine,
+			state,
+			"test-sacrifice-outlet",
+			ALICE,
+		);
 		const alice = new ScriptedAgent(
 			[],
 			[],
@@ -337,7 +368,8 @@ describe("sacrifice as an activated ability cost", () => {
 		);
 		const bob = new ScriptedAgent();
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -350,17 +382,18 @@ describe("sacrifice as an activated ability cost", () => {
 
 		expect(state.battlefield).not.toContain(outlet.id);
 		expect(state.stack).toHaveLength(1);
-		engine.settlePriority(state, [alice, bob]);
+		settlePriority(engine, state, [alice, bob]);
 		expect(state.players[ALICE].library[0]).toBe(top.id);
 	});
 
 	test("a mana ability pays the sacrifice and produces mana immediately", () => {
 		const state = setupMain(engine);
-		const altar = engine.spawnPermanent(state, "test-ashnods-altar", ALICE);
-		const creature = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const altar = spawnPermanent(engine, state, "test-ashnods-altar", ALICE);
+		const creature = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [creature.id]);
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -378,13 +411,19 @@ describe("sacrifice as an activated ability cost", () => {
 
 	test("Samurai of the Pale Curtain changes the destination without making the cost unpaid", () => {
 		const state = setupMain(engine);
-		engine.spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
-		engine.spawnCard(state, "forest", ALICE, "library");
-		const outlet = engine.spawnPermanent(state, "test-sacrifice-outlet", ALICE);
+		spawnPermanent(engine, state, "samurai-of-the-pale-curtain", BOB);
+		spawnCard(state, "forest", ALICE, "library");
+		const outlet = spawnPermanent(
+			engine,
+			state,
+			"test-sacrifice-outlet",
+			ALICE,
+		);
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [outlet.id]);
 
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				ALICE,
 				{

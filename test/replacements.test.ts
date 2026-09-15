@@ -14,9 +14,14 @@ import {
 	ChoiceController,
 	ChoicePendingError,
 	createEngine,
+	createReadContext,
 	defineCard,
 	getSnapshot,
+	newGame,
+	perform,
 	permanent,
+	spawnCard,
+	spawnPermanent,
 } from "../index.ts";
 import {
 	type SyncAgents as Agents,
@@ -68,10 +73,11 @@ describe("destroy event success", () => {
 	const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 
 	test("ordinary destruction reports both the movement and successful destroy", () => {
-		const state = engine.newGame();
-		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const state = newGame();
+		const bears = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			agents,
@@ -94,14 +100,15 @@ describe("destroy event success", () => {
 	});
 
 	test("regeneration replaces destruction without reporting a destroy", () => {
-		const state = engine.newGame();
-		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE, {
+		const state = newGame();
+		const bears = spawnPermanent(engine, state, "grizzly-bears", ALICE, {
 			tapped: false,
 		});
 		permanent(state, bears.id).damage = 2;
 		addTemporaryEffect(state, ALICE, regenerationShield(bears.id));
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			agents,
@@ -117,11 +124,12 @@ describe("destroy event success", () => {
 	});
 
 	test("exile-instead movement executes without reporting a destroy", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const state = newGame();
+		spawnPermanent(engine, state, "samurai-of-the-pale-curtain", BOB);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			agents,
@@ -146,20 +154,21 @@ describe("replacement effects that add counters as a permanent enters", () => {
 		state: GameState;
 		entered: ObjectId;
 	} {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [
 			new ScriptedAgent(preferences),
 			new ScriptedAgent(),
 		];
-		engine.spawnPermanent(state, "hardened-scales", ALICE);
-		engine.spawnPermanent(state, "doubling-season", ALICE);
-		const fixtureCard = engine.spawnCard(
+		spawnPermanent(engine, state, "hardened-scales", ALICE);
+		spawnPermanent(engine, state, "doubling-season", ALICE);
+		const fixtureCard = spawnCard(
 			state,
 			"test-enters-with-counters",
 			ALICE,
 			"hand",
 		);
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -187,7 +196,7 @@ describe("replacement effects that add counters as a permanent enters", () => {
 		expect(seasonFirst.counters, "Season then Scales").toBe(5);
 		expect(
 			getSnapshot(
-				engine.createReadContext(scalesFirst.state),
+				createReadContext(engine, scalesFirst.state),
 				scalesFirst.entered,
 			).currentCharacteristics,
 			"fixture power with 6 counters",
@@ -197,12 +206,13 @@ describe("replacement effects that add counters as a permanent enters", () => {
 
 describe("when two effects change where a destroyed creature goes", () => {
 	function kalitasFixtureVsSamurai(p1Prefs: string[]): GameState {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent(p1Prefs)];
-		engine.spawnPermanent(state, "test-kalitas-replacement", ALICE);
-		engine.spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
-		engine.perform(
+		spawnPermanent(engine, state, "test-kalitas-replacement", ALICE);
+		spawnPermanent(engine, state, "samurai-of-the-pale-curtain", BOB);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", BOB);
+		perform(
+			engine,
 			state,
 			{ kind: "destroy", object: bears.id, noRegen: false },
 			agents,
@@ -233,7 +243,7 @@ describe("when two effects change where a destroyed creature goes", () => {
 		if (tokenId === undefined)
 			throw new Error("fixture did not create a token");
 		const token = getSnapshot(
-			engine.createReadContext(kalitasFixtureFirst),
+			createReadContext(engine, kalitasFixtureFirst),
 			tokenId,
 		);
 		expect(token.currentCharacteristics).toMatchObject({
@@ -247,14 +257,14 @@ describe("when two effects change where a destroyed creature goes", () => {
 
 describe("drawing with Chains of Mephistopheles on the battlefield", () => {
 	test("a player with a card in hand discards before drawing", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		engine.spawnPermanent(state, "chains-of-mephistopheles", ALICE);
-		engine.spawnCard(state, "forest", ALICE, "library");
-		engine.spawnCard(state, "forest", ALICE, "library");
-		engine.spawnCard(state, "grizzly-bears", ALICE, "hand");
+		spawnPermanent(engine, state, "chains-of-mephistopheles", ALICE);
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "grizzly-bears", ALICE, "hand");
 
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 
 		expect(
 			state.players[ALICE].hand.length,
@@ -268,12 +278,12 @@ describe("drawing with Chains of Mephistopheles on the battlefield", () => {
 	});
 
 	test("a player with an empty hand mills instead of drawing", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		engine.spawnPermanent(state, "chains-of-mephistopheles", ALICE);
-		engine.spawnCard(state, "forest", ALICE, "library");
+		spawnPermanent(engine, state, "chains-of-mephistopheles", ALICE);
+		spawnCard(state, "forest", ALICE, "library");
 
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 		expect(state.players[ALICE].hand.length, "no cards drawn").toBe(0);
 		expect(state.players[ALICE].library.length, "library down by one").toBe(0);
 		expect(state.players[ALICE].graveyard.length, "top card was milled").toBe(
@@ -284,19 +294,20 @@ describe("drawing with Chains of Mephistopheles on the battlefield", () => {
 
 describe("choosing between damage replacement and prevention effects", () => {
 	function dealDamage(preferences: string[]): GameState {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [
 			new ScriptedAgent(),
 			new ScriptedAgent(preferences),
 		];
-		engine.spawnPermanent(state, "furnace-of-rath", ALICE);
-		const source = engine.spawnPermanent(state, "eager-cadet", ALICE);
+		spawnPermanent(engine, state, "furnace-of-rath", ALICE);
+		const source = spawnPermanent(engine, state, "eager-cadet", ALICE);
 		addTemporaryEffect(
 			state,
 			BOB,
 			preventNextDamageShield({ type: "player", player: BOB }, 3),
 		);
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "damage",
@@ -331,19 +342,20 @@ describe("choosing between damage replacement and prevention effects", () => {
 	});
 
 	test("unpreventable damage can still be doubled", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [
 			new ScriptedAgent(),
 			new ScriptedAgent(["prevent"]),
 		];
-		engine.spawnPermanent(state, "furnace-of-rath", ALICE);
-		const pyro = engine.spawnPermanent(state, "eager-cadet", 0);
+		spawnPermanent(engine, state, "furnace-of-rath", ALICE);
+		const pyro = spawnPermanent(engine, state, "eager-cadet", 0);
 		addTemporaryEffect(
 			state,
 			BOB,
 			preventNextDamageShield({ type: "player", player: BOB }, 3),
 		);
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "damage",
@@ -363,11 +375,12 @@ describe("choosing between damage replacement and prevention effects", () => {
 	});
 
 	test("redirected damage can still be prevented", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		const giant = engine.spawnPermanent(state, "palisade-giant", 1);
-		const pyro = engine.spawnPermanent(state, "eager-cadet", 0);
-		engine.perform(
+		const giant = spawnPermanent(engine, state, "palisade-giant", 1);
+		const pyro = spawnPermanent(engine, state, "eager-cadet", 0);
+		perform(
+			engine,
 			state,
 			{
 				kind: "damage",
@@ -389,7 +402,8 @@ describe("choosing between damage replacement and prevention effects", () => {
 		expect(state.players[1].life, "ALICE life untouched").toBe(20);
 
 		addTemporaryEffect(state, 1, prismaticStrands("r"));
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "damage",
@@ -414,11 +428,12 @@ describe("choosing between damage replacement and prevention effects", () => {
 
 describe("effects that inspect a permanent as it enters", () => {
 	test("Root Maze sees a creature that Baby Mycosynth Lattice makes an artifact", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		engine.spawnPermanent(state, "root-maze", 0);
-		const bearsCard = engine.spawnCard(state, "grizzly-bears", 0, "hand");
-		const r1 = engine.perform(
+		spawnPermanent(engine, state, "root-maze", 0);
+		const bearsCard = spawnCard(state, "grizzly-bears", 0, "hand");
+		const r1 = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -434,9 +449,10 @@ describe("effects that inspect a permanent as it enters", () => {
 			"no Lattice: bear enters untapped",
 		).toBe(false);
 
-		engine.spawnPermanent(state, "baby-mycosynth-lattice", 0);
-		const bears2 = engine.spawnCard(state, "grizzly-bears", 0, "hand");
-		const r2 = engine.perform(
+		spawnPermanent(engine, state, "baby-mycosynth-lattice", 0);
+		const bears2 = spawnCard(state, "grizzly-bears", 0, "hand");
+		const r2 = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -456,14 +472,15 @@ describe("effects that inspect a permanent as it enters", () => {
 
 describe("interacting effects as permanents enter", () => {
 	test("a control-changing effect applies before Root Maze checks the permanent", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		engine.spawnPermanent(state, "root-maze", 0);
-		engine.spawnPermanent(state, "baby-mycosynth-lattice", 0);
+		spawnPermanent(engine, state, "root-maze", 0);
+		spawnPermanent(engine, state, "baby-mycosynth-lattice", 0);
 		addTemporaryEffect(state, 0, gatherSpecimens());
-		const bears = engine.spawnCard(state, "grizzly-bears", 1, "hand");
+		const bears = spawnCard(state, "grizzly-bears", 1, "hand");
 
-		const r = engine.perform(
+		const r = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -481,13 +498,14 @@ describe("interacting effects as permanents enter", () => {
 	});
 
 	test("the forced-copy fixture chooses what to copy before that card's own entry effect applies", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
-		engine.spawnPermanent(state, "test-enters-with-counters", 1, {
+		spawnPermanent(engine, state, "test-enters-with-counters", 1, {
 			counters: { "+1/+1": 2 },
 		});
-		const clone = engine.spawnCard(state, "test-forced-copy", 0, "hand");
-		const r = engine.perform(
+		const clone = spawnCard(state, "test-forced-copy", 0, "hand");
+		const r = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -508,7 +526,7 @@ describe("interacting effects as permanents enter", () => {
 			cardId: "test-forced-copy",
 		});
 		expect(
-			getSnapshot(engine.createReadContext(state), entered)
+			getSnapshot(createReadContext(engine, state), entered)
 				.currentCharacteristics.name,
 			"entered as a copy of the counters fixture",
 		).toBe("TEST ONLY — Enters With Counters");
@@ -537,19 +555,19 @@ describe("Clone's optional copy replacement", () => {
 	}
 
 	test("chooses any battlefield creature without targeting", () => {
-		const state = engine.newGame();
-		const first = engine.spawnPermanent(state, "grizzly-bears", BOB);
-		const selected = engine.spawnPermanent(state, "eager-cadet", BOB);
-		const clone = engine.spawnCard(state, "clone", ALICE, "hand");
+		const state = newGame();
+		const first = spawnPermanent(engine, state, "grizzly-bears", BOB);
+		const selected = spawnPermanent(engine, state, "eager-cadet", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
 		const recorder = ChoiceController.record(engine, [
 			chooseCopiedObject(selected.id),
 			new ScriptedAgent(),
 		]);
 
-		const result = engine.perform(state, cloneEvent(clone.id), recorder);
+		const result = perform(engine, state, cloneEvent(clone.id), recorder);
 		const entered = created(result);
 		expect(
-			getSnapshot(engine.createReadContext(state), entered)
+			getSnapshot(createReadContext(engine, state), entered)
 				.currentCharacteristics.name,
 		).toBe("Eager Cadet");
 		expect(permanent(state, entered).representation).toEqual({
@@ -567,9 +585,9 @@ describe("Clone's optional copy replacement", () => {
 	});
 
 	test("the entering permanent's would-be controller makes the choice", () => {
-		const state = engine.newGame();
-		const selected = engine.spawnPermanent(state, "grizzly-bears", BOB);
-		const clone = engine.spawnCard(state, "clone", ALICE, "hand");
+		const state = newGame();
+		const selected = spawnPermanent(engine, state, "grizzly-bears", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
 		const aliceFallback = new ScriptedAgent();
 		const alice: SyncAgent = {
 			choose(view, request) {
@@ -587,7 +605,8 @@ describe("Clone's optional copy replacement", () => {
 			chooseCopiedObject(selected.id),
 		]);
 		const event = cloneEvent(clone.id);
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{
 				...event,
@@ -599,24 +618,24 @@ describe("Clone's optional copy replacement", () => {
 		const entered = created(result);
 		expect(permanent(state, entered).controller).toBe(BOB);
 		expect(
-			getSnapshot(engine.createReadContext(state), entered)
+			getSnapshot(createReadContext(engine, state), entered)
 				.currentCharacteristics.name,
 		).toBe("Grizzly Bears");
 		expect(recorder.transcript().choices[0]?.request.player).toBe(BOB);
 	});
 
 	test("may decline and enter as Clone", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "grizzly-bears", BOB);
-		const clone = engine.spawnCard(state, "clone", ALICE, "hand");
+		const state = newGame();
+		spawnPermanent(engine, state, "grizzly-bears", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
 
 		const entered = created(
-			engine.perform(state, cloneEvent(clone.id), [
+			perform(engine, state, cloneEvent(clone.id), [
 				chooseCopiedObject(null),
 				new ScriptedAgent(),
 			]),
 		);
-		const snapshot = getSnapshot(engine.createReadContext(state), entered);
+		const snapshot = getSnapshot(createReadContext(engine, state), entered);
 		expect(snapshot.currentCharacteristics.name).toBe("Clone");
 		expect(snapshot.currentCharacteristics).toMatchObject({
 			kind: "creature",
@@ -626,18 +645,18 @@ describe("Clone's optional copy replacement", () => {
 	});
 
 	test("can choose a permanent that is currently a creature but copies only its copiable values", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "test-animate-artifacts-for-copy", ALICE);
-		const relic = engine.spawnPermanent(state, "darksteel-relic", BOB);
-		const clone = engine.spawnCard(state, "clone", ALICE, "hand");
+		const state = newGame();
+		spawnPermanent(engine, state, "test-animate-artifacts-for-copy", ALICE);
+		const relic = spawnPermanent(engine, state, "darksteel-relic", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
 
 		const entered = created(
-			engine.perform(state, cloneEvent(clone.id), [
+			perform(engine, state, cloneEvent(clone.id), [
 				chooseCopiedObject(relic.id),
 				new ScriptedAgent(),
 			]),
 		);
-		const snapshot = getSnapshot(engine.createReadContext(state), entered);
+		const snapshot = getSnapshot(createReadContext(engine, state), entered);
 		expect(snapshot.copiableValues.name).toBe("Darksteel Relic");
 		expect(snapshot.copiableValues.types).toEqual(["artifact"]);
 		expect(snapshot.currentCharacteristics.types).toEqual([
@@ -647,64 +666,64 @@ describe("Clone's optional copy replacement", () => {
 	});
 
 	test("acquires and applies the chosen creature's own entry replacement in the same event", () => {
-		const state = engine.newGame();
-		const watchdog = engine.spawnPermanent(state, "faithful-watchdog", BOB);
-		const clone = engine.spawnCard(state, "clone", ALICE, "hand");
+		const state = newGame();
+		const watchdog = spawnPermanent(engine, state, "faithful-watchdog", BOB);
+		const clone = spawnCard(state, "clone", ALICE, "hand");
 
 		const entered = created(
-			engine.perform(state, cloneEvent(clone.id), [
+			perform(engine, state, cloneEvent(clone.id), [
 				chooseCopiedObject(watchdog.id),
 				new ScriptedAgent(),
 			]),
 		);
-		const snapshot = getSnapshot(engine.createReadContext(state), entered);
+		const snapshot = getSnapshot(createReadContext(engine, state), entered);
 		expect(snapshot.currentCharacteristics.name).toBe("Faithful Watchdog");
 		expect(permanent(state, entered).counters).toEqual({ "+1/+1": 3 });
 	});
 
 	test("with no legal creature, enters as Clone without asking", () => {
-		const state = engine.newGame();
-		const clone = engine.spawnCard(state, "clone", ALICE, "hand");
+		const state = newGame();
+		const clone = spawnCard(state, "clone", ALICE, "hand");
 		const recorder = ChoiceController.record(engine, [
 			new ScriptedAgent(),
 			new ScriptedAgent(),
 		]);
 
 		const entered = created(
-			engine.perform(state, cloneEvent(clone.id), recorder),
+			perform(engine, state, cloneEvent(clone.id), recorder),
 		);
 		expect(
-			getSnapshot(engine.createReadContext(state), entered)
+			getSnapshot(createReadContext(engine, state), entered)
 				.currentCharacteristics.name,
 		).toBe("Clone");
 		expect(recorder.transcript().choices).toHaveLength(0);
 	});
 
 	test("records, serializes, and exactly replays the selection", () => {
-		const checkpoint = engine.newGame();
-		engine.spawnPermanent(checkpoint, "grizzly-bears", BOB);
-		const selected = engine.spawnPermanent(checkpoint, "eager-cadet", BOB);
-		const clone = engine.spawnCard(checkpoint, "clone", ALICE, "hand");
+		const checkpoint = newGame();
+		spawnPermanent(engine, checkpoint, "grizzly-bears", BOB);
+		const selected = spawnPermanent(engine, checkpoint, "eager-cadet", BOB);
+		const clone = spawnCard(checkpoint, "clone", ALICE, "hand");
 
 		const recordedState = structuredClone(checkpoint);
 		const recorder = ChoiceController.record(engine, [
 			chooseCopiedObject(selected.id),
 			new ScriptedAgent(),
 		]);
-		engine.perform(recordedState, cloneEvent(clone.id), recorder);
+		perform(engine, recordedState, cloneEvent(clone.id), recorder);
 		const transcript = JSON.parse(JSON.stringify(recorder.transcript()));
 
 		const replayedState = structuredClone(checkpoint);
 		const replay = ChoiceController.replay(engine, transcript);
-		engine.perform(replayedState, cloneEvent(clone.id), replay);
+		perform(engine, replayedState, cloneEvent(clone.id), replay);
 		replay.assertComplete();
 		expect(replayedState).toEqual(recordedState);
 	});
 
 	test("an asynchronous selection unwinds and replays from the checkpoint", async () => {
-		const checkpoint = engine.newGame();
-		const selected = engine.spawnPermanent(checkpoint, "grizzly-bears", BOB);
-		const clone = engine.spawnCard(checkpoint, "clone", ALICE, "hand");
+		const checkpoint = newGame();
+		const selected = spawnPermanent(engine, checkpoint, "grizzly-bears", BOB);
+		const clone = spawnCard(checkpoint, "clone", ALICE, "hand");
 		const checkpointSnapshot = structuredClone(checkpoint);
 		const fallback = new ScriptedAgent();
 		const asyncAgent: Agent = {
@@ -752,8 +771,8 @@ describe("Clone's optional copy replacement", () => {
 
 describe("choosing who applies a replacement effect", () => {
 	test("a permanent's controller chooses, not its owner", () => {
-		const state = engine.newGame();
-		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const state = newGame();
+		const bears = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 		permanent(state, bears.id).controller = BOB;
 
 		expect(
@@ -766,8 +785,8 @@ describe("choosing who applies a replacement effect", () => {
 	});
 
 	test("an object with no controller falls back to its owner", () => {
-		const state = engine.newGame();
-		const card = engine.spawnCard(state, "grizzly-bears", BOB, "graveyard");
+		const state = newGame();
+		const card = spawnCard(state, "grizzly-bears", BOB, "graveyard");
 
 		expect(
 			affectedPlayer(state, {
@@ -780,7 +799,7 @@ describe("choosing who applies a replacement effect", () => {
 	});
 
 	test("an event naming no object has no chooser at all", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const missing = 9999 as ObjectId;
 
 		// Answering P0 here would hand a real choice to a player the event

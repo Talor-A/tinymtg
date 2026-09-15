@@ -1,6 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS } from "../cards.ts";
-import { abilityId, createEngine, defineCard, getSnapshot } from "../index.ts";
+import {
+	abilityId,
+	advance,
+	createEngine,
+	createReadContext,
+	defineCard,
+	executeCastAction,
+	getSnapshot,
+	perform,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+	spawnToken,
+} from "../index.ts";
 import {
 	ALICE,
 	advanceUntil,
@@ -119,30 +132,32 @@ const engine = createEngine([...CARDS, TEST_CARD_1, TEST_CARD_2]);
 
 function castGrant() {
 	const state = setupMain(engine);
-	const creature = engine.spawnPermanent(state, "grizzly-bears", ALICE);
-	const spell = engine.spawnCard(state, GRANT, ALICE, "hand");
-	engine.executeCastAction(
+	const creature = spawnPermanent(engine, state, "grizzly-bears", ALICE);
+	const spell = spawnCard(state, GRANT, ALICE, "hand");
+	executeCastAction(
+		engine,
 		state,
 		ALICE,
 		{ kind: "cast", card: spell.id },
 		passingAgents(),
 	);
-	engine.settlePriority(state, passingAgents());
+	settlePriority(engine, state, passingAgents());
 	return { state, creature };
 }
 
 function castReturnGrant() {
 	const state = setupMain(engine);
-	const creature = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+	const creature = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 	const cast = () => {
-		const spell = engine.spawnCard(state, RETURN_GRANT, ALICE, "hand");
-		engine.executeCastAction(
+		const spell = spawnCard(state, RETURN_GRANT, ALICE, "hand");
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 	};
 	cast();
 	return { state, creature, cast };
@@ -151,13 +166,14 @@ function castReturnGrant() {
 describe("temporary triggered-ability grants", () => {
 	test("the target gains a noncopiable trigger that fires", () => {
 		const { state, creature } = castGrant();
-		const snapshot = getSnapshot(engine.createReadContext(state), creature.id);
+		const snapshot = getSnapshot(createReadContext(engine, state), creature.id);
 		expect(snapshot.copiableValues.abilities.triggered).toEqual([]);
 		expect(snapshot.currentCharacteristics.abilities.triggered).toEqual([
 			GRANTED_TRIGGER,
 		]);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "tap", objects: [creature.id] },
 			passingAgents(),
@@ -165,7 +181,7 @@ describe("temporary triggered-ability grants", () => {
 		expect(state.pendingTriggers.map((trigger) => trigger.triggerId)).toEqual([
 			GRANTED_TRIGGER,
 		]);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[ALICE].life).toBe(21);
 	});
 
@@ -174,15 +190,16 @@ describe("temporary triggered-ability grants", () => {
 		advanceUntil(engine, state, passingAgents(), (next) =>
 			isAt(next, "cleanup"),
 		);
-		engine.advance(state, passingAgents());
+		advance(engine, state, passingAgents());
 
-		const snapshot = getSnapshot(engine.createReadContext(state), creature.id);
+		const snapshot = getSnapshot(createReadContext(engine, state), creature.id);
 		expect(snapshot.currentCharacteristics.abilities.triggered).toEqual([]);
 	});
 
 	test("the grant does not follow the physical card through a zone change", () => {
 		const { state, creature } = castGrant();
-		const moved = engine.perform(
+		const moved = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -196,7 +213,8 @@ describe("temporary triggered-ability grants", () => {
 		const card = moved.created[0];
 		expect(card).toBeDefined();
 		if (card === undefined) return;
-		const returned = engine.perform(
+		const returned = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -210,7 +228,7 @@ describe("temporary triggered-ability grants", () => {
 		expect(returned).toBeDefined();
 		if (returned === undefined) return;
 		expect(
-			getSnapshot(engine.createReadContext(state), returned)
+			getSnapshot(createReadContext(engine, state), returned)
 				.currentCharacteristics.abilities.triggered,
 		).toEqual([]);
 	});
@@ -221,7 +239,8 @@ describe("triggering zone-change results", () => {
 		const { state, creature } = castReturnGrant();
 		const handBefore = state.players[ALICE].hand.length;
 		const graveyardBefore = state.players[ALICE].graveyard.length;
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "sacrifice", object: creature.id },
 			passingAgents(),
@@ -233,7 +252,7 @@ describe("triggering zone-change results", () => {
 			graveyardCard,
 		);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[ALICE].graveyard).toHaveLength(graveyardBefore);
 		expect(state.players[ALICE].hand).toHaveLength(handBefore + 1);
 	});
@@ -241,7 +260,8 @@ describe("triggering zone-change results", () => {
 	test("the trigger does nothing if its destination object moved again", () => {
 		const { state, creature } = castReturnGrant();
 		const handBefore = state.players[ALICE].hand.length;
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "sacrifice", object: creature.id },
 			passingAgents(),
@@ -249,7 +269,8 @@ describe("triggering zone-change results", () => {
 		const graveyardCard = state.players[ALICE].graveyard.at(-1);
 		expect(graveyardCard).toBeDefined();
 		if (graveyardCard === undefined) return;
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -261,7 +282,7 @@ describe("triggering zone-change results", () => {
 			passingAgents(),
 		);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[ALICE].hand).toHaveLength(handBefore);
 		expect(state.players[ALICE].exile).toHaveLength(1);
 	});
@@ -269,8 +290,9 @@ describe("triggering zone-change results", () => {
 	test("a graveyard-to-exile replacement prevents the dies trigger", () => {
 		const { state, creature } = castReturnGrant();
 		const graveyardBefore = state.players[ALICE].graveyard.length;
-		engine.spawnPermanent(state, "samurai-of-the-pale-curtain", ALICE);
-		engine.perform(
+		spawnPermanent(engine, state, "samurai-of-the-pale-curtain", ALICE);
+		perform(
+			engine,
 			state,
 			{ kind: "sacrifice", object: creature.id },
 			passingAgents(),
@@ -286,21 +308,22 @@ describe("triggering zone-change results", () => {
 		cast();
 		const handBefore = state.players[ALICE].hand.length;
 		const graveyardBefore = state.players[ALICE].graveyard.length;
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "sacrifice", object: creature.id },
 			passingAgents(),
 		);
 		expect(state.pendingTriggers).toHaveLength(2);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[ALICE].graveyard).toHaveLength(graveyardBefore);
 		expect(state.players[ALICE].hand).toHaveLength(handBefore + 1);
 	});
 
 	test("a token ceases to exist before its return trigger resolves", () => {
 		const state = setupMain(engine);
-		const token = engine.spawnToken(state, ALICE, {
+		const token = spawnToken(state, ALICE, {
 			kind: "creature",
 			name: "Bear Token",
 			manaCost: "zero",
@@ -319,26 +342,28 @@ describe("triggering zone-change results", () => {
 			power: 2,
 			toughness: 2,
 		});
-		const spell = engine.spawnCard(state, RETURN_GRANT, ALICE, "hand");
-		engine.executeCastAction(
+		const spell = spawnCard(state, RETURN_GRANT, ALICE, "hand");
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
-		engine.perform(
+		settlePriority(engine, state, passingAgents());
+		perform(
+			engine,
 			state,
 			{ kind: "sacrifice", object: token.id },
 			passingAgents(),
 		);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(
 			state.battlefield.some(
 				(id) =>
-					getSnapshot(engine.createReadContext(state), id)
+					getSnapshot(createReadContext(engine, state), id)
 						.currentCharacteristics.name === "Bear Token",
 			),
 		).toBe(false);

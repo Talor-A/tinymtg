@@ -1,8 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
-import type { Engine, ObjectId, PlayerId } from "../index.ts";
-import { abilityId, createEngine, defineCard } from "../index.ts";
+import type { ObjectId, PlayerId } from "../index.ts";
+import {
+	abilityId,
+	createEngine,
+	defineCard,
+	executeAbilityAction,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import {
 	ALICE,
 	BOB,
@@ -27,13 +35,7 @@ const TEST_CARD_1 = defineCard({
 			id: "intrinsic-mana-u",
 			text: "Add {U}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [
-				{
-					kind: "add-mana",
-					subject: "you",
-					mana: { w: 0, u: 1, b: 0, r: 0, g: 0 },
-				},
-			],
+			manaOptions: [{ w: 0, u: 1, b: 0, r: 0, g: 0 }],
 		},
 	],
 });
@@ -48,12 +50,13 @@ function castAction(card: ObjectId) {
 }
 
 function tapForMana(
-	state: Parameters<Engine["executeAbilityAction"]>[0],
+	state: Parameters<typeof executeAbilityAction>[1],
 	player: PlayerId,
 	sources: { id: ObjectId; ability: typeof blueMana }[],
 ): void {
 	for (const { id, ability } of sources) {
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			player,
 			{ kind: "activate ability", source: id, ability },
@@ -65,9 +68,9 @@ function tapForMana(
 describe("Vision Skeins", () => {
 	test("each player draws two cards", () => {
 		const state = setupMain(engine);
-		const skeins = engine.spawnCard(state, "vision-skeins", ALICE, "hand");
-		const island = engine.spawnPermanent(state, "test-blue-source", ALICE);
-		const forest = engine.spawnPermanent(state, "forest", ALICE);
+		const skeins = spawnCard(state, "vision-skeins", ALICE, "hand");
+		const island = spawnPermanent(engine, state, "test-blue-source", ALICE);
+		const forest = spawnPermanent(engine, state, "forest", ALICE);
 		tapForMana(state, ALICE, [
 			{ id: island.id, ability: blueMana },
 			{ id: forest.id, ability: forestMana },
@@ -79,7 +82,7 @@ describe("Vision Skeins", () => {
 		const bobLibrary = state.players[BOB].library.length;
 
 		const caster = new ScriptedAgent([], [], [castAction(skeins.id)]);
-		engine.settlePriority(state, [caster, new ScriptedAgent()]);
+		settlePriority(engine, state, [caster, new ScriptedAgent()]);
 		expectScriptConsumed(caster);
 
 		// "Each player draws two cards." ALICE's hand nets +1: two draws in,
@@ -95,9 +98,9 @@ describe("Vision Skeins", () => {
 
 	test("the active player draws first when the nonactive player casts it", () => {
 		const state = setupMain(engine);
-		const skeins = engine.spawnCard(state, "vision-skeins", BOB, "hand");
-		const island = engine.spawnPermanent(state, "test-blue-source", BOB);
-		const forest = engine.spawnPermanent(state, "forest", BOB);
+		const skeins = spawnCard(state, "vision-skeins", BOB, "hand");
+		const island = spawnPermanent(engine, state, "test-blue-source", BOB);
+		const forest = spawnPermanent(engine, state, "forest", BOB);
 		tapForMana(state, BOB, [
 			{ id: island.id, ability: blueMana },
 			{ id: forest.id, ability: forestMana },
@@ -105,7 +108,7 @@ describe("Vision Skeins", () => {
 
 		state.log.length = 0;
 		const caster = new ScriptedAgent([], [], [castAction(skeins.id)]);
-		engine.settlePriority(state, [new ScriptedAgent(), caster]);
+		settlePriority(engine, state, [new ScriptedAgent(), caster]);
 		expectScriptConsumed(caster);
 
 		// CR 121.2c: for an instruction that makes multiple players draw,

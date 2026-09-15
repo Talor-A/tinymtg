@@ -10,23 +10,27 @@ import {
 	createEngine,
 	type GameState,
 	InvalidChoiceAnswerError,
+	name,
+	newGame,
 	type ObjectId,
+	perform,
 	type SyncAgent,
+	spawnCard,
 } from "../index.ts";
 
 const engine = createEngine(CARDS);
 
 function cards(state: GameState): ObjectId[] {
 	return [
-		engine.spawnCard(state, "forest", 0, "library").id,
-		engine.spawnCard(state, "grizzly-bears", 0, "library").id,
-		engine.spawnCard(state, "eager-cadet", 0, "library").id,
+		spawnCard(state, "forest", 0, "library").id,
+		spawnCard(state, "grizzly-bears", 0, "library").id,
+		spawnCard(state, "eager-cadet", 0, "library").id,
 	];
 }
 
 describe("choose-from-top choices", () => {
 	test("chooses two cards and replays the exact kept set and bottom order", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected three cards");
@@ -71,7 +75,7 @@ describe("choose-from-top choices", () => {
 	});
 
 	test("supports a one-card choice and suspension without a speculative answer", async () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b] = cards(state);
 		if (a === undefined || b === undefined) throw new Error("expected cards");
 		let resolveAnswer: ((answer: ChoiceAnswer) => void) | undefined;
@@ -107,7 +111,7 @@ describe("choose-from-top choices", () => {
 	});
 
 	test("rejects a wrong kept count, missing, duplicate, or unknown card", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected cards");
@@ -135,13 +139,13 @@ describe("choose-from-top choices", () => {
 
 describe("choose-from-top events", () => {
 	test("puts two kept cards into hand and the ordered rest on the bottom", () => {
-		const state = engine.newGame();
-		const untouched = engine.spawnCard(state, "darksteel-myr", 0, "library").id;
-		const a = engine.spawnCard(state, "forest", 0, "library").id;
-		const b = engine.spawnCard(state, "grizzly-bears", 0, "library").id;
-		const c = engine.spawnCard(state, "eager-cadet", 0, "library").id;
-		const d = engine.spawnCard(state, "darksteel-relic", 0, "library").id;
-		const e = engine.spawnCard(state, "monastery-swiftspear", 0, "library").id;
+		const state = newGame();
+		const untouched = spawnCard(state, "darksteel-myr", 0, "library").id;
+		const a = spawnCard(state, "forest", 0, "library").id;
+		const b = spawnCard(state, "grizzly-bears", 0, "library").id;
+		const c = spawnCard(state, "eager-cadet", 0, "library").id;
+		const d = spawnCard(state, "darksteel-relic", 0, "library").id;
+		const e = spawnCard(state, "monastery-swiftspear", 0, "library").id;
 		const agent: SyncAgent = {
 			choose(_view, request) {
 				if (
@@ -167,13 +171,14 @@ describe("choose-from-top events", () => {
 			},
 		};
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "choose from top", player: 0, amount: 5, keep: 2 },
 			[agent, agent],
 		);
 
-		expect(state.players[0].hand.map((id) => engine.name(state, id))).toEqual([
+		expect(state.players[0].hand.map((id) => name(engine, state, id))).toEqual([
 			"Eager Cadet",
 			"Monastery Swiftspear",
 		]);
@@ -183,26 +188,28 @@ describe("choose-from-top events", () => {
 	});
 
 	test("keeps every available card without a choice when fewer than n remain", () => {
-		const state = engine.newGame();
-		const only = engine.spawnCard(state, "forest", 0, "library").id;
+		const state = newGame();
+		const only = spawnCard(state, "forest", 0, "library").id;
 		const agent: SyncAgent = {
 			choose() {
 				throw new Error("an undersized library must not request a choice");
 			},
 		};
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "choose from top", player: 0, amount: 5, keep: 2 },
 			[agent, agent],
 		);
 		expect(state.players[0].library).toEqual([]);
-		expect(state.players[0].hand.map((id) => engine.name(state, id))).toEqual([
+		expect(state.players[0].hand.map((id) => name(engine, state, id))).toEqual([
 			"Forest",
 		]);
 		expect(state.objects.has(only)).toBe(false);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "choose from top", player: 0, amount: 5, keep: 2 },
 			[agent, agent],

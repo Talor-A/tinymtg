@@ -7,7 +7,16 @@ import type {
 	GameState,
 	PlayerView,
 } from "../index.ts";
-import { createEngine, getSnapshot, permanent } from "../index.ts";
+import {
+	createEngine,
+	createReadContext,
+	getSnapshot,
+	perform,
+	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import {
 	ALICE,
 	BOB,
@@ -41,8 +50,9 @@ function putOntoBattlefield(
 	cardId: string,
 	agents: SyncAgents,
 ) {
-	const card = engine.spawnCard(state, cardId, ALICE, "hand");
-	engine.perform(
+	const card = spawnCard(state, cardId, ALICE, "hand");
+	perform(
+		engine,
 		state,
 		{
 			kind: "change zone",
@@ -58,8 +68,8 @@ function putOntoBattlefield(
 describe("Baffling End", () => {
 	test("exiles only an opponent's creature with mana value 3 or less", () => {
 		const state = setupMain(engine);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
-		const whisperer = engine.spawnPermanent(state, "beast-whisperer", BOB);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", BOB);
+		const whisperer = spawnPermanent(engine, state, "beast-whisperer", BOB);
 
 		// Grizzly Bears costs {1}{G} and Beast Whisperer {2}{G}{G}, so only the
 		// bears are inside "mana value 3 or less".
@@ -68,7 +78,7 @@ describe("Baffling End", () => {
 		putOntoBattlefield(state, "baffling-end", agents);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(watcher.offered).toEqual([1]);
 		expect(state.objects.has(bears.id)).toBe(false);
 		expect(state.objects.has(whisperer.id)).toBe(true);
@@ -79,9 +89,10 @@ describe("Baffling End", () => {
 	test("hands the targeted opponent a Dinosaur when it leaves the battlefield", () => {
 		const state = setupMain(engine);
 		const agents = alicePicksBob();
-		const baffling = engine.spawnPermanent(state, "baffling-end", ALICE);
+		const baffling = spawnPermanent(engine, state, "baffling-end", ALICE);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -93,7 +104,7 @@ describe("Baffling End", () => {
 			agents,
 		);
 		expect(state.pendingTriggers).toHaveLength(1);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		const tokens = state.battlefield.filter(
 			(id) => permanent(state, id).representation.kind === "token",
@@ -103,7 +114,7 @@ describe("Baffling End", () => {
 		if (dinosaur === undefined) throw new Error("no token was created");
 		expect(permanent(state, dinosaur).controller).toBe(BOB);
 		expect(
-			getSnapshot(engine.createReadContext(state), dinosaur)
+			getSnapshot(createReadContext(engine, state), dinosaur)
 				.currentCharacteristics,
 		).toMatchObject({
 			name: "Dinosaur Token",
@@ -118,9 +129,10 @@ describe("Baffling End", () => {
 	test("a departure trigger also fires on a destination other than the graveyard", () => {
 		const state = setupMain(engine);
 		const agents = alicePicksBob();
-		const baffling = engine.spawnPermanent(state, "baffling-end", ALICE);
+		const baffling = spawnPermanent(engine, state, "baffling-end", ALICE);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -132,7 +144,7 @@ describe("Baffling End", () => {
 			agents,
 		);
 		expect(state.pendingTriggers).toHaveLength(1);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		const tokens = state.battlefield.filter(
 			(id) => permanent(state, id).representation.kind === "token",
@@ -144,9 +156,10 @@ describe("Baffling End", () => {
 describe("Thragtusk", () => {
 	test("leaves for exile and still creates its Beast", () => {
 		const state = setupMain(engine);
-		const thragtusk = engine.spawnPermanent(state, "thragtusk", ALICE);
+		const thragtusk = spawnPermanent(engine, state, "thragtusk", ALICE);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -158,7 +171,7 @@ describe("Thragtusk", () => {
 			passingAgents(),
 		);
 		expect(state.pendingTriggers).toHaveLength(1);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		const tokens = state.battlefield.filter(
 			(id) => permanent(state, id).representation.kind === "token",

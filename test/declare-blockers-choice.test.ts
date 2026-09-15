@@ -14,6 +14,8 @@ import {
 	createEngine,
 	InvalidChoiceAnswerError,
 	isTurnStep,
+	spawnCard,
+	spawnPermanent,
 } from "../index.ts";
 import {
 	type SyncAgents as Agents,
@@ -59,11 +61,11 @@ function oneBlockerTwoAttackers(blocker: BlockingAgent): {
 	run: () => void;
 } {
 	const state = newInProgressGame(engine);
-	const first = engine.spawnPermanent(state, "grizzly-bears", ALICE).id;
-	const second = engine.spawnPermanent(state, "grizzly-bears", ALICE).id;
-	engine.spawnPermanent(state, "grizzly-bears", BOB);
-	engine.spawnCard(state, "forest", ALICE, "library");
-	engine.spawnCard(state, "forest", BOB, "library");
+	const first = spawnPermanent(engine, state, "grizzly-bears", ALICE).id;
+	const second = spawnPermanent(engine, state, "grizzly-bears", ALICE).id;
+	spawnPermanent(engine, state, "grizzly-bears", BOB);
+	spawnCard(state, "forest", ALICE, "library");
+	spawnCard(state, "forest", BOB, "library");
 	const agents: Agents = [
 		new ScriptedAgent([], [], [], [[first, second]]),
 		blocker,

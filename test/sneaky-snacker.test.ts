@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS } from "../cards.ts";
-import { createEngine, getSnapshot, permanent } from "../index.ts";
+import {
+	createEngine,
+	createReadContext,
+	getSnapshot,
+	perform,
+	permanent,
+	settlePriority,
+	spawnCard,
+} from "../index.ts";
 import {
 	ALICE,
 	advanceUntil,
@@ -21,10 +29,9 @@ const engine = createEngine(CARDS);
  */
 function snackerInGraveyard(): ReturnType<typeof setupMain> {
 	const state = setupMain(engine);
-	engine.spawnCard(state, "sneaky-snacker", ALICE, "graveyard");
+	spawnCard(state, "sneaky-snacker", ALICE, "graveyard");
 	// Enough library cards that no test accidentally draws out.
-	for (let i = 0; i < 6; i++)
-		engine.spawnCard(state, "forest", ALICE, "library");
+	for (let i = 0; i < 6; i++) spawnCard(state, "forest", ALICE, "library");
 	return state;
 }
 
@@ -35,19 +42,19 @@ describe("Sneaky Snacker", () => {
 		const _snacker = state.players[ALICE].graveyard[0];
 
 		// The draw step already drew the turn's first card.
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 		expect(
 			state.pendingTriggers,
 			"the second draw of the turn does not trigger",
 		).toHaveLength(0);
 
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 		expect(
 			state.pendingTriggers,
 			"the third draw of the turn triggers from the graveyard",
 		).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		// CR 400.7: the card that entered is a new permanent object, not the
 		// graveyard card that triggered, so find it by name on the battlefield.
 		const returned = state.battlefield.find((id) => {
@@ -63,7 +70,7 @@ describe("Sneaky Snacker", () => {
 		expect(object.controller).toBe(ALICE);
 		expect(object.tapped, "returns to the battlefield tapped").toBe(true);
 		expect(
-			getSnapshot(engine.createReadContext(state), returned)
+			getSnapshot(createReadContext(engine, state), returned)
 				.currentCharacteristics,
 		).toMatchObject({
 			kind: "creature",
@@ -81,8 +88,8 @@ describe("Sneaky Snacker", () => {
 		playOneTurn(engine, state, agents);
 		advanceUntil(engine, state, agents, (next) => atMain(next, "precombat"));
 
-		engine.perform(state, { kind: "draw", player: BOB }, agents);
-		engine.perform(state, { kind: "draw", player: BOB }, agents);
+		perform(engine, state, { kind: "draw", player: BOB }, agents);
+		perform(engine, state, { kind: "draw", player: BOB }, agents);
 		expect(
 			state.pendingTriggers,
 			"BOB's third draw this turn does not trigger ALICE's snacker",
@@ -99,7 +106,7 @@ describe("Sneaky Snacker", () => {
 		const state = snackerInGraveyard();
 		const agents = passingAgents();
 		// One more draw this turn: the second, so nothing returns yet.
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 		expect(state.pendingTriggers).toHaveLength(0);
 
 		// A full round to ALICE's next turn: its draw step is the turn's
@@ -118,28 +125,28 @@ describe("Sneaky Snacker", () => {
 			"the snacker is still in the graveyard",
 		).toBe(true);
 
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 		expect(
 			state.pendingTriggers,
 			"the second draw of the new turn does not trigger",
 		).toHaveLength(0);
 
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 		expect(
 			state.pendingTriggers,
 			"the third draw of the new turn triggers",
 		).toHaveLength(1);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].graveyard).toHaveLength(0);
 	});
 
 	test("the trigger functions only from the graveyard", () => {
 		const state = setupMain(engine);
-		engine.spawnCard(state, "sneaky-snacker", ALICE, "exile");
+		spawnCard(state, "sneaky-snacker", ALICE, "exile");
 		const agents = passingAgents();
 
 		for (let i = 0; i < 2; i++)
-			engine.perform(state, { kind: "draw", player: ALICE }, agents);
+			perform(engine, state, { kind: "draw", player: ALICE }, agents);
 		expect(
 			state.pendingTriggers,
 			"a snacker in exile does not trigger",

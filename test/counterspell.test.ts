@@ -3,7 +3,19 @@ import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
 import { loadCardFixture } from "../corpus.ts";
 import type { GameState, ObjectId, PlayerId } from "../index.ts";
-import { abilityId, createEngine, defineCard } from "../index.ts";
+import {
+	abilityId,
+	createEngine,
+	defineCard,
+	executeAbilityAction,
+	executeCastAction,
+	getObservableActions,
+	newGame,
+	perform,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import {
 	ALICE,
 	BOB,
@@ -37,10 +49,11 @@ const engine = createEngine([
 const islandMana = abilityId("activated", "island", 0);
 
 function putGrizzlyBearsOnStack() {
-	const state = engine.newGame();
+	const state = newGame();
 	beginFirstTurn(engine, state, passingAgents());
-	const bears = engine.spawnCard(state, "grizzly-bears", BOB, "hand");
-	const moved = engine.perform(
+	const bears = spawnCard(state, "grizzly-bears", BOB, "hand");
+	const moved = perform(
+		engine,
 		state,
 		{
 			kind: "change zone",
@@ -59,7 +72,8 @@ function putGrizzlyBearsOnStack() {
 describe("counter event", () => {
 	test("moves a spell off the stack without resolving it", () => {
 		const { state, spell } = putGrizzlyBearsOnStack();
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "counter", spell },
 			passingAgents(),
@@ -82,9 +96,10 @@ describe("counter event", () => {
 
 	test("is stopped by a prohibition like every other event", () => {
 		const { state, spell } = putGrizzlyBearsOnStack();
-		const ward = engine.spawnPermanent(state, "counter-test-ward", BOB);
+		const ward = spawnPermanent(engine, state, "counter-test-ward", BOB);
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "counter", spell },
 			passingAgents(),
@@ -101,11 +116,12 @@ describe("counter event", () => {
 /** Two Islands, both tapped for mana: exactly one Counterspell's worth. */
 function twoIslandsTappedFor(state: GameState, player: PlayerId): ObjectId[] {
 	const islands = [
-		engine.spawnPermanent(state, "island", player),
-		engine.spawnPermanent(state, "island", player),
+		spawnPermanent(engine, state, "island", player),
+		spawnPermanent(engine, state, "island", player),
 	];
 	for (const island of islands) {
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			player,
 			{ kind: "activate ability", source: island.id, ability: islandMana },
@@ -121,14 +137,15 @@ function castCounterspellAt(
 	player: PlayerId,
 	spell: ObjectId,
 ): void {
-	const counterspell = engine.spawnCard(state, "counterspell", player, "hand");
+	const counterspell = spawnCard(state, "counterspell", player, "hand");
 	const caster = new ScriptedAgent();
 	caster.targetChoices.push({ type: "spell", id: spell });
 	const agents: [ScriptedAgent, ScriptedAgent] =
 		player === ALICE
 			? [caster, new ScriptedAgent()]
 			: [new ScriptedAgent(), caster];
-	engine.executeCastAction(
+	executeCastAction(
+		engine,
 		state,
 		player,
 		{ kind: "cast", card: counterspell.id },
@@ -139,11 +156,12 @@ function castCounterspellAt(
 describe("Counterspell", () => {
 	test("targets and counters a spell through the priority stack", () => {
 		const { state, spell } = putGrizzlyBearsOnStack();
-		const counterspell = engine.spawnCard(state, "counterspell", ALICE, "hand");
-		const first = engine.spawnPermanent(state, "island", ALICE);
-		const second = engine.spawnPermanent(state, "island", ALICE);
+		const counterspell = spawnCard(state, "counterspell", ALICE, "hand");
+		const first = spawnPermanent(engine, state, "island", ALICE);
+		const second = spawnPermanent(engine, state, "island", ALICE);
 		for (const island of [first, second]) {
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				ALICE,
 				{ kind: "activate ability", source: island.id, ability: islandMana },
@@ -151,13 +169,14 @@ describe("Counterspell", () => {
 			);
 		}
 
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual({
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual({
 			kind: "cast",
 			card: counterspell.id,
 		});
 		const alice = new ScriptedAgent();
 		alice.targetChoices.push({ type: "spell", id: spell });
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: counterspell.id },
@@ -170,7 +189,7 @@ describe("Counterspell", () => {
 			targets: [{ slot: "target-1", target: { type: "spell", id: spell } }],
 		});
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(state.stack).toEqual([]);
 		expect(state.battlefield).toEqual([first.id, second.id]);
@@ -189,7 +208,7 @@ describe("Counterspell", () => {
 		if (first?.kind !== "spell") throw new Error("expected Alice's spell");
 		castCounterspellAt(state, BOB, first.objectId);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		// Bob's Counterspell resolved first and countered Alice's, so nothing was
 		// left to stop the bears.
@@ -211,7 +230,7 @@ describe("Counterspell", () => {
 		castCounterspellAt(state, ALICE, spell);
 		castCounterspellAt(state, ALICE, spell);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		// CR 608.2b: the second Counterspell to resolve countered the bears, so the
 		// first one is left with an illegal target and does nothing.
@@ -228,10 +247,10 @@ describe("Counterspell", () => {
 describe("Negate", () => {
 	test("is unavailable when the only spell is a creature", () => {
 		const { state } = putGrizzlyBearsOnStack();
-		const negate = engine.spawnCard(state, "negate", ALICE, "hand");
+		const negate = spawnCard(state, "negate", ALICE, "hand");
 		twoIslandsTappedFor(state, ALICE);
 
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual({
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual({
 			kind: "cast",
 			card: negate.id,
 		});
@@ -239,8 +258,9 @@ describe("Negate", () => {
 
 	test("rejects a creature spell and counters a noncreature spell", () => {
 		const { state, spell: creatureSpell } = putGrizzlyBearsOnStack();
-		const counterspell = engine.spawnCard(state, "counterspell", BOB, "hand");
-		const moved = engine.perform(
+		const counterspell = spawnCard(state, "counterspell", BOB, "hand");
+		const moved = perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -255,9 +275,9 @@ describe("Negate", () => {
 		if (noncreatureSpell === undefined)
 			throw new Error("expected a noncreature spell object");
 
-		const negate = engine.spawnCard(state, "negate", ALICE, "hand");
+		const negate = spawnCard(state, "negate", ALICE, "hand");
 		twoIslandsTappedFor(state, ALICE);
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual({
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual({
 			kind: "cast",
 			card: negate.id,
 		});
@@ -265,7 +285,8 @@ describe("Negate", () => {
 		const illegal = new ScriptedAgent();
 		illegal.targetChoices.push({ type: "spell", id: creatureSpell });
 		expect(() =>
-			engine.executeCastAction(
+			executeCastAction(
+				engine,
 				state,
 				ALICE,
 				{ kind: "cast", card: negate.id },
@@ -277,11 +298,11 @@ describe("Negate", () => {
 
 		const legal = new ScriptedAgent();
 		legal.targetChoices.push({ type: "spell", id: noncreatureSpell });
-		engine.executeCastAction(state, ALICE, { kind: "cast", card: negate.id }, [
+		executeCastAction(engine, state, ALICE, { kind: "cast", card: negate.id }, [
 			legal,
 			new ScriptedAgent(),
 		]);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(state.stack).toEqual([]);
 		expect(state.players[BOB].graveyard).toHaveLength(1);
@@ -294,7 +315,7 @@ describe("Negate", () => {
 describe("Ertai, Wizard Adept", () => {
 	test("counters a spell from an activated ability", () => {
 		const { state, spell } = putGrizzlyBearsOnStack();
-		const ertai = engine.spawnPermanent(state, "ertai-wizard-adept", ALICE, {
+		const ertai = spawnPermanent(engine, state, "ertai-wizard-adept", ALICE, {
 			summoningSick: false,
 		});
 		const islands = [
@@ -305,14 +326,15 @@ describe("Ertai, Wizard Adept", () => {
 
 		const alice = new ScriptedAgent();
 		alice.targetChoices.push({ type: "spell", id: spell });
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: ertai.id, ability: ertaiCounter },
 			[alice, new ScriptedAgent()],
 		);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(state.stack).toEqual([]);
 		expect(state.battlefield).toEqual([ertai.id, ...islands]);

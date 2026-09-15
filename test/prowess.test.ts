@@ -1,3 +1,10 @@
+import {
+	createReadContext,
+	executeCastAction,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 /**
  * prowess.test.ts — CR 702.108, the first triggered ability keyword.
  *
@@ -51,7 +58,7 @@ function castAction(card: ObjectId): CastAction {
 
 /** Power and toughness as the layer walk currently derives them. */
 function currentPT(state: GameState, id: ObjectId): [number, number] {
-	const snapshot = getSnapshot(engine.createReadContext(state), id);
+	const snapshot = getSnapshot(createReadContext(engine, state), id);
 	const current = snapshot.currentCharacteristics;
 	if (current.kind !== "creature")
 		throw new Error("expected a creature snapshot");
@@ -61,13 +68,14 @@ function currentPT(state: GameState, id: ObjectId): [number, number] {
 describe("prowess", () => {
 	test("Monastery Swiftspear prints the keyword and the ability it stands for", () => {
 		const state = setupMain(engine);
-		const swiftspear = engine.spawnPermanent(
+		const swiftspear = spawnPermanent(
+			engine,
 			state,
 			"monastery-swiftspear",
 			ALICE,
 		);
 		const snapshot = getSnapshot(
-			engine.createReadContext(state),
+			createReadContext(engine, state),
 			swiftspear.id,
 		);
 
@@ -94,20 +102,22 @@ describe("prowess", () => {
 
 	test("a noncreature spell pumps the creature until end of turn", () => {
 		const state = setupMain(engine);
-		const swiftspear = engine.spawnPermanent(
+		const swiftspear = spawnPermanent(
+			engine,
 			state,
 			"monastery-swiftspear",
 			ALICE,
 		);
 		expect(currentPT(state, swiftspear.id)).toEqual([1, 2]);
 
-		const instant = engine.spawnCard(
+		const instant = spawnCard(
 			state,
 			"test-prowess-free-instant",
 			ALICE,
 			"hand",
 		);
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			castAction(instant.id),
@@ -118,25 +128,27 @@ describe("prowess", () => {
 			abilityId("triggered", "monastery-swiftspear", 0),
 		);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(currentPT(state, swiftspear.id)).toEqual([2, 3]);
 	});
 
 	test("a creature spell does not trigger it", () => {
 		const state = setupMain(engine);
-		const swiftspear = engine.spawnPermanent(
+		const swiftspear = spawnPermanent(
+			engine,
 			state,
 			"monastery-swiftspear",
 			ALICE,
 		);
-		const creature = engine.spawnCard(
+		const creature = spawnCard(
 			state,
 			"test-prowess-free-creature",
 			ALICE,
 			"hand",
 		);
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			castAction(creature.id),
@@ -144,25 +156,22 @@ describe("prowess", () => {
 		);
 		expect(state.pendingTriggers).toHaveLength(0);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(currentPT(state, swiftspear.id)).toEqual([1, 2]);
 	});
 
 	test("an opponent's noncreature spell does not trigger it", () => {
 		const state = setupMain(engine);
-		const swiftspear = engine.spawnPermanent(
+		const swiftspear = spawnPermanent(
+			engine,
 			state,
 			"monastery-swiftspear",
 			ALICE,
 		);
-		const instant = engine.spawnCard(
-			state,
-			"test-prowess-free-instant",
-			BOB,
-			"hand",
-		);
+		const instant = spawnCard(state, "test-prowess-free-instant", BOB, "hand");
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			BOB,
 			castAction(instant.id),
@@ -170,23 +179,24 @@ describe("prowess", () => {
 		);
 		expect(state.pendingTriggers).toHaveLength(0);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(currentPT(state, swiftspear.id)).toEqual([1, 2]);
 	});
 
 	test("each instance triggers separately (CR 702.108b)", () => {
 		const state = setupMain(engine);
 		// Thor Odinson prints `K:Prowess` twice, so it has prowess twice.
-		const thor = engine.spawnPermanent(state, "thor-odinson", ALICE);
+		const thor = spawnPermanent(engine, state, "thor-odinson", ALICE);
 		expect(currentPT(state, thor.id)).toEqual([4, 4]);
 
-		const instant = engine.spawnCard(
+		const instant = spawnCard(
 			state,
 			"test-prowess-free-instant",
 			ALICE,
 			"hand",
 		);
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			castAction(instant.id),
@@ -197,32 +207,34 @@ describe("prowess", () => {
 			abilityId("triggered", "thor-odinson", 1),
 		]);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(currentPT(state, thor.id)).toEqual([6, 6]);
 	});
 
 	test("two noncreature spells stack their bonuses", () => {
 		const state = setupMain(engine);
-		const swiftspear = engine.spawnPermanent(
+		const swiftspear = spawnPermanent(
+			engine,
 			state,
 			"monastery-swiftspear",
 			ALICE,
 		);
 
 		for (let cast = 0; cast < 2; cast++) {
-			const instant = engine.spawnCard(
+			const instant = spawnCard(
 				state,
 				"test-prowess-free-instant",
 				ALICE,
 				"hand",
 			);
-			engine.executeCastAction(
+			executeCastAction(
+				engine,
 				state,
 				ALICE,
 				castAction(instant.id),
 				passingAgents(),
 			);
-			engine.settlePriority(state, passingAgents());
+			settlePriority(engine, state, passingAgents());
 		}
 
 		expect(currentPT(state, swiftspear.id)).toEqual([3, 4]);
@@ -230,25 +242,27 @@ describe("prowess", () => {
 
 	test("the bonus wears off at end of turn", () => {
 		const state = setupMain(engine);
-		const swiftspear = engine.spawnPermanent(
+		const swiftspear = spawnPermanent(
+			engine,
 			state,
 			"monastery-swiftspear",
 			ALICE,
 		);
-		const instant = engine.spawnCard(
+		const instant = spawnCard(
 			state,
 			"test-prowess-free-instant",
 			ALICE,
 			"hand",
 		);
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			castAction(instant.id),
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(currentPT(state, swiftspear.id)).toEqual([2, 3]);
 
 		playOneTurn(engine, state, passingAgents());

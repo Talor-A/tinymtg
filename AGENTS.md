@@ -28,3 +28,8 @@ absolute correctness. Coding standards:
 ## Engine Implementation
 
 index.ts is not very large, the engine can be understood completely from one file.
+
+## Verification
+
+If `bun run typecheck` reports that `tsc` is not installed, run `bun install`
+before retrying it.

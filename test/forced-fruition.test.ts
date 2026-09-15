@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS } from "../cards.ts";
 import type { CastAction, ObjectId } from "../index.ts";
-import { createEngine, defineCard } from "../index.ts";
+import {
+	createEngine,
+	defineCard,
+	executeCastAction,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import {
 	ALICE,
 	BOB,
@@ -32,23 +39,18 @@ function castAction(card: ObjectId): CastAction {
 describe("Forced Fruition", () => {
 	test("an opponent casting a spell draws seven", () => {
 		const state = setupMain(engine);
-		engine.spawnPermanent(state, "forced-fruition", ALICE);
-		const instant = engine.spawnCard(
-			state,
-			"test-fruition-free-instant",
-			BOB,
-			"hand",
-		);
+		spawnPermanent(engine, state, "forced-fruition", ALICE);
+		const instant = spawnCard(state, "test-fruition-free-instant", BOB, "hand");
 		// The seeded library holds three cards; seven more keep the draw from
 		// emptying it and losing BOB the game mid-test.
-		for (let i = 0; i < 7; i++)
-			engine.spawnCard(state, "forest", BOB, "library");
+		for (let i = 0; i < 7; i++) spawnCard(state, "forest", BOB, "library");
 
 		const bobHand = state.players[BOB].hand.length;
 		const aliceHand = state.players[ALICE].hand.length;
 		const bobLibrary = state.players[BOB].library.length;
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			BOB,
 			castAction(instant.id),
@@ -56,7 +58,7 @@ describe("Forced Fruition", () => {
 		);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		// "Whenever an opponent casts a spell, that player draws seven cards."
 		// BOB's hand nets +6: seven drawn, the cast spell itself gone.

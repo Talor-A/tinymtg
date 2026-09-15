@@ -7,7 +7,14 @@ import type {
 	StepKind,
 	SyncAgent,
 } from "../../index.ts";
-import { gameOver, isTurnStep, turnLocation } from "../../index.ts";
+import {
+	advance,
+	gameOver,
+	isTurnStep,
+	newGame,
+	spawnCard,
+	turnLocation,
+} from "../../index.ts";
 
 export { loadCardFixture } from "../../corpus.ts";
 
@@ -46,7 +53,7 @@ export function advanceUntil(
 ): void {
 	for (let count = 0; count < maxAdvances; count++) {
 		if (done(state)) return;
-		engine.advance(state, agents);
+		advance(engine, state, agents);
 	}
 	throw new Error(
 		`engine did not reach the expected state after ${maxAdvances} advances`,
@@ -73,9 +80,9 @@ export function beginFirstTurn(
 
 /**
  * Consumes the CR 103 pre-game without entering the first turn, leaving the
- * next engine.advance() to be the one that installs the turn and its untap step.
+ * next advance(engine, ) to be the one that installs the turn and its untap step.
  *
- * `engine.startGame()` stops one transition later, inside the turn. Use this instead
+ * `startGame(engine, )` stops one transition later, inside the turn. Use this instead
  * when the untap transition itself is what a test is exercising.
  */
 export function completePreGame(
@@ -138,8 +145,8 @@ export function seedLibraries(
 	count = 3,
 ): void {
 	for (let i = 0; i < count; i++) {
-		engine.spawnCard(state, "forest", ALICE, "library");
-		engine.spawnCard(state, "forest", BOB, "library");
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", BOB, "library");
 	}
 }
 
@@ -162,7 +169,7 @@ export function created(result: { created: ObjectId[] }): ObjectId {
 }
 /** Start a game while deliberately skipping shuffle and opening-hand draws. */
 export function newInProgressGame(engine: Engine, seed = 0) {
-	const state = engine.newGame(seed);
+	const state = newGame(seed);
 	skipPreGame(state);
 	return state;
 }
@@ -172,7 +179,6 @@ export function skipPreGame(state: GameState): void {
 	if (state.turnScheduler.progress.kind !== "notStarted")
 		throw new Error("only a fresh game can skip pregame");
 	state.turnScheduler = {
-		nextAction: { kind: "advancePreGameStep" },
 		// start the game after opening hand actions.
 		progress: { kind: "pregame", step: "opening hand" },
 		pendingTurns: [],

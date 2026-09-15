@@ -6,7 +6,7 @@ import type {
 	PlayerView,
 	SyncAgent,
 } from "../index.ts";
-import { createEngine } from "../index.ts";
+import { advance, createEngine, spawnPermanent } from "../index.ts";
 import {
 	type SyncAgents as Agents,
 	ALICE,
@@ -45,11 +45,11 @@ describe("priority option labels", () => {
 		seedLibraries(engine, state);
 		// A land whose two mana abilities differ only in the color they add:
 		// labelled by ability id they read `contaminated-aquifer:0` and `:1`.
-		engine.spawnPermanent(state, "contaminated-aquifer", ALICE);
+		spawnPermanent(engine, state, "contaminated-aquifer", ALICE);
 		const alice = new Capturing();
 		const agents: Agents = [alice, new Capturing()];
 		advanceUntil(engine, state, agents, (next) => atMain(next, "precombat"));
-		engine.advance(state, agents);
+		advance(engine, state, agents);
 
 		const labels = (alice.options ?? []).map((option) => option.label);
 		expect(labels).toContain("pass");

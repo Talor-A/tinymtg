@@ -6,9 +6,16 @@ import { importForgeCard } from "../forge/import.ts";
 import type { CastAction, GameState, ObjectId } from "../index.ts";
 import {
 	activePlayer,
+	advance,
 	characteristicsFromCardDef,
 	createEngine,
+	executeCastAction,
+	getObservableActions,
 	IllegalCastError,
+	name,
+	perform,
+	settlePriority,
+	spawnCard,
 	turnLocation,
 } from "../index.ts";
 import {
@@ -44,11 +51,11 @@ function castAction(card: ObjectId): CastAction {
 }
 
 function resolveWrennsResolve(state: GameState): void {
-	const card = engine.spawnCard(state, "wrenns-resolve", ALICE, "hand");
+	const card = spawnCard(state, "wrenns-resolve", ALICE, "hand");
 	state.players[ALICE].manaPool.c = 1;
 	state.players[ALICE].manaPool.r = 1;
-	engine.executeCastAction(state, ALICE, castAction(card.id), passingAgents());
-	engine.settlePriority(state, passingAgents());
+	executeCastAction(engine, state, ALICE, castAction(card.id), passingAgents());
+	settlePriority(engine, state, passingAgents());
 }
 
 describe("Wrenn's Resolve", () => {
@@ -89,14 +96,9 @@ describe("Wrenn's Resolve", () => {
 
 	test("exiles the top two cards and permits only its controller to play both", () => {
 		const state = setupMain(engine);
-		const unrelated = engine.spawnCard(
-			state,
-			"darksteel-relic",
-			ALICE,
-			"exile",
-		);
-		const second = engine.spawnCard(state, "forest", ALICE, "library");
-		const first = engine.spawnCard(state, "darksteel-relic", ALICE, "library");
+		const unrelated = spawnCard(state, "darksteel-relic", ALICE, "exile");
+		const second = spawnCard(state, "forest", ALICE, "library");
+		const first = spawnCard(state, "darksteel-relic", ALICE, "library");
 
 		resolveWrennsResolve(state);
 
@@ -107,19 +109,19 @@ describe("Wrenn's Resolve", () => {
 		if (firstExiled === undefined || secondExiled === undefined)
 			throw new Error("expected two cards exiled by Wrenn's Resolve");
 		expect([
-			engine.name(state, firstExiled),
-			engine.name(state, secondExiled),
+			name(engine, state, firstExiled),
+			name(engine, state, secondExiled),
 		]).toEqual(["Darksteel Relic", "Forest"]);
-		expect(engine.getObservableActions(state, ALICE)).toEqual(
+		expect(getObservableActions(engine, state, ALICE)).toEqual(
 			expect.arrayContaining([
 				castAction(firstExiled),
 				{ kind: "play land", card: secondExiled },
 			]),
 		);
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual(
 			castAction(unrelated.id),
 		);
-		expect(engine.getObservableActions(state, BOB)).not.toContainEqual(
+		expect(getObservableActions(engine, state, BOB)).not.toContainEqual(
 			castAction(firstExiled),
 		);
 
@@ -140,12 +142,13 @@ describe("Wrenn's Resolve", () => {
 
 	test("creates permission only for the one card available in a short library", () => {
 		const state = setupMain(engine);
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "mill", player: ALICE, amount: 100 },
 			passingAgents(),
 		);
-		engine.spawnCard(state, "darksteel-relic", ALICE, "library");
+		spawnCard(state, "darksteel-relic", ALICE, "library");
 
 		resolveWrennsResolve(state);
 
@@ -155,14 +158,15 @@ describe("Wrenn's Resolve", () => {
 		const exiled = state.players[ALICE].exile[0];
 		if (exiled === undefined)
 			throw new Error("expected the available top card");
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(
 			castAction(exiled),
 		);
 	});
 
 	test("creates no permission for an empty library", () => {
 		const state = setupMain(engine);
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "mill", player: ALICE, amount: 100 },
 			passingAgents(),
@@ -177,8 +181,8 @@ describe("Wrenn's Resolve", () => {
 
 	test("expires after the controller's next turn and rejects later casting", () => {
 		const state = setupMain(engine);
-		engine.spawnCard(state, "forest", ALICE, "library");
-		engine.spawnCard(state, "darksteel-relic", ALICE, "library");
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "darksteel-relic", ALICE, "library");
 		resolveWrennsResolve(state);
 		const exiled = state.players[ALICE].exile[0];
 		if (exiled === undefined) throw new Error("expected an exiled spell");
@@ -200,7 +204,7 @@ describe("Wrenn's Resolve", () => {
 				activePlayer(next) === ALICE &&
 				turnLocation(next)?.kind === "mainPhase",
 		);
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(
 			castAction(exiled),
 		);
 
@@ -213,7 +217,7 @@ describe("Wrenn's Resolve", () => {
 			);
 		});
 		expect(state.temporaryEffects).toHaveLength(2);
-		engine.advance(state, passingAgents());
+		advance(engine, state, passingAgents());
 		expect(state.temporaryEffects).toEqual([]);
 
 		advanceUntil(
@@ -231,12 +235,13 @@ describe("Wrenn's Resolve", () => {
 				activePlayer(next) === ALICE &&
 				turnLocation(next)?.kind === "mainPhase",
 		);
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual(
 			castAction(exiled),
 		);
 		const before = structuredClone(state);
 		expect(() =>
-			engine.executeCastAction(
+			executeCastAction(
+				engine,
 				state,
 				ALICE,
 				castAction(exiled),

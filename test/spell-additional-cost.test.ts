@@ -12,10 +12,16 @@ import type {
 } from "../index.ts";
 import {
 	abilityId,
+	advanceWithReplay,
 	createEngine,
 	defineCard,
+	executeCastAction,
+	getObservableActions,
 	IllegalCastError,
 	InvalidChoiceAnswerError,
+	perform,
+	spawnCard,
+	spawnPermanent,
 } from "../index.ts";
 import {
 	ALICE,
@@ -77,7 +83,7 @@ const TEST_CARD_2 = defineCard({
 			id: "intrinsic-mana-b",
 			text: "Add {B}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [{ kind: "add-mana", subject: "you", mana: { b: 1 } }],
+			manaOptions: [{ b: 1 }],
 		},
 	],
 });
@@ -201,7 +207,8 @@ function canonicalStateBytes(state: GameState): string {
 }
 
 function addBlackMana(state: GameState, source: ObjectId): void {
-	engine.perform(
+	perform(
+		engine,
 		state,
 		{ kind: "add mana", source, player: ALICE, mana: { b: 1 } },
 		passingAgents(),
@@ -213,9 +220,9 @@ function castAction(card: ObjectId) {
 }
 
 function offered(state: GameState, spell: ObjectId): boolean {
-	return engine
-		.getObservableActions(state, ALICE)
-		.some((action) => action.kind === "cast" && action.card === spell);
+	return getObservableActions(engine, state, ALICE).some(
+		(action) => action.kind === "cast" && action.card === spell,
+	);
 }
 
 function setupCast(): {
@@ -225,14 +232,14 @@ function setupCast(): {
 	sacrifice: ObjectId;
 } {
 	const state = setupMain(engine);
-	const spell = engine.spawnCard(
+	const spell = spawnCard(
 		state,
 		"test-sacrifice-creature-spell",
 		ALICE,
 		"hand",
 	);
-	const target = engine.spawnPermanent(state, "grizzly-bears", BOB);
-	const sacrifice = engine.spawnPermanent(state, "eager-cadet", ALICE);
+	const target = spawnPermanent(engine, state, "grizzly-bears", BOB);
+	const sacrifice = spawnPermanent(engine, state, "eager-cadet", ALICE);
 	addBlackMana(state, spell.id);
 	return {
 		state,
@@ -245,28 +252,30 @@ function setupCast(): {
 describe("spell additional sacrifice cost", () => {
 	test("offering requires mana, a legal target, and a legal sacrifice", () => {
 		const state = setupMain(engine);
-		const spell = engine.spawnCard(
+		const spell = spawnCard(
 			state,
 			"test-sacrifice-creature-spell",
 			ALICE,
 			"hand",
 		);
-		const target = engine.spawnPermanent(state, "grizzly-bears", BOB);
-		const sacrifice = engine.spawnPermanent(state, "eager-cadet", ALICE);
+		const target = spawnPermanent(engine, state, "grizzly-bears", BOB);
+		const sacrifice = spawnPermanent(engine, state, "eager-cadet", ALICE);
 
 		expect(offered(state, spell.id)).toBe(false);
 		addBlackMana(state, spell.id);
 		expect(offered(state, spell.id)).toBe(true);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "sacrifice", object: sacrifice.id },
 			passingAgents(),
 		);
 		expect(offered(state, spell.id)).toBe(false);
 
-		engine.spawnPermanent(state, "eager-cadet", ALICE);
-		engine.perform(
+		spawnPermanent(engine, state, "eager-cadet", ALICE);
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -308,7 +317,7 @@ describe("spell additional sacrifice cost", () => {
 			},
 		};
 
-		engine.executeCastAction(state, ALICE, castAction(spell), [
+		executeCastAction(engine, state, ALICE, castAction(spell), [
 			alice,
 			new ScriptedAgent(),
 		]);
@@ -330,7 +339,7 @@ describe("spell additional sacrifice cost", () => {
 
 	test("a sacrifice that cannot execute rejects the cast atomically", () => {
 		const { state, spell, target, sacrifice } = setupCast();
-		engine.spawnPermanent(state, "test-prevent-sacrifice-move", BOB);
+		spawnPermanent(engine, state, "test-prevent-sacrifice-move", BOB);
 		const before = canonicalStateBytes(state);
 		const alice = new ScriptedAgent(
 			[],
@@ -344,7 +353,7 @@ describe("spell additional sacrifice cost", () => {
 		);
 
 		expect(() =>
-			engine.executeCastAction(state, ALICE, castAction(spell), [
+			executeCastAction(engine, state, ALICE, castAction(spell), [
 				alice,
 				new ScriptedAgent(),
 			]),
@@ -369,7 +378,7 @@ describe("spell additional sacrifice cost", () => {
 		};
 
 		expect(() =>
-			engine.executeCastAction(state, ALICE, castAction(spell), [
+			executeCastAction(engine, state, ALICE, castAction(spell), [
 				alice,
 				new ScriptedAgent(),
 			]),
@@ -379,7 +388,7 @@ describe("spell additional sacrifice cost", () => {
 
 	test("a graveyard destination replacement still pays the sacrifice", () => {
 		const { state, spell, target, sacrifice } = setupCast();
-		engine.spawnPermanent(state, "samurai-of-the-pale-curtain", BOB);
+		spawnPermanent(engine, state, "samurai-of-the-pale-curtain", BOB);
 		const alice = new ScriptedAgent(
 			[],
 			[],
@@ -392,7 +401,7 @@ describe("spell additional sacrifice cost", () => {
 		);
 
 		expect(() =>
-			engine.executeCastAction(state, ALICE, castAction(spell), [
+			executeCastAction(engine, state, ALICE, castAction(spell), [
 				alice,
 				new ScriptedAgent(),
 			]),
@@ -404,19 +413,21 @@ describe("spell additional sacrifice cost", () => {
 
 	test("advanceWithReplay replays an async sacrifice from an untouched checkpoint", async () => {
 		const checkpoint = setupMain(engine);
-		const spell = engine.spawnCard(
+		const spell = spawnCard(
 			checkpoint,
 			"test-sacrifice-creature-spell",
 			ALICE,
 			"hand",
 		).id;
-		const target = engine.spawnPermanent(checkpoint, "grizzly-bears", BOB).id;
-		const sacrifice = engine.spawnPermanent(
+		const target = spawnPermanent(engine, checkpoint, "grizzly-bears", BOB).id;
+		const sacrifice = spawnPermanent(
+			engine,
 			checkpoint,
 			"eager-cadet",
 			ALICE,
 		).id;
-		const blackSource = engine.spawnPermanent(
+		const blackSource = spawnPermanent(
+			engine,
 			checkpoint,
 			"test-additional-cost-black-source",
 			ALICE,
@@ -464,7 +475,7 @@ describe("spell additional sacrifice cost", () => {
 			advances++
 		) {
 			const inputBytes = canonicalStateBytes(state);
-			const result = await engine.advanceWithReplay(state, [
+			const result = await advanceWithReplay(engine, state, [
 				alice,
 				new ScriptedAgent(),
 			]);
@@ -498,7 +509,8 @@ describe("spell additional discard cost", () => {
 	test("does not count the spell itself as a card it can discard", () => {
 		const state = setupMain(engine);
 		for (const card of [...state.players[ALICE].hand]) {
-			engine.perform(
+			perform(
+				engine,
 				state,
 				{
 					kind: "change zone",
@@ -510,18 +522,13 @@ describe("spell additional discard cost", () => {
 				passingAgents(),
 			);
 		}
-		const spell = engine.spawnCard(
-			state,
-			"test-discard-card-spell",
-			ALICE,
-			"hand",
-		);
+		const spell = spawnCard(state, "test-discard-card-spell", ALICE, "hand");
 		expect(offered(state, spell.id)).toBe(false);
 
-		const fodder = engine.spawnCard(state, "forest", ALICE, "hand");
+		const fodder = spawnCard(state, "forest", ALICE, "hand");
 		expect(offered(state, spell.id)).toBe(true);
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [fodder.id]);
-		engine.executeCastAction(state, ALICE, castAction(spell.id), [
+		executeCastAction(engine, state, ALICE, castAction(spell.id), [
 			alice,
 			new ScriptedAgent(),
 		]);
@@ -535,15 +542,16 @@ describe("spell additional discard cost", () => {
 describe("spell additional life cost", () => {
 	test("requires enough life and permits paying the player's last life", () => {
 		const state = setupMain(engine);
-		engine.spawnPermanent(state, "test-life-payment-watcher", ALICE);
-		const spell = engine.spawnCard(state, "test-pay-life-spell", ALICE, "hand");
+		spawnPermanent(engine, state, "test-life-payment-watcher", ALICE);
+		const spell = spawnCard(state, "test-pay-life-spell", ALICE, "hand");
 
 		state.players[ALICE].life = 2;
 		expect(offered(state, spell.id)).toBe(false);
 		state.players[ALICE].life = 3;
 		expect(offered(state, spell.id)).toBe(true);
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			castAction(spell.id),
@@ -559,18 +567,20 @@ describe("spell additional life cost", () => {
 
 	test("a prohibition rejects only cost payment and rewinds the cast", () => {
 		const state = setupMain(engine);
-		engine.spawnPermanent(state, "test-cannot-pay-life", BOB);
-		engine.perform(
+		spawnPermanent(engine, state, "test-cannot-pay-life", BOB);
+		perform(
+			engine,
 			state,
 			{ kind: "lose life", player: ALICE, amount: 1 },
 			passingAgents(),
 		);
 		expect(state.players[ALICE].life).toBe(19);
-		const spell = engine.spawnCard(state, "test-pay-life-spell", ALICE, "hand");
+		const spell = spawnCard(state, "test-pay-life-spell", ALICE, "hand");
 		const before = canonicalStateBytes(state);
 
 		expect(() =>
-			engine.executeCastAction(
+			executeCastAction(
+				engine,
 				state,
 				ALICE,
 				castAction(spell.id),

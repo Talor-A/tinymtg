@@ -7,23 +7,27 @@ import {
 	type ChoiceRequest,
 	createEngine,
 	type GameState,
+	name,
+	newGame,
 	type ObjectId,
+	perform,
 	type SyncAgent,
+	spawnCard,
 } from "../index.ts";
 
 const engine = createEngine(CARDS);
 
 function cards(state: GameState): ObjectId[] {
 	return [
-		engine.spawnCard(state, "forest", 0, "library").id,
-		engine.spawnCard(state, "grizzly-bears", 0, "library").id,
-		engine.spawnCard(state, "eager-cadet", 0, "library").id,
+		spawnCard(state, "forest", 0, "library").id,
+		spawnCard(state, "grizzly-bears", 0, "library").id,
+		spawnCard(state, "eager-cadet", 0, "library").id,
 	];
 }
 
 describe("surveil choices", () => {
 	test("returns and replays the same ordered partition shape as scry", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected three cards");
@@ -64,8 +68,8 @@ describe("surveil choices", () => {
 
 describe("surveil events", () => {
 	test("orders kept cards and moves the others to the graveyard", () => {
-		const state = engine.newGame();
-		const untouched = engine.spawnCard(state, "darksteel-myr", 0, "library").id;
+		const state = newGame();
+		const untouched = spawnCard(state, "darksteel-myr", 0, "library").id;
 		const [a, b, c] = cards(state);
 		if (a === undefined || b === undefined || c === undefined) {
 			throw new Error("expected three cards");
@@ -84,7 +88,8 @@ describe("surveil events", () => {
 			},
 		};
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "surveil", player: 0, amount: 3 },
 			[agent, agent],
@@ -93,7 +98,7 @@ describe("surveil events", () => {
 		expect(seen).toEqual([c, b, a]);
 		expect(state.players[0].library).toEqual([untouched, b]);
 		expect(
-			state.players[0].graveyard.map((id) => engine.name(state, id)),
+			state.players[0].graveyard.map((id) => name(engine, state, id)),
 		).toEqual(["Forest", "Eager Cadet"]);
 		expect(result.executed.at(-1)).toEqual({
 			kind: "surveil",
@@ -103,14 +108,14 @@ describe("surveil events", () => {
 	});
 
 	test("positive surveil on an empty library happens without a choice", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agent: SyncAgent = {
 			choose() {
 				throw new Error("empty surveil must not request a choice");
 			},
 		};
 		expect(
-			engine.perform(state, { kind: "surveil", player: 0, amount: 2 }, [
+			perform(engine, state, { kind: "surveil", player: 0, amount: 2 }, [
 				agent,
 				agent,
 			]).executed,
@@ -118,7 +123,7 @@ describe("surveil events", () => {
 	});
 
 	test("ScriptedAgent defaults to keeping every card on top", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const [a] = cards(state);
 		if (a === undefined) throw new Error("expected a card");
 		const choices = ChoiceController.record(engine, [

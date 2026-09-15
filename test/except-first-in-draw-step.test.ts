@@ -7,6 +7,8 @@ import {
 	type GameState,
 	isTurnStep,
 	type PlayerId,
+	perform,
+	spawnPermanent,
 } from "../index.ts";
 import {
 	ALICE,
@@ -47,7 +49,7 @@ const WATCHER = "test-draw-step-watcher";
 function watcherGame(): GameState {
 	const state = newInProgressGame(engine);
 	seedLibraries(engine, state, 6);
-	engine.spawnPermanent(state, WATCHER, ALICE);
+	spawnPermanent(engine, state, WATCHER, ALICE);
 	return state;
 }
 
@@ -76,7 +78,7 @@ describe("the except-first-in-draw-step qualifier", () => {
 			"BOB's first draw-step card does not trigger",
 		).toHaveLength(0);
 
-		engine.perform(state, { kind: "draw", player: BOB }, agents);
+		perform(engine, state, { kind: "draw", player: BOB }, agents);
 		expect(
 			state.pendingTriggers,
 			"BOB's second draw-step card triggers",
@@ -93,7 +95,7 @@ describe("the except-first-in-draw-step qualifier", () => {
 		advanceUntil(engine, state, agents, (next) => atMain(next, "precombat"));
 
 		expect(activePlayer(state)).toBe(ALICE as PlayerId);
-		engine.perform(state, { kind: "draw", player: BOB }, agents);
+		perform(engine, state, { kind: "draw", player: BOB }, agents);
 		expect(
 			state.pendingTriggers,
 			"BOB drawing on ALICE's turn triggers",
@@ -110,7 +112,7 @@ describe("the except-first-in-draw-step qualifier", () => {
 			agents,
 			(next) => isTurnStep(next, "draw") && activePlayer(next) === ALICE,
 		);
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 
 		expect(state.pendingTriggers).toHaveLength(0);
 	});

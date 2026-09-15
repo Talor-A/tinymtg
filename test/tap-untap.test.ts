@@ -9,9 +9,16 @@ import type {
 } from "../index.ts";
 import {
 	activePlayer,
+	advanceWithReplay,
 	createEngine,
 	defineCard,
+	name,
+	newGame,
+	perform,
 	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
 	turnLocation,
 } from "../index.ts";
 import {
@@ -164,14 +171,9 @@ const passingAgents: [ScriptedAgent, ScriptedAgent] = [
 describe("tap and untap occurrences", () => {
 	test("a plural effect selects its permanents after responses resolve", () => {
 		const state = setupMain(engine);
-		const metalFatigue = engine.spawnCard(
-			state,
-			"metal-fatigue",
-			ALICE,
-			"hand",
-		);
-		const sentinel = engine.spawnCard(state, "darksteel-sentinel", BOB, "hand");
-		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const metalFatigue = spawnCard(state, "metal-fatigue", ALICE, "hand");
+		const sentinel = spawnCard(state, "darksteel-sentinel", BOB, "hand");
+		const bears = spawnPermanent(engine, state, "grizzly-bears", BOB);
 		state.players[ALICE].manaPool.w = 1;
 		state.players[ALICE].manaPool.c = 2;
 		state.players[BOB].manaPool.c = 6;
@@ -186,12 +188,12 @@ describe("tap and untap occurrences", () => {
 			[],
 			[{ kind: "cast", card: sentinel.id }],
 		);
-		engine.settlePriority(state, [alice, bob]);
+		settlePriority(engine, state, [alice, bob]);
 
 		expectScriptConsumed(alice);
 		expectScriptConsumed(bob);
 		const flashed = state.battlefield.find(
-			(id) => engine.name(state, id) === "Darksteel Sentinel",
+			(id) => name(engine, state, id) === "Darksteel Sentinel",
 		);
 		if (flashed === undefined) throw new Error("sentinel did not resolve");
 		expect(permanent(state, flashed).tapped).toBe(true);
@@ -199,13 +201,14 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("single-object events occur and trigger only for actual transitions", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		// The trigger reaches the stack through a priority window, which only
 		// exists inside a turn.
 		beginFirstTurn(engine, state, passingAgents);
-		const observer = engine.spawnPermanent(state, TAP_OBSERVER, ALICE);
+		const observer = spawnPermanent(engine, state, TAP_OBSERVER, ALICE);
 
-		const tap = engine.perform(
+		const tap = perform(
+			engine,
 			state,
 			{ kind: "tap", objects: [observer.id] },
 			passingAgents,
@@ -215,10 +218,11 @@ describe("tap and untap occurrences", () => {
 		expect(
 			state.pendingTriggers.map((trigger) => String(trigger.triggerId)),
 		).toEqual([`${TAP_OBSERVER}:0`]);
-		engine.settlePriority(state, passingAgents);
+		settlePriority(engine, state, passingAgents);
 		expect(state.players[ALICE].life).toBe(21);
 
-		const untap = engine.perform(
+		const untap = perform(
+			engine,
 			state,
 			{ kind: "untap", objects: [observer.id] },
 			passingAgents,
@@ -231,22 +235,24 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("single-object events already in the requested state do not occur", () => {
-		const state = engine.newGame();
-		const tapped = engine.spawnPermanent(state, TAP_OBSERVER, ALICE, {
+		const state = newGame();
+		const tapped = spawnPermanent(engine, state, TAP_OBSERVER, ALICE, {
 			tapped: true,
 		});
-		const untapped = engine.spawnPermanent(state, TAP_OBSERVER, ALICE);
+		const untapped = spawnPermanent(engine, state, TAP_OBSERVER, ALICE);
 		const revision = state.revision;
 
 		expect(
-			engine.perform(
+			perform(
+				engine,
 				state,
 				{ kind: "tap", objects: [tapped.id] },
 				passingAgents,
 			).executed,
 		).toEqual([]);
 		expect(
-			engine.perform(
+			perform(
+				engine,
 				state,
 				{ kind: "untap", objects: [untapped.id] },
 				passingAgents,
@@ -257,14 +263,15 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("bulk events expose exactly the permanents whose state changed to triggers", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, BULK_OBSERVER, ALICE);
-		const red = engine.spawnPermanent(state, "test-red-permanent", ALICE, {
+		const state = newGame();
+		spawnPermanent(engine, state, BULK_OBSERVER, ALICE);
+		const red = spawnPermanent(engine, state, "test-red-permanent", ALICE, {
 			tapped: true,
 		});
-		const green = engine.spawnPermanent(state, "test-green-permanent", ALICE);
+		const green = spawnPermanent(engine, state, "test-green-permanent", ALICE);
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "tap", objects: [...state.battlefield] },
 			passingAgents,
@@ -279,14 +286,15 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("a bulk event with no state transitions does not occur", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, TAP_OBSERVER, ALICE, { tapped: true });
-		engine.spawnPermanent(state, "test-red-permanent", ALICE, {
+		const state = newGame();
+		spawnPermanent(engine, state, TAP_OBSERVER, ALICE, { tapped: true });
+		spawnPermanent(engine, state, "test-red-permanent", ALICE, {
 			tapped: true,
 		});
 		const revision = state.revision;
 
-		const result = engine.perform(
+		const result = perform(
+			engine,
 			state,
 			{ kind: "tap", objects: [...state.battlefield] },
 			passingAgents,
@@ -298,11 +306,11 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("the nonactive affected player orders replacements for their bulk event", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		beginFirstTurn(engine, state, passingAgents);
-		engine.spawnPermanent(state, "test-bulk-tap-replacement-a", ALICE);
-		engine.spawnPermanent(state, "test-bulk-tap-replacement-b", ALICE);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		spawnPermanent(engine, state, "test-bulk-tap-replacement-a", ALICE);
+		spawnPermanent(engine, state, "test-bulk-tap-replacement-b", ALICE);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", BOB);
 		const requests: ChoiceRequest[] = [];
 		const unexpected: SyncAgent = {
 			choose: () => {
@@ -318,7 +326,7 @@ describe("tap and untap occurrences", () => {
 			},
 		};
 
-		engine.perform(state, { kind: "tap", objects: [bears.id] }, [
+		perform(engine, state, { kind: "tap", objects: [bears.id] }, [
 			unexpected,
 			affected,
 		]);
@@ -330,13 +338,13 @@ describe("tap and untap occurrences", () => {
 
 	test("untap-step triggers stay pending until the upkeep priority window", async () => {
 		const checkpoint = newInProgressGame(engine);
-		const observer = engine.spawnPermanent(checkpoint, TAP_OBSERVER, ALICE, {
+		const observer = spawnPermanent(engine, checkpoint, TAP_OBSERVER, ALICE, {
 			tapped: true,
 		});
 
 		completePreGame(engine, checkpoint, passingAgents);
 
-		const untap = await engine.advanceWithReplay(checkpoint, passingAgents);
+		const untap = await advanceWithReplay(engine, checkpoint, passingAgents);
 		expect(turnLocation(untap.state)).toMatchObject({
 			kind: "step",
 			step: { kind: "untap" },
@@ -347,7 +355,7 @@ describe("tap and untap occurrences", () => {
 		expect(untap.state.players[ALICE].life).toBe(20);
 		expect(() => structuredClone(untap.state)).not.toThrow();
 
-		const upkeep = await engine.advanceWithReplay(untap.state, passingAgents);
+		const upkeep = await advanceWithReplay(engine, untap.state, passingAgents);
 		expect(turnLocation(upkeep.state)).toMatchObject({
 			kind: "step",
 			step: { kind: "upkeep" },

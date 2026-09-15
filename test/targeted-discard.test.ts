@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
-import { abilityId, createEngine } from "../index.ts";
+import {
+	abilityId,
+	createEngine,
+	executeAbilityAction,
+	perform,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import {
 	ALICE,
 	BOB,
@@ -26,12 +34,13 @@ describe("a targeted player discards", () => {
 	test("Ravenous Rats empties a card from the targeted opponent's hand", () => {
 		const state = setupMain(engine);
 		const agents = alicePicksBob();
-		engine.spawnCard(state, "forest", BOB, "hand");
+		spawnCard(state, "forest", BOB, "hand");
 		const aliceHand = state.players[ALICE].hand.length;
 		const bobHand = state.players[BOB].hand.length;
 
-		const rats = engine.spawnCard(state, "ravenous-rats", ALICE, "hand");
-		engine.perform(
+		const rats = spawnCard(state, "ravenous-rats", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -43,7 +52,7 @@ describe("a targeted player discards", () => {
 			agents,
 		);
 		expect(state.pendingTriggers).toHaveLength(1);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		// The rats left ALICE's hand on their way to the battlefield; only BOB
 		// discards.
@@ -56,19 +65,20 @@ describe("a targeted player discards", () => {
 	test("Cephalid Looter draws and discards for one targeted player", () => {
 		const state = setupMain(engine);
 		const agents = alicePicksBob();
-		const looter = engine.spawnPermanent(state, "cephalid-looter", ALICE, {
+		const looter = spawnPermanent(engine, state, "cephalid-looter", ALICE, {
 			summoningSick: false,
 		});
 		const bobHand = state.players[BOB].hand.length;
 		const bobLibrary = state.players[BOB].library.length;
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: looter.id, ability: LOOTER_ABILITY },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		// Both halves read the same target slot: BOB draws one and discards one,
 		// so the hand is level and the library is one shorter.
@@ -80,9 +90,10 @@ describe("a targeted player discards", () => {
 
 	test("an untargeted discard still names its own player", () => {
 		const state = setupMain(engine);
-		engine.spawnCard(state, "forest", ALICE, "hand");
-		const rats = engine.spawnCard(state, "ravenous-rats", BOB, "hand");
-		engine.perform(
+		spawnCard(state, "forest", ALICE, "hand");
+		const rats = spawnCard(state, "ravenous-rats", BOB, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -93,7 +104,7 @@ describe("a targeted player discards", () => {
 			},
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		// BOB controls the rats, so ALICE is the only legal target.
 		expect(state.players[ALICE].graveyard).toHaveLength(1);

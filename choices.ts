@@ -24,7 +24,11 @@ import type {
 } from "./index.ts";
 import {
 	activePlayer,
+	buildPlayerView,
+	createReadContext,
+	eligibleBlockers,
 	getSnapshot,
+	name,
 	objectMatchesPredicate,
 	turnLocation,
 } from "./index.ts";
@@ -36,7 +40,7 @@ function objectLabel(
 	id: ObjectId,
 ): string {
 	const object = state.objects.get(id);
-	return object ? engine.name(state, id) : "unknown";
+	return object ? name(engine, state, id) : "unknown";
 }
 
 /** The option id naming one looked-at card. */
@@ -806,7 +810,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			);
 		}
 		const answer = agent.choose(
-			this.engine.buildPlayerView(state, request.player),
+			buildPlayerView(this.engine, state, request.player),
 			request,
 		);
 		if (isPromiseLike(answer)) {
@@ -936,7 +940,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			new Set(input.objects).size === input.objects.length,
 			"object choice received duplicate objects",
 		);
-		const read = input.predicate ? this.engine.createReadContext(state) : null;
+		const read = input.predicate ? createReadContext(this.engine, state) : null;
 		const objects = input.objects.filter((id) => {
 			if (!input.predicate) return true;
 			assertDefined(read);
@@ -993,7 +997,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			};
 		},
 	): ObjectId | null {
-		const read = this.engine.createReadContext(state);
+		const read = createReadContext(this.engine, state);
 		const cards: PlayerLibrarySearchCardView[] = state.players[
 			input.owner
 		].library
@@ -1188,16 +1192,16 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 		state: GameState,
 		player: PlayerId,
 		attackers: ObjectId[],
-		eligibleBlockers: ObjectId[],
+		eligibleBlockerIds: ObjectId[],
 	): BlockAssignment[] {
-		if (attackers.length === 0 || eligibleBlockers.length === 0) return [];
+		if (attackers.length === 0 || eligibleBlockerIds.length === 0) return [];
 		const candidates: { id: string; value: BlockAssignment }[] = [];
-		for (const blocker of eligibleBlockers) {
+		for (const blocker of eligibleBlockerIds) {
 			for (const attacker of attackers) {
 				if (
-					!this.engine
-						.eligibleBlockers(state, player, attacker)
-						.includes(blocker)
+					!eligibleBlockers(this.engine, state, player, attacker).includes(
+						blocker,
+					)
 				)
 					continue;
 				candidates.push({
@@ -1207,7 +1211,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			}
 		}
 		if (candidates.length === 0) return [];
-		const offeredBlockers = eligibleBlockers.filter((blocker) =>
+		const offeredBlockers = eligibleBlockerIds.filter((blocker) =>
 			candidates.some((candidate) => candidate.value.blocker === blocker),
 		);
 		const request = this.request({

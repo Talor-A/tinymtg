@@ -17,6 +17,7 @@ import {
 	activePlayer,
 	cloneCharacteristics,
 	defineCard,
+	etbPreview,
 	getSnapshot,
 	maybeObject,
 	maybePermanent,
@@ -181,14 +182,14 @@ export const URZAS_MINE = defineCard({
 			id: "add-c",
 			text: "Add {C}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [{ kind: "add-mana", subject: "you", mana: { c: 1 } }],
+			manaOptions: [{ c: 1 }],
 		},
 		{
 			kind: "mana",
 			id: "add-cc",
 			text: "Add {C}{C}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [{ kind: "add-mana", subject: "you", mana: { c: 2 } }],
+			manaOptions: [{ c: 2 }],
 		},
 	],
 	statics: [
@@ -246,14 +247,14 @@ export const URZAS_POWER_PLANT = defineCard({
 			id: "add-c",
 			text: "Add {C}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [{ kind: "add-mana", subject: "you", mana: { c: 1 } }],
+			manaOptions: [{ c: 1 }],
 		},
 		{
 			kind: "mana",
 			id: "add-cc",
 			text: "Add {C}{C}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [{ kind: "add-mana", subject: "you", mana: { c: 2 } }],
+			manaOptions: [{ c: 2 }],
 		},
 	],
 	statics: [
@@ -311,14 +312,14 @@ export const URZAS_TOWER = defineCard({
 			id: "add-c",
 			text: "Add {C}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [{ kind: "add-mana", subject: "you", mana: { c: 1 } }],
+			manaOptions: [{ c: 1 }],
 		},
 		{
 			kind: "mana",
 			id: "add-ccc",
 			text: "Add {C}{C}{C}.",
 			cost: { mana: "zero", tapSelf: true },
-			effects: [{ kind: "add-mana", subject: "you", mana: { c: 3 } }],
+			manaOptions: [{ c: 3 }],
 		},
 	],
 	statics: [
@@ -415,9 +416,11 @@ function isCreatureRecipient(ctx: EffectCtx, ev: GameEvent): boolean {
 		);
 	}
 	if (ev.kind === "change zone" && ev.destination.zone === "battlefield")
-		return ctx.read.engine
-			.etbPreview(ctx.state, ev)
-			.currentCharacteristics.types.includes("creature");
+		return etbPreview(
+			ctx.read.engine,
+			ctx.state,
+			ev,
+		).currentCharacteristics.types.includes("creature");
 	return false;
 }
 

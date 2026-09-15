@@ -15,12 +15,25 @@ import type {
 import {
 	abilityId,
 	activePlayer,
+	advance,
 	ChoiceController,
 	createEngine,
+	createReadContext,
 	defineCard,
+	eligibleBlockers,
+	executeAbilityAction,
+	executeCastAction,
+	getObservableActions,
 	getSnapshot,
 	isTurnStep,
+	name,
+	newGame,
+	perform,
 	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+	spawnToken,
 } from "../index.ts";
 import {
 	ALICE,
@@ -268,8 +281,7 @@ function atUpkeepOf(state: GameState, player: PlayerId): boolean {
 
 function stockLibraries(state: GameState): void {
 	for (const player of [ALICE, BOB] as const) {
-		for (let i = 0; i < 3; i++)
-			engine.spawnCard(state, "forest", player, "library");
+		for (let i = 0; i < 3; i++) spawnCard(state, "forest", player, "library");
 	}
 }
 
@@ -279,8 +291,9 @@ function enterFromHand(
 	controller: PlayerId,
 	agents: ChoiceSource,
 ): ObjectId {
-	const card = engine.spawnCard(state, cardId, controller, "hand");
-	const result = engine.perform(
+	const card = spawnCard(state, cardId, controller, "hand");
+	const result = perform(
+		engine,
 		state,
 		{
 			kind: "change zone",
@@ -296,7 +309,7 @@ function enterFromHand(
 
 describe("forge-import runtime: triggers", () => {
 	test("Soul Warden and Essence Warden trigger for other creatures and gain life for their controllers", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
 
@@ -311,7 +324,7 @@ describe("forge-import runtime: triggers", () => {
 			state.pendingTriggers,
 			"only the Soul Warden already on the battlefield triggers",
 		).toHaveLength(1);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].life).toBe(21);
 		expect(state.players[BOB].life).toBe(20);
 
@@ -320,13 +333,13 @@ describe("forge-import runtime: triggers", () => {
 			state.pendingTriggers,
 			"both Wardens see either player's creature",
 		).toHaveLength(2);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].life).toBe(22);
 		expect(state.players[BOB].life).toBe(21);
 	});
 
 	test("Arashin Cleric's imported ETB trigger queues and gains life on resolution", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
 
@@ -335,13 +348,13 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].life, "trigger has not resolved yet").toBe(20);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].life).toBe(23);
 		expect(state.stack).toHaveLength(0);
 	});
 
 	test("Wall of Omens' imported ETB trigger draws a card on resolution", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		stockLibraries(state);
 		beginFirstTurn(engine, state, agents);
@@ -355,17 +368,16 @@ describe("forge-import runtime: triggers", () => {
 		).toHaveLength(librarySize);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].library).toHaveLength(librarySize - 1);
 		expect(state.stack).toHaveLength(0);
 	});
 
 	test("Flayed One's imported ETB trigger mills three cards on resolution", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
-		for (let i = 0; i < 5; i++)
-			engine.spawnCard(state, "forest", ALICE, "library");
+		for (let i = 0; i < 5; i++) spawnCard(state, "forest", ALICE, "library");
 		const library = [...state.players[ALICE].library];
 
 		enterFromHand(state, "rt-flayed-one", ALICE, agents);
@@ -375,23 +387,22 @@ describe("forge-import runtime: triggers", () => {
 		).toHaveLength(0);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		// The library's last element is its top card, so milling three takes the
 		// last three and leaves the rest in order.
 		expect(state.players[ALICE].library).toEqual(library.slice(0, -3));
 		// A card gets a fresh object id when it changes zone, so the milled cards
 		// are identified by name rather than by the ids the library held.
 		expect(
-			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+			state.players[ALICE].graveyard.map((id) => name(engine, state, id)),
 		).toEqual(["Forest", "Forest", "Forest"]);
 	});
 
 	test("Mire Triton's imported ETB mills two cards, then gains two life", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
-		for (let i = 0; i < 4; i++)
-			engine.spawnCard(state, "forest", ALICE, "library");
+		for (let i = 0; i < 4; i++) spawnCard(state, "forest", ALICE, "library");
 		const library = [...state.players[ALICE].library];
 		state.players[ALICE].life = 17;
 
@@ -400,16 +411,16 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].life).toBe(17);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].library).toEqual(library.slice(0, -2));
 		expect(
-			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+			state.players[ALICE].graveyard.map((id) => name(engine, state, id)),
 		).toEqual(["Forest", "Forest"]);
 		expect(state.players[ALICE].life).toBe(19);
 	});
 
 	test("Baleful Strix's imported ETB draws one card on resolution", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		stockLibraries(state);
 		beginFirstTurn(engine, state, agents);
@@ -417,7 +428,7 @@ describe("forge-import runtime: triggers", () => {
 
 		const strix = enterFromHand(state, "rt-baleful-strix", ALICE, agents);
 		const characteristics = getSnapshot(
-			engine.createReadContext(state),
+			createReadContext(engine, state),
 			strix,
 		).currentCharacteristics;
 		expect(characteristics.types).toEqual(["artifact", "creature"]);
@@ -426,16 +437,16 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].hand).toHaveLength(0);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].library).toEqual(library.slice(0, -1));
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toEqual(["Forest"]);
 		expect(state.stack).toHaveLength(0);
 	});
 
 	test("Pierce Strider's imported ETB targets only its controller's opponent", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const fallback = new ScriptedAgent();
 		let targetOptions: string[] = [];
 		const alice: SyncAgent = {
@@ -454,7 +465,7 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].life).toBe(20);
 		expect(state.players[BOB].life).toBe(20);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(targetOptions).toEqual(["Player 1"]);
 		expect(state.players[ALICE].life).toBe(20);
 		expect(state.players[BOB].life).toBe(17);
@@ -462,7 +473,7 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("Thraben Inspector's imported ETB trigger creates one usable Clue", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		stockLibraries(state);
 		beginFirstTurn(engine, state, agents);
@@ -476,9 +487,9 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.battlefield).toEqual([inspector]);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		const clues = state.battlefield.filter(
-			(id) => engine.name(state, id) === "Clue Token",
+			(id) => name(engine, state, id) === "Clue Token",
 		);
 		expect(clues).toHaveLength(1);
 		const clue = clues[0];
@@ -488,7 +499,8 @@ describe("forge-import runtime: triggers", () => {
 			token: true,
 		});
 		expect(
-			getSnapshot(engine.createReadContext(state), clue).currentCharacteristics,
+			getSnapshot(createReadContext(engine, state), clue)
+				.currentCharacteristics,
 		).toMatchObject({
 			types: ["artifact"],
 			subtypes: ["Clue"],
@@ -499,13 +511,14 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("Etched Familiar's imported dies trigger drains its controller's opponent", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
 		expect(state.players).toHaveLength(2);
-		const familiar = engine.spawnPermanent(state, "rt-etched-familiar", BOB);
+		const familiar = spawnPermanent(engine, state, "rt-etched-familiar", BOB);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -520,19 +533,20 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].life).toBe(20);
 		expect(state.players[BOB].life).toBe(20);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].life).toBe(18);
 		expect(state.players[BOB].life).toBe(22);
 		expect(state.stack).toHaveLength(0);
 	});
 
 	test("Deathgreeter's imported dies predicate watches another creature", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
-		const watcher = engine.spawnPermanent(state, "rt-deathgreeter", ALICE);
-		const victim = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
+		const watcher = spawnPermanent(engine, state, "rt-deathgreeter", ALICE);
+		const victim = spawnPermanent(engine, state, "rt-grizzly-bears", BOB);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -552,15 +566,15 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("Judith's imported dies trigger ignores tokens and her anthem spares herself", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
-		const judith = engine.spawnPermanent(state, "rt-judith", ALICE);
-		const bears = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
-		const token = engine.spawnToken(state, ALICE, ZOMBIE_TOKEN);
+		const judith = spawnPermanent(engine, state, "rt-judith", ALICE);
+		const bears = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE);
+		const token = spawnToken(state, ALICE, ZOMBIE_TOKEN);
 
 		// `Affected$ Creature.Other+YouCtrl | AddPower$ 1`: the other creature
 		// gains power only, and Judith is not her own anthem's subject.
-		const read = engine.createReadContext(state);
+		const read = createReadContext(engine, state);
 		expect(getSnapshot(read, bears.id).currentCharacteristics).toMatchObject({
 			power: 3,
 			toughness: 2,
@@ -575,7 +589,8 @@ describe("forge-import runtime: triggers", () => {
 		});
 
 		// A token dying does not match `ValidCard$ Creature.YouCtrl+!token`.
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -589,7 +604,8 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.pendingTriggers).toHaveLength(0);
 
 		// The nontoken creature does.
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -610,29 +626,24 @@ describe("forge-import runtime: triggers", () => {
 	test("Resolute Reinforcements casts during an opponent's turn and creates its Soldier", () => {
 		const state = setupMain(engine);
 		expect(activePlayer(state)).toBe(ALICE);
-		const card = engine.spawnCard(
-			state,
-			"rt-resolute-reinforcements",
-			BOB,
-			"hand",
-		);
+		const card = spawnCard(state, "rt-resolute-reinforcements", BOB, "hand");
 		state.players[BOB].manaPool.c = 1;
 		state.players[BOB].manaPool.w = 1;
 
-		expect(engine.getObservableActions(state, BOB)).toContainEqual({
+		expect(getObservableActions(engine, state, BOB)).toContainEqual({
 			kind: "cast",
 			card: card.id,
 		});
 		const caster = new ScriptedAgent([], [], [{ kind: "cast", card: card.id }]);
-		engine.settlePriority(state, [new ScriptedAgent(), caster]);
+		settlePriority(engine, state, [new ScriptedAgent(), caster]);
 
 		expect(caster.priorityActions).toHaveLength(0);
 		expect(state.players[BOB].manaPool).toMatchObject({ c: 0, w: 0 });
 		const reinforcements = state.battlefield.filter(
-			(id) => engine.name(state, id) === "Resolute Reinforcements",
+			(id) => name(engine, state, id) === "Resolute Reinforcements",
 		);
 		const soldiers = state.battlefield.filter(
-			(id) => engine.name(state, id) === "Soldier Token",
+			(id) => name(engine, state, id) === "Soldier Token",
 		);
 		expect(reinforcements).toHaveLength(1);
 		expect(soldiers).toHaveLength(1);
@@ -643,7 +654,7 @@ describe("forge-import runtime: triggers", () => {
 			controller: BOB,
 		});
 		expect(
-			getSnapshot(engine.createReadContext(state), soldier)
+			getSnapshot(createReadContext(engine, state), soldier)
 				.currentCharacteristics,
 		).toMatchObject({
 			kind: "creature",
@@ -656,33 +667,34 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("Timberland Guide's imported ETB trigger puts a counter on its chosen creature", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const alice = new ScriptedAgent();
 		const agents: SyncAgents = [alice, new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
-		const target = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
+		const target = spawnPermanent(engine, state, "rt-grizzly-bears", BOB);
 		alice.targetChoices.push({ type: "permanent", id: target.id });
 
 		const guide = enterFromHand(state, "rt-timberland-guide", ALICE, agents);
 
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(permanent(state, target.id).counters).toEqual({});
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(permanent(state, target.id).counters).toEqual({ "+1/+1": 1 });
 		expect(permanent(state, guide).counters).toEqual({});
 		expect(
-			getSnapshot(engine.createReadContext(state), target.id)
+			getSnapshot(createReadContext(engine, state), target.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 3, toughness: 3 });
 	});
 
 	test("Network Disruptor's imported ETB trigger taps any target permanent and keeps flying", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const alice = new ScriptedAgent();
 		const agents: SyncAgents = [alice, new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
-		const land = engine.spawnPermanent(state, "forest", BOB);
-		const groundCreature = engine.spawnPermanent(
+		const land = spawnPermanent(engine, state, "forest", BOB);
+		const groundCreature = spawnPermanent(
+			engine,
 			state,
 			"rt-grizzly-bears",
 			BOB,
@@ -698,16 +710,16 @@ describe("forge-import runtime: triggers", () => {
 
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(permanent(state, land.id).tapped).toBe(false);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(permanent(state, land.id).tapped).toBe(true);
 		expect(alice.targetChoices).toHaveLength(0);
-		expect(engine.eligibleBlockers(state, BOB, disruptor)).not.toContain(
+		expect(eligibleBlockers(engine, state, BOB, disruptor)).not.toContain(
 			groundCreature.id,
 		);
 	});
 
 	test("Priest of Ancient Lore's imported ETB trigger gains life and draws", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		stockLibraries(state);
 		beginFirstTurn(engine, state, agents);
@@ -718,7 +730,7 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.players[ALICE].library).toHaveLength(3);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].life).toBe(21);
 		expect(state.players[ALICE].library).toHaveLength(2);
 		expect(state.stack).toHaveLength(0);
@@ -727,7 +739,7 @@ describe("forge-import runtime: triggers", () => {
 	test("Ajani's Mantra's imported upkeep trigger fires only for its controller, and its choice is genuinely optional", () => {
 		const accept = newInProgressGame(engine);
 		const acceptAgents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
-		engine.spawnPermanent(accept, "rt-ajanis-mantra", ALICE);
+		spawnPermanent(engine, accept, "rt-ajanis-mantra", ALICE);
 		stockLibraries(accept);
 		advanceUntil(engine, accept, acceptAgents, (next) =>
 			atUpkeepOf(next, ALICE),
@@ -744,7 +756,7 @@ describe("forge-import runtime: triggers", () => {
 			new ScriptedAgent([], [false]),
 			new ScriptedAgent(),
 		];
-		engine.spawnPermanent(decline, "rt-ajanis-mantra", ALICE);
+		spawnPermanent(engine, decline, "rt-ajanis-mantra", ALICE);
 		stockLibraries(decline);
 		advanceUntil(engine, decline, declineAgents, (next) =>
 			atUpkeepOf(next, ALICE),
@@ -755,9 +767,10 @@ describe("forge-import runtime: triggers", () => {
 	test("Kambal makes the opponent who cast a noncreature spell lose life", () => {
 		const state = setupMain(engine);
 		const agents = passingAgents();
-		engine.spawnPermanent(state, "rt-kambal", ALICE);
-		const spell = engine.spawnCard(state, "rt-consider", BOB, "hand");
-		engine.perform(
+		spawnPermanent(engine, state, "rt-kambal", ALICE);
+		const spell = spawnCard(state, "rt-consider", BOB, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "add mana",
@@ -768,13 +781,14 @@ describe("forge-import runtime: triggers", () => {
 			agents,
 		);
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			BOB,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(state.players[ALICE].life).toBe(22);
 		expect(state.players[BOB].life).toBe(18);
@@ -783,16 +797,17 @@ describe("forge-import runtime: triggers", () => {
 	test("Firebrand Archer and Kessig Flamebreather damage their controller's opponent", () => {
 		for (const cardId of ["rt-firebrand-archer", "rt-kessig-flamebreather"]) {
 			const state = setupMain(engine);
-			engine.spawnPermanent(state, cardId, ALICE);
-			const spell = engine.spawnCard(state, "darksteel-relic", ALICE, "hand");
+			spawnPermanent(engine, state, cardId, ALICE);
+			const spell = spawnCard(state, "darksteel-relic", ALICE, "hand");
 
-			engine.executeCastAction(
+			executeCastAction(
+				engine,
 				state,
 				ALICE,
 				{ kind: "cast", card: spell.id },
 				passingAgents(),
 			);
-			engine.settlePriority(state, passingAgents());
+			settlePriority(engine, state, passingAgents());
 
 			expect(state.players[ALICE].life, `${cardId} does not damage you`).toBe(
 				20,
@@ -806,61 +821,61 @@ describe("forge-import runtime: triggers", () => {
 	test("a self PutCounter trigger adds its counter to its source", () => {
 		const state = newInProgressGame(engine);
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
-		const source = engine.spawnPermanent(state, "rt-test-self-counter", ALICE);
+		const source = spawnPermanent(engine, state, "rt-test-self-counter", ALICE);
 		stockLibraries(state);
 
 		advanceUntil(engine, state, agents, (next) => atUpkeepOf(next, ALICE));
 
 		expect(permanent(state, source.id).counters).toEqual({ "+1/+1": 1 });
 		expect(
-			getSnapshot(engine.createReadContext(state), source.id)
+			getSnapshot(createReadContext(engine, state), source.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 	});
 
 	test("Lorescale Coatl's imported Drawn trigger fires on its controller's draws only", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		stockLibraries(state);
 		beginFirstTurn(engine, state, agents);
-		const coatl = engine.spawnPermanent(state, "rt-lorescale-coatl", ALICE);
+		const coatl = spawnPermanent(engine, state, "rt-lorescale-coatl", ALICE);
 
-		engine.perform(state, { kind: "draw", player: BOB }, agents);
+		perform(engine, state, { kind: "draw", player: BOB }, agents);
 		expect(
 			state.pendingTriggers,
 			"an opponent's draw is not this trigger's event",
 		).toHaveLength(0);
 
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(
 			permanent(state, coatl.id).counters,
 			"trigger has not resolved yet",
 		).toEqual({});
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(permanent(state, coatl.id).counters).toEqual({ "+1/+1": 1 });
 		expect(
-			getSnapshot(engine.createReadContext(state), coatl.id)
+			getSnapshot(createReadContext(engine, state), coatl.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 3, toughness: 3 });
 	});
 
 	test("Underworld Dreams damages the opponent whose draw triggered it", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		stockLibraries(state);
 		beginFirstTurn(engine, state, agents);
-		engine.spawnPermanent(state, "rt-underworld-dreams", ALICE);
+		spawnPermanent(engine, state, "rt-underworld-dreams", ALICE);
 
-		engine.perform(state, { kind: "draw", player: ALICE }, agents);
+		perform(engine, state, { kind: "draw", player: ALICE }, agents);
 		expect(
 			state.pendingTriggers,
 			"your own draw is not an opponent's draw",
 		).toHaveLength(0);
 
-		engine.perform(state, { kind: "draw", player: BOB }, agents);
-		engine.settlePriority(state, agents);
+		perform(engine, state, { kind: "draw", player: BOB }, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].life).toBe(20);
 		expect(state.players[BOB].life).toBe(19);
 	});
@@ -868,7 +883,7 @@ describe("forge-import runtime: triggers", () => {
 	test("Necrogen Mists makes the player whose upkeep began discard", () => {
 		const state = newInProgressGame(engine);
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
-		engine.spawnPermanent(state, "rt-necrogen-mists", ALICE);
+		spawnPermanent(engine, state, "rt-necrogen-mists", ALICE);
 		stockLibraries(state);
 
 		advanceUntil(
@@ -877,8 +892,8 @@ describe("forge-import runtime: triggers", () => {
 			agents,
 			(next) => isTurnStep(next, "untap") && activePlayer(next) === BOB,
 		);
-		const aliceCard = engine.spawnCard(state, "forest", ALICE, "hand");
-		engine.spawnCard(state, "forest", BOB, "hand");
+		const aliceCard = spawnCard(state, "forest", ALICE, "hand");
+		spawnCard(state, "forest", BOB, "hand");
 		const bobHandBefore = state.players[BOB].hand.length;
 		const bobGraveyardBefore = state.players[BOB].graveyard.length;
 
@@ -895,7 +910,7 @@ describe("forge-import runtime: triggers", () => {
 			new ScriptedAgent([], [true]),
 			new ScriptedAgent(),
 		];
-		engine.spawnPermanent(accept, "rt-test-optional-multi", ALICE);
+		spawnPermanent(engine, accept, "rt-test-optional-multi", ALICE);
 		stockLibraries(accept);
 		const handBefore = accept.players[ALICE].hand.length;
 		advanceUntil(engine, accept, acceptAgents, (next) =>
@@ -911,7 +926,7 @@ describe("forge-import runtime: triggers", () => {
 			new ScriptedAgent([], [false]),
 			new ScriptedAgent(),
 		];
-		engine.spawnPermanent(decline, "rt-test-optional-multi", ALICE);
+		spawnPermanent(engine, decline, "rt-test-optional-multi", ALICE);
 		stockLibraries(decline);
 		const declineHandBefore = decline.players[ALICE].hand.length;
 		advanceUntil(engine, decline, declineAgents, (next) =>
@@ -928,8 +943,8 @@ describe("forge-import runtime: triggers", () => {
 				new ScriptedAgent([], [accepted]),
 				new ScriptedAgent(),
 			];
-			engine.spawnPermanent(state, "rt-test-optional-targeted", ALICE);
-			const bears = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
+			spawnPermanent(engine, state, "rt-test-optional-targeted", ALICE);
+			const bears = spawnPermanent(engine, state, "rt-grizzly-bears", BOB);
 			stockLibraries(state);
 			advanceUntil(engine, state, agents, (next) => atUpkeepOf(next, ALICE));
 
@@ -940,16 +955,18 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("Doomed Dissenter's imported dies trigger makes a 2/2 black Zombie for its controller", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
 
-		const dissenter = engine.spawnPermanent(
+		const dissenter = spawnPermanent(
+			engine,
 			state,
 			"rt-doomed-dissenter",
 			ALICE,
 		);
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -963,7 +980,7 @@ describe("forge-import runtime: triggers", () => {
 		expect(state.pendingTriggers).toHaveLength(1);
 		expect(state.battlefield).toHaveLength(0);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(state.battlefield).toHaveLength(1);
 		const zombieId = state.battlefield[0];
@@ -972,7 +989,7 @@ describe("forge-import runtime: triggers", () => {
 		expect(zombie.token).toBe(true);
 		expect(zombie.controller).toBe(ALICE);
 		const characteristics = getSnapshot(
-			engine.createReadContext(state),
+			createReadContext(engine, state),
 			zombieId,
 		).currentCharacteristics;
 		expect(characteristics.name).toBe("Zombie Token");
@@ -994,7 +1011,7 @@ describe("forge-import runtime: triggers", () => {
 			new ScriptedAgent([], [true]),
 			new ScriptedAgent(),
 		];
-		engine.spawnPermanent(state, "rt-test-optional-targeted", ALICE);
+		spawnPermanent(engine, state, "rt-test-optional-targeted", ALICE);
 		stockLibraries(state);
 		advanceUntil(engine, state, agents, (next) => atUpkeepOf(next, ALICE));
 
@@ -1005,41 +1022,41 @@ describe("forge-import runtime: triggers", () => {
 
 describe("forge-import runtime: statics and replacements", () => {
 	test("Clone's imported replacement may copy any chosen creature or decline", () => {
-		const copying = engine.newGame();
-		engine.spawnPermanent(copying, "darksteel-relic", BOB);
-		engine.spawnPermanent(copying, "rt-grizzly-bears", BOB);
-		const selected = engine.spawnPermanent(copying, "eager-cadet", BOB);
+		const copying = newGame();
+		spawnPermanent(engine, copying, "darksteel-relic", BOB);
+		spawnPermanent(engine, copying, "rt-grizzly-bears", BOB);
+		const selected = spawnPermanent(engine, copying, "eager-cadet", BOB);
 		const copied = enterFromHand(copying, "rt-clone", ALICE, [
 			chooseCopiedObject(selected.id),
 			new ScriptedAgent(),
 		]);
 		expect(
-			getSnapshot(engine.createReadContext(copying), copied)
+			getSnapshot(createReadContext(engine, copying), copied)
 				.currentCharacteristics.name,
 		).toBe("Eager Cadet");
 
-		const declining = engine.newGame();
-		engine.spawnPermanent(declining, "rt-grizzly-bears", BOB);
+		const declining = newGame();
+		spawnPermanent(engine, declining, "rt-grizzly-bears", BOB);
 		const unchanged = enterFromHand(declining, "rt-clone", ALICE, [
 			chooseCopiedObject(null),
 			new ScriptedAgent(),
 		]);
 		expect(
-			getSnapshot(engine.createReadContext(declining), unchanged)
+			getSnapshot(createReadContext(engine, declining), unchanged)
 				.currentCharacteristics.name,
 		).toBe("Clone");
 	});
 
 	test("Copy Artifact offers artifacts and keeps its enchantment exception", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
-		const relic = engine.spawnPermanent(state, "darksteel-relic", BOB);
+		const state = newGame();
+		spawnPermanent(engine, state, "rt-grizzly-bears", BOB);
+		const relic = spawnPermanent(engine, state, "darksteel-relic", BOB);
 		const recorder = ChoiceController.record(engine, [
 			chooseCopiedObject(relic.id),
 			new ScriptedAgent(),
 		]);
 		const copied = enterFromHand(state, "rt-copy-artifact", ALICE, recorder);
-		const snapshot = getSnapshot(engine.createReadContext(state), copied);
+		const snapshot = getSnapshot(createReadContext(engine, state), copied);
 
 		expect(snapshot.currentCharacteristics.name).toBe("Darksteel Relic");
 		expect(snapshot.copiableValues.types).toEqual(["artifact", "enchantment"]);
@@ -1050,105 +1067,108 @@ describe("forge-import runtime: statics and replacements", () => {
 	});
 
 	test("Aesthir Glider's imported static removes only itself from blocker candidates", () => {
-		const state = engine.newGame();
-		const glider = engine.spawnPermanent(state, "rt-aesthir-glider", BOB);
-		const bear = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
-		expect(engine.eligibleBlockers(state, BOB)).toEqual([bear.id]);
-		expect(engine.eligibleBlockers(state, BOB)).not.toContain(glider.id);
+		const state = newGame();
+		const glider = spawnPermanent(engine, state, "rt-aesthir-glider", BOB);
+		const bear = spawnPermanent(engine, state, "rt-grizzly-bears", BOB);
+		expect(eligibleBlockers(engine, state, BOB)).toEqual([bear.id]);
+		expect(eligibleBlockers(engine, state, BOB)).not.toContain(glider.id);
 	});
 
 	test("Exploration's imported rule effect offers exactly one additional land", () => {
 		const state = setupMain(engine);
-		engine.spawnPermanent(state, "rt-exploration", ALICE);
-		const land = engine.spawnCard(state, "forest", ALICE, "hand");
+		spawnPermanent(engine, state, "rt-exploration", ALICE);
+		const land = spawnCard(state, "forest", ALICE, "hand");
 
 		state.players[ALICE].stats.lands.played = 1;
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual({
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual({
 			kind: "play land",
 			card: land.id,
 		});
 
 		state.players[ALICE].stats.lands.played = 2;
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual({
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual({
 			kind: "play land",
 			card: land.id,
 		});
 	});
 
 	test("Glorious Anthem's imported static only pumps creatures its controller controls", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "rt-glorious-anthem", ALICE);
-		const mine = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
-		const theirs = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
+		const state = newGame();
+		spawnPermanent(engine, state, "rt-glorious-anthem", ALICE);
+		const mine = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE);
+		const theirs = spawnPermanent(engine, state, "rt-grizzly-bears", BOB);
 
 		expect(
-			getSnapshot(engine.createReadContext(state), mine.id)
+			getSnapshot(createReadContext(engine, state), mine.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 3, toughness: 3 });
 		expect(
-			getSnapshot(engine.createReadContext(state), theirs.id)
+			getSnapshot(createReadContext(engine, state), theirs.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 	});
 
 	test("Spidersilk Armor grants reach and +0/+1 only to its controller's creatures", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "rt-spidersilk-armor", BOB);
-		const mine = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
-		const theirs = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
-		const flyingAttacker = engine.spawnPermanent(
+		const state = newGame();
+		spawnPermanent(engine, state, "rt-spidersilk-armor", BOB);
+		const mine = spawnPermanent(engine, state, "rt-grizzly-bears", BOB);
+		const theirs = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE);
+		const flyingAttacker = spawnPermanent(
+			engine,
 			state,
 			"rt-network-disruptor",
 			ALICE,
 		);
 
 		expect(
-			getSnapshot(engine.createReadContext(state), mine.id)
+			getSnapshot(createReadContext(engine, state), mine.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 3, keywords: ["reach"] });
 		expect(
-			getSnapshot(engine.createReadContext(state), theirs.id)
+			getSnapshot(createReadContext(engine, state), theirs.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2, keywords: [] });
-		expect(engine.eligibleBlockers(state, BOB, flyingAttacker.id)).toContain(
+		expect(eligibleBlockers(engine, state, BOB, flyingAttacker.id)).toContain(
 			mine.id,
 		);
 	});
 
 	test("Air Nomad Legacy's keyword predicate pumps only its controller's flyers", () => {
-		const state = engine.newGame();
-		engine.spawnPermanent(state, "rt-air-nomad-legacy", ALICE);
-		const flyer = engine.spawnPermanent(state, "rt-network-disruptor", ALICE);
-		const groundCreature = engine.spawnPermanent(
+		const state = newGame();
+		spawnPermanent(engine, state, "rt-air-nomad-legacy", ALICE);
+		const flyer = spawnPermanent(engine, state, "rt-network-disruptor", ALICE);
+		const groundCreature = spawnPermanent(
+			engine,
 			state,
 			"rt-grizzly-bears",
 			ALICE,
 		);
-		const opposingFlyer = engine.spawnPermanent(
+		const opposingFlyer = spawnPermanent(
+			engine,
 			state,
 			"rt-network-disruptor",
 			BOB,
 		);
 
 		expect(
-			getSnapshot(engine.createReadContext(state), flyer.id)
+			getSnapshot(createReadContext(engine, state), flyer.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 		expect(
-			getSnapshot(engine.createReadContext(state), groundCreature.id)
+			getSnapshot(createReadContext(engine, state), groundCreature.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
 		expect(
-			getSnapshot(engine.createReadContext(state), opposingFlyer.id)
+			getSnapshot(createReadContext(engine, state), opposingFlyer.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 1, toughness: 1 });
 	});
 
 	test("Root Maze's imported replacement taps entering artifacts and lands but not creatures", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
-		engine.spawnPermanent(state, "rt-root-maze", ALICE);
+		spawnPermanent(engine, state, "rt-root-maze", ALICE);
 
 		const relic = enterFromHand(state, "darksteel-relic", ALICE, agents);
 		expect(permanent(state, relic).tapped, "artifact enters tapped").toBe(true);
@@ -1161,11 +1181,11 @@ describe("forge-import runtime: statics and replacements", () => {
 	});
 
 	test("Root Maze's imported replacement matches an incoming object's derived type, not just its printed one", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
-		engine.spawnPermanent(state, "rt-root-maze", ALICE);
-		engine.spawnPermanent(state, "rt-test-all-permanents-artifacts", ALICE);
+		spawnPermanent(engine, state, "rt-root-maze", ALICE);
+		spawnPermanent(engine, state, "rt-test-all-permanents-artifacts", ALICE);
 
 		// Grizzly Bears is a creature by its printed characteristics, but the
 		// synthetic static above adds "artifact" to every permanent's derived
@@ -1179,14 +1199,14 @@ describe("forge-import runtime: statics and replacements", () => {
 	});
 
 	test("Faithful Watchdog's imported entersWith replacement grants its printed counters", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
 
 		const dog = enterFromHand(state, "rt-faithful-watchdog", ALICE, agents);
 		expect(permanent(state, dog).counters).toEqual({ "+1/+1": 3 });
 		expect(
-			getSnapshot(engine.createReadContext(state), dog).currentCharacteristics,
+			getSnapshot(createReadContext(engine, state), dog).currentCharacteristics,
 		).toMatchObject({
 			power: 3,
 			toughness: 3,
@@ -1195,7 +1215,7 @@ describe("forge-import runtime: statics and replacements", () => {
 	});
 
 	test("Charcoal Diamond's imported canonical self-entry form enters tapped", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
 
@@ -1204,10 +1224,10 @@ describe("forge-import runtime: statics and replacements", () => {
 	});
 
 	test("Root Maze's imported global replacement does not tap its own entry, even if another effect would make it match (CR 614.12)", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
-		engine.spawnPermanent(state, "rt-test-all-permanents-artifacts", ALICE);
+		spawnPermanent(engine, state, "rt-test-all-permanents-artifacts", ALICE);
 
 		const rootMaze = enterFromHand(state, "rt-root-maze", ALICE, agents);
 		expect(
@@ -1225,34 +1245,35 @@ describe("forge-import runtime: statics and replacements", () => {
 describe("forge-import runtime: spell effects", () => {
 	test("Pain 101 grants a dies trigger that returns the new card tapped", () => {
 		const state = setupMain(engine);
-		const target = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const target = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE);
 		const originalId = target.id;
-		const spell = engine.spawnCard(state, "rt-pain-101", ALICE, "hand");
+		const spell = spawnCard(state, "rt-pain-101", ALICE, "hand");
 		state.players[ALICE].manaPool.b = 1;
 		state.players[ALICE].manaPool.c = 1;
 		const alice = new ScriptedAgent();
 		alice.targetChoices.push({ type: "permanent", id: target.id });
 
-		engine.executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, [
+		executeCastAction(engine, state, ALICE, { kind: "cast", card: spell.id }, [
 			alice,
 			new ScriptedAgent(),
 		]);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(
-			getSnapshot(engine.createReadContext(state), target.id)
+			getSnapshot(createReadContext(engine, state), target.id)
 				.currentCharacteristics.keywords,
 		).toContain("deathtouch");
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "destroy", object: target.id, noRegen: false },
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(state.objects.has(originalId)).toBe(false);
 		const returned = state.battlefield.find(
-			(id) => engine.name(state, id) === "Grizzly Bears",
+			(id) => name(engine, state, id) === "Grizzly Bears",
 		);
 		if (returned === undefined)
 			throw new Error("Pain 101 returned no creature");
@@ -1262,33 +1283,34 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Verdant Rebirth draws, then its granted dies trigger returns the new card to hand", () => {
 		const state = setupMain(engine);
-		engine.spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "forest", ALICE, "library");
 		const librarySize = state.players[ALICE].library.length;
-		const target = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const target = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE);
 		const originalId = target.id;
-		const spell = engine.spawnCard(state, "rt-verdant-rebirth", ALICE, "hand");
+		const spell = spawnCard(state, "rt-verdant-rebirth", ALICE, "hand");
 		state.players[ALICE].manaPool.g = 1;
 		state.players[ALICE].manaPool.c = 1;
 		const alice = new ScriptedAgent();
 		alice.targetChoices.push({ type: "permanent", id: target.id });
 
-		engine.executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, [
+		executeCastAction(engine, state, ALICE, { kind: "cast", card: spell.id }, [
 			alice,
 			new ScriptedAgent(),
 		]);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[ALICE].library).toHaveLength(librarySize - 1);
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "destroy", object: target.id, noRegen: false },
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(state.objects.has(originalId)).toBe(false);
 		const returned = state.players[ALICE].hand.find(
-			(id) => engine.name(state, id) === "Grizzly Bears",
+			(id) => name(engine, state, id) === "Grizzly Bears",
 		);
 		expect(returned).toBeDefined();
 		expect(returned).not.toBe(originalId);
@@ -1296,41 +1318,37 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Wrenn's Resolve permits only the cards its imported Dig actually exiles", () => {
 		const state = setupMain(engine);
-		const unrelated = engine.spawnCard(
-			state,
-			"darksteel-relic",
-			ALICE,
-			"exile",
-		);
-		engine.spawnCard(state, "forest", ALICE, "library");
-		engine.spawnCard(state, "darksteel-relic", ALICE, "library");
-		const spell = engine.spawnCard(state, "rt-wrenns-resolve", ALICE, "hand");
+		const unrelated = spawnCard(state, "darksteel-relic", ALICE, "exile");
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "darksteel-relic", ALICE, "library");
+		const spell = spawnCard(state, "rt-wrenns-resolve", ALICE, "hand");
 		state.players[ALICE].manaPool.c = 1;
 		state.players[ALICE].manaPool.r = 1;
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		const [unrelatedId, firstExiled, secondExiled] = state.players[ALICE].exile;
 		expect(unrelatedId).toBe(unrelated.id);
 		if (firstExiled === undefined || secondExiled === undefined)
 			throw new Error("expected Wrenn's Resolve to exile two cards");
-		expect(engine.getObservableActions(state, ALICE)).toEqual(
+		expect(getObservableActions(engine, state, ALICE)).toEqual(
 			expect.arrayContaining([
 				{ kind: "cast", card: firstExiled },
 				{ kind: "play land", card: secondExiled },
 			]),
 		);
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual({
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual({
 			kind: "cast",
 			card: unrelated.id,
 		});
-		expect(engine.getObservableActions(state, BOB)).not.toContainEqual({
+		expect(getObservableActions(engine, state, BOB)).not.toContainEqual({
 			kind: "cast",
 			card: firstExiled,
 		});
@@ -1351,22 +1369,23 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Cloudshift returns the new exile object and retriggers the imported ETB", () => {
 		const state = setupMain(engine);
-		const target = engine.spawnPermanent(state, "rt-wall-of-omens", ALICE);
+		const target = spawnPermanent(engine, state, "rt-wall-of-omens", ALICE);
 		target.tapped = true;
 		target.damage = 1;
 		target.counters["+1/+1"] = 1;
 		const originalId = target.id;
 		const librarySize = state.players[ALICE].library.length;
-		const spell = engine.spawnCard(state, "rt-cloudshift", ALICE, "hand");
+		const spell = spawnCard(state, "rt-cloudshift", ALICE, "hand");
 		state.players[ALICE].manaPool.w = 1;
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(state.objects.has(originalId)).toBe(false);
 		expect(state.players[ALICE].exile).toEqual([]);
@@ -1395,21 +1414,12 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Preordain's imported scry arrangement is applied before its draw", () => {
 		const state = setupMain(engine);
-		const bottom = engine.spawnCard(
-			state,
-			"darksteel-relic",
-			ALICE,
-			"library",
-		).id;
-		const first = engine.spawnCard(state, "forest", ALICE, "library").id;
-		const second = engine.spawnCard(
-			state,
-			"rt-grizzly-bears",
-			ALICE,
-			"library",
-		).id;
-		const spell = engine.spawnCard(state, "rt-preordain", ALICE, "hand");
-		engine.perform(
+		const bottom = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+		const first = spawnCard(state, "forest", ALICE, "library").id;
+		const second = spawnCard(state, "rt-grizzly-bears", ALICE, "library").id;
+		const spell = spawnCard(state, "rt-preordain", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "add mana",
@@ -1425,16 +1435,17 @@ describe("forge-import runtime: spell effects", () => {
 			bottom: [first],
 		});
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toContain("Grizzly Bears");
 		expect(state.players[ALICE].library[0]).toBe(first);
 		expect(state.players[ALICE].library.at(-1)).toBe(bottom);
@@ -1444,15 +1455,11 @@ describe("forge-import runtime: spell effects", () => {
 	test("Sleight of Hand keeps one chosen card when ChangeNum is omitted", () => {
 		const state = setupMain(engine);
 		const existingLibrary = [...state.players[ALICE].library];
-		const bottomed = engine.spawnCard(state, "forest", ALICE, "library").id;
-		const chosen = engine.spawnCard(
-			state,
-			"darksteel-relic",
-			ALICE,
-			"library",
-		).id;
-		const spell = engine.spawnCard(state, "rt-sleight-of-hand", ALICE, "hand");
-		engine.perform(
+		const bottomed = spawnCard(state, "forest", ALICE, "library").id;
+		const chosen = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+		const spell = spawnCard(state, "rt-sleight-of-hand", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "add mana",
@@ -1468,16 +1475,17 @@ describe("forge-import runtime: spell effects", () => {
 			bottom: [bottomed],
 		});
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toContain("Darksteel Relic");
 		expect(state.players[ALICE].library).toEqual([
 			bottomed,
@@ -1489,27 +1497,13 @@ describe("forge-import runtime: spell effects", () => {
 	test("Impulse puts the chosen top-four card into hand and the rest on the bottom in the chosen order", () => {
 		const state = setupMain(engine);
 		const existingLibrary = [...state.players[ALICE].library];
-		const first = engine.spawnCard(state, "forest", ALICE, "library").id;
-		const second = engine.spawnCard(
-			state,
-			"rt-grizzly-bears",
-			ALICE,
-			"library",
-		).id;
-		const chosen = engine.spawnCard(
-			state,
-			"darksteel-relic",
-			ALICE,
-			"library",
-		).id;
-		const fourth = engine.spawnCard(
-			state,
-			"rt-aesthir-glider",
-			ALICE,
-			"library",
-		).id;
-		const spell = engine.spawnCard(state, "rt-impulse", ALICE, "hand");
-		engine.perform(
+		const first = spawnCard(state, "forest", ALICE, "library").id;
+		const second = spawnCard(state, "rt-grizzly-bears", ALICE, "library").id;
+		const chosen = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+		const fourth = spawnCard(state, "rt-aesthir-glider", ALICE, "library").id;
+		const spell = spawnCard(state, "rt-impulse", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "add mana",
@@ -1525,16 +1519,17 @@ describe("forge-import runtime: spell effects", () => {
 			bottom: [second, fourth, first],
 		});
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toContain("Darksteel Relic");
 		expect(state.players[ALICE].library).toEqual([
 			first,
@@ -1548,33 +1543,19 @@ describe("forge-import runtime: spell effects", () => {
 	test("Stock Up puts two chosen top-five cards into hand and orders the rest on the bottom", () => {
 		const state = setupMain(engine);
 		const existingLibrary = [...state.players[ALICE].library];
-		const first = engine.spawnCard(state, "forest", ALICE, "library").id;
-		const keptFirst = engine.spawnCard(
-			state,
-			"rt-grizzly-bears",
-			ALICE,
-			"library",
-		).id;
-		const third = engine.spawnCard(
-			state,
-			"darksteel-relic",
-			ALICE,
-			"library",
-		).id;
-		const fourth = engine.spawnCard(
-			state,
-			"rt-aesthir-glider",
-			ALICE,
-			"library",
-		).id;
-		const keptSecond = engine.spawnCard(
+		const first = spawnCard(state, "forest", ALICE, "library").id;
+		const keptFirst = spawnCard(state, "rt-grizzly-bears", ALICE, "library").id;
+		const third = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+		const fourth = spawnCard(state, "rt-aesthir-glider", ALICE, "library").id;
+		const keptSecond = spawnCard(
 			state,
 			"monastery-swiftspear",
 			ALICE,
 			"library",
 		).id;
-		const spell = engine.spawnCard(state, "rt-stock-up", ALICE, "hand");
-		engine.perform(
+		const spell = spawnCard(state, "rt-stock-up", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "add mana",
@@ -1590,15 +1571,16 @@ describe("forge-import runtime: spell effects", () => {
 			bottom: [fourth, first, third],
 		});
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
-		const hand = state.players[ALICE].hand.map((id) => engine.name(state, id));
+		const hand = state.players[ALICE].hand.map((id) => name(engine, state, id));
 		expect(hand).toContain("Monastery Swiftspear");
 		expect(hand).toContain("Grizzly Bears");
 		expect(state.players[ALICE].library).toEqual([
@@ -1612,12 +1594,12 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Village Rites' imported additional cost sacrifices before it draws", () => {
 		const state = setupMain(engine);
-		// The end of a library array is its top, so these two are drawn first.
-		engine.spawnCard(state, "forest", ALICE, "library");
-		engine.spawnCard(state, "darksteel-relic", ALICE, "library");
-		const fodder = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE).id;
-		const spell = engine.spawnCard(state, "rt-village-rites", ALICE, "hand");
-		engine.perform(
+		// The end of a library array is its top, so these two are drawn spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "darksteel-relic", ALICE, "library");
+		const fodder = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE).id;
+		const spell = spawnCard(state, "rt-village-rites", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{ kind: "add mana", source: spell.id, player: ALICE, mana: { b: 1 } },
 			passingAgents(),
@@ -1625,7 +1607,8 @@ describe("forge-import runtime: spell effects", () => {
 		const agents = passingAgents();
 		agents[ALICE].sacrificeChoices.push(fodder);
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
@@ -1635,11 +1618,11 @@ describe("forge-import runtime: spell effects", () => {
 		// CR 601.2h pays costs during casting, not on resolution.
 		expect(state.battlefield).not.toContain(fodder);
 		expect(state.players[ALICE].hand).not.toContain(spell.id);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		// Names, not ids: a zone change creates a new object (CR 400.7), so the
 		// cards that arrive in hand are not the objects that were in the library.
-		const hand = state.players[ALICE].hand.map((id) => engine.name(state, id));
+		const hand = state.players[ALICE].hand.map((id) => name(engine, state, id));
 		expect(hand).toContain("Forest");
 		expect(hand).toContain("Darksteel Relic");
 		expect(agents[ALICE].sacrificeChoices).toHaveLength(0);
@@ -1647,30 +1630,32 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Village Rites is not castable with no creature to sacrifice", () => {
 		const state = setupMain(engine);
-		const spell = engine.spawnCard(state, "rt-village-rites", ALICE, "hand");
-		engine.perform(
+		const spell = spawnCard(state, "rt-village-rites", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{ kind: "add mana", source: spell.id, player: ALICE, mana: { b: 1 } },
 			passingAgents(),
 		);
-		const castable = engine
-			.getObservableActions(state, ALICE)
-			.some((action) => action.kind === "cast" && action.card === spell.id);
+		const castable = getObservableActions(engine, state, ALICE).some(
+			(action) => action.kind === "cast" && action.card === spell.id,
+		);
 		expect(castable).toBe(false);
 	});
 
 	test("Deadly Dispute sacrifices an artifact, draws two, and creates a working Treasure", () => {
 		const state = setupMain(engine);
-		engine.spawnCard(state, "forest", ALICE, "library");
-		engine.spawnCard(state, "darksteel-relic", ALICE, "library");
-		const artifact = engine.spawnPermanent(state, "darksteel-relic", ALICE).id;
-		const spell = engine.spawnCard(state, "rt-deadly-dispute", ALICE, "hand");
+		spawnCard(state, "forest", ALICE, "library");
+		spawnCard(state, "darksteel-relic", ALICE, "library");
+		const artifact = spawnPermanent(engine, state, "darksteel-relic", ALICE).id;
+		const spell = spawnCard(state, "rt-deadly-dispute", ALICE, "hand");
 		state.players[ALICE].manaPool.c = 1;
 		state.players[ALICE].manaPool.b = 1;
 		const agents = passingAgents();
 		agents[ALICE].sacrificeChoices.push(artifact);
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
@@ -1681,9 +1666,9 @@ describe("forge-import runtime: spell effects", () => {
 			"the additional cost is paid before resolution",
 		).toBe(false);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toEqual(expect.arrayContaining(["Forest", "Darksteel Relic"]));
 		const treasure = state.battlefield.find(
 			(id) => permanent(state, id).representation.kind === "token",
@@ -1691,7 +1676,8 @@ describe("forge-import runtime: spell effects", () => {
 		if (treasure === undefined)
 			throw new Error("Deadly Dispute created no token");
 		const treasureMana = abilityId("activated", "rt-deadly-dispute", 0);
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: treasure, ability: treasureMana },
@@ -1703,21 +1689,21 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Deadly Dispute is not castable without an artifact or creature", () => {
 		const state = setupMain(engine);
-		const spell = engine.spawnCard(state, "rt-deadly-dispute", ALICE, "hand");
+		const spell = spawnCard(state, "rt-deadly-dispute", ALICE, "hand");
 		state.players[ALICE].manaPool.c = 1;
 		state.players[ALICE].manaPool.b = 1;
 		expect(
-			engine
-				.getObservableActions(state, ALICE)
-				.some((action) => action.kind === "cast" && action.card === spell.id),
+			getObservableActions(engine, state, ALICE).some(
+				(action) => action.kind === "cast" && action.card === spell.id,
+			),
 		).toBe(false);
 	});
 
 	test("Diabolic Edict's targeted player chooses the creature sacrificed on resolution", () => {
 		const state = setupMain(engine);
-		const first = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
-		const chosen = engine.spawnPermanent(state, "rt-doomed-dissenter", BOB);
-		const spell = engine.spawnCard(state, "rt-diabolic-edict", ALICE, "hand");
+		const first = spawnPermanent(engine, state, "rt-grizzly-bears", BOB);
+		const chosen = spawnPermanent(engine, state, "rt-doomed-dissenter", BOB);
+		const spell = spawnCard(state, "rt-diabolic-edict", ALICE, "hand");
 		state.players[ALICE].manaPool.c = 1;
 		state.players[ALICE].manaPool.b = 1;
 		const alice = new ScriptedAgent();
@@ -1725,12 +1711,12 @@ describe("forge-import runtime: spell effects", () => {
 		const bob = new ScriptedAgent();
 		bob.sacrificeChoices.push(chosen.id);
 
-		engine.executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, [
+		executeCastAction(engine, state, ALICE, { kind: "cast", card: spell.id }, [
 			alice,
 			bob,
 		]);
 		expect(state.battlefield).toContain(chosen.id);
-		engine.settlePriority(state, [alice, bob]);
+		settlePriority(engine, state, [alice, bob]);
 
 		expect(state.battlefield).toContain(first.id);
 		expect(state.battlefield).not.toContain(chosen.id);
@@ -1740,22 +1726,22 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Dredge's controller sacrifices before the following draw resolves", () => {
 		const state = setupMain(engine);
-		const drawn = engine.spawnCard(state, "forest", ALICE, "library");
-		const creature = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
-		const spell = engine.spawnCard(state, "rt-dredge", ALICE, "hand");
+		const drawn = spawnCard(state, "forest", ALICE, "library");
+		const creature = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE);
+		const spell = spawnCard(state, "rt-dredge", ALICE, "hand");
 		state.players[ALICE].manaPool.b = 1;
 		const alice = new ScriptedAgent();
 		alice.sacrificeChoices.push(creature.id);
 
-		engine.executeCastAction(state, ALICE, { kind: "cast", card: spell.id }, [
+		executeCastAction(engine, state, ALICE, { kind: "cast", card: spell.id }, [
 			alice,
 			new ScriptedAgent(),
 		]);
-		engine.settlePriority(state, [alice, new ScriptedAgent()]);
+		settlePriority(engine, state, [alice, new ScriptedAgent()]);
 
 		expect(state.battlefield).not.toContain(creature.id);
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toContain("Forest");
 		expect(state.players[ALICE].library).not.toContain(drawn.id);
 		expect(alice.sacrificeChoices).toHaveLength(0);
@@ -1763,11 +1749,11 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Blood Pact's imported halves both act on the one targeted player", () => {
 		const state = setupMain(engine);
-		// The end of a library array is its top, so these two are drawn first.
-		engine.spawnCard(state, "forest", BOB, "library");
-		engine.spawnCard(state, "darksteel-relic", BOB, "library");
-		const spell = engine.spawnCard(state, "rt-blood-pact", ALICE, "hand");
-		engine.perform(
+		// The end of a library array is its top, so these two are drawn spawnCard(state, "forest", BOB, "library");
+		spawnCard(state, "darksteel-relic", BOB, "library");
+		const spell = spawnCard(state, "rt-blood-pact", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "add mana",
@@ -1781,18 +1767,21 @@ describe("forge-import runtime: spell effects", () => {
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "player", player: BOB });
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		// The draw and the life loss name the same target slot, so both land on
 		// Bob -- not on Alice, who controls the spell and is the default player
 		// an undefined operand would resolve to.
-		const bobHand = state.players[BOB].hand.map((id) => engine.name(state, id));
+		const bobHand = state.players[BOB].hand.map((id) =>
+			name(engine, state, id),
+		);
 		expect(bobHand).toHaveLength(bobHandBefore + 2);
 		expect(bobHand).toContain("Forest");
 		expect(bobHand).toContain("Darksteel Relic");
@@ -1803,12 +1792,12 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Tome Scour's imported mill runs against the targeted player", () => {
 		const state = setupMain(engine);
-		for (let i = 0; i < 5; i++)
-			engine.spawnCard(state, "forest", BOB, "library");
+		for (let i = 0; i < 5; i++) spawnCard(state, "forest", BOB, "library");
 		const bobLibrary = [...state.players[BOB].library];
 		const aliceLibrary = [...state.players[ALICE].library];
-		const spell = engine.spawnCard(state, "rt-tome-scour", ALICE, "hand");
-		engine.perform(
+		const spell = spawnCard(state, "rt-tome-scour", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{ kind: "add mana", source: spell.id, player: ALICE, mana: { u: 1 } },
 			passingAgents(),
@@ -1816,13 +1805,14 @@ describe("forge-import runtime: spell effects", () => {
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "player", player: BOB });
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		// The library's last element is its top card, so milling five takes the
 		// last five and leaves the rest in order.
@@ -1836,15 +1826,16 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Consider's imported surveil moves the chosen card before drawing", () => {
 		const state = setupMain(engine);
-		engine.spawnCard(state, "forest", ALICE, "library");
-		const surveilled = engine.spawnCard(
+		spawnCard(state, "forest", ALICE, "library");
+		const surveilled = spawnCard(
 			state,
 			"rt-grizzly-bears",
 			ALICE,
 			"library",
 		).id;
-		const spell = engine.spawnCard(state, "rt-consider", ALICE, "hand");
-		engine.perform(
+		const spell = spawnCard(state, "rt-consider", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "add mana",
@@ -1857,39 +1848,36 @@ describe("forge-import runtime: spell effects", () => {
 		const agents = passingAgents();
 		agents[ALICE].surveilChoices.push({ top: [], bottom: [surveilled] });
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toContain("Forest");
 		expect(
-			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+			state.players[ALICE].graveyard.map((id) => name(engine, state, id)),
 		).toContain("Grizzly Bears");
 		expect(agents[ALICE].surveilChoices).toHaveLength(0);
 	});
 
 	test("Disentomb targets only a creature card its caster owns", () => {
 		const state = setupMain(engine);
-		const own = engine.spawnCard(state, "rt-grizzly-bears", ALICE, "graveyard");
-		const opposing = engine.spawnCard(
-			state,
-			"rt-grizzly-bears",
-			BOB,
-			"graveyard",
-		);
-		const spell = engine.spawnCard(state, "rt-disentomb", ALICE, "hand");
+		const own = spawnCard(state, "rt-grizzly-bears", ALICE, "graveyard");
+		const opposing = spawnCard(state, "rt-grizzly-bears", BOB, "graveyard");
+		const spell = spawnCard(state, "rt-disentomb", ALICE, "hand");
 		state.players[ALICE].manaPool.b = 1;
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "card", id: opposing.id });
 
 		expect(() =>
-			engine.executeCastAction(
+			executeCastAction(
+				engine,
 				state,
 				ALICE,
 				{ kind: "cast", card: spell.id },
@@ -1900,40 +1888,38 @@ describe("forge-import runtime: spell effects", () => {
 		expect(state.players[BOB].graveyard).toContain(opposing.id);
 
 		agents[ALICE].targetChoices.push({ type: "card", id: own.id });
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.players[ALICE].graveyard).not.toContain(own.id);
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toContain("Grizzly Bears");
 	});
 
 	test("Cremate fizzles when its graveyard target becomes a new object", () => {
 		const state = setupMain(engine);
-		const drawn = engine.spawnCard(state, "forest", ALICE, "library");
-		const target = engine.spawnCard(
-			state,
-			"rt-grizzly-bears",
-			BOB,
-			"graveyard",
-		);
-		const spell = engine.spawnCard(state, "rt-cremate", ALICE, "hand");
+		const drawn = spawnCard(state, "forest", ALICE, "library");
+		const target = spawnCard(state, "rt-grizzly-bears", BOB, "graveyard");
+		const spell = spawnCard(state, "rt-cremate", ALICE, "hand");
 		state.players[ALICE].manaPool.b = 1;
 		const agents = passingAgents();
 		agents[ALICE].targetChoices.push({ type: "card", id: target.id });
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -1944,7 +1930,7 @@ describe("forge-import runtime: spell effects", () => {
 			},
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(state.players[ALICE].library).toContain(drawn.id);
 		expect(state.log.some((line) => line.includes("[illegal target]"))).toBe(
@@ -1954,58 +1940,50 @@ describe("forge-import runtime: spell effects", () => {
 
 	test("Reclaim uses the top library position and Hymn of Rebirth uses its controller", () => {
 		const reclaimState = setupMain(engine);
-		const reclaimed = engine.spawnCard(
+		const reclaimed = spawnCard(
 			reclaimState,
 			"rt-grizzly-bears",
 			ALICE,
 			"graveyard",
 		);
-		const reclaim = engine.spawnCard(reclaimState, "rt-reclaim", ALICE, "hand");
+		const reclaim = spawnCard(reclaimState, "rt-reclaim", ALICE, "hand");
 		reclaimState.players[ALICE].manaPool.g = 1;
 		const reclaimAgents = passingAgents();
 		reclaimAgents[ALICE].targetChoices.push({
 			type: "card",
 			id: reclaimed.id,
 		});
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			reclaimState,
 			ALICE,
 			{ kind: "cast", card: reclaim.id },
 			reclaimAgents,
 		);
-		engine.settlePriority(reclaimState, reclaimAgents);
+		settlePriority(engine, reclaimState, reclaimAgents);
 		const libraryTop = reclaimState.players[ALICE].library.at(-1);
 		if (libraryTop === undefined)
 			throw new Error("Reclaim left no library top");
-		expect(engine.name(reclaimState, libraryTop)).toBe("Grizzly Bears");
+		expect(name(engine, reclaimState, libraryTop)).toBe("Grizzly Bears");
 
 		const riseState = setupMain(engine);
-		const risen = engine.spawnCard(
-			riseState,
-			"rt-grizzly-bears",
-			BOB,
-			"graveyard",
-		);
-		const rise = engine.spawnCard(
-			riseState,
-			"rt-hymn-of-rebirth",
-			ALICE,
-			"hand",
-		);
+		const risen = spawnCard(riseState, "rt-grizzly-bears", BOB, "graveyard");
+		const rise = spawnCard(riseState, "rt-hymn-of-rebirth", ALICE, "hand");
 		riseState.players[ALICE].manaPool.g = 1;
 		riseState.players[ALICE].manaPool.w = 1;
 		riseState.players[ALICE].manaPool.c = 3;
 		const riseAgents = passingAgents();
 		riseAgents[ALICE].targetChoices.push({ type: "card", id: risen.id });
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			riseState,
 			ALICE,
 			{ kind: "cast", card: rise.id },
 			riseAgents,
 		);
-		engine.settlePriority(riseState, riseAgents);
+		settlePriority(engine, riseState, riseAgents);
 		const permanentId = riseState.battlefield.find(
-			(id) => engine.name(riseState, id) === "Grizzly Bears",
+			(id) => name(engine, riseState, id) === "Grizzly Bears",
 		);
 		if (permanentId === undefined)
 			throw new Error("Hymn of Rebirth returned no card");
@@ -2025,20 +2003,22 @@ describe("forge-import runtime: activated abilities", () => {
 			ability,
 		});
 
-		const upkeep = engine.newGame();
+		const upkeep = newGame();
 		stockLibraries(upkeep);
 		beginFirstTurn(engine, upkeep, passingAgents());
-		const upkeepMinister = engine.spawnPermanent(
+		const upkeepMinister = spawnPermanent(
+			engine,
 			upkeep,
 			"rt-traveling-minister",
 			ALICE,
 			{ summoningSick: false },
 		);
-		expect(engine.getObservableActions(upkeep, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, upkeep, ALICE)).not.toContainEqual(
 			actionFor(upkeepMinister.id),
 		);
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				upkeep,
 				ALICE,
 				actionFor(upkeepMinister.id),
@@ -2048,16 +2028,18 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(permanent(upkeep, upkeepMinister.id).tapped).toBe(false);
 
 		const main = setupMain(engine);
-		const mainMinister = engine.spawnPermanent(
+		const mainMinister = spawnPermanent(
+			engine,
 			main,
 			"rt-traveling-minister",
 			ALICE,
 			{ summoningSick: false },
 		);
-		expect(engine.getObservableActions(main, ALICE)).toContainEqual(
+		expect(getObservableActions(engine, main, ALICE)).toContainEqual(
 			actionFor(mainMinister.id),
 		);
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			main,
 			ALICE,
 			actionFor(mainMinister.id),
@@ -2067,17 +2049,19 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(main.stack).toHaveLength(1);
 
 		const nonactive = setupMain(engine);
-		const bobsMinister = engine.spawnPermanent(
+		const bobsMinister = spawnPermanent(
+			engine,
 			nonactive,
 			"rt-traveling-minister",
 			BOB,
 			{ summoningSick: false },
 		);
-		expect(engine.getObservableActions(nonactive, BOB)).not.toContainEqual(
+		expect(getObservableActions(engine, nonactive, BOB)).not.toContainEqual(
 			actionFor(bobsMinister.id),
 		);
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				nonactive,
 				BOB,
 				actionFor(bobsMinister.id),
@@ -2086,14 +2070,16 @@ describe("forge-import runtime: activated abilities", () => {
 		).toThrow("only as a sorcery");
 
 		const stacked = setupMain(engine);
-		const stackedMinister = engine.spawnPermanent(
+		const stackedMinister = spawnPermanent(
+			engine,
 			stacked,
 			"rt-traveling-minister",
 			ALICE,
 			{ summoningSick: false },
 		);
-		const bears = engine.spawnCard(stacked, "grizzly-bears", BOB, "hand");
-		engine.perform(
+		const bears = spawnCard(stacked, "grizzly-bears", BOB, "hand");
+		perform(
+			engine,
 			stacked,
 			{
 				kind: "change zone",
@@ -2104,11 +2090,12 @@ describe("forge-import runtime: activated abilities", () => {
 			},
 			passingAgents(),
 		);
-		expect(engine.getObservableActions(stacked, ALICE)).not.toContainEqual(
+		expect(getObservableActions(engine, stacked, ALICE)).not.toContainEqual(
 			actionFor(stackedMinister.id),
 		);
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				stacked,
 				ALICE,
 				actionFor(stackedMinister.id),
@@ -2120,14 +2107,16 @@ describe("forge-import runtime: activated abilities", () => {
 	test("Giant Caterpillar survives its source sacrifice as a delayed end-step trigger", () => {
 		const state = setupMain(engine);
 		const agents = passingAgents();
-		const caterpillar = engine.spawnPermanent(
+		const caterpillar = spawnPermanent(
+			engine,
 			state,
 			"rt-giant-caterpillar",
 			ALICE,
 		);
 		state.players[ALICE].manaPool.g = 1;
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -2140,7 +2129,7 @@ describe("forge-import runtime: activated abilities", () => {
 
 		expect(state.battlefield).not.toContain(caterpillar.id);
 		expect(state.delayedTriggers).toHaveLength(0);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.delayedTriggers).toMatchObject([
 			{
 				controller: ALICE,
@@ -2150,14 +2139,14 @@ describe("forge-import runtime: activated abilities", () => {
 			},
 		]);
 		expect(
-			state.battlefield.some((id) => engine.name(state, id) === "Butterfly"),
+			state.battlefield.some((id) => name(engine, state, id) === "Butterfly"),
 		).toBe(false);
 
 		advanceUntil(engine, state, agents, (next) => isTurnStep(next, "end"));
 
 		expect(state.delayedTriggers).toHaveLength(0);
 		expect(
-			state.battlefield.filter((id) => engine.name(state, id) === "Butterfly"),
+			state.battlefield.filter((id) => name(engine, state, id) === "Butterfly"),
 		).toHaveLength(1);
 	});
 
@@ -2166,14 +2155,16 @@ describe("forge-import runtime: activated abilities", () => {
 		const agents = passingAgents();
 		advanceUntil(engine, state, agents, (next) => isTurnStep(next, "end"));
 		const completedTurns = state.completedTurns;
-		const caterpillar = engine.spawnPermanent(
+		const caterpillar = spawnPermanent(
+			engine,
 			state,
 			"rt-giant-caterpillar",
 			ALICE,
 		);
 		state.players[ALICE].manaPool.g = 1;
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -2183,12 +2174,12 @@ describe("forge-import runtime: activated abilities", () => {
 			},
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(state.delayedTriggers).toHaveLength(1);
 
-		engine.advance(state, agents);
+		advance(engine, state, agents);
 		expect(
-			state.battlefield.some((id) => engine.name(state, id) === "Butterfly"),
+			state.battlefield.some((id) => name(engine, state, id) === "Butterfly"),
 		).toBe(false);
 		advanceUntil(
 			engine,
@@ -2199,22 +2190,23 @@ describe("forge-import runtime: activated abilities", () => {
 
 		expect(state.delayedTriggers).toHaveLength(0);
 		expect(
-			state.battlefield.filter((id) => engine.name(state, id) === "Butterfly"),
+			state.battlefield.filter((id) => name(engine, state, id) === "Butterfly"),
 		).toHaveLength(1);
 	});
 
 	test("Rummaging Goblin's imported discard cost is paid before it draws", () => {
 		const state = setupMain(engine);
 		const agents = passingAgents();
-		const goblin = engine.spawnPermanent(state, "rt-rummaging-goblin", ALICE, {
+		const goblin = spawnPermanent(engine, state, "rt-rummaging-goblin", ALICE, {
 			summoningSick: false,
 		});
-		engine.spawnCard(state, "forest", ALICE, "hand");
+		spawnCard(state, "forest", ALICE, "hand");
 		const handBefore = state.players[ALICE].hand.length;
 		const libraryBefore = state.players[ALICE].library.length;
 		const graveyardBefore = state.players[ALICE].graveyard.length;
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -2224,7 +2216,7 @@ describe("forge-import runtime: activated abilities", () => {
 			},
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(permanent(state, goblin.id).tapped, "the tap cost was paid").toBe(
 			true,
@@ -2242,7 +2234,7 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Persistent Specimen activates only from its owner's graveyard and returns tapped", () => {
 		const state = setupMain(engine);
-		const specimen = engine.spawnCard(
+		const specimen = spawnCard(
 			state,
 			"rt-persistent-specimen",
 			ALICE,
@@ -2257,26 +2249,27 @@ describe("forge-import runtime: activated abilities", () => {
 			ability,
 		};
 
-		expect(engine.getObservableActions(state, ALICE)).toContainEqual(action);
-		expect(engine.getObservableActions(state, BOB)).not.toContainEqual(action);
-		engine.executeAbilityAction(state, ALICE, action, passingAgents());
+		expect(getObservableActions(engine, state, ALICE)).toContainEqual(action);
+		expect(getObservableActions(engine, state, BOB)).not.toContainEqual(action);
+		executeAbilityAction(engine, state, ALICE, action, passingAgents());
 		expect(state.players[ALICE].graveyard).toContain(specimen.id);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		const returned = state.battlefield.find(
-			(id) => engine.name(state, id) === "Persistent Specimen",
+			(id) => name(engine, state, id) === "Persistent Specimen",
 		);
 		if (returned === undefined) throw new Error("specimen did not return");
 		expect(permanent(state, returned)).toMatchObject({
 			controller: ALICE,
 			tapped: true,
 		});
-		expect(engine.getObservableActions(state, ALICE)).not.toContainEqual({
+		expect(getObservableActions(engine, state, ALICE)).not.toContainEqual({
 			...action,
 			source: returned,
 		});
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				ALICE,
 				{ ...action, source: returned },
@@ -2287,13 +2280,14 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Arcanis's imported nontargeted ability returns its source to its owner's hand", () => {
 		const state = setupMain(engine);
-		const arcanis = engine.spawnPermanent(state, "rt-arcanis", ALICE);
+		const arcanis = spawnPermanent(engine, state, "rt-arcanis", ALICE);
 		const handSize = state.players[ALICE].hand.length;
 		const ability = abilityId("activated", "rt-arcanis", 1);
 		state.players[ALICE].manaPool.u = 2;
 		state.players[ALICE].manaPool.c = 2;
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: arcanis.id, ability },
@@ -2302,12 +2296,12 @@ describe("forge-import runtime: activated abilities", () => {
 
 		expect(state.stack).toHaveLength(1);
 		expect(state.battlefield).toContain(arcanis.id);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.battlefield).not.toContain(arcanis.id);
 		expect(state.players[ALICE].hand).toHaveLength(handSize + 1);
 		expect(
 			state.players[ALICE].hand.some(
-				(object) => engine.name(state, object) === "Arcanis the Omnipotent",
+				(object) => name(engine, state, object) === "Arcanis the Omnipotent",
 			),
 		).toBe(true);
 		expect(state.stack).toHaveLength(0);
@@ -2315,10 +2309,11 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Timeless Lotus's imported fixed list adds W/U and the other symbols in one activation", () => {
 		const state = setupMain(engine);
-		const lotus = engine.spawnPermanent(state, "rt-timeless-lotus", ALICE);
+		const lotus = spawnPermanent(engine, state, "rt-timeless-lotus", ALICE);
 		const ability = abilityId("activated", "rt-timeless-lotus", 0);
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: lotus.id, ability },
@@ -2344,17 +2339,12 @@ describe("forge-import runtime: activated abilities", () => {
 		["Add {R}.", { w: 0, u: 0, b: 0, r: 1, g: 0, c: 0 }],
 	] as const) {
 		test(`Temple of Epiphany enters tapped, scries one, and taps for ${chosenLabel}`, () => {
-			const state = engine.newGame();
+			const state = newGame();
 			const alice = new ScriptedAgent();
 			// The end of a library array is its top, so `scried` is the card the
 			// scry looks at and `deeper` stays untouched beneath it.
-			const deeper = engine.spawnCard(
-				state,
-				"darksteel-relic",
-				ALICE,
-				"library",
-			).id;
-			const scried = engine.spawnCard(state, "forest", ALICE, "library").id;
+			const deeper = spawnCard(state, "darksteel-relic", ALICE, "library").id;
+			const scried = spawnCard(state, "forest", ALICE, "library").id;
 			alice.scryChoices.push({ top: [], bottom: [scried] });
 			const offeredLabels: string[][] = [];
 			const chooseColor: SyncAgent = {
@@ -2384,17 +2374,18 @@ describe("forge-import runtime: activated abilities", () => {
 			expect(permanent(state, temple).tapped).toBe(true);
 			expect(state.pendingTriggers).toHaveLength(1);
 
-			engine.settlePriority(state, agents);
+			settlePriority(engine, state, agents);
 			// The enters-tapped replacement and the scry trigger are independent:
 			// the trigger must have resolved and consumed the scripted scry.
 			expect(alice.scryChoices).toHaveLength(0);
 			expect(state.players[ALICE].library[0]).toBe(scried);
 			expect(state.players[ALICE].library.at(-1)).toBe(deeper);
 
-			engine.perform(state, { kind: "untap", objects: [temple] }, agents);
+			perform(engine, state, { kind: "untap", objects: [temple] }, agents);
 			expect(permanent(state, temple).tapped).toBe(false);
 
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				ALICE,
 				{
@@ -2414,8 +2405,8 @@ describe("forge-import runtime: activated abilities", () => {
 	}
 
 	test("Golgari Rot Farm enters tapped, returns a chosen land, and taps for {B}{G}", () => {
-		const state = engine.newGame();
-		const forest = engine.spawnPermanent(state, "forest", ALICE);
+		const state = newGame();
+		const forest = spawnPermanent(engine, state, "forest", ALICE);
 		const offered: ObjectId[][] = [];
 		const alice = new ScriptedAgent();
 		const chooseForest: SyncAgent = {
@@ -2437,17 +2428,18 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(permanent(state, farm).tapped).toBe(true);
 		expect(state.pendingTriggers).toHaveLength(1);
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(offered).toEqual([[forest.id, farm]]);
 		expect(state.battlefield).not.toContain(forest.id);
 		expect(state.objects.has(forest.id)).toBe(false);
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toContain("Forest");
 		expect(permanent(state, farm).tapped).toBe(true);
 
-		engine.perform(state, { kind: "untap", objects: [farm] }, agents);
-		engine.executeAbilityAction(
+		perform(engine, state, { kind: "untap", objects: [farm] }, agents);
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -2469,7 +2461,7 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Black Lotus offers three of each colour, sacrifices itself, and pays out only the chosen colour", () => {
 		const state = setupMain(engine);
-		const lotus = engine.spawnPermanent(state, "rt-black-lotus", ALICE);
+		const lotus = spawnPermanent(engine, state, "rt-black-lotus", ALICE);
 		const ability = abilityId("activated", "rt-black-lotus", 0);
 		const offeredLabels: string[][] = [];
 		const fallback = new ScriptedAgent();
@@ -2487,7 +2479,8 @@ describe("forge-import runtime: activated abilities", () => {
 			},
 		};
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: lotus.id, ability },
@@ -2515,12 +2508,13 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Llanowar Elves' imported mana ability taps and adds green mana immediately", () => {
 		const state = setupMain(engine);
-		const elves = engine.spawnPermanent(state, "rt-llanowar-elves", ALICE, {
+		const elves = spawnPermanent(engine, state, "rt-llanowar-elves", ALICE, {
 			summoningSick: false,
 		});
 		const ability = abilityId("activated", "rt-llanowar-elves", 0);
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: elves.id, ability },
@@ -2534,7 +2528,7 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Rod of Ruin's imported paid ability executes through normal priority", () => {
 		const state = setupMain(engine);
-		const rod = engine.spawnPermanent(state, "rt-rod-of-ruin", ALICE);
+		const rod = spawnPermanent(engine, state, "rt-rod-of-ruin", ALICE);
 		const ability = abilityId("activated", "rt-rod-of-ruin", 0);
 		state.players[ALICE].manaPool.c = 3;
 		const alice = new ScriptedAgent();
@@ -2545,7 +2539,7 @@ describe("forge-import runtime: activated abilities", () => {
 		});
 		alice.targetChoices.push({ type: "player", player: BOB });
 
-		engine.settlePriority(state, [alice, new ScriptedAgent()]);
+		settlePriority(engine, state, [alice, new ScriptedAgent()]);
 
 		expect(alice.priorityActions).toHaveLength(0);
 		expect(alice.targetChoices).toHaveLength(0);
@@ -2557,14 +2551,15 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Icy Manipulator's imported ability pays its costs and taps its target on resolution", () => {
 		const state = setupMain(engine);
-		const icy = engine.spawnPermanent(state, "rt-icy-manipulator", ALICE);
-		const target = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
+		const icy = spawnPermanent(engine, state, "rt-icy-manipulator", ALICE);
+		const target = spawnPermanent(engine, state, "rt-grizzly-bears", BOB);
 		const ability = abilityId("activated", "rt-icy-manipulator", 0);
 		state.players[ALICE].manaPool.c = 1;
 		const alice = new ScriptedAgent();
 		alice.targetChoices.push({ type: "permanent", id: target.id });
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: icy.id, ability },
@@ -2576,7 +2571,7 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(state.players[ALICE].manaPool.c).toBe(0);
 		expect(state.stack).toHaveLength(1);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(permanent(state, target.id).tapped).toBe(true);
 		expect(state.stack).toHaveLength(0);
@@ -2584,8 +2579,8 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Wirewood Lodge's imported ability pays its costs and untaps its Elf target on resolution", () => {
 		const state = setupMain(engine);
-		const lodge = engine.spawnPermanent(state, "rt-wirewood-lodge", ALICE);
-		const target = engine.spawnPermanent(state, "rt-llanowar-elves", ALICE, {
+		const lodge = spawnPermanent(engine, state, "rt-wirewood-lodge", ALICE);
+		const target = spawnPermanent(engine, state, "rt-llanowar-elves", ALICE, {
 			tapped: true,
 		});
 		const ability = abilityId("activated", "rt-wirewood-lodge", 1);
@@ -2593,7 +2588,8 @@ describe("forge-import runtime: activated abilities", () => {
 		const alice = new ScriptedAgent();
 		alice.targetChoices.push({ type: "permanent", id: target.id });
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: lodge.id, ability },
@@ -2605,7 +2601,7 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(state.players[ALICE].manaPool.g).toBe(0);
 		expect(state.stack).toHaveLength(1);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(permanent(state, target.id).tapped).toBe(false);
 		expect(state.stack).toHaveLength(0);
@@ -2613,8 +2609,8 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Viscera Seer's imported ability can sacrifice itself and scry", () => {
 		const state = setupMain(engine);
-		const top = engine.spawnCard(state, "forest", ALICE, "library");
-		const seer = engine.spawnPermanent(state, "rt-viscera-seer", ALICE);
+		const top = spawnCard(state, "forest", ALICE, "library");
+		const seer = spawnPermanent(engine, state, "rt-viscera-seer", ALICE);
 		const ability = abilityId("activated", "rt-viscera-seer", 0);
 		const alice = new ScriptedAgent(
 			[],
@@ -2627,7 +2623,8 @@ describe("forge-import runtime: activated abilities", () => {
 			[seer.id],
 		);
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: seer.id, ability },
@@ -2637,10 +2634,10 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(state.battlefield).not.toContain(seer.id);
 		expect(state.players[ALICE].graveyard).toHaveLength(1);
 		expect(
-			engine.name(state, state.players[ALICE].graveyard[0] as ObjectId),
+			name(engine, state, state.players[ALICE].graveyard[0] as ObjectId),
 		).toBe("Viscera Seer");
 		expect(state.stack).toHaveLength(1);
-		engine.settlePriority(state, [alice, new ScriptedAgent()]);
+		settlePriority(engine, state, [alice, new ScriptedAgent()]);
 		expect(state.players[ALICE].library[0]).toBe(top.id);
 		expect(state.stack).toHaveLength(0);
 	});
@@ -2648,29 +2645,30 @@ describe("forge-import runtime: activated abilities", () => {
 	test("Cathar Commando casts during an opponent's turn, then sacrifices itself to destroy", () => {
 		const state = setupMain(engine);
 		expect(activePlayer(state)).toBe(ALICE);
-		const card = engine.spawnCard(state, "rt-cathar-commando", BOB, "hand");
-		const target = engine.spawnPermanent(state, "rt-glorious-anthem", ALICE);
+		const card = spawnCard(state, "rt-cathar-commando", BOB, "hand");
+		const target = spawnPermanent(engine, state, "rt-glorious-anthem", ALICE);
 		state.players[BOB].manaPool.c = 2;
 		state.players[BOB].manaPool.w = 1;
 
-		expect(engine.getObservableActions(state, BOB)).toContainEqual({
+		expect(getObservableActions(engine, state, BOB)).toContainEqual({
 			kind: "cast",
 			card: card.id,
 		});
 		const caster = new ScriptedAgent([], [], [{ kind: "cast", card: card.id }]);
-		engine.settlePriority(state, [new ScriptedAgent(), caster]);
+		settlePriority(engine, state, [new ScriptedAgent(), caster]);
 		expect(caster.priorityActions).toHaveLength(0);
 		expect(state.players[BOB].manaPool).toMatchObject({ c: 1, w: 0 });
 
 		const commando = state.battlefield.find(
-			(id) => engine.name(state, id) === "Cathar Commando",
+			(id) => name(engine, state, id) === "Cathar Commando",
 		);
 		if (commando === undefined)
 			throw new Error("Cathar Commando did not resolve to the battlefield");
 		const ability = abilityId("activated", "rt-cathar-commando", 0);
 		const bob = new ScriptedAgent();
 		bob.targetChoices.push({ type: "permanent", id: target.id });
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			BOB,
 			{ kind: "activate ability", source: commando, ability },
@@ -2680,7 +2678,7 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(state.players[BOB].manaPool.c).toBe(0);
 		expect(state.battlefield).not.toContain(commando);
 		expect(state.battlefield).toContain(target.id);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.battlefield).not.toContain(target.id);
 	});
 
@@ -2690,18 +2688,20 @@ describe("forge-import runtime: activated abilities", () => {
 	] as const) {
 		test(`Thrashing Brontodon sacrifices itself to destroy a target ${targetType}`, () => {
 			const state = setupMain(engine);
-			const brontodon = engine.spawnPermanent(
+			const brontodon = spawnPermanent(
+				engine,
 				state,
 				"rt-thrashing-brontodon",
 				ALICE,
 			);
-			const target = engine.spawnPermanent(state, targetCard, BOB);
+			const target = spawnPermanent(engine, state, targetCard, BOB);
 			const ability = abilityId("activated", "rt-thrashing-brontodon", 0);
 			state.players[ALICE].manaPool.c = 1;
 			const alice = new ScriptedAgent();
 			alice.targetChoices.push({ type: "permanent", id: target.id });
 
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				ALICE,
 				{ kind: "activate ability", source: brontodon.id, ability },
@@ -2713,7 +2713,7 @@ describe("forge-import runtime: activated abilities", () => {
 			expect(state.battlefield).toContain(target.id);
 			expect(state.stack).toHaveLength(1);
 
-			engine.settlePriority(state, passingAgents());
+			settlePriority(engine, state, passingAgents());
 
 			expect(state.battlefield).not.toContain(target.id);
 			expect(state.stack).toHaveLength(0);
@@ -2722,14 +2722,15 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Selfless Savior sacrifices itself to grant another creature indestructible", () => {
 		const state = setupMain(engine);
-		const savior = engine.spawnPermanent(state, "rt-selfless-savior", ALICE);
-		const target = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const savior = spawnPermanent(engine, state, "rt-selfless-savior", ALICE);
+		const target = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE);
 		const ability = abilityId("activated", "rt-selfless-savior", 0);
 
 		const invalid = new ScriptedAgent();
 		invalid.targetChoices.push({ type: "permanent", id: savior.id });
 		expect(() =>
-			engine.executeAbilityAction(
+			executeAbilityAction(
+				engine,
 				state,
 				ALICE,
 				{ kind: "activate ability", source: savior.id, ability },
@@ -2740,7 +2741,8 @@ describe("forge-import runtime: activated abilities", () => {
 
 		const alice = new ScriptedAgent();
 		alice.targetChoices.push({ type: "permanent", id: target.id });
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: savior.id, ability },
@@ -2749,12 +2751,12 @@ describe("forge-import runtime: activated abilities", () => {
 
 		expect(state.battlefield).not.toContain(savior.id);
 		expect(
-			getSnapshot(engine.createReadContext(state), target.id)
+			getSnapshot(createReadContext(engine, state), target.id)
 				.currentCharacteristics.keywords,
 		).not.toContain("indestructible");
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(
-			getSnapshot(engine.createReadContext(state), target.id)
+			getSnapshot(createReadContext(engine, state), target.id)
 				.currentCharacteristics.keywords,
 		).toContain("indestructible");
 		expect(state.temporaryEffects[0]).toMatchObject({
@@ -2768,7 +2770,8 @@ describe("forge-import runtime: activated abilities", () => {
 			duration: "until-end-of-turn",
 		});
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "destroy", object: target.id, noRegen: false },
 			passingAgents(),
@@ -2778,7 +2781,8 @@ describe("forge-import runtime: activated abilities", () => {
 
 	test("Blazing Hellhound sacrifices another creature but not itself", () => {
 		const state = setupMain(engine);
-		const hellhound = engine.spawnPermanent(
+		const hellhound = spawnPermanent(
+			engine,
 			state,
 			"rt-blazing-hellhound",
 			ALICE,
@@ -2786,27 +2790,24 @@ describe("forge-import runtime: activated abilities", () => {
 		const ability = abilityId("activated", "rt-blazing-hellhound", 0);
 		state.players[ALICE].manaPool.c = 1;
 		expect(
-			engine
-				.getObservableActions(state, ALICE)
-				.some(
-					(action) =>
-						action.kind === "activate ability" && action.ability === ability,
-				),
+			getObservableActions(engine, state, ALICE).some(
+				(action) =>
+					action.kind === "activate ability" && action.ability === ability,
+			),
 		).toBe(false);
 
-		const fodder = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const fodder = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE);
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [fodder.id]);
 		alice.targetChoices.push({ type: "player", player: BOB });
 		expect(
-			engine
-				.getObservableActions(state, ALICE)
-				.some(
-					(action) =>
-						action.kind === "activate ability" && action.ability === ability,
-				),
+			getObservableActions(engine, state, ALICE).some(
+				(action) =>
+					action.kind === "activate ability" && action.ability === ability,
+			),
 		).toBe(true);
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: hellhound.id, ability },
@@ -2814,31 +2815,31 @@ describe("forge-import runtime: activated abilities", () => {
 		);
 		expect(state.battlefield).toContain(hellhound.id);
 		expect(state.battlefield).not.toContain(fodder.id);
-		engine.settlePriority(state, [alice, new ScriptedAgent()]);
+		settlePriority(engine, state, [alice, new ScriptedAgent()]);
 		expect(state.players[BOB].life).toBe(19);
 	});
 
 	test("Bartolomé sacrifices another artifact, then gets its counter on resolution", () => {
 		const state = setupMain(engine);
-		const bartolome = engine.spawnPermanent(
+		const bartolome = spawnPermanent(
+			engine,
 			state,
 			"rt-bartolome-del-presidio",
 			ALICE,
 		);
 		const ability = abilityId("activated", "rt-bartolome-del-presidio", 0);
 		expect(
-			engine
-				.getObservableActions(state, ALICE)
-				.some(
-					(action) =>
-						action.kind === "activate ability" && action.ability === ability,
-				),
+			getObservableActions(engine, state, ALICE).some(
+				(action) =>
+					action.kind === "activate ability" && action.ability === ability,
+			),
 			"Bartolomé cannot pay the another-permanent cost with itself",
 		).toBe(false);
 
-		const relic = engine.spawnPermanent(state, "darksteel-relic", ALICE);
+		const relic = spawnPermanent(engine, state, "darksteel-relic", ALICE);
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [relic.id]);
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: bartolome.id, ability },
@@ -2850,14 +2851,15 @@ describe("forge-import runtime: activated abilities", () => {
 		expect(permanent(state, bartolome.id).counters["+1/+1"] ?? 0).toBe(0);
 		expect(state.stack).toHaveLength(1);
 
-		engine.settlePriority(state, [alice, new ScriptedAgent()]);
+		settlePriority(engine, state, [alice, new ScriptedAgent()]);
 		expect(permanent(state, bartolome.id).counters["+1/+1"]).toBe(1);
 		expect(state.stack).toHaveLength(0);
 	});
 
 	test("Acolyte of Aclazotz sacrifices another artifact and drains its opponent", () => {
 		const state = setupMain(engine);
-		const acolyte = engine.spawnPermanent(
+		const acolyte = spawnPermanent(
+			engine,
 			state,
 			"rt-acolyte-of-aclazotz",
 			ALICE,
@@ -2865,11 +2867,12 @@ describe("forge-import runtime: activated abilities", () => {
 				summoningSick: false,
 			},
 		);
-		const relic = engine.spawnPermanent(state, "darksteel-relic", ALICE);
+		const relic = spawnPermanent(engine, state, "darksteel-relic", ALICE);
 		const ability = abilityId("activated", "rt-acolyte-of-aclazotz", 0);
 		const alice = new ScriptedAgent([], [], [], [], [], [], [], [relic.id]);
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: acolyte.id, ability },
@@ -2877,19 +2880,20 @@ describe("forge-import runtime: activated abilities", () => {
 		);
 		expect(state.battlefield).toContain(acolyte.id);
 		expect(state.battlefield).not.toContain(relic.id);
-		engine.settlePriority(state, [alice, new ScriptedAgent()]);
+		settlePriority(engine, state, [alice, new ScriptedAgent()]);
 		expect(state.players[ALICE].life).toBe(21);
 		expect(state.players[BOB].life).toBe(19);
 	});
 
 	test("Soulmender's imported targetless activated ability resolves through the stack", () => {
 		const state = setupMain(engine);
-		const soulmender = engine.spawnPermanent(state, "rt-soulmender", ALICE, {
+		const soulmender = spawnPermanent(engine, state, "rt-soulmender", ALICE, {
 			summoningSick: false,
 		});
 		const ability = abilityId("activated", "rt-soulmender", 0);
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "activate ability", source: soulmender.id, ability },
@@ -2901,7 +2905,7 @@ describe("forge-import runtime: activated abilities", () => {
 			"effect is on the stack, not resolved",
 		).toBe(20);
 
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 		expect(state.players[ALICE].life).toBe(21);
 		expect(state.stack).toHaveLength(0);
 	});
@@ -2909,20 +2913,20 @@ describe("forge-import runtime: activated abilities", () => {
 
 describe("forge-import runtime: registry and clone integrity", () => {
 	test("an imported card with a static and a replacement survives structuredClone and rebuilds identical views", () => {
-		const state = engine.newGame();
+		const state = newGame();
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
-		engine.spawnPermanent(state, "rt-glorious-anthem", ALICE);
-		engine.spawnPermanent(state, "rt-root-maze", ALICE);
-		const bear = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		spawnPermanent(engine, state, "rt-glorious-anthem", ALICE);
+		spawnPermanent(engine, state, "rt-root-maze", ALICE);
+		const bear = spawnPermanent(engine, state, "rt-grizzly-bears", ALICE);
 
 		const before = getSnapshot(
-			engine.createReadContext(state),
+			createReadContext(engine, state),
 			bear.id,
 		).currentCharacteristics;
 		const cloned = structuredClone(state);
 		const after = getSnapshot(
-			engine.createReadContext(cloned),
+			createReadContext(engine, cloned),
 			bear.id,
 		).currentCharacteristics;
 

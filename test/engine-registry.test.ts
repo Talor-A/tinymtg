@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
-import { createEngine, defineCard } from "../index.ts";
+import {
+	advanceWithReplay,
+	buildGameView,
+	createEngine,
+	defineCard,
+	newGame,
+	spawnPermanent,
+} from "../index.ts";
 
 function registryProbe(name: string) {
 	return defineCard({
@@ -18,15 +25,15 @@ describe("engine card registries", () => {
 	test("engines with the same card ID remain isolated", () => {
 		const first = createEngine([registryProbe("First Definition")]);
 		const second = createEngine([registryProbe("Second Definition")]);
-		const state = first.newGame();
-		const permanent = first.spawnPermanent(state, "registry-probe", 0);
+		const state = newGame();
+		const permanent = spawnPermanent(first, state, "registry-probe", 0);
 
 		expect(
-			first.buildGameView(state).objects.get(permanent.id)
+			buildGameView(first, state).objects.get(permanent.id)
 				?.currentCharacteristics.name,
 		).toBe("First Definition");
 		expect(
-			second.buildGameView(state).objects.get(permanent.id)
+			buildGameView(second, state).objects.get(permanent.id)
 				?.currentCharacteristics.name,
 		).toBe("Second Definition");
 	});
@@ -58,14 +65,14 @@ describe("engine card registries", () => {
 				],
 			}),
 		]);
-		const checkpoint = engine.newGame();
-		const permanent = engine.spawnPermanent(checkpoint, "callback-probe", 0);
+		const checkpoint = newGame();
+		const permanent = spawnPermanent(engine, checkpoint, "callback-probe", 0);
 		const before = structuredClone(checkpoint);
 
 		expect(checkpoint).not.toHaveProperty("engine");
 		expect(() => structuredClone(checkpoint)).not.toThrow();
 
-		const result = await engine.advanceWithReplay(checkpoint, [
+		const result = await advanceWithReplay(engine, checkpoint, [
 			new ScriptedAgent(),
 			new ScriptedAgent(),
 		]);
@@ -75,7 +82,7 @@ describe("engine card registries", () => {
 		expect(() => structuredClone(result.state)).not.toThrow();
 		expect(() => JSON.stringify(result.transcript)).not.toThrow();
 		expect(
-			engine.buildGameView(result.state).objects.get(permanent.id)
+			buildGameView(engine, result.state).objects.get(permanent.id)
 				?.currentCharacteristics.name,
 		).toBe("Callback Probe");
 	});

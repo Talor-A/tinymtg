@@ -3,9 +3,15 @@ import { CARDS, regenerationShield } from "../cards.ts";
 import { loadCardFixture } from "../corpus.ts";
 import {
 	addTemporaryEffect,
+	checkStateBasedActions,
 	createEngine,
 	defineCard,
+	executeCastAction,
+	name,
 	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
 } from "../index.ts";
 import { assert } from "../lib/assert.ts";
 import {
@@ -87,30 +93,31 @@ function castAndResolve(
 	state: ReturnType<typeof setupMain>,
 	card: string,
 ): void {
-	const spell = engine.spawnCard(state, card, ALICE, "hand");
+	const spell = spawnCard(state, card, ALICE, "hand");
 	state.players[ALICE].manaPool = { w: 4, u: 0, b: 0, r: 0, g: 0, c: 0 };
-	engine.executeCastAction(
+	executeCastAction(
+		engine,
 		state,
 		ALICE,
 		{ kind: "cast", card: spell.id },
 		passingAgents(),
 	);
-	engine.settlePriority(state, passingAgents());
+	settlePriority(engine, state, passingAgents());
 }
 
 function graveyardNames(
 	state: ReturnType<typeof setupMain>,
 	player: typeof ALICE | typeof BOB,
 ): string[] {
-	return state.players[player].graveyard.map((id) => engine.name(state, id));
+	return state.players[player].graveyard.map((id) => name(engine, state, id));
 }
 
 describe("Wrath of God", () => {
 	test("destroys every creature and leaves noncreatures", () => {
 		const state = setupMain(engine);
-		engine.spawnPermanent(state, "grizzly-bears", ALICE);
-		engine.spawnPermanent(state, "eager-cadet", BOB);
-		const relic = engine.spawnPermanent(state, "darksteel-relic", BOB);
+		spawnPermanent(engine, state, "grizzly-bears", ALICE);
+		spawnPermanent(engine, state, "eager-cadet", BOB);
+		const relic = spawnPermanent(engine, state, "darksteel-relic", BOB);
 
 		castAndResolve(state, "wrath-of-god");
 
@@ -121,12 +128,13 @@ describe("Wrath of God", () => {
 
 	test("uses one pre-destruction view for a departing indestructible grant", () => {
 		const state = setupMain(engine);
-		const captain = engine.spawnPermanent(
+		const captain = spawnPermanent(
+			engine,
 			state,
 			"test-indestructible-captain",
 			ALICE,
 		);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 
 		castAndResolve(state, "wrath-of-god");
 
@@ -140,7 +148,7 @@ describe("Wrath of God", () => {
 			["day-of-judgment", true],
 		] as const) {
 			const state = setupMain(engine);
-			const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
+			const bears = spawnPermanent(engine, state, "grizzly-bears", ALICE);
 			permanent(state, bears.id).damage = 1;
 			addTemporaryEffect(state, ALICE, regenerationShield(bears.id));
 
@@ -158,8 +166,8 @@ describe("Wrath of God", () => {
 
 	test("a departing replacement source replaces every simultaneous death", () => {
 		const state = setupMain(engine);
-		engine.spawnPermanent(state, "samurai-of-the-pale-curtain", ALICE);
-		engine.spawnPermanent(state, "grizzly-bears", BOB);
+		spawnPermanent(engine, state, "samurai-of-the-pale-curtain", ALICE);
+		spawnPermanent(engine, state, "grizzly-bears", BOB);
 
 		castAndResolve(state, "wrath-of-god");
 
@@ -173,12 +181,13 @@ describe("Wrath of God", () => {
 
 	test("a departing trigger source observes every simultaneous death", () => {
 		const state = setupMain(engine);
-		const watcher = engine.spawnPermanent(
+		const watcher = spawnPermanent(
+			engine,
 			state,
 			"test-wrath-death-watcher",
 			ALICE,
 		);
-		engine.spawnPermanent(state, "grizzly-bears", BOB);
+		spawnPermanent(engine, state, "grizzly-bears", BOB);
 
 		castAndResolve(state, "wrath-of-god");
 
@@ -190,16 +199,17 @@ describe("Wrath of God", () => {
 describe("simultaneous state-based actions", () => {
 	test("freeze replacement sources until every lethal destruction is prepared", () => {
 		const state = setupMain(engine);
-		const samurai = engine.spawnPermanent(
+		const samurai = spawnPermanent(
+			engine,
 			state,
 			"samurai-of-the-pale-curtain",
 			ALICE,
 		);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", BOB);
 		permanent(state, samurai.id).damage = 2;
 		permanent(state, bears.id).damage = 2;
 
-		engine.checkStateBasedActions(state, passingAgents());
+		checkStateBasedActions(engine, state, passingAgents());
 
 		expect(state.players[ALICE].exile).toHaveLength(1);
 		expect(state.players[BOB].exile).toHaveLength(1);

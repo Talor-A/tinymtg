@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS, prismaticStrands } from "../cards.ts";
 import { loadCardFixture } from "../corpus.ts";
-import { addTemporaryEffect, createEngine, permanent } from "../index.ts";
+import {
+	addTemporaryEffect,
+	createEngine,
+	executeCastAction,
+	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import {
 	ALICE,
 	BOB,
@@ -21,7 +29,7 @@ function castAndResolve(
 	card: string,
 	mana: { r: number },
 ): void {
-	const spell = engine.spawnCard(state, card, ALICE, "hand");
+	const spell = spawnCard(state, card, ALICE, "hand");
 	state.players[ALICE].manaPool = {
 		w: 0,
 		u: 0,
@@ -30,21 +38,22 @@ function castAndResolve(
 		g: 0,
 		c: 0,
 	};
-	engine.executeCastAction(
+	executeCastAction(
+		engine,
 		state,
 		ALICE,
 		{ kind: "cast", card: spell.id },
 		passingAgents(),
 	);
-	engine.settlePriority(state, passingAgents());
+	settlePriority(engine, state, passingAgents());
 }
 
 describe("simultaneous set-based damage", () => {
 	test("Sweltering Suns damages every creature before state-based actions", () => {
 		const state = setupMain(engine);
-		const myr = engine.spawnPermanent(state, "darksteel-myr", ALICE);
-		const bears = engine.spawnPermanent(state, "grizzly-bears", BOB);
-		const relic = engine.spawnPermanent(state, "darksteel-relic", BOB);
+		const myr = spawnPermanent(engine, state, "darksteel-myr", ALICE);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", BOB);
+		const relic = spawnPermanent(engine, state, "darksteel-relic", BOB);
 
 		castAndResolve(state, "sweltering-suns", { r: 3 });
 
@@ -56,8 +65,8 @@ describe("simultaneous set-based damage", () => {
 
 	test("one prevention effect applies to every simultaneous recipient", () => {
 		const state = setupMain(engine);
-		const mine = engine.spawnPermanent(state, "grizzly-bears", ALICE);
-		const theirs = engine.spawnPermanent(state, "grizzly-bears", BOB);
+		const mine = spawnPermanent(engine, state, "grizzly-bears", ALICE);
+		const theirs = spawnPermanent(engine, state, "grizzly-bears", BOB);
 		addTemporaryEffect(state, ALICE, prismaticStrands("r"));
 
 		castAndResolve(state, "sweltering-suns", { r: 3 });
@@ -77,8 +86,8 @@ describe("simultaneous set-based damage", () => {
 
 	test("Rain of Embers combines creature and player recipient sets", () => {
 		const state = setupMain(engine);
-		const mine = engine.spawnPermanent(state, "eager-cadet", ALICE);
-		const theirs = engine.spawnPermanent(state, "eager-cadet", BOB);
+		const mine = spawnPermanent(engine, state, "eager-cadet", ALICE);
+		const theirs = spawnPermanent(engine, state, "eager-cadet", BOB);
 
 		castAndResolve(state, "rain-of-embers", { r: 2 });
 

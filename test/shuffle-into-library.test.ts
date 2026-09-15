@@ -5,9 +5,15 @@ import type { PlayerId } from "../index.ts";
 import {
 	activePlayer,
 	createEngine,
+	createReadContext,
 	defineCard,
 	getSnapshot,
+	name,
+	perform,
 	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
 	turnLocation,
 } from "../index.ts";
 import {
@@ -46,79 +52,79 @@ function castTimetwister(
 	state: ReturnType<typeof setupMain>,
 	player: PlayerId,
 ): void {
-	const card = engine.spawnCard(state, "timetwister", player, "hand");
+	const card = spawnCard(state, "timetwister", player, "hand");
 	state.players[player].manaPool.u = 3;
 	const caster = new ScriptedAgent([], [], [{ kind: "cast", card: card.id }]);
 	const agents: [ScriptedAgent, ScriptedAgent] =
 		player === ALICE
 			? [caster, new ScriptedAgent()]
 			: [new ScriptedAgent(), caster];
-	engine.settlePriority(state, agents);
+	settlePriority(engine, state, agents);
 	expectScriptConsumed(caster);
 }
 
 describe("shuffle cards into a library", () => {
 	test("a predicate moves only matching cards from the declared zones", () => {
 		const state = setupMain(engine);
-		const spell = engine.spawnCard(state, "filtered-shuffle", ALICE, "hand");
-		engine.spawnCard(state, "grizzly-bears", ALICE, "hand");
-		engine.spawnCard(state, "eager-cadet", ALICE, "graveyard");
-		engine.spawnCard(state, "forest", ALICE, "hand");
-		engine.spawnCard(state, "darksteel-myr", BOB, "graveyard");
-		engine.spawnCard(state, "forest", BOB, "hand");
+		const spell = spawnCard(state, "filtered-shuffle", ALICE, "hand");
+		spawnCard(state, "grizzly-bears", ALICE, "hand");
+		spawnCard(state, "eager-cadet", ALICE, "graveyard");
+		spawnCard(state, "forest", ALICE, "hand");
+		spawnCard(state, "darksteel-myr", BOB, "graveyard");
+		spawnCard(state, "forest", BOB, "hand");
 
 		const caster = new ScriptedAgent(
 			[],
 			[],
 			[{ kind: "cast", card: spell.id }],
 		);
-		engine.settlePriority(state, [caster, new ScriptedAgent()]);
+		settlePriority(engine, state, [caster, new ScriptedAgent()]);
 		expectScriptConsumed(caster);
 
 		expect(
-			state.players[ALICE].library.map((id) => engine.name(state, id)),
+			state.players[ALICE].library.map((id) => name(engine, state, id)),
 		).toEqual(expect.arrayContaining(["Grizzly Bears", "Eager Cadet"]));
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toEqual(["Forest", "Forest"]);
 		expect(
-			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+			state.players[ALICE].graveyard.map((id) => name(engine, state, id)),
 		).toEqual(["Filtered Shuffle"]);
 		expect(
-			state.players[BOB].library.map((id) => engine.name(state, id)),
+			state.players[BOB].library.map((id) => name(engine, state, id)),
 		).toContain("Darksteel Myr");
-		expect(state.players[BOB].hand.map((id) => engine.name(state, id))).toEqual(
-			["Forest"],
-		);
+		expect(
+			state.players[BOB].hand.map((id) => name(engine, state, id)),
+		).toEqual(["Forest"]);
 	});
 
 	test("Timetwister shuffles each hand and graveyard into its owner's library, then draws seven", () => {
 		const state = setupMain(engine);
 		for (let i = 0; i < 8; i++) {
-			engine.spawnCard(state, "forest", ALICE, "library");
-			engine.spawnCard(state, "forest", BOB, "library");
+			spawnCard(state, "forest", ALICE, "library");
+			spawnCard(state, "forest", BOB, "library");
 		}
-		engine.spawnCard(state, "grizzly-bears", ALICE, "hand");
-		engine.spawnCard(state, "eager-cadet", ALICE, "graveyard");
-		engine.spawnCard(state, "darksteel-myr", BOB, "hand");
-		engine.spawnCard(state, "darksteel-relic", BOB, "graveyard");
+		spawnCard(state, "grizzly-bears", ALICE, "hand");
+		spawnCard(state, "eager-cadet", ALICE, "graveyard");
+		spawnCard(state, "darksteel-myr", BOB, "hand");
+		spawnCard(state, "darksteel-relic", BOB, "graveyard");
 
 		castTimetwister(state, ALICE);
 
 		expect(state.players[ALICE].hand).toHaveLength(7);
 		expect(state.players[BOB].hand).toHaveLength(7);
 		expect(
-			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+			state.players[ALICE].graveyard.map((id) => name(engine, state, id)),
 		).toEqual(["Timetwister"]);
 		expect(state.players[BOB].graveyard).toEqual([]);
 		expect(
 			[...state.players[ALICE].library, ...state.players[ALICE].hand]
-				.map((id) => engine.name(state, id))
+				.map((id) => name(engine, state, id))
 				.includes("Eager Cadet"),
 		).toBe(true);
 		expect(
 			[...state.players[BOB].library, ...state.players[BOB].hand]
-				.map((id) => engine.name(state, id))
+				.map((id) => name(engine, state, id))
 				.includes("Darksteel Relic"),
 		).toBe(true);
 	});
@@ -133,8 +139,8 @@ describe("shuffle cards into a library", () => {
 				activePlayer(next) === BOB && turnLocation(next)?.kind === "mainPhase",
 		);
 		for (let i = 0; i < 8; i++) {
-			engine.spawnCard(state, "forest", ALICE, "library");
-			engine.spawnCard(state, "forest", BOB, "library");
+			spawnCard(state, "forest", ALICE, "library");
+			spawnCard(state, "forest", BOB, "library");
 		}
 
 		castTimetwister(state, BOB);
@@ -148,32 +154,33 @@ describe("shuffle cards into a library", () => {
 
 	test("Worldspine Wurm dies into three trample tokens and its owner's library", () => {
 		const state = setupMain(engine);
-		const wurm = engine.spawnPermanent(state, "worldspine-wurm", ALICE);
+		const wurm = spawnPermanent(engine, state, "worldspine-wurm", ALICE);
 		// Its dies trigger belongs to the controller, while the shuffled card still
 		// belongs in its owner ALICE's library.
 		permanent(state, wurm.id).controller = BOB;
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{ kind: "destroy", object: wurm.id, noRegen: false },
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(
-			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+			state.players[ALICE].graveyard.map((id) => name(engine, state, id)),
 		).not.toContain("Worldspine Wurm");
 		expect(
-			state.players[ALICE].library.map((id) => engine.name(state, id)),
+			state.players[ALICE].library.map((id) => name(engine, state, id)),
 		).toContain("Worldspine Wurm");
 		const tokens = state.battlefield.filter(
-			(id) => engine.name(state, id) === "Wurm Token",
+			(id) => name(engine, state, id) === "Wurm Token",
 		);
 		expect(tokens).toHaveLength(3);
 		for (const id of tokens) {
 			expect(permanent(state, id).controller).toBe(BOB);
 			expect(
-				getSnapshot(engine.createReadContext(state), id).currentCharacteristics
+				getSnapshot(createReadContext(engine, state), id).currentCharacteristics
 					.keywords,
 			).toContain("trample");
 		}
@@ -181,9 +188,10 @@ describe("shuffle cards into a library", () => {
 
 	test("Worldspine Wurm also shuffles itself after going from hand to graveyard", () => {
 		const state = setupMain(engine);
-		const wurm = engine.spawnCard(state, "worldspine-wurm", ALICE, "hand");
+		const wurm = spawnCard(state, "worldspine-wurm", ALICE, "hand");
 
-		engine.perform(
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -194,13 +202,13 @@ describe("shuffle cards into a library", () => {
 			},
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		expect(
-			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+			state.players[ALICE].graveyard.map((id) => name(engine, state, id)),
 		).not.toContain("Worldspine Wurm");
 		expect(
-			state.players[ALICE].library.map((id) => engine.name(state, id)),
+			state.players[ALICE].library.map((id) => name(engine, state, id)),
 		).toContain("Worldspine Wurm");
 	});
 });

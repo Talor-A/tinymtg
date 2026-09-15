@@ -4,12 +4,20 @@ import { CARDS } from "../cards.ts";
 import { loadCardFixture } from "../corpus.ts";
 import {
 	abilityId,
+	buildGameView,
 	ChoiceController,
 	type ChoiceRequest,
 	createEngine,
 	defineCard,
+	executeAbilityAction,
+	executeCastAction,
+	name,
+	newGame,
 	type ObjectId,
 	type PlayerView,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
 } from "../index.ts";
 import { ALICE, BOB, setupMain } from "./utils/engine-helpers.ts";
 
@@ -67,10 +75,10 @@ class SearchAgent extends ScriptedAgent {
 
 describe("library search choices", () => {
 	test("the searcher sees only eligible cards from the separately named owner", () => {
-		const state = engine.newGame();
-		const source = engine.spawnCard(state, "demonic-tutor", ALICE, "hand");
-		const ineligible = engine.spawnCard(state, "forest", BOB, "library");
-		const eligible = engine.spawnCard(state, "grizzly-bears", BOB, "library");
+		const state = newGame();
+		const source = spawnCard(state, "demonic-tutor", ALICE, "hand");
+		const ineligible = spawnCard(state, "forest", BOB, "library");
+		const eligible = spawnCard(state, "grizzly-bears", BOB, "library");
 		const alice = new SearchAgent(eligible.id);
 		const choices = ChoiceController.record(engine, [
 			alice,
@@ -118,57 +126,54 @@ describe("library search choices", () => {
 describe("search effects", () => {
 	test("the effect keeps the searcher distinct from the library owner", () => {
 		const state = setupMain(engine);
-		const chosen = engine.spawnCard(state, "grizzly-bears", BOB, "library");
-		const spell = engine.spawnCard(
-			state,
-			"test-search-opponent",
-			ALICE,
-			"hand",
-		);
+		const chosen = spawnCard(state, "grizzly-bears", BOB, "library");
+		const spell = spawnCard(state, "test-search-opponent", ALICE, "hand");
 		const alice = new SearchAgent(chosen.id);
 		const agents: [SearchAgent, ScriptedAgent] = [alice, new ScriptedAgent()];
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: spell.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(alice.searches[0]).toMatchObject({
 			player: ALICE,
 			context: { owner: BOB },
 		});
 		expect(
-			state.players[BOB].hand.map((id) => engine.name(state, id)),
+			state.players[BOB].hand.map((id) => name(engine, state, id)),
 		).toContain("Grizzly Bears");
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).not.toContain("Grizzly Bears");
 		expect(state.log).toContain("  P1 shuffles their library");
 	});
 
 	test("Demonic Tutor moves the selected card into hand, then shuffles", () => {
 		const state = setupMain(engine);
-		const chosen = engine.spawnCard(state, "grizzly-bears", ALICE, "library");
-		const tutor = engine.spawnCard(state, "demonic-tutor", ALICE, "hand");
+		const chosen = spawnCard(state, "grizzly-bears", ALICE, "library");
+		const tutor = spawnCard(state, "demonic-tutor", ALICE, "hand");
 		state.players[ALICE].manaPool.b = 1;
 		state.players[ALICE].manaPool.c = 1;
 		const alice = new SearchAgent(chosen.id);
 		const agents: [SearchAgent, ScriptedAgent] = [alice, new ScriptedAgent()];
 
-		engine.executeCastAction(
+		executeCastAction(
+			engine,
 			state,
 			ALICE,
 			{ kind: "cast", card: tutor.id },
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(state.objects.has(chosen.id)).toBe(false);
 		expect(
-			state.players[ALICE].hand.map((id) => engine.name(state, id)),
+			state.players[ALICE].hand.map((id) => name(engine, state, id)),
 		).toContain("Grizzly Bears");
 		expect(alice.searches[0]?.context).toMatchObject({
 			owner: ALICE,
@@ -182,18 +187,14 @@ describe("search effects", () => {
 
 	test("Evolving Wilds filters for a basic land and puts it onto the battlefield tapped", () => {
 		const state = setupMain(engine);
-		const ineligible = engine.spawnCard(
-			state,
-			"darksteel-relic",
-			ALICE,
-			"library",
-		);
-		const chosen = engine.spawnCard(state, "forest", ALICE, "library");
-		const wilds = engine.spawnPermanent(state, "evolving-wilds", ALICE);
+		const ineligible = spawnCard(state, "darksteel-relic", ALICE, "library");
+		const chosen = spawnCard(state, "forest", ALICE, "library");
+		const wilds = spawnPermanent(engine, state, "evolving-wilds", ALICE);
 		const alice = new SearchAgent(chosen.id);
 		const agents: [SearchAgent, ScriptedAgent] = [alice, new ScriptedAgent()];
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -203,7 +204,7 @@ describe("search effects", () => {
 			},
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(
 			alice.searches[0]?.context.cards.map(
@@ -214,7 +215,7 @@ describe("search effects", () => {
 			expect.objectContaining({ objectId: ineligible.id }),
 		);
 		const forest = state.battlefield
-			.map((id) => engine.buildGameView(state).objects.get(id))
+			.map((id) => buildGameView(engine, state).objects.get(id))
 			.find((object) => object?.currentCharacteristics.name === "Forest");
 		expect(forest).toMatchObject({
 			kind: "permanent",
@@ -222,18 +223,19 @@ describe("search effects", () => {
 			tapped: true,
 		});
 		expect(
-			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+			state.players[ALICE].graveyard.map((id) => name(engine, state, id)),
 		).toContain("Evolving Wilds");
 	});
 
 	test("Wooded Foothills pays life and finds a land by subtype", () => {
 		const state = setupMain(engine);
-		const chosen = engine.spawnCard(state, "forest", ALICE, "library");
-		const foothills = engine.spawnPermanent(state, "wooded-foothills", ALICE);
+		const chosen = spawnCard(state, "forest", ALICE, "library");
+		const foothills = spawnPermanent(engine, state, "wooded-foothills", ALICE);
 		const alice = new SearchAgent(chosen.id);
 		const agents: [SearchAgent, ScriptedAgent] = [alice, new ScriptedAgent()];
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -245,17 +247,17 @@ describe("search effects", () => {
 		);
 		expect(state.players[ALICE].life).toBe(19);
 		expect(
-			state.players[ALICE].graveyard.map((id) => engine.name(state, id)),
+			state.players[ALICE].graveyard.map((id) => name(engine, state, id)),
 		).toContain("Wooded Foothills");
 
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 		expect(
 			alice.searches[0]?.context.cards.map(
 				(card) => card.currentCharacteristics.name,
 			),
 		).toContain("Forest");
 		const forest = state.battlefield
-			.map((id) => engine.buildGameView(state).objects.get(id))
+			.map((id) => buildGameView(engine, state).objects.get(id))
 			.find((object) => object?.currentCharacteristics.name === "Forest");
 		expect(forest).toMatchObject({
 			kind: "permanent",
@@ -268,11 +270,12 @@ describe("search effects", () => {
 	test("a qualified search may fail to find and still shuffles", () => {
 		const state = setupMain(engine);
 		const before = [...state.players[ALICE].library];
-		const wilds = engine.spawnPermanent(state, "evolving-wilds", ALICE);
+		const wilds = spawnPermanent(engine, state, "evolving-wilds", ALICE);
 		const alice = new SearchAgent(null);
 		const agents: [SearchAgent, ScriptedAgent] = [alice, new ScriptedAgent()];
 
-		engine.executeAbilityAction(
+		executeAbilityAction(
+			engine,
 			state,
 			ALICE,
 			{
@@ -282,7 +285,7 @@ describe("search effects", () => {
 			},
 			agents,
 		);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		expect(state.players[ALICE].library).toHaveLength(before.length);
 		expect(state.battlefield).toHaveLength(0);

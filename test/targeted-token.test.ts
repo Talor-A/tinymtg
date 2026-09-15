@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
-import { createEngine, getSnapshot, permanent } from "../index.ts";
+import {
+	createEngine,
+	createReadContext,
+	getSnapshot,
+	perform,
+	permanent,
+	settlePriority,
+	spawnCard,
+	spawnPermanent,
+} from "../index.ts";
 import {
 	ALICE,
 	BOB,
@@ -24,8 +33,9 @@ describe("a targeted player creates the token", () => {
 	test("Hunted Lammasu hands its Horror to the targeted opponent", () => {
 		const state = setupMain(engine);
 		const agents = alicePicksBob();
-		const lammasu = engine.spawnCard(state, "hunted-lammasu", ALICE, "hand");
-		engine.perform(
+		const lammasu = spawnCard(state, "hunted-lammasu", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -37,7 +47,7 @@ describe("a targeted player creates the token", () => {
 			agents,
 		);
 		expect(state.pendingTriggers).toHaveLength(1);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		const tokens = state.battlefield.filter(
 			(id) => permanent(state, id).representation.kind === "token",
@@ -50,7 +60,7 @@ describe("a targeted player creates the token", () => {
 		// controller is the targeted player, not the ability's controller.
 		expect(permanent(state, token).controller).toBe(BOB);
 		expect(
-			getSnapshot(engine.createReadContext(state), token)
+			getSnapshot(createReadContext(engine, state), token)
 				.currentCharacteristics,
 		).toMatchObject({
 			name: "Horror Token",
@@ -65,8 +75,14 @@ describe("a targeted player creates the token", () => {
 	test("Wanted Scoundrels gives the targeted opponent both Treasures", () => {
 		const state = setupMain(engine);
 		const agents = alicePicksBob();
-		const scoundrels = engine.spawnPermanent(state, "wanted-scoundrels", ALICE);
-		engine.perform(
+		const scoundrels = spawnPermanent(
+			engine,
+			state,
+			"wanted-scoundrels",
+			ALICE,
+		);
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -78,7 +94,7 @@ describe("a targeted player creates the token", () => {
 			agents,
 		);
 		expect(state.pendingTriggers).toHaveLength(1);
-		engine.settlePriority(state, agents);
+		settlePriority(engine, state, agents);
 
 		const treasures = state.battlefield.filter(
 			(id) => permanent(state, id).representation.kind === "token",
@@ -91,8 +107,9 @@ describe("a targeted player creates the token", () => {
 
 	test("the ability's controller keeps nothing when the opponent is targeted", () => {
 		const state = setupMain(engine);
-		const lammasu = engine.spawnCard(state, "hunted-lammasu", ALICE, "hand");
-		engine.perform(
+		const lammasu = spawnCard(state, "hunted-lammasu", ALICE, "hand");
+		perform(
+			engine,
 			state,
 			{
 				kind: "change zone",
@@ -103,7 +120,7 @@ describe("a targeted player creates the token", () => {
 			},
 			passingAgents(),
 		);
-		engine.settlePriority(state, passingAgents());
+		settlePriority(engine, state, passingAgents());
 
 		// BOB is ALICE's only opponent, so the fallback choice lands there too.
 		const aliceTokens = state.battlefield.filter((id) => {
