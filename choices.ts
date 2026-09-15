@@ -632,8 +632,13 @@ function priorityOptionLabel(
 	switch (action.kind) {
 		case "play land":
 			return `play land ${objectLabel(engine, state, action.card)}#${action.card}`;
-		case "activate ability":
-			return `activate ${objectLabel(engine, state, action.source)}#${action.source} — ${action.ability}`;
+		case "activate ability": {
+			// The ability's own rules text, not its `cardId:index` registry id:
+			// a land with two mana abilities offers two options that are
+			// indistinguishable when labelled by id.
+			const ability = engine.getAbilityDefinition("activated", action.ability);
+			return `activate ${objectLabel(engine, state, action.source)}#${action.source} — ${ability.text}`;
+		}
 		case "cast":
 			return `cast ${objectLabel(engine, state, action.card)}#${action.card}`;
 		default:
