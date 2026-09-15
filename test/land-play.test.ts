@@ -69,17 +69,22 @@ const TEST_CARD_2 = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "6-ability-changing",
+			kind: "characteristic",
 			text: "Creatures you control have Exploration's static ability.",
 			applies: (subject, _state, source) =>
 				source.kind === "permanent" &&
 				subject.controller === source.controller &&
 				subject.currentCharacteristics.types.includes("creature"),
-			modify: (characteristics) => {
-				characteristics.abilities.static.push(
-					abilityId("static", "exploration", 0),
-				);
-			},
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify: (characteristics) => {
+						characteristics.abilities.static.push(
+							abilityId("static", "exploration", 0),
+						);
+					},
+				},
+			],
 		},
 	],
 });

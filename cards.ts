@@ -105,6 +105,7 @@ const CORPUS_CARDS = [
 	loadCardFixture("t/thragtusk"),
 	loadCardFixture("r/ravenous_rats"),
 	loadCardFixture("c/cephalid_looter"),
+	loadCardFixture("s/spidersilk_armor"),
 ] as const;
 
 /**
@@ -593,14 +594,19 @@ export const BABY_MYCOSYNTH = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "4-type-changing",
+			kind: "characteristic",
 			text: "All permanents are artifacts in addition to their other types.",
 			applies: (v, _s, src) =>
 				src.zone === "battlefield" &&
 				!v.currentCharacteristics.types.includes("artifact"),
-			modify: (v) => {
-				v.types.push("artifact");
-			},
+			effects: [
+				{
+					layer: "4-type-changing",
+					modify: (v) => {
+						v.types.push("artifact");
+					},
+				},
+			],
 		},
 	],
 });

@@ -95,12 +95,17 @@ const TEST_CARD_2 = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "6-ability-changing",
+			kind: "characteristic",
 			text: "Creatures have lifelink.",
 			applies: (v) => v.currentCharacteristics.types.includes("creature"),
-			modify: (v) => {
-				v.keywords.push("lifelink");
-			},
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify: (v) => {
+						v.keywords.push("lifelink");
+					},
+				},
+			],
 		},
 	],
 });
@@ -113,12 +118,17 @@ const TEST_CARD_3 = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "5-color-changing",
+			kind: "characteristic",
 			text: "Creatures are red.",
 			applies: (v) => v.currentCharacteristics.types.includes("creature"),
-			modify: (v) => {
-				v.colors = ["r"];
-			},
+			effects: [
+				{
+					layer: "5-color-changing",
+					modify: (v) => {
+						v.colors = ["r"];
+					},
+				},
+			],
 		},
 	],
 });

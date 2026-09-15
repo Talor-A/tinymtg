@@ -3,6 +3,7 @@ import { ScriptedAgent } from "../agents.ts";
 import { CARDS } from "../cards.ts";
 import {
 	abilityId,
+	type CharacteristicStaticAbilityDefinition,
 	type CharacteristicsSnapshot,
 	createEngine,
 	defineCard,
@@ -77,17 +78,22 @@ const COMMUNAL_INSTRUCTION = defineCard({
 	],
 	statics: [
 		{
-			layer: "6-ability-changing",
+			kind: "characteristic",
 			text: 'Creatures you control have "{T}: Draw a card." and "When this creature enters, you gain 3 life."',
 			applies: (v, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
 				v.currentCharacteristics.types.includes("creature") &&
 				v.controller === source.controller,
-			modify: (v) => {
-				v.abilities.activated.push(abilityId("activated", GRANT_CARD, 0));
-				v.abilities.triggered.push(abilityId("triggered", GRANT_CARD, 0));
-			},
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify: (v) => {
+						v.abilities.activated.push(abilityId("activated", GRANT_CARD, 0));
+						v.abilities.triggered.push(abilityId("triggered", GRANT_CARD, 0));
+					},
+				},
+			],
 		},
 	],
 	// Definitions only: the instruction itself has no activated or triggered
@@ -107,7 +113,7 @@ const SWAP_SOURCE = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "7d-swap-power-toughness",
+			kind: "characteristic",
 			text: "Each creature with power 4 or greater has its power and toughness switched.",
 			applies: (v) => {
 				const characteristics = v.currentCharacteristics;
@@ -115,12 +121,17 @@ const SWAP_SOURCE = defineCard({
 					characteristics.kind === "creature" && characteristics.power >= 4
 				);
 			},
-			modify: (v) => {
-				if (v.kind !== "creature") return;
-				const power = v.power;
-				v.power = v.toughness;
-				v.toughness = power;
-			},
+			effects: [
+				{
+					layer: "7d-swap-power-toughness",
+					modify: (v) => {
+						if (v.kind !== "creature") return;
+						const power = v.power;
+						v.power = v.toughness;
+						v.toughness = power;
+					},
+				},
+			],
 		},
 	],
 });
@@ -133,15 +144,20 @@ const LAYER_ONE_SOURCE = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "1a-copiable-values",
+			kind: "characteristic",
 			text: "Grizzly Bears is named Layer-One Grizzly Bears.",
 			applies: (v, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
 				v.cardId === "grizzly-bears",
-			modify: (v) => {
-				v.name = "Layer-One Grizzly Bears";
-			},
+			effects: [
+				{
+					layer: "1a-copiable-values",
+					modify: (v) => {
+						v.name = "Layer-One Grizzly Bears";
+					},
+				},
+			],
 		},
 	],
 });
@@ -157,11 +173,11 @@ describe("derived game views", () => {
 			"baby-mycosynth-lattice:0",
 		]);
 		const colonCardStatic = {
-			layer: "4-type-changing" as const,
+			kind: "characteristic",
 			text: "test callback",
 			applies: () => false,
-			modify: () => {},
-		};
+			effects: [{ layer: "4-type-changing", modify: () => {} }],
+		} satisfies CharacteristicStaticAbilityDefinition;
 		const localEngine = engine.withCards([
 			{
 				id: "card:id:with:colons",
@@ -691,17 +707,26 @@ const TEST_CARD_1 = defineCard({
 	],
 	statics: [
 		{
-			layer: "6-ability-changing",
+			kind: "characteristic",
 			text: "Creatures you control gain those abilities.",
 			applies: (v, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
 				v.currentCharacteristics.types.includes("creature") &&
 				v.controller === source.controller,
-			modify: (v) => {
-				v.abilities.replacement.push(abilityId("replacement", WARD_CARD, 0));
-				v.abilities.prohibition.push(abilityId("prohibition", WARD_CARD, 0));
-			},
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify: (v) => {
+						v.abilities.replacement.push(
+							abilityId("replacement", WARD_CARD, 0),
+						);
+						v.abilities.prohibition.push(
+							abilityId("prohibition", WARD_CARD, 0),
+						);
+					},
+				},
+			],
 		},
 	],
 	printed: { replacement: [], prohibition: [] },
@@ -1020,20 +1045,71 @@ const GRAVEYARD_ANTHEM = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "7c-modify-power-toughness",
+			kind: "characteristic",
 			text: "While this is in your graveyard, creatures you control get +1/+1.",
 			functionsFrom: ["graveyard"],
 			affects: ["battlefield"],
 			applies: (v, _state, source) =>
 				v.currentCharacteristics.types.includes("creature") &&
 				v.controller === source.owner,
-			modify: (v) => {
-				if (v.kind !== "creature") return;
-				v.power += 1;
-				v.toughness += 1;
-			},
+			effects: [
+				{
+					layer: "7c-modify-power-toughness",
+					modify: (v) => {
+						if (v.kind !== "creature") return;
+						v.power += 1;
+						v.toughness += 1;
+					},
+				},
+			],
 		},
 	],
+});
+
+const LAYERED_LOCK_SOURCE = defineCard({
+	id: "test-layered-lock-source",
+	name: "Layered Lock Source",
+	types: ["enchantment"],
+	colors: [],
+	manaCost: "zero",
+	statics: [
+		{
+			kind: "characteristic",
+			text: "Synthetic: your creatures lose flying and get +1/+1.",
+			applies: (v, _state, source) =>
+				source.kind === "permanent" &&
+				v.currentCharacteristics.types.includes("creature") &&
+				v.currentCharacteristics.keywords.includes("flying") &&
+				v.controller === source.controller,
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify: (v) => {
+						v.keywords = v.keywords.filter((keyword) => keyword !== "flying");
+					},
+				},
+				{
+					layer: "7c-modify-power-toughness",
+					modify: (v) => {
+						if (v.kind !== "creature") return;
+						v.power += 1;
+						v.toughness += 1;
+					},
+				},
+			],
+		},
+	],
+});
+
+const LAYERED_LOCK_FLYER = defineCard({
+	id: "test-layered-lock-flyer",
+	name: "Layered Lock Flyer",
+	types: ["creature"],
+	colors: ["u"],
+	manaCost: "zero",
+	power: 1,
+	toughness: 1,
+	keywords: ["flying"],
 });
 
 const engine = createEngine([
@@ -1043,7 +1119,20 @@ const engine = createEngine([
 	LAYER_ONE_SOURCE,
 	TEST_CARD_1,
 	GRAVEYARD_ANTHEM,
+	LAYERED_LOCK_SOURCE,
+	LAYERED_LOCK_FLYER,
 ]);
+
+test("a layered static keeps the subjects selected by its first slice", () => {
+	const state = engine.newGame();
+	engine.spawnPermanent(state, LAYERED_LOCK_SOURCE.id, P1);
+	const creature = engine.spawnPermanent(state, LAYERED_LOCK_FLYER.id, P1);
+
+	expect(
+		getSnapshot(engine.createReadContext(state), creature.id)
+			.currentCharacteristics,
+	).toMatchObject({ power: 2, toughness: 2, keywords: [] });
+});
 
 describe("functionsFrom and affects are separate questions", () => {
 	test("an anthem functions from the graveyard and affects the battlefield", () => {

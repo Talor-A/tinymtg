@@ -1343,10 +1343,14 @@ function buildFilteredGameView(
 	const abilities: Partial<
 		Record<
 			ContinuousEffectLayer,
-			[
-				effect: CharacteristicStaticAbilityDefinition,
-				source: DeepReadOnly<GameObject>,
-			][]
+			{
+				slice: CharacteristicStaticEffectSliceDefinition;
+				affects: ZoneScope | undefined;
+				applies: CharacteristicStaticAbilityDefinition["applies"];
+				source: DeepReadOnly<GameObject>;
+				lockedSubjects: Set<ObjectId>;
+				firstSlice: boolean;
+			}[]
 		>
 	> = {};
 
@@ -1363,57 +1367,69 @@ function buildFilteredGameView(
 			const ability = abilityDefinition(engine, "static", id);
 			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
 			if (!isCharacteristicStaticAbility(ability)) continue;
-			let layerAbilities = abilities[ability.layer];
-			if (!layerAbilities) {
-				layerAbilities = [];
-				abilities[ability.layer] = layerAbilities;
+			const lockedSubjects = new Set<ObjectId>();
+			let previousLayer = -1;
+			for (const [index, slice] of ability.effects.entries()) {
+				const layerIndex = CONTINUOUS_EFFECT_LAYERS.indexOf(slice.layer);
+				assert(
+					layerIndex > previousLayer,
+					"a layered static ability's slices must be in layer order",
+				);
+				previousLayer = layerIndex;
+				let layerAbilities = abilities[slice.layer];
+				if (!layerAbilities) {
+					layerAbilities = [];
+					abilities[slice.layer] = layerAbilities;
+				}
+				layerAbilities.push({
+					slice,
+					affects: ability.affects,
+					applies: ability.applies,
+					source: object,
+					lockedSubjects,
+					firstSlice: index === 0,
+				});
 			}
-			layerAbilities.push([ability, object]);
 		}
 	}
 
 	for (const layer of CONTINUOUS_EFFECT_LAYERS) {
-		for (const [ability, source] of abilities[layer] ?? []) {
+		for (const entry of abilities[layer] ?? []) {
+			const { slice, source } = entry;
 			const zones: readonly Zone[] =
-				ability.affects === "any"
+				entry.affects === "any"
 					? ALL_ZONES
-					: (ability.affects ?? ["battlefield"]);
+					: (entry.affects ?? ["battlefield"]);
 
 			for (const zone of zones) {
 				for (const objectId of zoneList(state, zone, "any")) {
 					if (!characteristics.has(objectId)) continue;
 					const subject = state.objects.get(objectId);
 					assertDefined(subject, "subject object not found");
+					const current =
+						layer === "1a-copiable-values"
+							? copiable.get(objectId)
+							: characteristics.get(objectId);
+					assertDefined(current, "characteristics not found");
+					let applies: boolean;
+					if (entry.firstSlice) {
+						applies = entry.applies(
+							continuousEffectEvaluation(subject, current),
+							state,
+							source,
+						);
+						if (applies) entry.lockedSubjects.add(objectId);
+					} else {
+						applies = entry.lockedSubjects.has(objectId);
+					}
+					if (!applies) continue;
+					const next = cloneCharacteristics(current);
+					slice.modify(next, state, source);
 					if (layer === "1a-copiable-values") {
-						const current = copiable.get(objectId);
-						assertDefined(current, "copiable values not found");
-						if (
-							!ability.applies(
-								continuousEffectEvaluation(subject, current),
-								state,
-								source,
-							)
-						)
-							continue;
-						const next = cloneCharacteristics(current);
-						ability.modify(next, state, source);
 						copiable.set(objectId, next);
 						characteristics.set(objectId, cloneCharacteristics(next));
 						continue;
 					}
-
-					const current = characteristics.get(objectId);
-					assertDefined(current, "characteristics not found");
-					if (
-						!ability.applies(
-							continuousEffectEvaluation(subject, current),
-							state,
-							source,
-						)
-					)
-						continue;
-					const next = cloneCharacteristics(current);
-					ability.modify(next, state, source);
 					characteristics.set(objectId, next);
 				}
 			}
@@ -2654,6 +2670,7 @@ export type ObjectPredicateDef =
 	| { kind: "supertype"; supertype: Supertype }
 	| { kind: "subtype"; subtype: string }
 	| { kind: "color"; color: Color }
+	| { kind: "keyword"; keyword: Keyword }
 	| { kind: "owner"; player: "you" | "opponent" }
 	| { kind: "controller"; player: "you" | "opponent" }
 	/**
@@ -2960,6 +2977,8 @@ export function objectMatchesPredicate(
 			return characteristics.subtypes.includes(predicate.subtype);
 		case "color":
 			return characteristics.colors.includes(predicate.color);
+		case "keyword":
+			return characteristics.keywords.includes(predicate.keyword);
 		case "token":
 			if (object.kind === "nonbattlefield-token") return true;
 			if (object.kind === "permanent") {
@@ -4152,7 +4171,7 @@ function eligibleBlockers(
 		return !snapshot.currentCharacteristics.abilities.static.some(
 			(abilityId) => {
 				const ability = abilityDefinition(engine, "static", abilityId);
-				return "kind" in ability && ability.kind === "cant-block-self";
+				return ability.kind === "cant-block-self";
 			},
 		);
 	});
@@ -4226,14 +4245,18 @@ export function log(state: GameState, line: string): void {
  * still require timestamp order unless their operations commute (CR 613.7);
  * absence of dependencies does not make arbitrary ordering correct.
  */
-export interface CharacteristicStaticAbilityDefinition {
-	text: string;
+export interface CharacteristicStaticEffectSliceDefinition {
 	layer: ContinuousEffectLayer;
-	/**
-	 * Where the *source* must be for this effect to exist at all.
-	 *
-	 * @default ['battlefield']
-	 */
+	modify(
+		view: CharacteristicsSnapshot,
+		state: ReadonlyGameState,
+		source: DeepReadOnly<GameObject>,
+	): void;
+}
+
+export interface CharacteristicStaticAbilityDefinition {
+	kind: "characteristic";
+	text: string;
 	functionsFrom?: ZoneScope;
 	/**
 	 * Which objects this effect may modify. `applies()` still filters within
@@ -4251,11 +4274,11 @@ export interface CharacteristicStaticAbilityDefinition {
 		state: ReadonlyGameState,
 		source: DeepReadOnly<GameObject>,
 	): boolean;
-	modify(
-		view: CharacteristicsSnapshot,
-		state: ReadonlyGameState,
-		source: DeepReadOnly<GameObject>,
-	): void;
+	/** The objects are fixed when the first slice begins to apply (CR 613.6). */
+	effects: [
+		CharacteristicStaticEffectSliceDefinition,
+		...CharacteristicStaticEffectSliceDefinition[],
+	];
 }
 
 /**
@@ -4295,7 +4318,7 @@ export type StaticAbilityDefinition =
 function isCharacteristicStaticAbility(
 	ability: StaticAbilityDefinition,
 ): ability is CharacteristicStaticAbilityDefinition {
-	return !("kind" in ability);
+	return ability.kind === "characteristic";
 }
 
 /**
@@ -4747,13 +4770,13 @@ const CHARACTERISTIC_CHANGING_LAYERS = [
 function anyPossessedCharacteristicStatic(
 	engine: Engine,
 	state: ReadonlyGameState,
-	predicate: (effect: CharacteristicStaticAbilityDefinition) => boolean,
+	predicate: (effect: CharacteristicStaticEffectSliceDefinition) => boolean,
 ): boolean {
 	for (const object of state.objects.values()) {
 		for (const id of baseCharacteristics(engine, object).abilities.static) {
 			const ability = abilityDefinition(engine, "static", id);
 			if (!isCharacteristicStaticAbility(ability)) continue;
-			if (predicate(ability)) return true;
+			if (ability.effects.some(predicate)) return true;
 		}
 	}
 	return false;
@@ -9691,8 +9714,7 @@ function landPlayAllowance(read: ReadContext, player: PlayerId): number {
 		// not an input to characteristic derivation, so this does not recurse.
 		for (const id of abilityReferencesOf(read.view, object).static) {
 			const ability = abilityDefinition(read.engine, "static", id);
-			if (!("kind" in ability) || ability.kind !== "adjust-land-plays")
-				continue;
+			if (ability.kind !== "adjust-land-plays") continue;
 			if (!functionsHere(ability.functionsFrom, object.zone)) continue;
 			assert(
 				ability.affects === "you",

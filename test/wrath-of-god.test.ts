@@ -25,7 +25,7 @@ const INDESTRUCTIBLE_CAPTAIN = defineCard({
 	toughness: 2,
 	statics: [
 		{
-			layer: "6-ability-changing",
+			kind: "characteristic",
 			text: "Other creatures you control have indestructible.",
 			applies: (view, _state, source) =>
 				source.kind === "permanent" &&
@@ -33,10 +33,15 @@ const INDESTRUCTIBLE_CAPTAIN = defineCard({
 				view.objectId !== source.id &&
 				view.controller === source.controller &&
 				view.currentCharacteristics.types.includes("creature"),
-			modify: (view) => {
-				assert(!view.keywords.includes("indestructible"));
-				view.keywords.push("indestructible");
-			},
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify: (view) => {
+						assert(!view.keywords.includes("indestructible"));
+						view.keywords.push("indestructible");
+					},
+				},
+			],
 		},
 	],
 });

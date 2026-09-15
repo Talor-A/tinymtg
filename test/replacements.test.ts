@@ -45,14 +45,19 @@ const TEST_CARD_1 = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "4-type-changing",
+			kind: "characteristic",
 			text: "Test: Artifacts are creatures in addition to their other types.",
 			applies: (view) =>
 				view.currentCharacteristics.types.includes("artifact") &&
 				!view.currentCharacteristics.types.includes("creature"),
-			modify: (view) => {
-				view.types.push("creature");
-			},
+			effects: [
+				{
+					layer: "4-type-changing",
+					modify: (view) => {
+						view.types.push("creature");
+					},
+				},
+			],
 		},
 	],
 });

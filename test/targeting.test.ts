@@ -279,12 +279,17 @@ const TEST_CARD_3 = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "4-type-changing",
+			kind: "characteristic",
 			text: "Creatures are noncreature artifacts.",
 			applies: (v) => v.currentCharacteristics.types.includes("creature"),
-			modify: (v) => {
-				v.types = ["artifact"];
-			},
+			effects: [
+				{
+					layer: "4-type-changing",
+					modify: (v) => {
+						v.types = ["artifact"];
+					},
+				},
+			],
 		},
 	],
 });
@@ -298,12 +303,17 @@ const TEST_CARD_4 = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "5-color-changing",
+			kind: "characteristic",
 			text: "Creatures are black.",
 			applies: (v) => v.currentCharacteristics.types.includes("creature"),
-			modify: (v) => {
-				v.colors = ["b"];
-			},
+			effects: [
+				{
+					layer: "5-color-changing",
+					modify: (v) => {
+						v.colors = ["b"];
+					},
+				},
+			],
 		},
 	],
 });
@@ -317,12 +327,17 @@ const TEST_CARD_5 = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "4-type-changing",
+			kind: "characteristic",
 			text: "Creatures are planeswalkers.",
 			applies: (v) => v.currentCharacteristics.types.includes("creature"),
-			modify: (v) => {
-				v.types = ["planeswalker"];
-			},
+			effects: [
+				{
+					layer: "4-type-changing",
+					modify: (v) => {
+						v.types = ["planeswalker"];
+					},
+				},
+			],
 		},
 	],
 });

@@ -46,20 +46,25 @@ const INDESTRUCTIBLE_ANTHEM = defineCard({
 	manaCost: { w: 1 },
 	statics: [
 		{
-			layer: "6-ability-changing",
+			kind: "characteristic",
 			text: "Creatures you control have indestructible.",
 			applies: (view, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
 				view.currentCharacteristics.types.includes("creature") &&
 				view.controller === source.controller,
-			modify: (view) => {
-				assert(
-					!view.keywords.includes("indestructible"),
-					"test fixture cannot grant duplicate indestructible",
-				);
-				view.keywords.push("indestructible");
-			},
+			effects: [
+				{
+					layer: "6-ability-changing",
+					modify: (view) => {
+						assert(
+							!view.keywords.includes("indestructible"),
+							"test fixture cannot grant duplicate indestructible",
+						);
+						view.keywords.push("indestructible");
+					},
+				},
+			],
 		},
 	],
 });

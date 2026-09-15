@@ -50,10 +50,10 @@ describe("engine card registries", () => {
 				manaCost: "zero",
 				statics: [
 					{
-						layer: "4-type-changing",
+						kind: "characteristic",
 						text: "This callback proves definitions are not in GameState.",
 						applies: () => false,
-						modify: () => {},
+						effects: [{ layer: "4-type-changing", modify: () => {} }],
 					},
 				],
 			}),

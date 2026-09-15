@@ -46,6 +46,8 @@ import type {
 	CardDef,
 	CardDefInput,
 	CardType,
+	CharacteristicStaticAbilityDefinition,
+	CharacteristicStaticEffectSliceDefinition,
 	CharacteristicsSnapshot,
 	Color,
 	DamageAllRecipientDef,
@@ -77,6 +79,7 @@ import {
 	abilityId,
 	characteristicsFromCardDef,
 	cloneCharacteristics,
+	controllerOf,
 	defineCard,
 	effectTargetUses,
 	getSnapshot,
@@ -515,6 +518,15 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
 	if (modifier === "YouOwn") return { kind: "owner", player: "you" };
 	if (modifier === "OppOwn") return { kind: "owner", player: "opponent" };
+	const keywordMatch = /^(without|with)(.+)$/.exec(modifier);
+	if (keywordMatch) {
+		const keyword = BARE_KEYWORDS.get(keywordMatch[2] ?? "");
+		if (keyword === undefined) return null;
+		const predicate: ObjectPredicateDef = { kind: "keyword", keyword };
+		return keywordMatch[1] === "without"
+			? { kind: "not", predicate }
+			: predicate;
+	}
 	// Both spellings of the word appear in the corpus and mean the same
 	// property: a permanent or nonbattlefield object that is a token.
 	if (modifier === "token" || modifier === "Token") return { kind: "token" };
@@ -2787,6 +2799,22 @@ function lowerNextEndStepDelayedTrigger(
 /* Continuous effects and replacements                                       */
 /* ------------------------------------------------------------------------- */
 
+function staticAppliesFromObjectPredicate(
+	predicate: ObjectPredicateDef,
+): CharacteristicStaticAbilityDefinition["applies"] {
+	return (object, _state, source) => {
+		const controller = controllerOf(source);
+		assertDefined(
+			controller,
+			"an imported static ability source must have a controller",
+		);
+		return objectMatchesPredicate(predicate, object, {
+			controller,
+			source: source.id,
+		});
+	};
+}
+
 function lowerStatic(
 	record:
 		| ForgeAbilityRecord
@@ -2799,6 +2827,7 @@ function lowerStatic(
 		new Set([
 			"mode",
 			"affected",
+			"addkeyword",
 			"addpower",
 			"addtoughness",
 			"adjustlandplays",
@@ -2816,6 +2845,7 @@ function lowerStatic(
 			getForgeParam(params, "Affected") !== undefined ||
 			getForgeParam(params, "AddPower") !== undefined ||
 			getForgeParam(params, "AddToughness") !== undefined ||
+			getForgeParam(params, "AddKeyword") !== undefined ||
 			getForgeParam(params, "AdjustLandPlays") !== undefined ||
 			!description
 		)
@@ -2842,6 +2872,7 @@ function lowerStatic(
 			getForgeParam(params, "ValidCard") !== undefined ||
 			getForgeParam(params, "AddPower") !== undefined ||
 			getForgeParam(params, "AddToughness") !== undefined ||
+			getForgeParam(params, "AddKeyword") !== undefined ||
 			!description
 		)
 			return issue(
@@ -2863,14 +2894,33 @@ function lowerStatic(
 	// kind — still rejects, so a variable pump never lowers as a fixed one.
 	const powerText = getForgeParam(params, "AddPower");
 	const toughnessText = getForgeParam(params, "AddToughness");
+	const keywordText = getForgeParam(params, "AddKeyword");
 	const addPower = powerText === undefined ? 0 : signedInteger(powerText);
 	const addToughness =
 		toughnessText === undefined ? 0 : signedInteger(toughnessText);
+	let keywords: Keyword[] | null = null;
+	let keywordsSupported = true;
+	if (keywordText !== undefined) {
+		keywords = [];
+		for (const rawKeyword of keywordText
+			.split("&")
+			.map((part) => part.trim())) {
+			const keyword = BARE_KEYWORDS.get(rawKeyword);
+			if (keyword === undefined || keyword === "prowess") {
+				keywordsSupported = false;
+				break;
+			}
+			keywords.push(keyword);
+		}
+	}
 	if (
 		!selector ||
-		(powerText === undefined && toughnessText === undefined) ||
+		(powerText === undefined &&
+			toughnessText === undefined &&
+			keywordText === undefined) ||
 		addPower === null ||
 		addToughness === null ||
+		!keywordsSupported ||
 		getForgeParam(params, "ValidCard") !== undefined ||
 		!description
 	)
@@ -2879,23 +2929,36 @@ function lowerStatic(
 			"unsupported static ability shape",
 			where,
 		);
+	const effects: CharacteristicStaticEffectSliceDefinition[] = [];
+	if (keywords !== null) {
+		effects.push({
+			layer: "6-ability-changing",
+			modify(view) {
+				for (const keyword of keywords) {
+					if (!view.keywords.includes(keyword)) view.keywords.push(keyword);
+				}
+			},
+		});
+	}
+	if (powerText !== undefined || toughnessText !== undefined) {
+		effects.push({
+			layer: "7c-modify-power-toughness",
+			modify(view) {
+				if (!("power" in view) || !("toughness" in view)) return;
+				view.power += addPower;
+				view.toughness += addToughness;
+			},
+		});
+	}
+	assert(effects.length > 0);
 	return ok({
-		layer: "7c-modify-power-toughness",
+		kind: "characteristic",
 		text: description,
-		applies(view, _state, source) {
-			return (
-				source.zone === "battlefield" &&
-				objectMatchesPredicate(selector, view, {
-					controller: source.controller,
-					source: source.id,
-				})
-			);
-		},
-		modify(view) {
-			if (!("power" in view) || !("toughness" in view)) return;
-			view.power += addPower;
-			view.toughness += addToughness;
-		},
+		applies: staticAppliesFromObjectPredicate(selector),
+		effects: effects as [
+			CharacteristicStaticEffectSliceDefinition,
+			...CharacteristicStaticEffectSliceDefinition[],
+		],
 	});
 }
 

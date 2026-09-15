@@ -59,6 +59,8 @@ function loadRuntimeFixture(path: string, id: string): CardDef {
 const RUNTIME_CARDS = [
 	loadRuntimeFixture("g/grizzly_bears", "rt-grizzly-bears"),
 	loadRuntimeFixture("g/glorious_anthem", "rt-glorious-anthem"),
+	loadRuntimeFixture("s/spidersilk_armor", "rt-spidersilk-armor"),
+	loadRuntimeFixture("a/air_nomad_legacy", "rt-air-nomad-legacy"),
 	loadRuntimeFixture("e/exploration", "rt-exploration"),
 	loadRuntimeFixture("a/aesthir_glider", "rt-aesthir-glider"),
 	loadRuntimeFixture("r/root_maze", "rt-root-maze"),
@@ -173,12 +175,18 @@ const TEST_CARD_1 = defineCard({
 	manaCost: "zero",
 	statics: [
 		{
-			layer: "4-type-changing",
+			kind: "characteristic",
 			text: "Synthetic: all permanents are artifacts.",
 			applies: () => true,
-			modify: (v) => {
-				if (!v.types.includes("artifact")) v.types = [...v.types, "artifact"];
-			},
+			effects: [
+				{
+					layer: "4-type-changing",
+					modify: (v) => {
+						if (!v.types.includes("artifact"))
+							v.types = [...v.types, "artifact"];
+					},
+				},
+			],
 		},
 	],
 });
@@ -1080,6 +1088,59 @@ describe("forge-import runtime: statics and replacements", () => {
 			getSnapshot(engine.createReadContext(state), theirs.id)
 				.currentCharacteristics,
 		).toMatchObject({ power: 2, toughness: 2 });
+	});
+
+	test("Spidersilk Armor grants reach and +0/+1 only to its controller's creatures", () => {
+		const state = engine.newGame();
+		engine.spawnPermanent(state, "rt-spidersilk-armor", BOB);
+		const mine = engine.spawnPermanent(state, "rt-grizzly-bears", BOB);
+		const theirs = engine.spawnPermanent(state, "rt-grizzly-bears", ALICE);
+		const flyingAttacker = engine.spawnPermanent(
+			state,
+			"rt-network-disruptor",
+			ALICE,
+		);
+
+		expect(
+			getSnapshot(engine.createReadContext(state), mine.id)
+				.currentCharacteristics,
+		).toMatchObject({ power: 2, toughness: 3, keywords: ["reach"] });
+		expect(
+			getSnapshot(engine.createReadContext(state), theirs.id)
+				.currentCharacteristics,
+		).toMatchObject({ power: 2, toughness: 2, keywords: [] });
+		expect(engine.eligibleBlockers(state, BOB, flyingAttacker.id)).toContain(
+			mine.id,
+		);
+	});
+
+	test("Air Nomad Legacy's keyword predicate pumps only its controller's flyers", () => {
+		const state = engine.newGame();
+		engine.spawnPermanent(state, "rt-air-nomad-legacy", ALICE);
+		const flyer = engine.spawnPermanent(state, "rt-network-disruptor", ALICE);
+		const groundCreature = engine.spawnPermanent(
+			state,
+			"rt-grizzly-bears",
+			ALICE,
+		);
+		const opposingFlyer = engine.spawnPermanent(
+			state,
+			"rt-network-disruptor",
+			BOB,
+		);
+
+		expect(
+			getSnapshot(engine.createReadContext(state), flyer.id)
+				.currentCharacteristics,
+		).toMatchObject({ power: 2, toughness: 2 });
+		expect(
+			getSnapshot(engine.createReadContext(state), groundCreature.id)
+				.currentCharacteristics,
+		).toMatchObject({ power: 2, toughness: 2 });
+		expect(
+			getSnapshot(engine.createReadContext(state), opposingFlyer.id)
+				.currentCharacteristics,
+		).toMatchObject({ power: 1, toughness: 1 });
 	});
 
 	test("Root Maze's imported replacement taps entering artifacts and lands but not creatures", () => {

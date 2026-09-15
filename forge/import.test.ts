@@ -2548,9 +2548,77 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		if (!result.ok) throw new Error("expected ok");
 		expect(result.card.abilityDefinitions.static).toHaveLength(1);
 		const ability = result.card.abilityDefinitions.static[0];
-		if (!ability || "kind" in ability)
+		if (ability?.kind !== "characteristic")
 			throw new Error("expected a characteristic static ability");
-		expect(ability.layer).toBe("7c-modify-power-toughness");
+		expect(ability.effects.map((effect) => effect.layer)).toEqual([
+			"7c-modify-power-toughness",
+		]);
+	});
+
+	test("Spidersilk Armor is one static ability spanning layers 6 and 7c", () => {
+		const result = importFixture("s/spidersilk_armor");
+		if (!result.ok) throw new Error("expected ok");
+		expect(result.card.abilityDefinitions.static).toHaveLength(1);
+		const ability = result.card.abilityDefinitions.static[0];
+		if (ability?.kind !== "characteristic")
+			throw new Error("expected a characteristic static ability");
+		expect(ability.effects.map((effect) => effect.layer)).toEqual([
+			"6-ability-changing",
+			"7c-modify-power-toughness",
+		]);
+	});
+
+	test("keyword-only statics grant one or more supported keywords", () => {
+		const result = importText(
+			[
+				"Name:Keyword Grant",
+				"ManaCost:2 W",
+				"Types:Enchantment",
+				"S:Mode$ Continuous | Affected$ Creature.YouCtrl | AddKeyword$ Vigilance & Reach | Description$ Creatures you control have vigilance and reach.",
+				"Oracle:Creatures you control have vigilance and reach.",
+				"",
+			].join("\n"),
+		);
+		if (!result.ok) throw new Error("expected keyword grant to import");
+		const ability = result.card.abilityDefinitions.static[0];
+		if (ability?.kind !== "characteristic")
+			throw new Error("expected a characteristic static ability");
+		expect(ability.effects.map((effect) => effect.layer)).toEqual([
+			"6-ability-changing",
+		]);
+		const body = { keywords: [] as string[] };
+		ability.effects[0].modify(body as never, {} as never, {} as never);
+		expect(body.keywords).toEqual(["vigilance", "reach"]);
+	});
+
+	test("keyword predicates and Other lower through ordinary object predicates", () => {
+		for (const fixture of [
+			"a/air_nomad_legacy",
+			"s/serras_guardian",
+		] as const) {
+			const result = importFixture(fixture);
+			if (!result.ok) throw new Error(`expected ${fixture} to import`);
+			expect(result.card.abilityDefinitions.static).toHaveLength(1);
+		}
+	});
+
+	test("gained prowess rejects until its triggered ability can be granted", () => {
+		const result = importText(
+			[
+				"Name:Prowess Grant",
+				"ManaCost:2 U",
+				"Types:Enchantment",
+				"S:Mode$ Continuous | Affected$ Creature.YouCtrl | AddKeyword$ Prowess | Description$ Creatures you control have prowess.",
+				"Oracle:Creatures you control have prowess.",
+				"",
+			].join("\n"),
+		);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message: "unsupported static ability shape",
+		});
 	});
 
 	test("Exploration and Azusa lower finite positive land-play adjustments", () => {
@@ -4294,9 +4362,10 @@ describe("lowerForgeCard: one-sided pump statics", () => {
 	function pumped(path: string): { power: number; toughness: number } {
 		const result = importFixture(path);
 		if (!result.ok) throw new Error(`expected ${path} to lower`);
-		const effect = result.card.abilityDefinitions.static[0];
-		if (!effect || "kind" in effect)
+		const ability = result.card.abilityDefinitions.static[0];
+		if (ability?.kind !== "characteristic")
 			throw new Error("expected a characteristic static effect");
+		const effect = ability.effects[0];
 		const body = { power: 2, toughness: 2 };
 		effect.modify(
 			body as unknown as Parameters<typeof effect.modify>[0],
@@ -5316,9 +5385,10 @@ describe("lowerForgeCard: bridge contract", () => {
 		const { card: ast } = parseForgeCardScript(anthemText);
 		const first = lowerForgeCard(ast, { id: "anthem-1" });
 		if (!first.ok) throw new Error("expected ok");
-		const effect = first.card.abilityDefinitions.static[0];
-		if (!effect || "kind" in effect)
+		const ability = first.card.abilityDefinitions.static[0];
+		if (ability?.kind !== "characteristic")
 			throw new Error("expected a characteristic static effect");
+		const effect = ability.effects[0];
 
 		// Find and mutate the AddPower$/AddToughness$ param entries in the AST
 		// after lowering: if `modify` closed over the AST node instead of a
