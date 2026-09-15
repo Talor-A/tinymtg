@@ -23,6 +23,7 @@ import {
 	advanceUntil,
 	BOB,
 	isAt,
+	newInProgressGame,
 	passingAgents,
 	type SyncAgents,
 	setupMain,
@@ -49,7 +50,7 @@ function attackAndBlock(attacker: ObjectId, blockers: ObjectId[]): SyncAgents {
 
 /** A game with libraries stocked, so the draw step never decks anyone. */
 function combatGame(): GameState {
-	const state = engine.newGame();
+	const state = newInProgressGame(engine);
 	for (let i = 0; i < 3; i++) {
 		engine.spawnCard(state, "forest", ALICE, "library");
 		engine.spawnCard(state, "forest", BOB, "library");

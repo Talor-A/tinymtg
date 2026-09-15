@@ -28,6 +28,7 @@ import {
 	beginFirstTurn,
 	completePreGame,
 	loadCardFixture,
+	newInProgressGame,
 	passingAgents,
 	seedLibraries,
 	setupMain,
@@ -498,7 +499,7 @@ describe("priority-time mana abilities", () => {
 	});
 
 	test("replays an async activation without mutating its checkpoint", async () => {
-		let checkpoint = engine.newGame();
+		let checkpoint = newInProgressGame(engine);
 		seedLibraries(engine, checkpoint);
 		const forest = engine.spawnPermanent(checkpoint, "forest", ALICE);
 		let suspended = false;

@@ -19,6 +19,7 @@ import {
 	BOB,
 	isAt,
 	loadCardFixture,
+	newInProgressGame,
 	playOneTurn,
 } from "./utils/engine-helpers.ts";
 
@@ -40,7 +41,7 @@ function setupAttackTurn(cardId: string): {
 	state: GameState;
 	attacker: ReturnType<Engine["spawnPermanent"]>;
 } {
-	const state = engine.newGame();
+	const state = newInProgressGame(engine);
 	const attacker = engine.spawnPermanent(state, cardId, ALICE);
 	engine.spawnCard(state, "forest", ALICE, "library");
 	engine.spawnCard(state, "forest", BOB, "library");
@@ -70,7 +71,7 @@ describe("declaring attackers", () => {
 		state: GameState;
 		agents: Agents;
 	} {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		// Enough library cards that the normal draw step along the way doesn't
 		// lose either player the game before combat is reached.
@@ -241,7 +242,7 @@ describe("declaring attackers", () => {
 	});
 
 	test("rejects declaring attackers outside the declare attackers step", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 
@@ -298,7 +299,7 @@ describe("declaring blockers", () => {
 		agents: Agents;
 		attacker: ReturnType<Engine["spawnPermanent"]>;
 	} {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const attackerAgent = new ScriptedAgent();
 		const agents: Agents = [attackerAgent, new ScriptedAgent()];
 		engine.spawnCard(state, "forest", ALICE, "library");
@@ -574,7 +575,7 @@ describe("declaring blockers", () => {
 	});
 
 	test("rejects declaring blockers outside the declare blockers step", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		const attacker = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 		const blocker = engine.spawnPermanent(state, "grizzly-bears", BOB);
@@ -645,7 +646,7 @@ describe("declaring blockers", () => {
 
 describe("declaring attackers during normal progression", () => {
 	test("summoning sickness clears as its controller's turn begins", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const attacker = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		engine.spawnCard(state, "forest", ALICE, "library");
@@ -658,7 +659,7 @@ describe("declaring attackers during normal progression", () => {
 	});
 
 	test("a creature cannot attack on the turn it enters", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		engine.spawnCard(state, "forest", ALICE, "library");
 		engine.spawnCard(state, "forest", BOB, "library");
@@ -675,7 +676,7 @@ describe("declaring attackers during normal progression", () => {
 	});
 
 	test("haste allows a creature to attack on the turn it enters", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const attackerAgent = new ScriptedAgent();
 		const agents: Agents = [attackerAgent, new ScriptedAgent()];
 		engine.spawnCard(state, "forest", ALICE, "library");
@@ -787,7 +788,7 @@ describe("declaring attackers during normal progression", () => {
 	});
 
 	test("Pegasus Courser grants flying only to another attacking creature", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const courser = engine.spawnPermanent(state, "pegasus-courser", ALICE);
 		const wingmate = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 		const stayedHome = engine.spawnPermanent(state, "grizzly-bears", ALICE);
@@ -804,7 +805,9 @@ describe("declaring attackers during normal progression", () => {
 			[{ type: "permanent", id: wingmate.id }],
 		);
 		const agents: Agents = [alice, new ScriptedAgent()];
-		advanceUntil(engine, state, agents, (next) => isAt(next, "declare blockers"));
+		advanceUntil(engine, state, agents, (next) =>
+			isAt(next, "declare blockers"),
+		);
 
 		expect(alice.targetChoices).toHaveLength(0);
 		expect(
@@ -826,7 +829,7 @@ describe("declaring attackers during normal progression", () => {
 		).not.toContain("flying");
 		expect(state.temporaryEffects).toHaveLength(0);
 	});
-	});
+});
 
 describe("dealing combat damage", () => {
 	test("a blocked attacker damages its blocker instead of the defending player", () => {
@@ -854,7 +857,7 @@ describe("dealing combat damage", () => {
 	});
 
 	test("multiple blockers all deal damage and receive a legal ordered assignment", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const attacker = engine.spawnPermanent(state, "grizzly-bears", ALICE, {
 			counters: { "+1/+1": 1 },
 		});
@@ -941,7 +944,7 @@ describe("dealing combat damage", () => {
 	});
 
 	test("multiple selected attackers deal the sum of their current powers while an unselected creature deals none", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE);
 		const attackingCadet = engine.spawnPermanent(state, "eager-cadet", ALICE);
 		const benchedCadet = engine.spawnPermanent(state, "eager-cadet", ALICE);
@@ -957,7 +960,7 @@ describe("dealing combat damage", () => {
 	});
 
 	test("current modified power is used: a +1/+1 counter makes Bears deal 3", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const bears = engine.spawnPermanent(state, "grizzly-bears", ALICE, {
 			counters: { "+1/+1": 1 },
 		});
@@ -986,7 +989,7 @@ describe("dealing combat damage", () => {
 	});
 
 	test("Stealer of Secrets triggers only from combat damage to a player", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const source = engine.spawnPermanent(state, "stealer-of-secrets", ALICE);
 		const creature = engine.spawnPermanent(state, "grizzly-bears", BOB);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];

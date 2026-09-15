@@ -13,6 +13,7 @@ import {
 	advanceUntil,
 	atMain,
 	BOB,
+	newInProgressGame,
 	passingAgents,
 	playOneTurn,
 	seedLibraries,
@@ -44,7 +45,7 @@ const WATCHER = "test-draw-step-watcher";
 
 /** A fresh game with the watcher on ALICE's battlefield and deep libraries. */
 function watcherGame(): GameState {
-	const state = engine.newGame();
+	const state = newInProgressGame(engine);
 	seedLibraries(engine, state, 6);
 	engine.spawnPermanent(state, WATCHER, ALICE);
 	return state;

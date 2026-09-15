@@ -18,6 +18,7 @@ import {
 	beginFirstTurn,
 	completePreGame,
 	expectScriptConsumed,
+	newInProgressGame,
 	setupMain,
 } from "./utils/engine-helpers.ts";
 
@@ -328,7 +329,7 @@ describe("tap and untap occurrences", () => {
 	});
 
 	test("untap-step triggers stay pending until the upkeep priority window", async () => {
-		const checkpoint = engine.newGame();
+		const checkpoint = newInProgressGame(engine);
 		const observer = engine.spawnPermanent(checkpoint, TAP_OBSERVER, ALICE, {
 			tapped: true,
 		});

@@ -25,6 +25,7 @@ import {
 import {
 	advanceUntil,
 	loadCardFixture,
+	newInProgressGame,
 	passingAgents,
 } from "./utils/engine-helpers.ts";
 
@@ -381,7 +382,7 @@ function assertActivated(
 }
 
 function mainPhaseGame(): GameState {
-	const state = engine.newGame();
+	const state = newInProgressGame(engine);
 	for (const player of [0, 1] as const) {
 		for (let i = 0; i < 5; i++)
 			engine.spawnCard(state, "forest", player, "library");

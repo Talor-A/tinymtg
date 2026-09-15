@@ -22,6 +22,7 @@ import {
 	advanceUntil,
 	BOB,
 	expectScriptConsumed,
+	newInProgressGame,
 	passingAgents,
 } from "./utils/engine-helpers.ts";
 
@@ -255,7 +256,7 @@ function seedLibraries(engine: Engine, state: GameState): void {
 
 /** A game advanced through the real scheduler to its first precombat main. */
 function setupMain(engine: Engine): GameState {
-	const state = engine.newGame();
+	const state = newInProgressGame(engine);
 	seedLibraries(engine, state);
 	advanceUntil(engine, state, passingAgents(), (next) => {
 		const location = turnLocation(next);
@@ -1020,7 +1021,7 @@ describe("instant and sorcery resolution", () => {
 	});
 
 	test("an instant resolves during the opponent's turn", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		seedLibraries(engine, state);
 		advanceUntil(engine, state, passingAgents(), (next) => {
 			const location = turnLocation(next);

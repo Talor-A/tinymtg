@@ -67,6 +67,7 @@ export function beginFirstTurn(
 	state: GameState,
 	agents: SyncAgents,
 ): void {
+	if (state.turnScheduler.progress.kind === "notStarted") skipPreGame(state);
 	advanceUntil(engine, state, agents, (next) => isTurnStep(next, "upkeep"));
 }
 
@@ -147,7 +148,7 @@ export function setupMain(
 	engine: Engine,
 	role: "precombat" | "postcombat" = "precombat",
 ): GameState {
-	const state = engine.newGame();
+	const state = newInProgressGame(engine);
 	seedLibraries(engine, state);
 	advanceUntil(engine, state, passingAgents(), (next) => atMain(next, role));
 	return state;
@@ -159,13 +160,20 @@ export function created(result: { created: ObjectId[] }): ObjectId {
 	if (id === undefined) throw new Error("nothing created");
 	return id;
 }
-/** start a game, skipping pregame shuffle / deal / mulligan. */
+/** Start a game while deliberately skipping shuffle and opening-hand draws. */
 export function newInProgressGame(engine: Engine, seed = 0) {
 	const state = engine.newGame(seed);
+	skipPreGame(state);
+	return state;
+}
+
+/** Position a test state immediately after pregame without performing its actions. */
+export function skipPreGame(state: GameState): void {
+	if (state.turnScheduler.progress.kind !== "notStarted")
+		throw new Error("only a fresh game can skip pregame");
 	state.turnScheduler = {
 		nextAction: { kind: "finishPreGameStep" },
-		// start the game after opening hand actions.
-		progress: { kind: "pregame", step: "opening hand actions" },
+		progress: { kind: "pregame", step: "opening hand" },
 		pendingTurns: [],
 		nextRegularPlayer: 0 as PlayerId,
 		remainingSteps: [],

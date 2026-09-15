@@ -22,7 +22,7 @@ import {
 	type SyncAgent,
 	type TurnId,
 } from "../index.ts";
-import { loadCardFixture } from "./utils/engine-helpers.ts";
+import { loadCardFixture, newInProgressGame } from "./utils/engine-helpers.ts";
 
 const engine = createEngine([...CARDS, loadCardFixture("f/flying_men")]);
 
@@ -234,7 +234,7 @@ describe("choice transcripts", () => {
 	});
 
 	test("advanceWithReplay completes synchronous agents in one attempt", async () => {
-		const checkpoint = engine.newGame();
+		const checkpoint = newInProgressGame(engine);
 		engine.spawnPermanent(checkpoint, "ajanis-mantra", 0);
 		engine.startGame(checkpoint, agents());
 		const snapshot = structuredClone(checkpoint);
@@ -253,7 +253,7 @@ describe("choice transcripts", () => {
 	});
 
 	test("advanceWithReplay rewinds one transition around an async choice", async () => {
-		const checkpoint = engine.newGame();
+		const checkpoint = newInProgressGame(engine);
 		engine.spawnPermanent(checkpoint, "ajanis-mantra", 0);
 		const setupAgents = agents();
 		engine.startGame(checkpoint, setupAgents);
@@ -303,7 +303,7 @@ describe("choice transcripts", () => {
 	});
 
 	test("advanceWithReplay propagates async rejection without mutating checkpoint", async () => {
-		const checkpoint = engine.newGame();
+		const checkpoint = newInProgressGame(engine);
 		engine.spawnPermanent(checkpoint, "ajanis-mantra", 0);
 		const setupAgents = agents();
 		engine.startGame(checkpoint, setupAgents);
@@ -326,7 +326,7 @@ describe("choice transcripts", () => {
 	});
 
 	test("replays multiple pending cleanup choices", async () => {
-		const checkpoint = engine.newGame();
+		const checkpoint = newInProgressGame(engine);
 		for (let i = 0; i < 10; i++) {
 			engine.spawnCard(checkpoint, "forest", 0, "hand");
 			engine.spawnCard(checkpoint, "forest", 0, "library");
@@ -371,7 +371,7 @@ describe("choice transcripts", () => {
 	});
 
 	test("rejects an invalid fulfilled answer without mutating the checkpoint", async () => {
-		const checkpoint = engine.newGame();
+		const checkpoint = newInProgressGame(engine);
 		engine.spawnPermanent(checkpoint, "ajanis-mantra", 0);
 		engine.startGame(checkpoint, agents());
 		const snapshot = structuredClone(checkpoint);
@@ -439,7 +439,7 @@ describe("choice transcripts", () => {
 	});
 
 	test("records synchronous choices and replays without agents", () => {
-		const checkpoint = engine.newGame();
+		const checkpoint = newInProgressGame(engine);
 		engine.spawnPermanent(checkpoint, "hardened-scales", 0);
 		engine.spawnPermanent(checkpoint, "doubling-season", 0);
 		const creature = engine.spawnPermanent(checkpoint, "grizzly-bears", 0);
@@ -514,7 +514,7 @@ describe("choice transcripts", () => {
 	});
 
 	test("rejects a transcript when the request changes", () => {
-		const checkpoint = engine.newGame();
+		const checkpoint = newInProgressGame(engine);
 		engine.spawnPermanent(checkpoint, "hardened-scales", 0);
 		engine.spawnPermanent(checkpoint, "doubling-season", 0);
 		const creature = engine.spawnPermanent(checkpoint, "grizzly-bears", 0);

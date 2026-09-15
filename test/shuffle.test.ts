@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CARDS } from "../cards.ts";
 import { createEngine, type GameState, type PlayerId } from "../index.ts";
-import {
-	ALICE,
-	advanceUntil,
-	BOB,
-	passingAgents,
-} from "./utils/engine-helpers.ts";
+import { ALICE, BOB, passingAgents } from "./utils/engine-helpers.ts";
 
 const engine = createEngine(CARDS);
 
@@ -42,15 +37,10 @@ function libraryCardIds(state: GameState, player: PlayerId): string[] {
 	});
 }
 
-/** Runs the pre-game, which is where CR 103.2's shuffle happens. */
+/** Runs the shuffle step without continuing into the opening-hand draw. */
 function shuffled(seed: number): GameState {
 	const state = seededGame(seed);
-	advanceUntil(
-		engine,
-		state,
-		passingAgents(),
-		(next) => next.turnScheduler.progress.kind === "inTurn",
-	);
+	engine.advance(state, passingAgents());
 	return state;
 }
 
@@ -98,12 +88,7 @@ describe("CR 103.2 shuffling", () => {
 	test("an empty or single-card library survives shuffling", () => {
 		const state = engine.newGame(7);
 		engine.spawnCard(state, "forest", ALICE, "library");
-		advanceUntil(
-			engine,
-			state,
-			passingAgents(),
-			(next) => next.turnScheduler.progress.kind === "inTurn",
-		);
+		engine.advance(state, passingAgents());
 
 		expect(libraryCardIds(state, ALICE)).toEqual(["forest"]);
 		expect(libraryCardIds(state, BOB)).toEqual([]);

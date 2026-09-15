@@ -15,6 +15,7 @@ import {
 	advanceUntil,
 	BOB,
 	isAt,
+	newInProgressGame,
 	passingAgents,
 	playOneTurn,
 } from "./utils/engine-helpers.ts";
@@ -25,7 +26,7 @@ describe("turn progress", () => {
 	test("notStarted is visible only before the first advance", () => {
 		const state = engine.newGame();
 		const agents = passingAgents();
-		for (let i = 0; i < 3; i++) {
+		for (let i = 0; i < 10; i++) {
 			engine.spawnCard(state, "forest", ALICE, "library");
 			engine.spawnCard(state, "forest", BOB, "library");
 		}
@@ -33,15 +34,14 @@ describe("turn progress", () => {
 		expect(state.turnScheduler.progress).toEqual({ kind: "notStarted" });
 
 		// CR 103 runs before the first turn, one step per engine.advance().
-		for (const step of [
-			"shuffle",
-			"opening hand",
-			"mulligan",
-			"opening hand actions",
-		] as const) {
+		for (const step of ["shuffle", "opening hand"] as const) {
 			engine.advance(state, agents);
 			expect(state.turnScheduler.progress).toEqual({ kind: "pregame", step });
 		}
+		expect(state.players[ALICE].hand).toHaveLength(7);
+		expect(state.players[BOB].hand).toHaveLength(7);
+		expect(state.players[ALICE].library).toHaveLength(3);
+		expect(state.players[BOB].library).toHaveLength(3);
 
 		// Once a turn is installed the game never leaves inTurn.
 		for (let i = 0; i < 30; i++) {
@@ -63,7 +63,7 @@ describe("turn progress", () => {
 
 		// The pre-game is not a turn, so it does not answer "whose turn is it"
 		// either -- the whole of CR 103 passes with no active player.
-		for (let i = 0; i < 4; i++) {
+		for (let i = 0; i < 2; i++) {
 			engine.advance(state, agents);
 			expect(state.turnScheduler.progress.kind).toBe("pregame");
 			expect(activePlayer(state)).toBe(null);
@@ -76,8 +76,10 @@ describe("turn progress", () => {
 	test("represents a main phase as a phase with its combat role", () => {
 		const state = engine.newGame();
 		const agents = passingAgents();
-		engine.spawnCard(state, "forest", ALICE, "library");
-		engine.spawnCard(state, "forest", BOB, "library");
+		for (let i = 0; i < 10; i++) {
+			engine.spawnCard(state, "forest", ALICE, "library");
+			engine.spawnCard(state, "forest", BOB, "library");
+		}
 
 		advanceUntil(engine, state, agents, (next) => isAt(next, "main"));
 
@@ -106,7 +108,7 @@ describe("playing a normal turn", () => {
 		agents: Agents;
 		tappedPermanent: ReturnType<Engine["spawnPermanent"]>;
 	} {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const tappedPermanent = engine.spawnPermanent(
 			state,
 			"grizzly-bears",
@@ -149,7 +151,7 @@ describe("playing a normal turn", () => {
 	});
 
 	test("players take alternating turns and each draws a card", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents = passingAgents();
 		addCards(state, ALICE, "library", 2);
 		addCards(state, BOB, "library", 2);
@@ -164,7 +166,7 @@ describe("playing a normal turn", () => {
 	});
 
 	test("hands the active player role to each player in turn", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents = passingAgents();
 		addCards(state, ALICE, "library", 2);
 		addCards(state, BOB, "library", 2);
@@ -182,7 +184,7 @@ describe("draw steps and game endings", () => {
 		state: GameState;
 		agents: Agents;
 	} {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		return { state, agents: passingAgents() };
 	}
 

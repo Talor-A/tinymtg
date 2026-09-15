@@ -28,6 +28,7 @@ import {
 	ALICE,
 	advanceUntil,
 	BOB,
+	newInProgressGame,
 	passingAgents,
 	seedLibraries,
 	setupMain,
@@ -290,7 +291,7 @@ describe("land action observability", () => {
 describe("playing a land through priority", () => {
 	test("plays one land in each main phase and retains priority", () => {
 		for (const role of ["precombat", "postcombat"] as const) {
-			const state = engine.newGame();
+			const state = newInProgressGame(engine);
 			seedLibraries(engine, state);
 			const land = engine.spawnCard(state, "forest", ALICE, "hand");
 			const priorityPlayers: PlayerId[] = [];
@@ -331,7 +332,7 @@ describe("playing a land through priority", () => {
 	});
 
 	test("runs ETB replacements and triggers through the existing event pipeline", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		seedLibraries(engine, state);
 		engine.spawnPermanent(state, "root-maze", BOB);
 		const land = engine.spawnCard(state, "test-etb-land", ALICE, "hand");
@@ -352,7 +353,7 @@ describe("playing a land through priority", () => {
 	});
 
 	test("replays an async card-specific priority choice without mutating its checkpoint", async () => {
-		let checkpoint = engine.newGame();
+		let checkpoint = newInProgressGame(engine);
 		seedLibraries(engine, checkpoint);
 		const land = engine.spawnCard(checkpoint, "forest", ALICE, "hand");
 		const snapshot = structuredClone(checkpoint);

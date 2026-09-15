@@ -149,12 +149,9 @@ interface StepOccurrence {
 	kind: StepKind;
 }
 
-const PRE_GAME_STEPS = [
-	"shuffle",
-	"opening hand",
-	"mulligan",
-	"opening hand actions",
-] as const;
+const PRE_GAME_STEPS = ["shuffle", "opening hand"] as const;
+
+const INITIAL_HAND_SIZE = 7;
 
 type PreGameStepKind = (typeof PRE_GAME_STEPS)[number];
 
@@ -10701,8 +10698,9 @@ function priority(
  * Turn progression
  * ------------------------------------------------------------------ */
 function performPreGameActions(
+	engine: Engine,
 	state: GameState,
-	__choices: AnyChoiceController,
+	choices: AnyChoiceController,
 	step: PreGameStepKind,
 ): void {
 	switch (step) {
@@ -10710,8 +10708,20 @@ function performPreGameActions(
 			for (const player of state.players) shuffleLibrary(state, player.id);
 			break;
 		case "opening hand":
-		case "mulligan":
-		case "opening hand actions":
+			for (const player of state.players) {
+				performIn(
+					engine,
+					state,
+					{
+						kind: "draw cards",
+						player: player.id,
+						amount: INITIAL_HAND_SIZE,
+					},
+					choices,
+					newScope(),
+					0,
+				);
+			}
 			break;
 		default:
 			assertNever(step);
@@ -11076,7 +11086,7 @@ function advanceIn(
 					continue;
 				}
 				scheduler.progress = { kind: "pregame", step };
-				performPreGameActions(state, choices, step);
+				performPreGameActions(engine, state, choices, step);
 				scheduler.nextAction = { kind: "finishPreGameStep" };
 				// A pre-game step is a rules-defined location, exactly like a turn's
 				// step. Unlike one, CR 103 opens no priority window, so there is no

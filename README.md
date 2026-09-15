@@ -258,8 +258,9 @@ and optional sacrifices are not implemented. Spells and activated abilities
 share fixed mana, life, tap-self, sacrifice, and discard payment logic; a
 spell's nonmana components are represented as additional costs. Fixed positive
 life payments are supported, including combined fetch-land costs. Variable life
-payments, deck construction, opening hands, mulligans, and alternative costs
-are not implemented yet.
+payments, deck construction, mulligans, pregame special actions, and alternative
+costs are not implemented yet. Pregame setup shuffles both libraries and draws
+seven cards for each player.
 
 Effect definitions call the entity they act on a `subject`. A singular player
 subject can be relative (`you`, `opponent`, or `triggering-player`) or refer to

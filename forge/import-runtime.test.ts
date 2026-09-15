@@ -28,6 +28,7 @@ import {
 	BOB,
 	beginFirstTurn,
 	created,
+	newInProgressGame,
 	passingAgents,
 	type SyncAgents,
 	setupMain,
@@ -724,7 +725,7 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("Ajani's Mantra's imported upkeep trigger fires only for its controller, and its choice is genuinely optional", () => {
-		const accept = engine.newGame();
+		const accept = newInProgressGame(engine);
 		const acceptAgents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		engine.spawnPermanent(accept, "rt-ajanis-mantra", ALICE);
 		stockLibraries(accept);
@@ -738,7 +739,7 @@ describe("forge-import runtime: triggers", () => {
 			"opponent's upkeep does not trigger it",
 		).toBe(21);
 
-		const decline = engine.newGame();
+		const decline = newInProgressGame(engine);
 		const declineAgents: SyncAgents = [
 			new ScriptedAgent([], [false]),
 			new ScriptedAgent(),
@@ -803,7 +804,7 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("a self PutCounter trigger adds its counter to its source", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		const source = engine.spawnPermanent(state, "rt-test-self-counter", ALICE);
 		stockLibraries(state);
@@ -865,7 +866,7 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("Necrogen Mists makes the player whose upkeep began discard", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: SyncAgents = [new ScriptedAgent(), new ScriptedAgent()];
 		engine.spawnPermanent(state, "rt-necrogen-mists", ALICE);
 		stockLibraries(state);
@@ -889,7 +890,7 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("an optional trigger's whole multi-effect sequence is accepted or declined as one choice", () => {
-		const accept = engine.newGame();
+		const accept = newInProgressGame(engine);
 		const acceptAgents: SyncAgents = [
 			new ScriptedAgent([], [true]),
 			new ScriptedAgent(),
@@ -905,7 +906,7 @@ describe("forge-import runtime: triggers", () => {
 		);
 		expect(accept.players[ALICE].hand.length).toBe(handBefore + 1);
 
-		const decline = engine.newGame();
+		const decline = newInProgressGame(engine);
 		const declineAgents: SyncAgents = [
 			new ScriptedAgent([], [false]),
 			new ScriptedAgent(),
@@ -922,7 +923,7 @@ describe("forge-import runtime: triggers", () => {
 
 	test("an optional targeted trigger picks its target before it asks the question", () => {
 		for (const accepted of [true, false]) {
-			const state = engine.newGame();
+			const state = newInProgressGame(engine);
 			const agents: SyncAgents = [
 				new ScriptedAgent([], [accepted]),
 				new ScriptedAgent(),
@@ -986,7 +987,7 @@ describe("forge-import runtime: triggers", () => {
 	});
 
 	test("an optional targeted trigger with no legal target is never put on the stack", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		// The agent would say yes; it is never asked, because there is no creature
 		// for the trigger to target when it would go on the stack.
 		const agents: SyncAgents = [

@@ -26,6 +26,7 @@ import {
 	BOB,
 	beginFirstTurn,
 	created,
+	newInProgressGame,
 	passingAgents,
 } from "./utils/engine-helpers.ts";
 
@@ -143,7 +144,7 @@ describe("triggered abilities", () => {
 	}
 
 	test("puts active-player triggers below nonactive-player triggers", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		// APNAP is meaningless without an active player, so run a real turn.
 		beginFirstTurn(engine, state, agents);
@@ -218,7 +219,7 @@ describe("triggered abilities", () => {
 	});
 
 	test("the forced-copy fixture queues and resolves a copied ETB trigger from its characteristics", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		beginFirstTurn(engine, state, agents);
 		engine.spawnPermanent(state, "arashin-cleric", ALICE);
@@ -291,7 +292,7 @@ describe("triggered abilities", () => {
 	}
 
 	test("Ajani's Mantra triggers only on its controller's upkeep", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: Agents = [new ScriptedAgent(), new ScriptedAgent()];
 		engine.spawnPermanent(state, "ajanis-mantra", ALICE);
 		stockLibraries(state);
@@ -308,7 +309,7 @@ describe("triggered abilities", () => {
 	});
 
 	test("Ajani's Mantra's controller may decline", () => {
-		const state = engine.newGame();
+		const state = newInProgressGame(engine);
 		const agents: Agents = [
 			new ScriptedAgent([], [false]),
 			new ScriptedAgent(),
