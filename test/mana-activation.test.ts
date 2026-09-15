@@ -498,7 +498,7 @@ describe("priority-time mana abilities", () => {
 		expect(state.players[ALICE].manaPool.g).toBe(1);
 	});
 
-	test("replays an async activation without mutating its checkpoint", async () => {
+	test("replays an async activation and empties its mana at step end", async () => {
 		let checkpoint = newInProgressGame(engine);
 		seedLibraries(engine, checkpoint);
 		const forest = engine.spawnPermanent(checkpoint, "forest", ALICE);
@@ -523,23 +523,24 @@ describe("priority-time mana abilities", () => {
 			new ScriptedAgent(),
 		]);
 
-		let attempts = 1;
-		for (let count = 0; count < 4; count++) {
-			const before = structuredClone(checkpoint);
-			const result = await engine.advanceWithReplay(checkpoint, [
-				active,
-				new ScriptedAgent(),
-			]);
-			expect(checkpoint).toEqual(before);
-			checkpoint = result.state;
-			attempts = Math.max(attempts, result.attempts);
-			if (checkpoint.players[ALICE].manaPool.g === 1) break;
-		}
+		// Enter the untap step, which has no ordinary priority window.
+		checkpoint = (
+			await engine.advanceWithReplay(checkpoint, [active, new ScriptedAgent()])
+		).state;
+		const before = structuredClone(checkpoint);
 
-		expect(attempts).toBe(2);
-		expect(checkpoint.objects.get(forest.id)).toMatchObject({ tapped: true });
-		expect(checkpoint.players[ALICE].manaPool.g).toBe(1);
-		expect(checkpoint.stack).toHaveLength(0);
+		// The activation suspends during upkeep priority. Its speculative state is
+		// discarded, then replayed through the end-of-step mana cleanup.
+		const result = await engine.advanceWithReplay(checkpoint, [
+			active,
+			new ScriptedAgent(),
+		]);
+
+		expect(checkpoint).toEqual(before);
+		expect(result.attempts).toBe(2);
+		expect(result.state.objects.get(forest.id)).toMatchObject({ tapped: true });
+		expect(result.state.players[ALICE].manaPool.g).toBe(0);
+		expect(result.state.stack).toHaveLength(0);
 	});
 });
 

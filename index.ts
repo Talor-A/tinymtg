@@ -195,16 +195,13 @@ export type GameProgress =
 
 type SchedulerCommand =
 	| { kind: "advancePreGameStep" }
-	| { kind: "finishPreGameStep" }
 	| { kind: "advanceTurn" }
 	| { kind: "advancePhase"; turn: TurnOccurrence }
 	| {
 			kind: "advanceStep";
 			turn: TurnOccurrence;
 			phase: PhaseOccurrence;
-	  }
-	| { kind: "finishStep" }
-	| { kind: "finishPhase" };
+	  };
 
 interface TurnScheduler {
 	/**
@@ -11091,17 +11088,8 @@ function advanceIn(
 				}
 				scheduler.progress = { kind: "pregame", step };
 				performPreGameActions(engine, state, choices, step);
-				scheduler.nextAction = { kind: "finishPreGameStep" };
-				// A pre-game step is a rules-defined location, exactly like a turn's
-				// step. Unlike one, CR 103 opens no priority window, so there is no
-				// priority() call before returning.
-				return;
-			}
-
-			case "finishPreGameStep": {
-				assert(scheduler.progress.kind === "pregame");
 				scheduler.nextAction = { kind: "advancePreGameStep" };
-				continue;
+				return;
 			}
 
 			case "advanceTurn": {
@@ -11210,8 +11198,9 @@ function advanceIn(
 						turn,
 						location: { kind: "mainPhase", phase, role },
 					};
-					scheduler.nextAction = { kind: "finishPhase" };
 					priority(engine, state, choices);
+					if (!gameOver(state)) emptyManaPools(state);
+					scheduler.nextAction = { kind: "advancePhase", turn };
 					return;
 				}
 
@@ -11224,7 +11213,7 @@ function advanceIn(
 				const { turn, phase } = command;
 				const step = scheduler.remainingSteps.shift();
 				if (!step) {
-					scheduler.nextAction = { kind: "finishPhase" };
+					scheduler.nextAction = { kind: "advancePhase", turn };
 					continue;
 				}
 
@@ -11257,37 +11246,13 @@ function advanceIn(
 					turn,
 					location: { kind: "step", phase, step },
 				};
-				scheduler.nextAction = { kind: "finishStep" };
 				performTurnBasedActions(engine, state, choices, step, turn.player);
 				// Untap has no priority window. Cleanup normally has none, but the
 				// priority helper opens one if something triggered.
 				priority(engine, state, choices);
+				if (!gameOver(state)) emptyManaPools(state);
+				scheduler.nextAction = { kind: "advanceStep", turn, phase };
 				return;
-			}
-
-			case "finishStep": {
-				const progress = scheduler.progress;
-				assert(progress.kind === "inTurn");
-				assert(progress.location?.kind === "step");
-				emptyManaPools(state);
-				scheduler.nextAction = {
-					kind: "advanceStep",
-					turn: progress.turn,
-					phase: progress.location.phase,
-				};
-				continue;
-			}
-
-			case "finishPhase": {
-				const progress = scheduler.progress;
-				assert(progress.kind === "inTurn");
-				emptyManaPools(state);
-				scheduler.remainingSteps = [];
-				scheduler.nextAction = {
-					kind: "advancePhase",
-					turn: progress.turn,
-				};
-				continue;
 			}
 
 			default:

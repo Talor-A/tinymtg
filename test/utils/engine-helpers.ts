@@ -172,7 +172,8 @@ export function skipPreGame(state: GameState): void {
 	if (state.turnScheduler.progress.kind !== "notStarted")
 		throw new Error("only a fresh game can skip pregame");
 	state.turnScheduler = {
-		nextAction: { kind: "finishPreGameStep" },
+		nextAction: { kind: "advancePreGameStep" },
+		// start the game after opening hand actions.
 		progress: { kind: "pregame", step: "opening hand" },
 		pendingTurns: [],
 		nextRegularPlayer: 0 as PlayerId,
