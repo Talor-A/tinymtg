@@ -121,7 +121,8 @@ Viscera Seer, Blazing Hellhound, and Acolyte of Aclazotz), with
 life/draw/discard-one-chosen-card, scry, surveil, and fixed hidden `Dig` forms
 such as Sleight of Hand, Impulse, and Stock Up, which put a card-defined
 number into hand (defaulting Forge's omitted `ChangeNum$` to one) and order the
-rest on the bottom; the unmodified `Investigate` effect, which creates one
+rest on the bottom; fixed mana added by spells or triggered abilities; the
+unmodified `Investigate` effect, which creates one
 canonical Clue token for the ability's controller; damage, destroy, counter,
 predicate-selected `TapAll` effects such as Metal Fatigue,
 one-permanent sacrifice for a relative or targeted player, targeted or

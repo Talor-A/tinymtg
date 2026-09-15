@@ -274,12 +274,16 @@ const ALLOWED_CARD_DIRECTIVES = new Set([
  * on every record without appearing on any operation's allowlist.
  *
  * `AILogic` names a strategy class that Forge's automated player consults when
- * deciding whether and when to use an ability. It never changes the ability's
- * instructions, its costs, or its targets, so the engine's lowering of a record
- * is identical with and without it. `ast.ts` already classifies it as a
- * non-SVar-referencing display-ish key for the same reason.
+ * deciding whether and when to use an ability. `AINoRecursiveCheck` controls
+ * that player's search. Neither changes instructions, costs, or targets, so the
+ * engine's lowering of a record is identical with and without them. `ast.ts`
+ * already classifies them as non-SVar-referencing display-ish keys for the same
+ * reason.
  */
-const IGNORED_PARAMS: ReadonlySet<string> = new Set(["ailogic"]);
+const IGNORED_PARAMS: ReadonlySet<string> = new Set([
+	"ailogic",
+	"ainorecursivecheck",
+]);
 
 /**
  * Scalar SVars Forge's AI and deck builder consult, but which do not affect a
@@ -1103,6 +1107,47 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			where,
 		);
 	switch (api) {
+		case "mana": {
+			const badParams = claim("produced", "amount");
+			if (!badParams.ok) return badParams;
+			const produced = getForgeParam(params, "Produced");
+			const producedSymbols = produced?.split(" ") ?? [];
+			const producedTypes: ManaType[] = [];
+			for (const symbol of producedSymbols) {
+				const type = PRODUCED_MANA_SYMBOLS.get(symbol);
+				if (!type)
+					return issue(
+						"UNSUPPORTED_EFFECT",
+						`unsupported produced mana ${produced ?? "(none)"}`,
+						where,
+					);
+				producedTypes.push(type);
+			}
+			if (producedTypes.length === 0)
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					"unsupported produced mana (none)",
+					where,
+				);
+
+			const amountText = getForgeParam(params, "Amount");
+			const amount =
+				producedTypes.length === 1
+					? positiveInteger(amountText, 1)
+					: amountText === undefined
+						? 1
+						: null;
+			if (!amount)
+				return issue(
+					"UNSUPPORTED_EFFECT",
+					`unsupported mana amount ${amountText ?? ""}`,
+					where,
+				);
+
+			const mana: ManaPool = { w: 0, u: 0, b: 0, r: 0, g: 0, c: 0 };
+			for (const type of producedTypes) mana[type] += amount;
+			return ok([{ kind: "add-mana", subject: "you", mana }]);
+		}
 		case "gainlife":
 		case "loselife":
 		case "scry":
@@ -3920,7 +3965,11 @@ function lowerTrigger(
 			});
 		}
 		case "Attacks": {
-			const badParams = claim("validcard", "triggerzones");
+			const badParams = claim(
+				"validcard",
+				"triggerzones",
+				"optionaldecider",
+			);
 			if (!badParams.ok) return badParams;
 			if (
 				getForgeParam(params, "ValidCard") !== "Card.Self" ||

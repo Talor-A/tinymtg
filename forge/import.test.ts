@@ -388,6 +388,54 @@ describe("lowerForgeCard: accepted card lowering", () => {
 		]);
 	});
 
+	test("fixed spell and triggered mana use the existing add-mana effect", () => {
+		const ritual = importFixture("d/dark_ritual");
+		if (!ritual.ok) throw new Error("expected Dark Ritual to import");
+		expect(ritual.card.spell?.effects).toEqual([
+			{
+				kind: "add-mana",
+				subject: "you",
+				mana: { w: 0, u: 0, b: 3, r: 0, g: 0, c: 0 },
+			},
+		]);
+
+		const radha = importFixture("r/radha_heir_to_keld");
+		if (!radha.ok) throw new Error("expected Radha, Heir to Keld to import");
+			expect(radha.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+			{
+				kind: "may",
+				decider: "you",
+				effects: [
+					{
+						kind: "add-mana",
+						subject: "you",
+						mana: { w: 0, u: 0, b: 0, r: 2, g: 0, c: 0 },
+					},
+				],
+			},
+		]);
+	});
+
+	test("nonfixed spell mana remains unsupported", () => {
+		for (const fixture of [
+			"b/battle_hymn",
+			"r/rosethorn_acolyte_seasonal_ritual",
+		]) {
+			expect(importFixture(fixture).ok).toBe(false);
+		}
+
+		const ritual = cardText("d/dark_ritual");
+		for (const [from, to] of [
+			["Produced$ B", "Produced$ Any"],
+			["Amount$ 3", "Amount$ X"],
+			["Produced$ B", "Produced$ B B"],
+			["Produced$ B", "Produced$ B | Defined$ Opponent"],
+			["Produced$ B", "Produced$ B | PersistentMana$ True"],
+		] as const) {
+			expect(importText(ritual.replace(from, to)).ok).toBe(false);
+		}
+	});
+
 	test("Firebrand Archer and Kessig Flamebreather lower opponent damage recipients", () => {
 		for (const fixture of ["f/firebrand_archer", "k/kessig_flamebreather"]) {
 			const result = importFixture(fixture);
