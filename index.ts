@@ -8767,8 +8767,9 @@ function effectToEvent(
 							player: relativeEffectPlayer(item, effect.subject.player),
 						}
 					: subject;
+			assertDefined(recipient, "damage recipient must be defined");
 			assert(
-				recipient?.type === "player" || recipient?.type === "permanent",
+				recipient.type === "player" || recipient.type === "permanent",
 				"damage recipient must be a player or permanent",
 			);
 			// CR 119.3: lifelink life goes to the controller of the damage source,
