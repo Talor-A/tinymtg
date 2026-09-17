@@ -7,6 +7,11 @@
  * supported subset is expected to add lines, and the diff on the snapshot is
  * the review-visible record of exactly which cards a change bought or lost.
  *
+ * A name here says the card imported, and nothing about what it imported as:
+ * a card whose ability lowered to something that can never do anything still
+ * appears. `lowered-cards.test.ts` snapshots whole definitions for a handful
+ * of cards to cover that, and the two files are meant to be read together.
+ *
  * Regenerate after a deliberate change:
  *
  *     bun test --update-snapshots forge/accepted-cards.test.ts

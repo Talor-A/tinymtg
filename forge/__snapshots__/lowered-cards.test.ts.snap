@@ -1,0 +1,1147 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`g/grizzly_bears lowers as printed characteristics only: g/grizzly_bears 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "g",
+  ],
+  "id": "grizzly-bears",
+  "manaCost": {
+    "g": 1,
+    "n": 1,
+  },
+  "name": "Grizzly Bears",
+  "power": 2,
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "subtypes": [
+    "Bear",
+  ],
+  "toughness": 2,
+  "types": [
+    "creature",
+  ],
+}
+`;
+
+exports[`l/lightning_bolt lowers as spell with an any-target: l/lightning_bolt 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "r",
+  ],
+  "id": "lightning-bolt",
+  "manaCost": {
+    "r": 1,
+  },
+  "name": "Lightning Bolt",
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "spell": {
+    "effects": [
+      {
+        "amount": 3,
+        "kind": "damage",
+        "recipients": [
+          {
+            "kind": "target",
+            "slot": "target-1",
+          },
+        ],
+      },
+    ],
+    "id": "spell-1",
+    "targets": [
+      {
+        "id": "target-1",
+        "legal": {
+          "kind": "any-target",
+        },
+        "max": 1,
+        "min": 1,
+      },
+    ],
+    "text": "CARDNAME deals 3 damage to any target.",
+  },
+  "types": [
+    "instant",
+  ],
+}
+`;
+
+exports[`c/counterspell lowers as spell targeting a spell on the stack: c/counterspell 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "u",
+  ],
+  "id": "counterspell",
+  "manaCost": {
+    "u": 2,
+  },
+  "name": "Counterspell",
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "spell": {
+    "effects": [
+      {
+        "kind": "counter",
+        "subject": {
+          "kind": "target",
+          "slot": "target-1",
+        },
+      },
+    ],
+    "id": "spell-1",
+    "targets": [
+      {
+        "id": "target-1",
+        "legal": {
+          "kind": "spell",
+        },
+        "max": 1,
+        "min": 1,
+      },
+    ],
+    "text": "Counter target spell.",
+  },
+  "types": [
+    "instant",
+  ],
+}
+`;
+
+exports[`w/wrath_of_god lowers as untargeted mass effect: w/wrath_of_god 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "w",
+  ],
+  "id": "wrath-of-god",
+  "manaCost": {
+    "n": 2,
+    "w": 2,
+  },
+  "name": "Wrath of God",
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "spell": {
+    "effects": [
+      {
+        "kind": "destroy",
+        "noRegen": true,
+        "subjects": {
+          "kind": "matching-permanents",
+          "predicate": {
+            "kind": "type",
+            "type": "creature",
+          },
+        },
+      },
+    ],
+    "id": "spell-1",
+    "targets": [],
+    "text": "Destroy all creatures. They can't be regenerated.",
+  },
+  "types": [
+    "sorcery",
+  ],
+}
+`;
+
+exports[`d/day_of_judgment lowers as untargeted mass effect, no regeneration clause: d/day_of_judgment 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "w",
+  ],
+  "id": "day-of-judgment",
+  "manaCost": {
+    "n": 2,
+    "w": 2,
+  },
+  "name": "Day of Judgment",
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "spell": {
+    "effects": [
+      {
+        "kind": "destroy",
+        "subjects": {
+          "kind": "matching-permanents",
+          "predicate": {
+            "kind": "type",
+            "type": "creature",
+          },
+        },
+      },
+    ],
+    "id": "spell-1",
+    "targets": [],
+    "text": "Destroy all creatures.",
+  },
+  "types": [
+    "sorcery",
+  ],
+}
+`;
+
+exports[`h/human_frailty lowers as target restricted by subtype: h/human_frailty 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "b",
+  ],
+  "id": "human-frailty",
+  "manaCost": {
+    "b": 1,
+  },
+  "name": "Human Frailty",
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "spell": {
+    "effects": [
+      {
+        "kind": "destroy",
+        "subjects": {
+          "kind": "target",
+          "slot": "target-1",
+        },
+      },
+    ],
+    "id": "spell-1",
+    "targets": [
+      {
+        "id": "target-1",
+        "legal": {
+          "kind": "permanent",
+          "predicate": {
+            "kind": "and",
+            "predicates": [
+              {
+                "kind": "type",
+                "type": "creature",
+              },
+              {
+                "kind": "subtype",
+                "subtype": "Human",
+              },
+            ],
+          },
+        },
+        "max": 1,
+        "min": 1,
+      },
+    ],
+    "text": "Destroy target Human creature.",
+  },
+  "types": [
+    "instant",
+  ],
+}
+`;
+
+exports[`u/unmarked_grave lowers as library search, negated supertype: u/unmarked_grave 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "b",
+  ],
+  "id": "unmarked-grave",
+  "manaCost": {
+    "b": 1,
+    "n": 1,
+  },
+  "name": "Unmarked Grave",
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "spell": {
+    "effects": [
+      {
+        "kind": "search-library",
+        "owner": {
+          "kind": "relative-player",
+          "player": "you",
+        },
+        "predicate": {
+          "kind": "not",
+          "predicate": {
+            "kind": "supertype",
+            "supertype": "legendary",
+          },
+        },
+        "resultSlot": "searched-library-card",
+        "searcher": {
+          "kind": "relative-player",
+          "player": "you",
+        },
+      },
+      {
+        "destination": {
+          "zone": "graveyard",
+        },
+        "from": "library",
+        "kind": "change-zone",
+        "subject": {
+          "kind": "effect-result",
+          "slot": "searched-library-card",
+        },
+      },
+      {
+        "kind": "shuffle-library",
+        "subject": {
+          "kind": "relative-player",
+          "player": "you",
+        },
+      },
+    ],
+    "id": "spell-1",
+    "targets": [],
+    "text": "Search your library for a nonlegendary card, put that card into your graveyard, then shuffle.",
+  },
+  "types": [
+    "sorcery",
+  ],
+}
+`;
+
+exports[`r/reki_the_history_of_kamigawa lowers as spell-cast trigger, supertype filter: r/reki_the_history_of_kamigawa 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [
+      {
+        "condition": {
+          "kind": "cast",
+          "player": "you",
+          "predicate": {
+            "kind": "supertype",
+            "supertype": "legendary",
+          },
+        },
+        "effects": [
+          {
+            "amount": 1,
+            "kind": "draw",
+            "subject": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+          },
+        ],
+        "id": "TrigDraw",
+        "targets": [],
+        "text": "Whenever you cast a legendary spell, draw a card.",
+      },
+    ],
+  },
+  "colors": [
+    "g",
+  ],
+  "id": "reki-the-history-of-kamigawa",
+  "manaCost": {
+    "g": 1,
+    "n": 2,
+  },
+  "name": "Reki, the History of Kamigawa",
+  "power": 1,
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [
+      "reki-the-history-of-kamigawa:0",
+    ],
+  },
+  "subtypes": [
+    "Human",
+    "Shaman",
+  ],
+  "supertypes": [
+    "legendary",
+  ],
+  "toughness": 2,
+  "types": [
+    "creature",
+  ],
+}
+`;
+
+exports[`m/merfolk_looter lowers as activated ability, tap cost: m/merfolk_looter 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [
+      {
+        "cost": {
+          "mana": "zero",
+          "tapSelf": true,
+        },
+        "effects": [
+          {
+            "amount": 1,
+            "kind": "draw",
+            "subject": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+          },
+          {
+            "amount": 1,
+            "kind": "discard",
+            "selector": "any",
+            "subject": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+          },
+        ],
+        "id": "activated-1",
+        "kind": "activated",
+        "targets": [],
+        "text": "Draw a card, then discard a card.",
+      },
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "u",
+  ],
+  "id": "merfolk-looter",
+  "manaCost": {
+    "n": 1,
+    "u": 1,
+  },
+  "name": "Merfolk Looter",
+  "power": 1,
+  "printedAbilities": {
+    "activated": [
+      "merfolk-looter:0",
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "subtypes": [
+    "Merfolk",
+    "Rogue",
+  ],
+  "toughness": 1,
+  "types": [
+    "creature",
+  ],
+}
+`;
+
+exports[`p/prodigal_sorcerer lowers as activated ability with a target: p/prodigal_sorcerer 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [
+      {
+        "cost": {
+          "mana": "zero",
+          "tapSelf": true,
+        },
+        "effects": [
+          {
+            "amount": 1,
+            "kind": "damage",
+            "recipients": [
+              {
+                "kind": "target",
+                "slot": "target-1",
+              },
+            ],
+          },
+        ],
+        "id": "activated-1",
+        "kind": "activated",
+        "targets": [
+          {
+            "id": "target-1",
+            "legal": {
+              "kind": "any-target",
+            },
+            "max": 1,
+            "min": 1,
+          },
+        ],
+        "text": "CARDNAME deals 1 damage to any target.",
+      },
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "u",
+  ],
+  "id": "prodigal-sorcerer",
+  "manaCost": {
+    "n": 2,
+    "u": 1,
+  },
+  "name": "Prodigal Sorcerer",
+  "power": 1,
+  "printedAbilities": {
+    "activated": [
+      "prodigal-sorcerer:0",
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "subtypes": [
+    "Human",
+    "Wizard",
+    "Sorcerer",
+  ],
+  "toughness": 1,
+  "types": [
+    "creature",
+  ],
+}
+`;
+
+exports[`j/judith_the_scourge_diva lowers as zone-change trigger, negated modifier: j/judith_the_scourge_diva 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [
+      {
+        "applies": [Function],
+        "effects": [
+          {
+            "layer": "7c-modify-power-toughness",
+            "modify": [Function: modify],
+          },
+        ],
+        "kind": "characteristic",
+        "text": "Other creatures you control get +1/+0.",
+      },
+    ],
+    "triggered": [
+      {
+        "condition": {
+          "from": "battlefield",
+          "kind": "change zone",
+          "predicate": {
+            "kind": "and",
+            "predicates": [
+              {
+                "kind": "type",
+                "type": "creature",
+              },
+              {
+                "kind": "controller",
+                "player": "you",
+              },
+              {
+                "kind": "not",
+                "predicate": {
+                  "kind": "token",
+                },
+              },
+            ],
+          },
+          "to": "graveyard",
+        },
+        "effects": [
+          {
+            "amount": 1,
+            "kind": "damage",
+            "recipients": [
+              {
+                "kind": "target",
+                "slot": "target-1",
+              },
+            ],
+          },
+        ],
+        "id": "TrigDamage",
+        "targets": [
+          {
+            "id": "target-1",
+            "legal": {
+              "kind": "any-target",
+            },
+            "max": 1,
+            "min": 1,
+          },
+        ],
+        "text": "Whenever a nontoken creature you control dies, CARDNAME deals 1 damage to any target.",
+      },
+    ],
+  },
+  "colors": [
+    "b",
+    "r",
+  ],
+  "id": "judith-the-scourge-diva",
+  "manaCost": {
+    "b": 1,
+    "n": 1,
+    "r": 1,
+  },
+  "name": "Judith, the Scourge Diva",
+  "power": 2,
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [
+      "judith-the-scourge-diva:0",
+    ],
+    "triggered": [
+      "judith-the-scourge-diva:0",
+    ],
+  },
+  "subtypes": [
+    "Human",
+    "Shaman",
+  ],
+  "supertypes": [
+    "legendary",
+  ],
+  "toughness": 2,
+  "types": [
+    "creature",
+  ],
+}
+`;
+
+exports[`v/vedalken_aethermage lowers as typecycling, subtype search: v/vedalken_aethermage 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [
+      {
+        "activationEvent": {
+          "kind": "cycle",
+        },
+        "cost": {
+          "discard": {
+            "amount": 1,
+            "kind": "source",
+          },
+          "mana": {
+            "n": 3,
+          },
+          "tapSelf": false,
+        },
+        "effects": [
+          {
+            "kind": "search-library",
+            "owner": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+            "predicate": {
+              "kind": "subtype",
+              "subtype": "Wizard",
+            },
+            "resultSlot": "searched-library-card",
+            "searcher": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+          },
+          {
+            "kind": "reveal",
+            "subject": {
+              "kind": "effect-result",
+              "slot": "searched-library-card",
+            },
+          },
+          {
+            "destination": {
+              "zone": "hand",
+            },
+            "from": "library",
+            "kind": "change-zone",
+            "subject": {
+              "kind": "effect-result",
+              "slot": "searched-library-card",
+            },
+          },
+          {
+            "kind": "shuffle-library",
+            "subject": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+          },
+        ],
+        "functionsFrom": [
+          "hand",
+        ],
+        "id": "activated-1",
+        "kind": "activated",
+        "targets": [],
+        "text": "Wizardcycling.",
+      },
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [
+      {
+        "condition": {
+          "from": "any",
+          "kind": "change zone",
+          "predicate": {
+            "kind": "self",
+          },
+          "to": "battlefield",
+        },
+        "effects": [
+          {
+            "destination": {
+              "zone": "hand",
+            },
+            "from": "battlefield",
+            "kind": "change-zone",
+            "subject": {
+              "kind": "target",
+              "slot": "target-1",
+            },
+          },
+        ],
+        "id": "TrigChangeZone",
+        "targets": [
+          {
+            "id": "target-1",
+            "legal": {
+              "kind": "permanent",
+              "predicate": {
+                "kind": "subtype",
+                "subtype": "Sliver",
+              },
+            },
+            "max": 1,
+            "min": 1,
+          },
+        ],
+        "text": "When CARDNAME enters, return target Sliver to its owner's hand.",
+      },
+    ],
+  },
+  "colors": [
+    "u",
+  ],
+  "id": "vedalken-aethermage",
+  "keywords": [
+    "flash",
+  ],
+  "manaCost": {
+    "n": 1,
+    "u": 1,
+  },
+  "name": "Vedalken Aethermage",
+  "power": 1,
+  "printedAbilities": {
+    "activated": [
+      "vedalken-aethermage:0",
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [
+      "vedalken-aethermage:0",
+    ],
+  },
+  "subtypes": [
+    "Vedalken",
+    "Wizard",
+  ],
+  "toughness": 2,
+  "types": [
+    "creature",
+  ],
+}
+`;
+
+exports[`a/ash_barrens lowers as basic landcycling, plus a mana ability: a/ash_barrens 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [
+      {
+        "activationEvent": {
+          "kind": "cycle",
+        },
+        "cost": {
+          "discard": {
+            "amount": 1,
+            "kind": "source",
+          },
+          "mana": {
+            "n": 1,
+          },
+          "tapSelf": false,
+        },
+        "effects": [
+          {
+            "kind": "search-library",
+            "owner": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+            "predicate": {
+              "kind": "and",
+              "predicates": [
+                {
+                  "kind": "type",
+                  "type": "land",
+                },
+                {
+                  "kind": "supertype",
+                  "supertype": "basic",
+                },
+              ],
+            },
+            "resultSlot": "searched-library-card",
+            "searcher": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+          },
+          {
+            "kind": "reveal",
+            "subject": {
+              "kind": "effect-result",
+              "slot": "searched-library-card",
+            },
+          },
+          {
+            "destination": {
+              "zone": "hand",
+            },
+            "from": "library",
+            "kind": "change-zone",
+            "subject": {
+              "kind": "effect-result",
+              "slot": "searched-library-card",
+            },
+          },
+          {
+            "kind": "shuffle-library",
+            "subject": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+          },
+        ],
+        "functionsFrom": [
+          "hand",
+        ],
+        "id": "activated-1",
+        "kind": "activated",
+        "targets": [],
+        "text": "Basic landcycling.",
+      },
+      {
+        "cost": {
+          "mana": "zero",
+          "tapSelf": true,
+        },
+        "id": "activated-2",
+        "kind": "mana",
+        "manaOptions": [
+          {
+            "b": 0,
+            "c": 1,
+            "g": 0,
+            "r": 0,
+            "u": 0,
+            "w": 0,
+          },
+        ],
+        "text": "Add {C}.",
+      },
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [],
+  "id": "ash-barrens",
+  "manaCost": "none",
+  "name": "Ash Barrens",
+  "printedAbilities": {
+    "activated": [
+      "ash-barrens:0",
+      "ash-barrens:1",
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "types": [
+    "land",
+  ],
+}
+`;
+
+exports[`w/wooded_foothills lowers as sacrifice-self search, enters tapped: w/wooded_foothills 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [
+      {
+        "cost": {
+          "life": {
+            "amount": 1,
+          },
+          "mana": "zero",
+          "sacrifice": {
+            "amount": 1,
+            "predicate": {
+              "kind": "self",
+            },
+          },
+          "tapSelf": true,
+        },
+        "effects": [
+          {
+            "kind": "search-library",
+            "owner": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+            "predicate": {
+              "kind": "or",
+              "predicates": [
+                {
+                  "kind": "subtype",
+                  "subtype": "Mountain",
+                },
+                {
+                  "kind": "subtype",
+                  "subtype": "Forest",
+                },
+              ],
+            },
+            "resultSlot": "searched-library-card",
+            "searcher": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+          },
+          {
+            "destination": {
+              "controller": "owner",
+              "zone": "battlefield",
+            },
+            "from": "library",
+            "kind": "change-zone",
+            "subject": {
+              "kind": "effect-result",
+              "slot": "searched-library-card",
+            },
+          },
+          {
+            "kind": "shuffle-library",
+            "subject": {
+              "kind": "relative-player",
+              "player": "you",
+            },
+          },
+        ],
+        "id": "activated-1",
+        "kind": "activated",
+        "targets": [],
+        "text": "Search your library for a Mountain or Forest card, put it onto the battlefield, then shuffle.",
+      },
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [],
+  "id": "wooded-foothills",
+  "manaCost": "none",
+  "name": "Wooded Foothills",
+  "printedAbilities": {
+    "activated": [
+      "wooded-foothills:0",
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "types": [
+    "land",
+  ],
+}
+`;
+
+exports[`d/dogged_hunter lowers as target restricted to tokens: d/dogged_hunter 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [
+      {
+        "cost": {
+          "mana": "zero",
+          "tapSelf": true,
+        },
+        "effects": [
+          {
+            "kind": "destroy",
+            "subjects": {
+              "kind": "target",
+              "slot": "target-1",
+            },
+          },
+        ],
+        "id": "activated-1",
+        "kind": "activated",
+        "targets": [
+          {
+            "id": "target-1",
+            "legal": {
+              "kind": "permanent",
+              "predicate": {
+                "kind": "and",
+                "predicates": [
+                  {
+                    "kind": "type",
+                    "type": "creature",
+                  },
+                  {
+                    "kind": "token",
+                  },
+                ],
+              },
+            },
+            "max": 1,
+            "min": 1,
+          },
+        ],
+        "text": "Destroy target creature token.",
+      },
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "w",
+  ],
+  "id": "dogged-hunter",
+  "manaCost": {
+    "n": 2,
+    "w": 1,
+  },
+  "name": "Dogged Hunter",
+  "power": 1,
+  "printedAbilities": {
+    "activated": [
+      "dogged-hunter:0",
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "subtypes": [
+    "Human",
+    "Nomad",
+  ],
+  "toughness": 1,
+  "types": [
+    "creature",
+  ],
+}
+`;
