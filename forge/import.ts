@@ -215,14 +215,19 @@ const COLOR_WORDS = new Map<string, Color>([
 	["green", "g"],
 ]);
 /**
- * The fixed symbols accepted in `Produced$` values. Colorless belongs here but
- * never in {@link COLOR_WORDS}: `Produced$ C` makes colorless mana, while a
- * card producing it is not thereby any color. A space-separated list of these
- * symbols produces every listed symbol. `Combo` followed by two or more
- * distinct fixed symbols is a modal choice of exactly one of them; `Any` is
- * the five colored choices. Variables, dynamic amounts, and other forms reject.
+ * Forge's one-letter mana symbols. Colorless belongs here but never in
+ * {@link COLOR_WORDS}: `C` is a mana type, while a card producing or requiring
+ * it is not thereby any color.
+ *
+ * Both a `Produced$` value and a `ManaCost:` line are written from these
+ * symbols, so both read them here. In a `Produced$` value, a space-separated
+ * list produces every listed symbol, `Combo` followed by two or more distinct
+ * symbols is a modal choice of exactly one, and `Any` is the five colored
+ * choices; variables, dynamic amounts, and other forms reject. In a mana cost,
+ * each symbol is one required mana of that type, alongside the generic numbers
+ * that {@link parseManaCost} reads itself.
  */
-const PRODUCED_MANA_SYMBOLS = new Map<string, ManaType>([
+const MANA_SYMBOLS = new Map<string, ManaType>([
 	["W", "w"],
 	["U", "u"],
 	["B", "b"],
@@ -1073,7 +1078,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			const producedSymbols = produced?.split(" ") ?? [];
 			const producedTypes: ManaType[] = [];
 			for (const symbol of producedSymbols) {
-				const type = PRODUCED_MANA_SYMBOLS.get(symbol);
+				const type = MANA_SYMBOLS.get(symbol);
 				if (!type)
 					return issue(
 						"UNSUPPORTED_EFFECT",
@@ -4012,17 +4017,13 @@ function parseManaCost(text: string): CardDefInput["manaCost"] | null {
 			const generic = Number(symbol);
 			if (!Number.isSafeInteger(generic)) return null;
 			result.n += generic;
-		} else if (
-			symbol === "W" ||
-			symbol === "U" ||
-			symbol === "B" ||
-			symbol === "R" ||
-			symbol === "G" ||
-			// {C}: a colorless requirement, not generic. Kozilek and friends.
-			symbol === "C"
-		)
-			result[symbol.toLowerCase() as ManaType] += 1;
-		else return null;
+			continue;
+		}
+		// Every non-generic symbol names one mana type, `C` included: {C} is a
+		// colorless requirement rather than generic mana. Kozilek and friends.
+		const type = MANA_SYMBOLS.get(symbol);
+		if (type === undefined) return null;
+		result[type] += 1;
 	}
 	const total = MANA_COST_TYPES.reduce((sum, type) => sum + result[type], 0);
 	if (total === 0 || !Number.isSafeInteger(total)) return null;
@@ -4921,7 +4922,7 @@ export function lowerForgeCard(
 					: (produced?.split(" ") ?? []);
 			const producedTypes: ManaType[] = [];
 			for (const symbol of producedSymbols) {
-				const type = PRODUCED_MANA_SYMBOLS.get(symbol);
+				const type = MANA_SYMBOLS.get(symbol);
 				if (!type) {
 					return reject(
 						issue(
