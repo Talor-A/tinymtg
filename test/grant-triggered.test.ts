@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import {
 	abilityId,
 	advance,
 	createEngine,
 	createReadContext,
-	defineCard,
 	executeCastAction,
 	getSnapshot,
 	perform,

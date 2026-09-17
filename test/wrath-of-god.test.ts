@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { defineCard } from "../card-def.ts";
 import { CARDS, regenerationShield } from "../cards.ts";
 import { loadCardFixture } from "../corpus.ts";
 import {
 	addTemporaryEffect,
 	checkStateBasedActions,
 	createEngine,
-	defineCard,
 	executeCastAction,
 	name,
 	permanent,

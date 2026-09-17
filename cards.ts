@@ -1,3 +1,4 @@
+import { defineCard } from "./card-def.ts";
 import { loadCardFixture } from "./corpus.ts";
 import type {
 	CharacteristicsSnapshot,
@@ -16,7 +17,6 @@ import {
 	abilityId,
 	activePlayer,
 	cloneCharacteristics,
-	defineCard,
 	etbPreview,
 	getSnapshot,
 	maybeObject,

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import {
 	CARDS,
 	gatherSpecimens,
@@ -15,7 +16,6 @@ import {
 	ChoicePendingError,
 	createEngine,
 	createReadContext,
-	defineCard,
 	getSnapshot,
 	newGame,
 	perform,

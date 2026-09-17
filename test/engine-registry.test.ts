@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import {
 	advanceWithReplay,
 	buildGameView,
 	createEngine,
-	defineCard,
 	newGame,
 	spawnPermanent,
 } from "../index.ts";

@@ -35,13 +35,17 @@
  */
 
 import assert from "node:assert/strict";
+import {
+	type CardDefInput,
+	defineCard,
+	targetSelectorSatisfies,
+} from "../card-def.ts";
 import type {
 	ActivatedEffectDef,
 	ActivationCost,
 	AdditionalCosts,
 	AnyActivatedAbilityDefinition,
 	CardDef,
-	CardDefInput,
 	CardType,
 	CharacteristicStaticAbilityDefinition,
 	CharacteristicStaticEffectSliceDefinition,
@@ -85,14 +89,12 @@ import {
 	characteristicsFromCardDef,
 	cloneCharacteristics,
 	controllerOf,
-	defineCard,
 	effectTargetUses,
 	etbPreview,
 	getSnapshot,
 	layerSubjectMatchesPredicate,
 	MANA_COST_TYPES,
 	objectMatchesPredicate,
-	targetSelectorSatisfies,
 } from "../index.ts";
 import { assertDefined } from "../lib/assert.ts";
 import { CLUE_TOKEN } from "../tokens.ts";

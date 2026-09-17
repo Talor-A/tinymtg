@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS, regenerationShield } from "../cards.ts";
 import {
 	addTemporaryEffect,
@@ -7,7 +8,6 @@ import {
 	checkStateBasedActions,
 	createEngine,
 	createReadContext,
-	defineCard,
 	getSnapshot,
 	newGame,
 	perform,

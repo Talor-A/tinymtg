@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import { priorityOptionId } from "../choices.ts";
 import type {
@@ -20,7 +21,6 @@ import {
 	advanceWithReplay,
 	ChoiceController,
 	createEngine,
-	defineCard,
 	executeAbilityAction,
 	getObservableActions,
 	IllegalAbilityActivationError,

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import {
 	abilityId,
@@ -9,7 +10,6 @@ import {
 	type CharacteristicsSnapshot,
 	createEngine,
 	createReadContext,
-	defineCard,
 	effectiveCharacteristics,
 	getSnapshot,
 	newGame,

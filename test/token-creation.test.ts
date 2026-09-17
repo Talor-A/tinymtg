@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import {
 	abilityId,
 	type CharacteristicsSnapshot,
 	createEngine,
 	createReadContext,
-	defineCard,
 	getSnapshot,
 	newGame,
 	perform,

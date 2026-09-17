@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import { priorityOptionId } from "../choices.ts";
 import {
@@ -12,7 +13,6 @@ import {
 	ChoiceReplayMismatchError,
 	createEngine,
 	createReadContext,
-	defineCard,
 	type EntityRef,
 	executeCastAction,
 	type GameState,

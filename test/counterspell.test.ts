@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import { loadCardFixture } from "../corpus.ts";
 import type { GameState, ObjectId, PlayerId } from "../index.ts";
 import {
 	abilityId,
 	createEngine,
-	defineCard,
 	executeAbilityAction,
 	executeCastAction,
 	getObservableActions,

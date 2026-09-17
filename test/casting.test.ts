@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import type {
 	CastAction,
@@ -14,7 +15,6 @@ import {
 	activePlayer,
 	advance,
 	createEngine,
-	defineCard,
 	executeAbilityAction,
 	executeCastAction,
 	executeLandAction,

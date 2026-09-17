@@ -1,4 +1,5 @@
-import { characteristicsFromCardDef, defineCard } from "./index.ts";
+import { defineCard } from "./card-def.ts";
+import { characteristicsFromCardDef } from "./index.ts";
 
 /**
  * Clue token

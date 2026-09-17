@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import type { CastAction, ObjectId } from "../index.ts";
 import {
 	createEngine,
-	defineCard,
 	executeCastAction,
 	settlePriority,
 	spawnCard,

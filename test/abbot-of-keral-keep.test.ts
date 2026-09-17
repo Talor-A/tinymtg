@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import type {
 	CastAction,
@@ -11,7 +12,6 @@ import {
 	activePlayer,
 	createEngine,
 	createReadContext,
-	defineCard,
 	executeCastAction,
 	executeLandAction,
 	getObservableActions,

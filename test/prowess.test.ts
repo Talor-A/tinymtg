@@ -15,9 +15,10 @@ import {
  */
 
 import { describe, expect, test } from "bun:test";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import type { CastAction, GameState, ObjectId } from "../index.ts";
-import { abilityId, createEngine, defineCard, getSnapshot } from "../index.ts";
+import { abilityId, createEngine, getSnapshot } from "../index.ts";
 import {
 	ALICE,
 	BOB,

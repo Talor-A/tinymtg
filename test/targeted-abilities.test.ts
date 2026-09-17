@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS, prismaticStrands } from "../cards.ts";
 import {
 	type ActivatedAbilityDef,
@@ -12,7 +13,6 @@ import {
 	type ChoiceRequest,
 	createEngine,
 	createReadContext,
-	defineCard,
 	type EntityRef,
 	executeAbilityAction,
 	type GameState,

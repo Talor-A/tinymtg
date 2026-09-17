@@ -17,13 +17,9 @@ import {
 
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
-import {
-	createEngine,
-	defineCard,
-	type GameState,
-	type ObjectId,
-} from "../index.ts";
+import { createEngine, type GameState, type ObjectId } from "../index.ts";
 import {
 	ALICE,
 	BOB,

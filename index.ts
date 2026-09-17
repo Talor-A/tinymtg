@@ -1,6 +1,9 @@
 import { prohibitionsFromKeywords } from "./abilities.ts";
-import { type CardDefInput, defineCard } from "./card-def.ts";
-export { type CardDefInput, defineCard } from "./card-def.ts";
+import {
+	type CardDefInput,
+	defineCard,
+	requiredTargetDefinition,
+} from "./card-def.ts";
 import {
 	type AgentPair,
 	type AnyChoiceController,
@@ -85,7 +88,7 @@ export type Color = (typeof COLORS)[number];
  * A kind of mana that can exist in a player's pool: the five colors plus
  * colorless.
  */
-const MANA_TYPES = [...COLORS, "c"] as const;
+export const MANA_TYPES = [...COLORS, "c"] as const;
 export type ManaType = (typeof MANA_TYPES)[number];
 
 /**
@@ -2450,7 +2453,7 @@ interface DeclaredEffectResult {
 }
 
 /** The named object result produced by one instruction, if it declares one. */
-function declaredEffectResult(
+export function declaredEffectResult(
 	effect: Exclude<EffectDef<TriggerEffectPlayer>, { kind: "may" }>,
 ): DeclaredEffectResult | null {
 	if (effect.kind === "exile-top" && effect.resultSlot !== undefined)
@@ -2929,21 +2932,6 @@ export function effectTargetUses<Player extends TriggerEffectPlayer>(
 		default:
 			return assertNever(effect);
 	}
-}
-
-export function targetSelectorSatisfies(
-	selector: TargetDef["legal"],
-	requirement: TargetRequirement,
-): boolean {
-	if (requirement.kind === "damage-recipient")
-		return (
-			selector.kind === "player" ||
-			selector.kind === "permanent" ||
-			selector.kind === "any-target"
-		);
-	if (requirement.kind === "card")
-		return selector.kind === "card" && selector.zone === requirement.zone;
-	return selector.kind === requirement.kind;
 }
 
 /**
@@ -8726,157 +8714,6 @@ export function planManaPayment(
  * definition enters the engine. These slots pass objects between instructions;
  * they are unrelated to an ability's Magic target slots.
  */
-function validateEffectResultFlow(
-	effects: EffectDef<TriggerEffectPlayer>[],
-	triggeringZoneChangeDestination: Zone | "any" | null = null,
-): void {
-	const check = (
-		sequence: EffectDef<TriggerEffectPlayer>[],
-		available: Map<string, Zone>,
-	): void => {
-		for (const effect of sequence) {
-			if (effect.kind === "may") {
-				// The optional branch may not execute. It can read preceding results and
-				// pass its own results between inner instructions, but it cannot make a
-				// result definitely available to a following outer instruction.
-				check(effect.effects, new Map(available));
-				continue;
-			}
-			if (
-				effect.kind === "change-zone" &&
-				effect.subject.kind === "triggering-zone-change-result"
-			) {
-				assert(
-					triggeringZoneChangeDestination === "any" ||
-						triggeringZoneChangeDestination === effect.from,
-					`change-zone refers to an unavailable triggering ${effect.from} object`,
-				);
-			}
-			if (
-				effect.kind === "change-zone" &&
-				effect.subject.kind === "effect-result"
-			) {
-				assert(
-					available.get(effect.subject.slot) === effect.from,
-					`change-zone refers to unavailable ${effect.from} effect result ${effect.subject.slot}`,
-				);
-			}
-			const declaredResult = declaredEffectResult(effect);
-			if (declaredResult) {
-				assert(
-					declaredResult.slot.length > 0,
-					"effect result slot must have a name",
-				);
-				assert(
-					!available.has(declaredResult.slot),
-					`duplicate effect result slot ${declaredResult.slot}`,
-				);
-				available.set(declaredResult.slot, declaredResult.zone);
-			}
-			if (
-				effect.kind === "may-play" &&
-				effect.subject.kind === "effect-result"
-			) {
-				assert(
-					available.get(effect.subject.slot) === effect.from,
-					`may-play refers to unavailable effect result ${effect.subject.slot}`,
-				);
-			}
-		}
-	};
-	check(effects, new Map());
-}
-
-export function validateCardEffectResultFlow(definition: CardDef): void {
-	if (definition.spell) {
-		validateEffectResultFlow(definition.spell.effects);
-		requiredTargetDefinition(
-			definition.spell.targets,
-			definition.spell.effects,
-		);
-	}
-	for (const ability of definition.abilityDefinitions.activated) {
-		if (ability.kind === "mana") {
-			assert(ability.manaOptions.length > 0, "mana ability has no outcomes");
-			for (const mana of ability.manaOptions) {
-				assert(
-					typeof mana === "object" && mana !== null && !Array.isArray(mana),
-					"mana ability has an invalid outcome",
-				);
-				for (const type of Object.keys(mana))
-					assert(
-						MANA_TYPES.includes(type as ManaType),
-						`mana ability produces invalid mana type ${type}`,
-					);
-				let total = 0;
-				for (const type of MANA_TYPES) {
-					const amount = mana[type] ?? 0;
-					assert(
-						Number.isSafeInteger(amount) && amount >= 0,
-						`mana ability produces an invalid ${type} quantity`,
-					);
-					total += amount;
-				}
-				assert(total > 0, "mana ability outcome produces no mana");
-			}
-			continue;
-		}
-		validateEffectResultFlow(ability.effects);
-		requiredTargetDefinition(ability.targets, ability.effects);
-	}
-	for (const trigger of definition.abilityDefinitions.triggered) {
-		validateEffectResultFlow(
-			trigger.effects,
-			trigger.condition.kind === "change zone" ? trigger.condition.to : null,
-		);
-		requiredTargetDefinition(trigger.targets, trigger.effects);
-	}
-}
-
-/**
- * The single required target slot a spell or ability declares, or null, after
- * checking that its targets and instructions fall inside the executable
- * subset. Every announcement path runs this before it can spend a cost, so an
- * unsupported definition can never leave a half-paid cast behind.
- */
-function requiredTargetDefinition(
-	targets: TargetDef[],
-	effects: EffectDef<TriggerEffectPlayer>[],
-): TargetDef | null {
-	assert(targets.length <= 1, "multiple target slots are not implemented");
-	const target = targets[0] ?? null;
-	if (target) {
-		assert(
-			target.min === 1 && target.max === 1,
-			"only one required target is implemented",
-		);
-	}
-	const check = (effect: EffectDef<TriggerEffectPlayer>): void => {
-		if (effect.kind === "may") {
-			for (const inner of effect.effects) check(inner);
-			return;
-		}
-		if (effect.kind === "sacrifice") {
-			assert(
-				effect.amount === 1,
-				"only sacrificing one permanent is implemented",
-			);
-		}
-		for (const use of effectTargetUses(effect)) {
-			assert(
-				target !== null && use.slot === target.id,
-				"effect must reference its ability's target slot",
-			);
-			assert(
-				targetSelectorSatisfies(target.legal, use.required),
-				use.required.message,
-			);
-		}
-	};
-	for (const effect of effects) check(effect);
-	return target;
-}
-
 /**
  * CR 115.4 / CR 608.2b: announcement and resolution ask exactly the same
  * question, of current characteristics. `ctx` supplies what a restriction

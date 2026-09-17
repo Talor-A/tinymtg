@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import { loadCardFixture } from "../corpus.ts";
 import {
@@ -8,7 +9,6 @@ import {
 	ChoiceController,
 	type ChoiceRequest,
 	createEngine,
-	defineCard,
 	executeAbilityAction,
 	executeCastAction,
 	name,

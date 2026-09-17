@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ScriptedAgent } from "../agents.ts";
+import { defineCard } from "../card-def.ts";
 import { CARDS } from "../cards.ts";
 import type {
 	CardDef,
@@ -19,7 +20,6 @@ import {
 	ChoiceController,
 	createEngine,
 	createReadContext,
-	defineCard,
 	eligibleBlockers,
 	executeAbilityAction,
 	executeCastAction,
