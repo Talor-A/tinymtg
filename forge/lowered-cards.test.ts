@@ -86,6 +86,11 @@ const FIXTURES: readonly (readonly [path: string, construct: string])[] = [
 	// A selector whose alternatives span creature and noncreature types, so
 	// the power comparison is asked of objects that have no power (CR 208.3).
 	["e/exorcise", "mixed-type target with a power comparison"],
+	// A continuous static gated on a board count: "as long as you control
+	// seven or more lands". The condition itself is a closure and so invisible
+	// here -- see `test/static-presence-condition.test.ts` -- but the layers
+	// and the text are not.
+	["g/gigantoad", "continuous static with a presence condition"],
 ];
 
 for (const [path, construct] of FIXTURES) {

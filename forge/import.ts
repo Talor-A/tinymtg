@@ -49,6 +49,7 @@ import type {
 	Color,
 	ContinuousEffectLayer,
 	DamageRecipientSelector,
+	DeepReadOnly,
 	EffectDef,
 	EffectPlayerSubject,
 	GameEvent,
@@ -56,10 +57,13 @@ import type {
 	ManaCostType,
 	ManaPool,
 	ManaType,
+	ObjectId,
 	ObjectPredicateDef,
 	PayableActivationManaCost,
 	PredicateComparisonWord,
+	PredicateContext,
 	PublicObjectZone,
+	ReadonlyGameState,
 	RelativeEffectPlayer,
 	ReplacementEffectDefinition,
 	SpellAbilityDef,
@@ -76,6 +80,7 @@ import type {
 } from "../index.ts";
 import {
 	abilityId,
+	applyComparisonWord,
 	CONTINUOUS_EFFECT_LAYERS,
 	characteristicsFromCardDef,
 	cloneCharacteristics,
@@ -2903,18 +2908,54 @@ function parseStaticPresence(
 
 function staticAppliesFromObjectPredicate(
 	predicate: ObjectPredicateDef,
+	presence: StaticPresenceCondition | null,
 ): CharacteristicStaticAbilityDefinition["applies"] {
-	return (subject, _state, source) => {
+	return (subject, state, source, evaluated) => {
 		const controller = controllerOf(source);
 		assertDefined(
 			controller,
 			"an imported static ability source must have a controller",
 		);
-		return layerSubjectMatchesPredicate(predicate, subject, {
-			controller,
-			source: source.id,
-		});
+		const context = { controller, source: source.id };
+		if (
+			presence !== null &&
+			!presenceHolds(presence, state, evaluated, context)
+		)
+			return false;
+		return layerSubjectMatchesPredicate(predicate, subject, context);
 	};
+}
+
+/**
+ * Whether enough battlefield permanents match a presence condition.
+ *
+ * Reading the walk's partly-evaluated characteristics is sound only because
+ * `lowerStatic` proved `presence.readLayer` to be strictly below the layer of
+ * the slice being applied, so every layer this predicate consults is already
+ * final.
+ */
+function presenceHolds(
+	presence: StaticPresenceCondition,
+	state: ReadonlyGameState,
+	evaluated: ReadonlyMap<ObjectId, DeepReadOnly<CharacteristicsSnapshot>>,
+	context: PredicateContext,
+): boolean {
+	let count = 0;
+	for (const id of state.battlefield) {
+		const object = state.objects.get(id);
+		assertDefined(object, `battlefield id ${id} has no object`);
+		const currentCharacteristics = evaluated.get(id);
+		if (currentCharacteristics === undefined) continue;
+		if (
+			layerSubjectMatchesPredicate(
+				presence.predicate,
+				{ object, currentCharacteristics },
+				context,
+			)
+		)
+			count += 1;
+	}
+	return applyComparisonWord(presence.comparison, count, presence.value);
 }
 
 function lowerStatic(
@@ -3082,21 +3123,11 @@ function lowerStatic(
 				} is not settled when its ${firstSlice.layer} effect applies`,
 				where,
 			);
-		// The layer rule above is what this change establishes. Evaluating the
-		// condition needs the walk's in-progress characteristics, which
-		// `applies()` does not receive yet, so a condition that passes the rule
-		// still rejects rather than being dropped -- a dropped condition is a
-		// static that applies when it should not.
-		return issue(
-			"UNSUPPORTED_EFFECT",
-			"a static presence condition is not evaluated yet",
-			where,
-		);
 	}
 	return ok({
 		kind: "characteristic",
 		text: description,
-		applies: staticAppliesFromObjectPredicate(selector),
+		applies: staticAppliesFromObjectPredicate(selector, presence.value),
 		effects: effects as [
 			CharacteristicStaticEffectSliceDefinition,
 			...CharacteristicStaticEffectSliceDefinition[],

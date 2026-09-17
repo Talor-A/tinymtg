@@ -1379,3 +1379,53 @@ exports[`e/exorcise lowers as mixed-type target with a power comparison: e/exorc
   ],
 }
 `;
+
+exports[`g/gigantoad lowers as continuous static with a presence condition: g/gigantoad 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [
+      {
+        "applies": [Function],
+        "effects": [
+          {
+            "layer": "7c-modify-power-toughness",
+            "modify": [Function: modify],
+          },
+        ],
+        "kind": "characteristic",
+        "text": "As long as you control seven or more lands, this creature gets +2/+2.",
+      },
+    ],
+    "triggered": [],
+  },
+  "colors": [
+    "g",
+  ],
+  "id": "gigantoad",
+  "manaCost": {
+    "g": 1,
+    "n": 3,
+  },
+  "name": "Gigantoad",
+  "power": 4,
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [
+      "gigantoad:0",
+    ],
+    "triggered": [],
+  },
+  "subtypes": [
+    "Frog",
+  ],
+  "toughness": 4,
+  "types": [
+    "creature",
+  ],
+}
+`;

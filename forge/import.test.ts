@@ -5117,7 +5117,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 		const withStatic = (params: string) =>
 			importText(`${BEARS}S:Mode$ Continuous | ${params} | Description$ x.\n`);
 
-		test("a condition reading below its effect's layer passes the rule", () => {
+		test("a condition reading below its effect's layer lowers", () => {
 			// The walk settles every layer below a slice before applying it, so
 			// these conditions have an answer when they are asked: types (layer
 			// 4) and colors (layer 5) are both final by layer 6, and a condition
@@ -5130,13 +5130,7 @@ describe("lowerForgeCard: required negative mutations", () => {
 				"Affected$ Card.Self | IsPresent$ Creature.withFlying | AddPower$ 1",
 			]) {
 				const result = withStatic(params);
-				expect(result.ok, params).toBe(false);
-				if (result.ok) return;
-				// Evaluating a condition is a separate change; what matters here
-				// is that it got past the layer rule rather than tripping it.
-				expect(result.diagnostics[0]?.message, params).toBe(
-					"a static presence condition is not evaluated yet",
-				);
+				expect(result.ok, params).toBe(true);
 			}
 		});
 

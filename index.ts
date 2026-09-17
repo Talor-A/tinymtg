@@ -1382,6 +1382,7 @@ function buildFilteredGameView(
 							{ object: subject, currentCharacteristics: current },
 							state,
 							source,
+							characteristics,
 						);
 						if (applies) entry.lockedSubjects.add(objectId);
 					} else {
@@ -3155,7 +3156,7 @@ function predicateMatchesFacts(
 	}
 }
 
-function applyComparisonWord(
+export function applyComparisonWord(
 	comparison: PredicateComparisonWord,
 	value: number,
 	predicateValue: number,
@@ -4252,6 +4253,8 @@ export interface CharacteristicStaticAbilityDefinition {
 		subject: LayerSubject,
 		state: ReadonlyGameState,
 		source: DeepReadOnly<GameObject>,
+		/** Characteristics evaluated so far in this layer walk. */
+		evaluated: ReadonlyMap<ObjectId, DeepReadOnly<CharacteristicsSnapshot>>,
 	): boolean;
 	/** The objects are fixed when the first slice begins to apply (CR 613.6). */
 	effects: [
