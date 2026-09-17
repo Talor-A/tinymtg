@@ -4626,6 +4626,18 @@ export function lowerForgeCard(
 					),
 				);
 
+			// `Basic` is basic landcycling; every other word names the subtype
+			// searched for. A word that is not a subtype -- Forge spells
+			// `TypeCycling:Affinity` for a keyword search -- would lower to a
+			// predicate no card can satisfy, so it rejects instead.
+			if (searchedType !== "Basic" && !SUBTYPES.has(searchedType))
+				return reject(
+					issue(
+						"UNSUPPORTED_KEYWORD",
+						`unsupported typecycling type ${searchedType}`,
+						where,
+					),
+				);
 			const predicate: ObjectPredicateDef =
 				searchedType === "Basic"
 					? {

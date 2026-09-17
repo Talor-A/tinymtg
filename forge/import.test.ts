@@ -4090,6 +4090,46 @@ describe("lowerForgeCard: cycling", () => {
 		});
 	});
 
+	test("typecycling searches for a real subtype, or rejects", () => {
+		// Vedalken Aethermage's `TypeCycling:Wizard` names a subtype, so the
+		// search looks for one. Forge also spells a keyword search the same way
+		// -- Sojourner's Enforcermite writes `TypeCycling:Affinity` -- which
+		// would lower to a subtype no card has, so the word is checked first.
+		const wizard = importFixture("v/vedalken_aethermage");
+		if (!wizard.ok) throw new Error("expected Vedalken Aethermage to import");
+		expect(wizard.card.abilityDefinitions.activated[0]).toMatchObject({
+			activationEvent: { kind: "cycle" },
+			effects: [
+				{
+					kind: "search-library",
+					predicate: { kind: "subtype", subtype: "Wizard" },
+				},
+				{ kind: "reveal" },
+				{ kind: "change-zone", destination: { zone: "hand" } },
+				{ kind: "shuffle-library" },
+			],
+		});
+
+		const keywordSearch = importForgeCard(
+			[
+				"Name:Probe",
+				"ManaCost:6",
+				"Types:Artifact Creature Myr",
+				"PT:6/6",
+				"K:TypeCycling:Affinity:2",
+				"Oracle:Affinitycycling {2}",
+				"",
+			].join("\n"),
+			{ id: "probe" },
+		);
+		expect(keywordSearch.ok).toBe(false);
+		if (keywordSearch.ok) return;
+		expect(keywordSearch.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_KEYWORD",
+			message: "unsupported typecycling type Affinity",
+		});
+	});
+
 	test("lowers channel through the same generic hand-activation path", () => {
 		const result = importFixture("i/ironhoof_boar");
 		if (!result.ok) throw new Error("expected Ironhoof Boar to import");
