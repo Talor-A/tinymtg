@@ -5112,6 +5112,78 @@ describe("lowerForgeCard: required negative mutations", () => {
 		});
 	});
 
+	describe("a static's presence condition must read a settled layer", () => {
+		/** `${BEARS}` plus one continuous static built from `params`. */
+		const withStatic = (params: string) =>
+			importText(`${BEARS}S:Mode$ Continuous | ${params} | Description$ x.\n`);
+
+		test("a condition reading below its effect's layer passes the rule", () => {
+			// The walk settles every layer below a slice before applying it, so
+			// these conditions have an answer when they are asked: types (layer
+			// 4) and colors (layer 5) are both final by layer 6, and a condition
+			// reading nothing the walk computes is final throughout.
+			for (const params of [
+				"Affected$ Card.Self | IsPresent$ Creature.YouCtrl | AddKeyword$ Flying",
+				"Affected$ Card.Self | IsPresent$ Permanent.White+YouCtrl | AddKeyword$ Lifelink",
+				"Affected$ Card.Self | IsPresent$ Card.Self | AddPower$ 1",
+				// Keywords settle at layer 6, which is before the 7 sublayers.
+				"Affected$ Card.Self | IsPresent$ Creature.withFlying | AddPower$ 1",
+			]) {
+				const result = withStatic(params);
+				expect(result.ok, params).toBe(false);
+				if (result.ok) return;
+				// Evaluating a condition is a separate change; what matters here
+				// is that it got past the layer rule rather than tripping it.
+				expect(result.diagnostics[0]?.message, params).toBe(
+					"a static presence condition is not evaluated yet",
+				);
+			}
+		});
+
+		test("a condition reading its own effect's layer rejects", () => {
+			// CR 613.8a decides the order of two effects in the SAME layer from
+			// what each would change about the other. The engine applies a
+			// layer in one pass with no such ordering, so a condition reading
+			// its own layer would be answered against a half-applied layer.
+			for (const [params, layer] of [
+				[
+					"Affected$ Card.Self | IsPresent$ Creature.withFlying | AddKeyword$ Flying",
+					"6-ability-changing",
+				],
+				[
+					"Affected$ Card.Self | IsPresent$ Creature.powerGE4 | AddPower$ 1",
+					"7c-modify-power-toughness",
+				],
+			] as const) {
+				const result = withStatic(params);
+				expect(result.ok, params).toBe(false);
+				if (result.ok) return;
+				expect(result.diagnostics[0]).toMatchObject({
+					code: "UNSUPPORTED_EFFECT",
+					message: `a static condition reading ${layer} is not settled when its ${layer} effect applies`,
+				});
+			}
+		});
+
+		test("only a battlefield count with a literal bound lowers", () => {
+			for (const params of [
+				// Counting in another zone is a different question.
+				"Affected$ Card.Self | IsPresent$ Creature.YouCtrl | PresentZone$ Graveyard | AddKeyword$ Flying",
+				// A bound chosen elsewhere on the card is not visible here.
+				"Affected$ Card.Self | IsPresent$ Creature.YouCtrl | PresentCompare$ X | AddKeyword$ Flying",
+				// A comparison with nothing to compare is malformed.
+				"Affected$ Card.Self | PresentCompare$ GE2 | AddKeyword$ Flying",
+			]) {
+				const result = withStatic(params);
+				expect(result.ok, params).toBe(false);
+				if (result.ok) return;
+				expect(result.diagnostics[0]?.code, params).toBe(
+					"UNSUPPORTED_PARAMETER",
+				);
+			}
+		});
+	});
+
 	test("rejects a dynamic (non-literal) amount", () => {
 		const result = importText(BOLT.replace("NumDmg$ 3", "NumDmg$ X"));
 		expect(result.ok).toBe(false);

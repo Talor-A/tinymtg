@@ -47,6 +47,7 @@ import type {
 	CharacteristicStaticEffectSliceDefinition,
 	CharacteristicsSnapshot,
 	Color,
+	ContinuousEffectLayer,
 	DamageRecipientSelector,
 	EffectDef,
 	EffectPlayerSubject,
@@ -75,6 +76,7 @@ import type {
 } from "../index.ts";
 import {
 	abilityId,
+	CONTINUOUS_EFFECT_LAYERS,
 	characteristicsFromCardDef,
 	cloneCharacteristics,
 	controllerOf,
@@ -2824,6 +2826,81 @@ function lowerNextEndStepDelayedTrigger(
 /* Continuous effects and replacements                                       */
 /* ------------------------------------------------------------------------- */
 
+/**
+ * `IsPresent$ Creature.YouCtrl | PresentCompare$ GE2`: a condition gating a
+ * continuous effect on how many matching permanents exist -- "as long as you
+ * control two or more creatures". CR 613.9: one continuous effect's result can
+ * decide whether another applies.
+ *
+ * Only a battlefield count lowers. `PresentZone$` counts in a graveyard, hand,
+ * or library instead, and `PresentDefined$` narrows to one named object; both
+ * reject, because neither is a question about the permanents the layer walk
+ * has in front of it.
+ *
+ * An omitted `PresentCompare$` means "at least one", which is Forge's default
+ * and the bare `IsPresent$` most of the corpus writes.
+ */
+interface StaticPresenceCondition {
+	predicate: ObjectPredicateDef;
+	comparison: PredicateComparisonWord;
+	value: number;
+	/** The layer that settles the predicate; see {@link predicateReadLayer}. */
+	readLayer: number;
+}
+
+function parseStaticPresence(
+	params: ForgeParamList,
+	where: { nodeId?: string; line?: number },
+): Result<StaticPresenceCondition | null, ImportIssue> {
+	const isPresent = getForgeParam(params, "IsPresent");
+	const compareText = getForgeParam(params, "PresentCompare");
+	const zone = getForgeParam(params, "PresentZone");
+	if (isPresent === undefined) {
+		// A comparison with nothing to compare is malformed rather than absent.
+		if (compareText !== undefined || zone !== undefined)
+			return issue(
+				"UNSUPPORTED_PARAMETER",
+				"PresentCompare$/PresentZone$ require an IsPresent$ selector",
+				where,
+			);
+		return ok(null);
+	}
+	if (zone !== undefined && zone !== "Battlefield")
+		return issue(
+			"UNSUPPORTED_PARAMETER",
+			`unsupported PresentZone$ ${zone}`,
+			where,
+		);
+	const predicate = parseSelector(isPresent);
+	if (!predicate)
+		return issue(
+			"UNSUPPORTED_PARAMETER",
+			"unsupported IsPresent$ selector",
+			where,
+		);
+	let comparison: PredicateComparisonWord = "at least";
+	let value = 1;
+	if (compareText !== undefined) {
+		const parsed = /^([A-Z]{2})(\d+)$/.exec(compareText);
+		const word = NUMERIC_COMPARISONS.get(parsed?.[1] ?? "");
+		const bound = Number(parsed?.[2]);
+		if (word === undefined || !Number.isSafeInteger(bound))
+			return issue(
+				"UNSUPPORTED_PARAMETER",
+				`unsupported PresentCompare$ ${compareText}`,
+				where,
+			);
+		comparison = word;
+		value = bound;
+	}
+	return ok({
+		predicate,
+		comparison,
+		value,
+		readLayer: predicateReadLayer(predicate),
+	});
+}
+
 function staticAppliesFromObjectPredicate(
 	predicate: ObjectPredicateDef,
 ): CharacteristicStaticAbilityDefinition["applies"] {
@@ -2858,6 +2935,9 @@ function lowerStatic(
 			"adjustlandplays",
 			"validcard",
 			"description",
+			"ispresent",
+			"presentcompare",
+			"presentzone",
 		]),
 		where,
 	);
@@ -2872,6 +2952,7 @@ function lowerStatic(
 			getForgeParam(params, "AddToughness") !== undefined ||
 			getForgeParam(params, "AddKeyword") !== undefined ||
 			getForgeParam(params, "AdjustLandPlays") !== undefined ||
+			getForgeParam(params, "IsPresent") !== undefined ||
 			!description
 		)
 			return issue(
@@ -2913,6 +2994,8 @@ function lowerStatic(
 		});
 	}
 	const selector = affected ? parseSelector(affected) : null;
+	const presence = parseStaticPresence(params, where);
+	if (!presence.ok) return presence;
 	// Forge omits the half it does not change, so `+1/+0` is written as
 	// `AddPower$ 1` with no AddToughness$ at all. An omitted half adds 0; a
 	// half that is present but not a signed integer — `AddPower$ X` and its
@@ -2976,6 +3059,40 @@ function lowerStatic(
 		});
 	}
 	assert(effects.length > 0);
+	const firstSlice = effects[0];
+	assertDefined(firstSlice, "a static with effects has a first slice");
+	if (presence.value !== null) {
+		// A condition is only answerable once every layer it reads is final.
+		// When the walk reaches this static's first slice it has settled every
+		// layer below that slice and none at or above it, so the condition may
+		// read strictly lower and no further.
+		//
+		// Equal layers are CR 613.8a's dependency case, where the order within
+		// a layer is decided by what each effect would change about the other.
+		// The engine applies a layer's effects in one pass with no such
+		// ordering, so a condition reading its own layer would be answered
+		// against a half-applied layer. Reject instead of guessing.
+		const writeLayer = CONTINUOUS_EFFECT_LAYERS.indexOf(firstSlice.layer);
+		assert(writeLayer >= 0, `unknown layer ${firstSlice.layer}`);
+		if (presence.value.readLayer >= writeLayer)
+			return issue(
+				"UNSUPPORTED_EFFECT",
+				`a static condition reading ${
+					CONTINUOUS_EFFECT_LAYERS[presence.value.readLayer]
+				} is not settled when its ${firstSlice.layer} effect applies`,
+				where,
+			);
+		// The layer rule above is what this change establishes. Evaluating the
+		// condition needs the walk's in-progress characteristics, which
+		// `applies()` does not receive yet, so a condition that passes the rule
+		// still rejects rather than being dropped -- a dropped condition is a
+		// static that applies when it should not.
+		return issue(
+			"UNSUPPORTED_EFFECT",
+			"a static presence condition is not evaluated yet",
+			where,
+		);
+	}
 	return ok({
 		kind: "characteristic",
 		text: description,
@@ -2985,6 +3102,64 @@ function lowerStatic(
 			...CharacteristicStaticEffectSliceDefinition[],
 		],
 	});
+}
+
+/**
+ * The layer that settles `predicate`, as an index into
+ * {@link CONTINUOUS_EFFECT_LAYERS}.
+ *
+ * A condition is only answerable once every layer it consults is final, so
+ * this is the HIGHEST layer any part of the predicate reads. `-1` means the
+ * predicate reads nothing the layer walk computes -- identity, ownership,
+ * combat state, tapped state -- and is answerable at any point.
+ *
+ * The switch is exhaustive on purpose: a new {@link ObjectPredicateDef} kind
+ * will not compile until someone decides which layer decides it. That is the
+ * point of writing the rule as a fold over the predicate rather than as a
+ * list of cards, because the rule cannot then fall out of step with the
+ * vocabulary it is about.
+ */
+function predicateReadLayer(predicate: ObjectPredicateDef): number {
+	const at = (layer: ContinuousEffectLayer): number => {
+		const index = CONTINUOUS_EFFECT_LAYERS.indexOf(layer);
+		assert(index >= 0, `unknown continuous effect layer ${layer}`);
+		return index;
+	};
+	switch (predicate.kind) {
+		// Identity and battlefield state, not characteristics: no layer
+		// changes which object this is, who owns it, or how it sits in combat.
+		// Ownership is included because only control changes (CR 109.4).
+		case "self":
+		case "token":
+		case "owner":
+		case "attacking":
+		case "blocking":
+		case "tapped":
+			return -1;
+		case "controller":
+			return at("2-control-changing");
+		// A mana value is read off the mana cost, which is a copiable value.
+		case "mana value":
+			return at("1a-copiable-values");
+		case "type":
+		case "supertype":
+		case "subtype":
+			return at("4-type-changing");
+		case "color":
+			return at("5-color-changing");
+		case "keyword":
+			return at("6-ability-changing");
+		// Power and toughness are not final until the last 7 sublayer, so the
+		// latest one this importer can produce is the honest bound.
+		case "power":
+		case "toughness":
+			return at("7c-modify-power-toughness");
+		case "and":
+		case "or":
+			return Math.max(...predicate.predicates.map(predicateReadLayer));
+		case "not":
+			return predicateReadLayer(predicate.predicate);
+	}
 }
 
 function predicateContainsSelf(predicate: ObjectPredicateDef): boolean {
