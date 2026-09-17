@@ -2646,7 +2646,7 @@ export type ObjectPredicateDef =
 	| { kind: "type"; type: CardType }
 	| { kind: "supertype"; supertype: Supertype }
 	| { kind: "subtype"; subtype: string }
-	| { kind: "color"; color: Color }
+	| { kind: "color"; color: Color | "monocolor" | "multicolor" }
 	| { kind: "keyword"; keyword: Keyword }
 	| { kind: "owner"; player: "you" | "opponent" }
 	| { kind: "controller"; player: "you" | "opponent" }
@@ -2659,14 +2659,8 @@ export type ObjectPredicateDef =
 	 * always the fixed printed total, in every zone.
 	 */
 	| {
-			kind: "mana value";
-			comparison:
-				| "at least"
-				| "greater than"
-				| "at most"
-				| "less than"
-				| "exactly"
-				| "other than";
+			kind: "mana value" | "power" | "toughness";
+			comparison: PredicateComparisonWord;
 			value: number;
 	  }
 	| {
@@ -2679,6 +2673,13 @@ export type ObjectPredicateDef =
 	  }
 	| { kind: "not"; predicate: ObjectPredicateDef };
 
+type PredicateComparisonWord =
+	| "at least"
+	| "greater than"
+	| "at most"
+	| "less than"
+	| "exactly"
+	| "other than";
 /** Declarative targeting; the runtime supports one required target slot. */
 export interface TargetDef {
 	id: string;
@@ -3029,6 +3030,10 @@ export function objectMatchesPredicate(
 		case "subtype":
 			return characteristics.subtypes.includes(predicate.subtype);
 		case "color":
+			if (predicate.color === "monocolor")
+				return characteristics.colors.length === 1;
+			if (predicate.color === "multicolor")
+				return characteristics.colors.length > 1;
 			return characteristics.colors.includes(predicate.color);
 		case "keyword":
 			return characteristics.keywords.includes(predicate.keyword);
@@ -3052,21 +3057,17 @@ export function objectMatchesPredicate(
 				cost === "none" || cost === "zero"
 					? 0
 					: MANA_COST_TYPES.reduce((sum, type) => sum + (cost[type] ?? 0), 0);
-			switch (predicate.comparison) {
-				case "at least":
-					return value >= predicate.value;
-				case "greater than":
-					return value > predicate.value;
-				case "at most":
-					return value <= predicate.value;
-				case "less than":
-					return value < predicate.value;
-				case "exactly":
-					return value === predicate.value;
-				case "other than":
-					return value !== predicate.value;
-			}
-			return assertNever(predicate.comparison);
+			return applyComparisonWord(predicate.comparison, value, predicate.value);
+		}
+		case "power":
+		case "toughness": {
+			// TODO: is this the right place for an assert, or should we just return false?
+			assert(characteristics.kind === "creature");
+			return applyComparisonWord(
+				predicate.comparison,
+				characteristics[predicate.kind],
+				predicate.value,
+			);
 		}
 		case "and":
 			return predicate.predicates.every((part) =>
@@ -3078,6 +3079,29 @@ export function objectMatchesPredicate(
 			);
 		case "not":
 			return !objectMatchesPredicate(predicate.predicate, subject, context);
+	}
+}
+
+function applyComparisonWord(
+	comparison: PredicateComparisonWord,
+	value: number,
+	predicateValue: number,
+): boolean {
+	switch (comparison) {
+		case "at least":
+			return value >= predicateValue;
+		case "greater than":
+			return value > predicateValue;
+		case "at most":
+			return value <= predicateValue;
+		case "less than":
+			return value < predicateValue;
+		case "exactly":
+			return value === predicateValue;
+		case "other than":
+			return value !== predicateValue;
+		default:
+			return assertNever(comparison);
 	}
 }
 
