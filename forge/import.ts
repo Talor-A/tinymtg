@@ -23,13 +23,10 @@
  * generic/coloured mana, tap-self, one permanent sacrifice, and one-card
  * discard; X/colorless/hybrid/Phyrexian/snow mana
  * and dynamic amounts; `Investigate` with an explicit count or player;
- * more than one target slot,
- * or an optional one; selector modifiers outside
- * `Other`/`YouCtrl`/`OppCtrl`/`YouOwn`/`OppOwn`, the exact
- * target form `Creature.Other+YouCtrl`, and `non`-prefixable color, card type,
- * and supertype words (so hexproof, shroud,
- * protection, and combat- or zone-dependent restrictions all reject, while a
- * subtype is only readable as a selector's base); more than one spell ability, or a
+ * more than one target slot, or an optional one; selector words outside the
+ * vocabulary of `parseSelectorModifier` (so hexproof, shroud, protection, and
+ * counter- or zone-dependent restrictions all reject); more than one spell
+ * ability, or a
  * spell ability on a permanent card; conditions, alternate "unless" costs, or
  * new target declarations on a `SubAbility`/`Execute` continuation;
  * alternate/specialize faces, `Variant:` patches, and `Draft:` actions; and any
@@ -105,6 +102,7 @@ import {
 	lookupForgeSVar,
 	parseForgeCardScript,
 } from "./ast.ts";
+import { SUBTYPES } from "./subtypes.ts";
 import { forgeTokenScript } from "./token-corpus.ts";
 
 interface Ok<T> {
@@ -427,14 +425,6 @@ function combinePredicates(
 }
 
 /**
- * One `.`-separated restriction following the base, such as the `nonBlack` of
- * `Creature.nonBlack`. Colors, card types, and supertypes lower exactly,
- * and `NEGATABLE_SUBTYPES` extends the vocabulary to negated subtypes. Every
- * `attacking` and `blocking` are the supported combat-state restrictions.
- * Every other Forge restriction (zone, counters, subtype-as-modifier without
- * `non`) rejects the card rather than being approximated.
- */
-/**
  * `ValidPlayer$` -> the engine's relative-player vocabulary.
  *
  * Forge writes the player set a trigger, replacement, or static watches
@@ -511,6 +501,19 @@ const CMC_COMPARISONS = new Map<string, ManaValueComparison>([
 	["NE", "other than"],
 ]);
 
+/**
+ * One `.`- or `+`-separated restriction following a selector's base, such as
+ * the `nonBlack` of `Creature.nonBlack` or the `YouCtrl` of
+ * `Creature.nonBlack+YouCtrl`.
+ *
+ * Colors, card types, supertypes, and {@link SUBTYPES} subtypes lower exactly,
+ * each also in its `non`-prefixed negation. `Other` and the ownership,
+ * control, combat-state, token, and mana-value restrictions lower to their
+ * predicates, and `!` negates the {@link NEGATABLE_MODIFIERS} subset. Every
+ * other Forge restriction -- zone, counters, and the rest of the state the
+ * engine does not model -- returns null so the caller rejects the card rather
+ * than approximating it.
+ */
 function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	if (modifier.startsWith("!")) {
 		const inner = modifier.slice(1);
@@ -560,130 +563,45 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 	else if (type) predicate = { kind: "type", type };
 	else if (supertype) predicate = { kind: "supertype", supertype };
 	if (predicate) return negated ? { kind: "not", predicate } : predicate;
-	// `nonAngel`: a negated subtype. Only a surveyed one lowers, so Forge
-	// pseudo-restrictions such as `nonChosenCard`, and typos, reject rather
-	// than lower to a restriction no card can satisfy.
-	if (negated && NEGATABLE_SUBTYPES.has(inner))
-		return { kind: "not", predicate: { kind: "subtype", subtype: inner } };
+	// `Human` and `nonAngel`: a subtype restriction, and its negation. Only a
+	// real subtype lowers, so Forge pseudo-restrictions such as `ChosenCard`
+	// and `nonCopiedSpell` reject rather than becoming a subtype predicate no
+	// object can ever satisfy.
+	if (SUBTYPES.has(inner))
+		return negated
+			? { kind: "not", predicate: { kind: "subtype", subtype: inner } }
+			: { kind: "subtype", subtype: inner };
 	return null;
 }
 
 /**
- * Subtypes the `non` modifier may negate, such as the `nonAngel` of
- * `Creature.nonAngel`.
+ * One selector choice, such as `Creature.nonAngel+YouCtrl`.
  *
- * Surveyed from the corpus: every word that follows `non` in a card script
- * and names a subtype on some `Types:` line, plus `Army`, a real type whose
- * only cards are tokens. Colors, card types, and supertypes resolve before
- * this list is consulted; the words that follow `non` and are not subtypes at
- * all — Forge pseudo-restrictions like `nonChosenCard` and `nonCopiedSpell` —
- * reject. A subtype missing from this list rejects too: add it when a card
- * needs it.
+ * A choice is a base word followed by restrictions, which Forge separates with
+ * either `.` or `+`; the two punctuation marks are interchangeable here,
+ * because every restriction AND-combines with the rest regardless of which
+ * one introduced it.
+ *
+ * The base is the whole domain the selector is evaluated in, so only the words
+ * naming an unrestricted domain are special: `Card` and `Permanent` add no
+ * restriction of their own, while `Player` and `Any` are not object domains at
+ * all and belong to {@link parseTarget}. Every other base is an ordinary
+ * restriction -- a card type, supertype, color, or subtype -- and lowers
+ * through the same {@link parseSelectorModifier} as the restrictions after it.
  */
-const NEGATABLE_SUBTYPES: ReadonlySet<string> = new Set([
-	"Angel",
-	"Archon",
-	"Army",
-	"Assassin",
-	"Aura",
-	"Avatar",
-	"Bear",
-	"Bolas",
-	"Borg",
-	"Brushwagg",
-	"Cat",
-	"Dalek",
-	"Demon",
-	"Detective",
-	"Devil",
-	"Dinosaur",
-	"Dragon",
-	"Eldrazi",
-	"Elemental",
-	"Elephant",
-	"Elf",
-	"Equipment",
-	"Eye",
-	"Faerie",
-	"Food",
-	"Forest",
-	"Fox",
-	"Frog",
-	"Gideon",
-	"Giant",
-	"Gnome",
-	"Goat",
-	"God",
-	"Gorgon",
-	"Horror",
-	"Human",
-	"Hydra",
-	"Imp",
-	"Insect",
-	"Island",
-	"Kraken",
-	"Kree",
-	"Lair",
-	"Lemur",
-	"Lesson",
-	"Leviathan",
-	"Merfolk",
-	"Mount",
-	"Mountain",
-	"Mutant",
-	"Octopus",
-	"Ogre",
-	"Ooze",
-	"Phyrexian",
-	"Pilot",
-	"Pirate",
-	"Rat",
-	"Rogue",
-	"Saga",
-	"Salamander",
-	"Serpent",
-	"Shapeshifter",
-	"Shark",
-	"Skeleton",
-	"Sliver",
-	"Soldier",
-	"Spacecraft",
-	"Spider",
-	"Spirit",
-	"Squirrel",
-	"Swamp",
-	"Vampire",
-	"Vehicle",
-	"Villain",
-	"Wall",
-	"Warrior",
-	"Werewolf",
-	"Wizard",
-	"Wolf",
-	"Zombie",
-]);
-
 function parseSelectorPart(value: string): ObjectPredicateDef | null {
 	if (value === "Card.Self" || value === "Self") return { kind: "self" };
-	// `+` AND-combines restrictions, like the `YouCtrl` of
-	// `Creature.nonAngel+YouCtrl`. Only the first segment names a base; each
-	// later segment is a bare modifier with no base of its own.
-	const segments = value.split("+");
-	const pieces = segments[0]?.split(".") ?? [];
-	const base = pieces.shift();
+	const words = value.split(/[.+]/);
+	const base = words[0];
+	// `Player` and `Any` name a target kind rather than an object restriction,
+	// and a selector has no way to widen its domain to one.
+	if (base === "Player" || base === "Any") return null;
 	const parts: ObjectPredicateDef[] = [];
-	const type = base ? (CARD_TYPES.get(base.toLowerCase()) ?? null) : null;
-	if (type) parts.push({ kind: "type", type });
-	else if (base === "Player" || base === "Any") return null;
-	else if (base && base !== "Card" && base !== "Permanent")
-		parts.push({ kind: "subtype", subtype: base });
-	for (const modifier of pieces) {
-		const parsed = parseSelectorModifier(modifier);
-		if (!parsed) return null;
-		parts.push(parsed);
-	}
-	for (const modifier of segments.slice(1)) {
-		const parsed = parseSelectorModifier(modifier);
+	for (const [index, word] of words.entries()) {
+		// The unrestricted bases contribute no predicate; the domain is already
+		// established by the caller.
+		if (index === 0 && (word === "Card" || word === "Permanent")) continue;
+		const parsed = parseSelectorModifier(word);
 		if (!parsed) return null;
 		parts.push(parsed);
 	}
@@ -3985,11 +3903,7 @@ function lowerTrigger(
 			});
 		}
 		case "Attacks": {
-			const badParams = claim(
-				"validcard",
-				"triggerzones",
-				"optionaldecider",
-			);
+			const badParams = claim("validcard", "triggerzones", "optionaldecider");
 			if (!badParams.ok) return badParams;
 			if (
 				getForgeParam(params, "ValidCard") !== "Card.Self" ||

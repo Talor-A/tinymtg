@@ -401,7 +401,7 @@ describe("lowerForgeCard: accepted card lowering", () => {
 
 		const radha = importFixture("r/radha_heir_to_keld");
 		if (!radha.ok) throw new Error("expected Radha, Heir to Keld to import");
-			expect(radha.card.abilityDefinitions.triggered[0]?.effects).toEqual([
+		expect(radha.card.abilityDefinitions.triggered[0]?.effects).toEqual([
 			{
 				kind: "may",
 				decider: "you",
@@ -4324,17 +4324,45 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 		expect(result.diagnostics[0]).toMatchObject({ code: "UNSUPPORTED_TARGET" });
 	});
 
-	test("a subtype missing from the surveyed list rejects", () => {
-		// Goblin is as real a subtype as Angel; it simply is not in the list,
-		// because no corpus card negates it. Rejecting keeps a typo from
-		// lowering to a restriction no card can satisfy.
-		const result = importForgeCard(
-			hostile.replaceAll("%TARGET%", "Creature.nonGoblin"),
-			{ id: "hostile-witness" },
-		);
-		expect(result.ok).toBe(false);
-		if (result.ok) return;
-		expect(result.diagnostics[0]).toMatchObject({ code: "UNSUPPORTED_TARGET" });
+	test("a subtype lowers as a restriction and as its negation", () => {
+		// Both directions consult the same CR subtype list, so a real subtype
+		// reads the same way whether or not `non` precedes it.
+		for (const [target, predicate] of [
+			["Creature.Goblin", { kind: "subtype", subtype: "Goblin" }],
+			[
+				"Creature.nonGoblin",
+				{ kind: "not", predicate: { kind: "subtype", subtype: "Goblin" } },
+			],
+		] as const) {
+			const result = importForgeCard(hostile.replaceAll("%TARGET%", target), {
+				id: "hostile-witness",
+			});
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			expect(result.card.spell?.targets[0]?.legal).toEqual({
+				kind: "permanent",
+				predicate: {
+					kind: "and",
+					predicates: [{ kind: "type", type: "creature" }, predicate],
+				},
+			});
+		}
+	});
+
+	test("a word that is not a subtype at all rejects as a base", () => {
+		// `Targeted` and `Battle` read as bases in the corpus, and neither is a
+		// subtype: lowering either to a subtype predicate would build a
+		// restriction no object can satisfy, so the selector rejects instead.
+		for (const target of ["Targeted.Other", "Battle", "Creature.Notatype"]) {
+			const result = importForgeCard(hostile.replaceAll("%TARGET%", target), {
+				id: "hostile-witness",
+			});
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			expect(result.diagnostics[0]).toMatchObject({
+				code: "UNSUPPORTED_TARGET",
+			});
+		}
 	});
 
 	test("a bare `+` segment outside the modifier vocabulary rejects", () => {
