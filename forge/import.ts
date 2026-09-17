@@ -835,6 +835,11 @@ function parseTarget(
 /**
  * Parameters every effect may carry, whatever its API.
  *
+ * These go through `consumeParams`' duplicate check, unlike
+ * {@link IGNORED_PARAMS}, which is discarded before it. That is the stricter
+ * placement and the right one here: a record naming any of these twice is
+ * malformed, and nothing in the corpus does.
+ *
  * `SpellDescription$` and `Cost$` are read where they matter, and
  * `SubAbility$` is followed by the caller that walks a continuation chain.
  *
@@ -2452,9 +2457,16 @@ function lowerEffectChain<Player extends TriggerEffectPlayer>(
 		if (depth > 0 || rejectAtRoot) {
 			for (const key of CHAIN_FORBIDDEN) {
 				if (current.effectiveLower.has(key)) {
+					// At depth 0 this is a trigger's `Execute$`, where a `Cost$`
+					// means "you may pay {2}{U}. If you do, ..." -- a cost paid
+					// during resolution, which is a different thing from the same
+					// key on a continuation. Name the one that happened, so the
+					// diagnostic does not send a reader to the wrong place.
 					return issue(
 						"UNSUPPORTED_EFFECT",
-						`${key} is not supported on a sub-ability continuation`,
+						depth === 0
+							? `${key} is not supported on a triggered ability`
+							: `${key} is not supported on a sub-ability continuation`,
 						where,
 					);
 				}

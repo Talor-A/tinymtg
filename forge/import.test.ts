@@ -5079,6 +5079,12 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(cost.ok).toBe(false);
 		if (!cost.ok) expect(cost.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
 
+		// A continuation says so, rather than blaming a triggered ability.
+		if (!cost.ok)
+			expect(cost.diagnostics[0]?.message).toBe(
+				"cost is not supported on a sub-ability continuation",
+			);
+
 		const target = importText(
 			REVITALIZE.replace(
 				"DB$ Draw | Defined$ You |",
@@ -5088,6 +5094,22 @@ describe("lowerForgeCard: required negative mutations", () => {
 		expect(target.ok).toBe(false);
 		if (!target.ok)
 			expect(target.diagnostics[0]?.code).toBe("UNSUPPORTED_EFFECT");
+	});
+
+	test("a cost on a triggered ability is reported as one", () => {
+		// Academy Wall's trigger executes `AB$ Discard | Cost$ Draw<1/You>`:
+		// Magic's "you may draw a card. If you do, discard a card", which is a
+		// cost paid while the ability resolves. The engine has no such cost, so
+		// the card rejects -- but at the root of the `Execute$` chain, not on a
+		// continuation, and the diagnostic has to say which or it sends a
+		// reader looking at the wrong record.
+		const result = importFixture("a/academy_wall");
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.diagnostics[0]).toMatchObject({
+			code: "UNSUPPORTED_EFFECT",
+			message: "cost is not supported on a triggered ability",
+		});
 	});
 
 	test("rejects a dynamic (non-literal) amount", () => {
