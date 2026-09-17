@@ -186,6 +186,118 @@ describe("target predicates", () => {
 				swamp.id,
 			),
 		).toBe(true);
+
+		// Grizzly Bears is a 2/2, so each comparator has a side to fall on.
+		expect(
+			matches({ kind: "power", comparison: "exactly", value: 2 }, bears.id),
+		).toBe(true);
+		expect(
+			matches({ kind: "power", comparison: "at least", value: 3 }, bears.id),
+		).toBe(false);
+		expect(
+			matches({ kind: "power", comparison: "at most", value: 2 }, bears.id),
+		).toBe(true);
+		expect(
+			matches(
+				{ kind: "toughness", comparison: "at least", value: 2 },
+				bears.id,
+			),
+		).toBe(true);
+		expect(
+			matches(
+				{ kind: "toughness", comparison: "greater than", value: 2 },
+				bears.id,
+			),
+		).toBe(false);
+
+		// The swamp enters untapped. Tapping it goes through the engine rather
+		// than assigning the field: a derived view is cached per state
+		// revision, so a direct mutation would leave `matches` reading a stale
+		// snapshot and the assertion would prove nothing.
+		expect(matches({ kind: "tapped" }, swamp.id)).toBe(false);
+		perform(
+			engine,
+			state,
+			{ kind: "tap", objects: [swamp.id] },
+			passingAgents(),
+		);
+		expect(matches({ kind: "tapped" }, swamp.id)).toBe(true);
+
+		// Color counts (CR 105.2a-c). Grizzly Bears is mono-green; a Swamp has
+		// no mana cost and so no colors at all.
+		expect(matches({ kind: "color", color: "monocolor" }, bears.id)).toBe(true);
+		expect(matches({ kind: "color", color: "multicolor" }, bears.id)).toBe(
+			false,
+		);
+		expect(matches({ kind: "color", color: "colorless" }, bears.id)).toBe(
+			false,
+		);
+		expect(matches({ kind: "color", color: "colorless" }, swamp.id)).toBe(true);
+		expect(matches({ kind: "color", color: "monocolor" }, swamp.id)).toBe(
+			false,
+		);
+	});
+
+	test("a noncreature has no power or toughness to compare", () => {
+		// CR 208.3: a noncreature permanent has no power or toughness, so no
+		// comparison against one holds -- not even "other than", which would
+		// otherwise be true of every number.
+		//
+		// This is reached by ordinary cards, not only by a malformed selector.
+		// Exorcise targets "artifact, enchantment, or creature with power 4 or
+		// greater", which lowers to an `or`; testing an artifact against it
+		// asks this question of a noncreature every time.
+		const state = newGame();
+		const artifact = spawnPermanent(
+			engine,
+			state,
+			"target-test-replace-cast",
+			0,
+		);
+		const bears = spawnPermanent(engine, state, "grizzly-bears", 0);
+		const matches = (predicate: ObjectPredicateDef, id: ObjectId) =>
+			objectMatchesPredicate(
+				predicate,
+				effectSubjectFromSnapshot(
+					getSnapshot(createReadContext(engine, state), id),
+				),
+				{ controller: 0 as const, source: bears.id },
+			);
+
+		for (const comparison of [
+			"at least",
+			"greater than",
+			"at most",
+			"less than",
+			"exactly",
+			"other than",
+		] as const) {
+			expect(
+				matches({ kind: "power", comparison, value: 0 }, artifact.id),
+			).toBe(false);
+			expect(
+				matches({ kind: "toughness", comparison, value: 0 }, artifact.id),
+			).toBe(false);
+		}
+
+		// Exorcise's whole selector: the artifact is legal on its own branch,
+		// and reaching the power branch does not disturb that.
+		const exorcise: ObjectPredicateDef = {
+			kind: "or",
+			predicates: [
+				{ kind: "type", type: "artifact" },
+				{ kind: "type", type: "enchantment" },
+				{
+					kind: "and",
+					predicates: [
+						{ kind: "type", type: "creature" },
+						{ kind: "power", comparison: "at least", value: 4 },
+					],
+				},
+			],
+		};
+		expect(matches(exorcise, artifact.id)).toBe(true);
+		expect(matches(exorcise, bears.id)).toBe(false);
 	});
 
 	test("the token predicate reads each object kind's representation", () => {

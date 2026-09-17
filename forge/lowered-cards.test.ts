@@ -78,6 +78,14 @@ const FIXTURES: readonly (readonly [path: string, construct: string])[] = [
 	["w/wooded_foothills", "sacrifice-self search, enters tapped"],
 	// A token-property target, the unnegated form of Judith's restriction.
 	["d/dogged_hunter", "target restricted to tokens"],
+	// A tapped-state restriction: `ValidTgts$ Creature.tapped`.
+	["a/assassinate", "target restricted by tapped state"],
+	// Both numeric predicates at once: `Creature.powerEQ1+toughnessEQ1` is
+	// Forge's spelling of "target 1/1 creature".
+	["a/aegis_of_the_meek", "target restricted by power and toughness"],
+	// A selector whose alternatives span creature and noncreature types, so
+	// the power comparison is asked of objects that have no power (CR 208.3).
+	["e/exorcise", "mixed-type target with a power comparison"],
 ];
 
 for (const [path, construct] of FIXTURES) {

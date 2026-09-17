@@ -485,7 +485,8 @@ function parseDrawnPlayer(value: string | undefined): ValidPlayer | null {
  * pair off the same way, and every object has an owner.
  *
  * `token` and `Token` are both spelled in the corpus and mean the same
- * property.
+ * property, and `untapped` is the negation of `tapped` rather than a state of
+ * its own.
  *
  * The values are shared rather than copied per call, which holds because no
  * caller mutates a predicate: the importer only ever builds new ones around
@@ -503,10 +504,33 @@ const FIXED_MODIFIERS = new Map<string, ObjectPredicateDef>([
 	["YouDontOwn", { kind: "owner", player: "opponent" }],
 	["token", { kind: "token" }],
 	["Token", { kind: "token" }],
+	["tapped", { kind: "tapped" }],
+	["untapped", { kind: "not", predicate: { kind: "tapped" } }],
+	["MonoColor", { kind: "color", color: "monocolor" }],
+	["MultiColor", { kind: "color", color: "multicolor" }],
+	["Colorless", { kind: "color", color: "colorless" }],
 ]);
 
-/** Forge's mana value comparators, spelled as the predicate spells them. */
-const CMC_COMPARISONS = new Map<string, PredicateComparisonWord>([
+/**
+ * The value a numeric restriction compares, from the word Forge writes before
+ * the comparator. `cmc` is Forge's spelling of mana value (CR 202.3).
+ */
+const NUMERIC_PREDICATE_KINDS = new Map<
+	string,
+	"mana value" | "power" | "toughness"
+>([
+	["cmc", "mana value"],
+	["power", "power"],
+	["toughness", "toughness"],
+]);
+
+/**
+ * Forge's numeric comparators, spelled as the predicates spell them.
+ *
+ * Forge writes the same two letters for every numeric restriction, so
+ * `cmcGE3`, `powerGE3`, and `toughnessGE3` all read their comparator here.
+ */
+const NUMERIC_COMPARISONS = new Map<string, PredicateComparisonWord>([
 	["GE", "at least"],
 	["GT", "greater than"],
 	["LE", "at most"],
@@ -549,16 +573,22 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 			? { kind: "not", predicate }
 			: predicate;
 	}
-	// `cmcGE5`: a mana value comparison against a literal bound. Forge also
-	// writes the bound as `X` (`cmcLEX`, `cmcEQX`), which reads a value chosen
-	// elsewhere on the card; a selector has no access to that value here, so
-	// only the literal form lowers.
-	const cmc = /^cmc([A-Z]{2})(\d+)$/.exec(modifier);
-	if (cmc) {
-		const comparison = CMC_COMPARISONS.get(cmc[1] ?? "");
-		const value = Number(cmc[2]);
-		if (comparison === undefined || !Number.isSafeInteger(value)) return null;
-		return { kind: "mana value", comparison, value };
+	// `cmcGE5`, `powerLE2`, `toughnessGE4`: a numeric comparison against a
+	// literal bound. Forge also writes the bound as `X` (`cmcLEX`, `powerLEX`),
+	// which reads a value chosen elsewhere on the card; a selector has no
+	// access to that value here, so only the literal form lowers.
+	const numeric = /^(cmc|power|toughness)([A-Z]{2})(\d+)$/.exec(modifier);
+	if (numeric) {
+		const kind = NUMERIC_PREDICATE_KINDS.get(numeric[1] ?? "");
+		const comparison = NUMERIC_COMPARISONS.get(numeric[2] ?? "");
+		const value = Number(numeric[3]);
+		if (
+			kind === undefined ||
+			comparison === undefined ||
+			!Number.isSafeInteger(value)
+		)
+			return null;
+		return { kind, comparison, value };
 	}
 	const negated = modifier.startsWith("non");
 	const inner = negated ? modifier.slice(3) : modifier;

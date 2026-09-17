@@ -1145,3 +1145,237 @@ exports[`d/dogged_hunter lowers as target restricted to tokens: d/dogged_hunter 
   ],
 }
 `;
+
+exports[`a/assassinate lowers as target restricted by tapped state: a/assassinate 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "b",
+  ],
+  "id": "assassinate",
+  "manaCost": {
+    "b": 1,
+    "n": 2,
+  },
+  "name": "Assassinate",
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "spell": {
+    "effects": [
+      {
+        "kind": "destroy",
+        "subjects": {
+          "kind": "target",
+          "slot": "target-1",
+        },
+      },
+    ],
+    "id": "spell-1",
+    "targets": [
+      {
+        "id": "target-1",
+        "legal": {
+          "kind": "permanent",
+          "predicate": {
+            "kind": "and",
+            "predicates": [
+              {
+                "kind": "type",
+                "type": "creature",
+              },
+              {
+                "kind": "tapped",
+              },
+            ],
+          },
+        },
+        "max": 1,
+        "min": 1,
+      },
+    ],
+    "text": "Destroy target tapped creature.",
+  },
+  "types": [
+    "sorcery",
+  ],
+}
+`;
+
+exports[`a/aegis_of_the_meek lowers as target restricted by power and toughness: a/aegis_of_the_meek 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [
+      {
+        "cost": {
+          "mana": {
+            "n": 1,
+          },
+          "tapSelf": true,
+        },
+        "effects": [
+          {
+            "duration": "until-end-of-turn",
+            "kind": "modify-pt",
+            "power": 1,
+            "subject": {
+              "kind": "target",
+              "slot": "target-1",
+            },
+            "toughness": 2,
+          },
+        ],
+        "id": "activated-1",
+        "kind": "activated",
+        "targets": [
+          {
+            "id": "target-1",
+            "legal": {
+              "kind": "permanent",
+              "predicate": {
+                "kind": "and",
+                "predicates": [
+                  {
+                    "kind": "type",
+                    "type": "creature",
+                  },
+                  {
+                    "comparison": "exactly",
+                    "kind": "power",
+                    "value": 1,
+                  },
+                  {
+                    "comparison": "exactly",
+                    "kind": "toughness",
+                    "value": 1,
+                  },
+                ],
+              },
+            },
+            "max": 1,
+            "min": 1,
+          },
+        ],
+        "text": "Target 1/1 creature gets +1/+2 until end of turn.",
+      },
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [],
+  "id": "aegis-of-the-meek",
+  "manaCost": {
+    "n": 3,
+  },
+  "name": "Aegis of the Meek",
+  "printedAbilities": {
+    "activated": [
+      "aegis-of-the-meek:0",
+    ],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "types": [
+    "artifact",
+  ],
+}
+`;
+
+exports[`e/exorcise lowers as mixed-type target with a power comparison: e/exorcise 1`] = `
+{
+  "abilityDefinitions": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "colors": [
+    "w",
+  ],
+  "id": "exorcise",
+  "manaCost": {
+    "n": 1,
+    "w": 1,
+  },
+  "name": "Exorcise",
+  "printedAbilities": {
+    "activated": [],
+    "prohibition": [],
+    "replacement": [],
+    "static": [],
+    "triggered": [],
+  },
+  "spell": {
+    "effects": [
+      {
+        "destination": {
+          "zone": "exile",
+        },
+        "from": "battlefield",
+        "kind": "change-zone",
+        "subject": {
+          "kind": "target",
+          "slot": "target-1",
+        },
+      },
+    ],
+    "id": "spell-1",
+    "targets": [
+      {
+        "id": "target-1",
+        "legal": {
+          "kind": "permanent",
+          "predicate": {
+            "kind": "or",
+            "predicates": [
+              {
+                "kind": "type",
+                "type": "artifact",
+              },
+              {
+                "kind": "type",
+                "type": "enchantment",
+              },
+              {
+                "kind": "and",
+                "predicates": [
+                  {
+                    "kind": "type",
+                    "type": "creature",
+                  },
+                  {
+                    "comparison": "at least",
+                    "kind": "power",
+                    "value": 4,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        "max": 1,
+        "min": 1,
+      },
+    ],
+    "text": "Exile target artifact, enchantment, or creature with power 4 or greater.",
+  },
+  "types": [
+    "sorcery",
+  ],
+}
+`;
