@@ -491,6 +491,39 @@ type ManaValueComparison = Extract<
 	{ kind: "mana value" }
 >["comparison"];
 
+/**
+ * Selector restrictions that name one fixed predicate, with no operand to
+ * read out of the word itself.
+ *
+ * `YouDontCtrl` and `OppCtrl` are the same restriction spelled two ways: an
+ * object with a controller who is not you is controlled by an opponent, so
+ * both lower to the `opponent` controller predicate rather than to a negation
+ * of the `you` one. The difference would only show on an object with no
+ * controller at all (CR 109.4) -- a card in a graveyard or library -- which
+ * "you don't control" does not describe either. `YouDontOwn` and `OppOwn`
+ * pair off the same way, and every object has an owner.
+ *
+ * `token` and `Token` are both spelled in the corpus and mean the same
+ * property.
+ *
+ * The values are shared rather than copied per call, which holds because no
+ * caller mutates a predicate: the importer only ever builds new ones around
+ * them.
+ */
+const FIXED_MODIFIERS = new Map<string, ObjectPredicateDef>([
+	["Other", { kind: "not", predicate: { kind: "self" } }],
+	["attacking", { kind: "attacking" }],
+	["blocking", { kind: "blocking" }],
+	["YouCtrl", { kind: "controller", player: "you" }],
+	["OppCtrl", { kind: "controller", player: "opponent" }],
+	["YouDontCtrl", { kind: "controller", player: "opponent" }],
+	["YouOwn", { kind: "owner", player: "you" }],
+	["OppOwn", { kind: "owner", player: "opponent" }],
+	["YouDontOwn", { kind: "owner", player: "opponent" }],
+	["token", { kind: "token" }],
+	["Token", { kind: "token" }],
+]);
+
 /** Forge's mana value comparators, spelled as the predicate spells them. */
 const CMC_COMPARISONS = new Map<string, ManaValueComparison>([
 	["GE", "at least"],
@@ -522,13 +555,8 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 		if (!predicate) return null;
 		return { kind: "not", predicate };
 	}
-	if (modifier === "Other") return { kind: "not", predicate: { kind: "self" } };
-	if (modifier === "attacking") return { kind: "attacking" };
-	if (modifier === "blocking") return { kind: "blocking" };
-	if (modifier === "YouCtrl") return { kind: "controller", player: "you" };
-	if (modifier === "OppCtrl") return { kind: "controller", player: "opponent" };
-	if (modifier === "YouOwn") return { kind: "owner", player: "you" };
-	if (modifier === "OppOwn") return { kind: "owner", player: "opponent" };
+	const fixed = FIXED_MODIFIERS.get(modifier);
+	if (fixed) return fixed;
 	const keywordMatch = /^(without|with)(.+)$/.exec(modifier);
 	if (keywordMatch) {
 		const keyword = BARE_KEYWORDS.get(keywordMatch[2] ?? "");
@@ -538,9 +566,6 @@ function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
 			? { kind: "not", predicate }
 			: predicate;
 	}
-	// Both spellings of the word appear in the corpus and mean the same
-	// property: a permanent or nonbattlefield object that is a token.
-	if (modifier === "token" || modifier === "Token") return { kind: "token" };
 	// `cmcGE5`: a mana value comparison against a literal bound. Forge also
 	// writes the bound as `X` (`cmcLEX`, `cmcEQX`), which reads a value chosen
 	// elsewhere on the card; a selector has no access to that value here, so

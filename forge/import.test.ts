@@ -4365,6 +4365,25 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 		}
 	});
 
+	test("`YouDontCtrl` and `OppCtrl` lower to the same predicate", () => {
+		// An object with a controller who is not you is controlled by an
+		// opponent, so the two spellings name one restriction. `YouDontOwn` and
+		// `OppOwn` pair off the same way.
+		for (const [dont, opp] of [
+			["Creature.YouDontCtrl", "Creature.OppCtrl"],
+			["Creature.YouDontOwn", "Creature.OppOwn"],
+		] as const) {
+			const lower = (target: string) => {
+				const result = importForgeCard(hostile.replaceAll("%TARGET%", target), {
+					id: "hostile-witness",
+				});
+				expect(result.ok).toBe(true);
+				return result.ok ? result.card.spell?.targets[0]?.legal : undefined;
+			};
+			expect(lower(dont)).toEqual(lower(opp));
+		}
+	});
+
 	test("a bare `+` segment outside the modifier vocabulary rejects", () => {
 		const result = importForgeCard(
 			hostile.replaceAll("%TARGET%", "Creature.YouCtrl+haunted"),

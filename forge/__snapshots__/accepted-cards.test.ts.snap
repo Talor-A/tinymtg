@@ -1540,6 +1540,7 @@ Flame Lash
 Flame Rift
 Flame Slash
 Flame Spirit
+Flame Sweep
 Flame-Kin Zealot
 Flameborn Viron
 Flamecast Wheel
@@ -1735,6 +1736,7 @@ Gilded Goose
 Gilded Lotus
 Gilded Sentinel
 Gin'tak Charge
+Githzerai Monk
 Give In to Violence
 Gixian Puppeteer
 Glacial Floodplain
@@ -2174,6 +2176,7 @@ Improbable Alliance
 Improvised Club
 Improvised Weaponry
 Impulse
+In Garruk's Wake
 In Oketra's Name
 Incandescent Aria
 Incendiary Sabotage
@@ -2424,6 +2427,7 @@ Kor Entanglers
 Kor Sky Climber
 Kor Skyfisher
 Koskun Keep
+Kothophed, Soul Hoarder
 Kozilek's Channeler
 Kozilek's Predator
 Kozilek's Unsealing
@@ -3190,6 +3194,7 @@ Pitiless Pontiff
 Pixie Queen
 Plague Dogs
 Plague Spitter
+Plague Wind
 Plains
 Planar Cleansing
 Planar Portal
@@ -4516,6 +4521,7 @@ Totally Lost
 Totem Speaker
 Toucan-Puffin
 Touch of Brilliance
+Touchstone
 Tower Defense
 Tower Gargoyle
 Tower of Calamities
@@ -5083,4 +5089,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `5080`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `5086`;
