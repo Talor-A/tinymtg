@@ -2643,10 +2643,11 @@ export type ObjectPredicateDef =
 	| { kind: "self" }
 	| { kind: "attacking" }
 	| { kind: "blocking" }
+	| { kind: "tapped" }
 	| { kind: "type"; type: CardType }
 	| { kind: "supertype"; supertype: Supertype }
 	| { kind: "subtype"; subtype: string }
-	| { kind: "color"; color: Color | "monocolor" | "multicolor" }
+	| { kind: "color"; color: Color | ColorCount }
 	| { kind: "keyword"; keyword: Keyword }
 	| { kind: "owner"; player: "you" | "opponent" }
 	| { kind: "controller"; player: "you" | "opponent" }
@@ -2673,13 +2674,31 @@ export type ObjectPredicateDef =
 	  }
 	| { kind: "not"; predicate: ObjectPredicateDef };
 
-type PredicateComparisonWord =
+/**
+ * A restriction on how many colors an object has, rather than on which one.
+ *
+ * A monocolored object is exactly one of the five colors (CR 105.2a), a
+ * multicolored object two or more (CR 105.2b), and a colorless object has no
+ * color (CR 105.2c). These sit in the `color` predicate beside the five colors
+ * because they restrict the same characteristic, but they are counts rather
+ * than colors: there are only five colors (CR 105.1), so `colorless` is not a
+ * sixth one, and every object is exactly one of these three.
+ */
+export type ColorCount = "colorless" | "monocolor" | "multicolor";
+
+/**
+ * How a numeric predicate compares the object's value against its bound. The
+ * same six words serve mana value, power, and toughness, so the set is named
+ * once here rather than restated per predicate.
+ */
+export type PredicateComparisonWord =
 	| "at least"
 	| "greater than"
 	| "at most"
 	| "less than"
 	| "exactly"
 	| "other than";
+
 /** Declarative targeting; the runtime supports one required target slot. */
 export interface TargetDef {
 	id: string;
@@ -2943,6 +2962,7 @@ export interface EffectSubjectView {
 	readonly token: boolean;
 	readonly attacking: boolean;
 	readonly blocking: boolean;
+	readonly tapped: boolean;
 	readonly currentCharacteristics: DeepReadOnly<CharacteristicsSnapshot>;
 }
 
@@ -2965,6 +2985,7 @@ export function effectSubjectFromSnapshot(
 				cardId: snapshot.cardId,
 				controller: null,
 				token: false,
+				tapped: false,
 			};
 		case "spell":
 			return {
@@ -2976,6 +2997,7 @@ export function effectSubjectFromSnapshot(
 				controller: snapshot.controller,
 				// A copy of a spell is not a token; only permanents can be tokens.
 				token: false,
+				tapped: false,
 			};
 		case "permanent":
 			return {
@@ -2988,6 +3010,7 @@ export function effectSubjectFromSnapshot(
 				token: snapshot.representation.kind === "token",
 				attacking: snapshot.attacking,
 				blocking: snapshot.blocking,
+				tapped: snapshot.tapped,
 			};
 		case "nonbattlefield-token":
 			return {
@@ -2995,6 +3018,7 @@ export function effectSubjectFromSnapshot(
 				cardId: null,
 				controller: null,
 				token: true,
+				tapped: false,
 			};
 	}
 	return assertNever(snapshot);
@@ -3020,9 +3044,9 @@ export function objectMatchesPredicate(
 		case "self":
 			return context.source !== null && subject.objectId === context.source;
 		case "attacking":
-			return subject.attacking;
 		case "blocking":
-			return subject.blocking;
+		case "tapped":
+			return subject[predicate.kind];
 		case "type":
 			return characteristics.types.includes(predicate.type);
 		case "supertype":
@@ -3030,11 +3054,21 @@ export function objectMatchesPredicate(
 		case "subtype":
 			return characteristics.subtypes.includes(predicate.subtype);
 		case "color":
-			if (predicate.color === "monocolor")
-				return characteristics.colors.length === 1;
-			if (predicate.color === "multicolor")
-				return characteristics.colors.length > 1;
-			return characteristics.colors.includes(predicate.color);
+			// The five colors ask whether the object is that color; the three
+			// counts (CR 105.2a-c) ask how many colors it has. Switching on the
+			// counts rather than testing them one by one keeps a new count from
+			// falling through to `includes`, which would answer false for a
+			// value it does not know.
+			switch (predicate.color) {
+				case "colorless":
+					return characteristics.colors.length === 0;
+				case "monocolor":
+					return characteristics.colors.length === 1;
+				case "multicolor":
+					return characteristics.colors.length > 1;
+				default:
+					return characteristics.colors.includes(predicate.color);
+			}
 		case "keyword":
 			return characteristics.keywords.includes(predicate.keyword);
 		case "token":
@@ -3061,8 +3095,14 @@ export function objectMatchesPredicate(
 		}
 		case "power":
 		case "toughness": {
-			// TODO: is this the right place for an assert, or should we just return false?
-			assert(characteristics.kind === "creature");
+			// CR 208.3: a noncreature permanent has no power or toughness, even
+			// one with both printed on it, such as an unanimated Vehicle. There
+			// is no number to compare, so no comparison holds -- not even
+			// "other than". Reaching this with a noncreature is ordinary:
+			// Exorcise targets "artifact, enchantment, or creature with power 4
+			// or greater", and testing an artifact against that `or` asks this
+			// question of a noncreature.
+			if (characteristics.kind !== "creature") return false;
 			return applyComparisonWord(
 				predicate.comparison,
 				characteristics[predicate.kind],
@@ -4607,6 +4647,7 @@ function effectSubjectDuringLayer(
 			(object.kind === "permanent" && object.representation.kind === "token"),
 		attacking: object.kind === "permanent" && object.attacking,
 		blocking: object.kind === "permanent" && object.blocking,
+		tapped: object.kind === "permanent" && object.tapped,
 		currentCharacteristics: characteristics,
 	};
 }

@@ -57,6 +57,7 @@ import type {
 	ManaType,
 	ObjectPredicateDef,
 	PayableActivationManaCost,
+	PredicateComparisonWord,
 	PublicObjectZone,
 	RelativeEffectPlayer,
 	ReplacementEffectDefinition,
@@ -471,11 +472,6 @@ function parseDrawnPlayer(value: string | undefined): ValidPlayer | null {
 	return null;
 }
 
-type ManaValueComparison = Extract<
-	ObjectPredicateDef,
-	{ kind: "mana value" }
->["comparison"];
-
 /**
  * Selector restrictions that name one fixed predicate, with no operand to
  * read out of the word itself.
@@ -510,7 +506,7 @@ const FIXED_MODIFIERS = new Map<string, ObjectPredicateDef>([
 ]);
 
 /** Forge's mana value comparators, spelled as the predicate spells them. */
-const CMC_COMPARISONS = new Map<string, ManaValueComparison>([
+const CMC_COMPARISONS = new Map<string, PredicateComparisonWord>([
 	["GE", "at least"],
 	["GT", "greater than"],
 	["LE", "at most"],
