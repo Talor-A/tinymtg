@@ -79,10 +79,10 @@ import {
 	cloneCharacteristics,
 	controllerOf,
 	defineCard,
-	effectSubjectFromSnapshot,
 	effectTargetUses,
 	etbPreview,
 	getSnapshot,
+	layerSubjectMatchesPredicate,
 	MANA_COST_TYPES,
 	objectMatchesPredicate,
 	targetSelectorSatisfies,
@@ -2827,13 +2827,13 @@ function lowerNextEndStepDelayedTrigger(
 function staticAppliesFromObjectPredicate(
 	predicate: ObjectPredicateDef,
 ): CharacteristicStaticAbilityDefinition["applies"] {
-	return (object, _state, source) => {
+	return (subject, _state, source) => {
 		const controller = controllerOf(source);
 		assertDefined(
 			controller,
 			"an imported static ability source must have a controller",
 		);
-		return objectMatchesPredicate(predicate, object, {
+		return layerSubjectMatchesPredicate(predicate, subject, {
 			controller,
 			source: source.id,
 		});
@@ -3118,14 +3118,10 @@ function lowerCopyEtbKeyword(
 					const object = getSnapshot(ctx.read, id);
 					return (
 						object.kind === "permanent" &&
-						objectMatchesPredicate(
-							selector,
-							effectSubjectFromSnapshot(object),
-							{
-								controller: ctx.controller,
-								source: ctx.self?.id ?? null,
-							},
-						)
+						objectMatchesPredicate(selector, object, {
+							controller: ctx.controller,
+							source: ctx.self?.id ?? null,
+						})
 					);
 				})
 			);
@@ -3258,7 +3254,7 @@ function lowerGraveyardExileReplacement(
 			// reads (CR 608.2h's last known information is not needed yet).
 			return objectMatchesPredicate(
 				selector,
-				effectSubjectFromSnapshot(getSnapshot(ctx.read, ev.object)),
+				getSnapshot(ctx.read, ev.object),
 				{
 					controller: ctx.controller,
 					source: ctx.self.id,
@@ -3414,7 +3410,7 @@ function lowerReplacement(
 				return false;
 			return objectMatchesPredicate(
 				selector,
-				effectSubjectFromSnapshot(etbPreview(ctx.read.engine, ctx.state, ev)),
+				etbPreview(ctx.read.engine, ctx.state, ev),
 				{
 					controller: ctx.controller,
 					source: ctx.self.id,

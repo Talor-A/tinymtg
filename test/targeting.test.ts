@@ -13,15 +13,14 @@ import {
 	createEngine,
 	createReadContext,
 	defineCard,
-	type EffectSubjectView,
 	type EntityRef,
-	effectSubjectFromSnapshot,
 	executeCastAction,
 	type GameState,
 	getObservableActions,
 	getSnapshot,
 	IllegalCastError,
 	InvalidChoiceAnswerError,
+	type LayerSubject,
 	newGame,
 	type ObjectId,
 	type ObjectPredicateDef,
@@ -105,11 +104,7 @@ describe("target predicates", () => {
 
 		const matches = (predicate: ObjectPredicateDef, id: ObjectId) => {
 			const snapshot = getSnapshot(createReadContext(engine, state), id);
-			return objectMatchesPredicate(
-				predicate,
-				effectSubjectFromSnapshot(snapshot),
-				mine,
-			);
+			return objectMatchesPredicate(predicate, snapshot, mine);
 		};
 
 		expect(matches({ kind: "self" }, bears.id)).toBe(true);
@@ -258,9 +253,7 @@ describe("target predicates", () => {
 		const matches = (predicate: ObjectPredicateDef, id: ObjectId) =>
 			objectMatchesPredicate(
 				predicate,
-				effectSubjectFromSnapshot(
-					getSnapshot(createReadContext(engine, state), id),
-				),
+				getSnapshot(createReadContext(engine, state), id),
 				{ controller: 0 as const, source: bears.id },
 			);
 
@@ -356,9 +349,7 @@ describe("target predicates", () => {
 		const isToken = (id: ObjectId) =>
 			objectMatchesPredicate(
 				{ kind: "token" },
-				effectSubjectFromSnapshot(
-					getSnapshot(createReadContext(engine, state), id),
-				),
+				getSnapshot(createReadContext(engine, state), id),
 				{ controller: 0, source: null },
 			);
 
@@ -369,7 +360,7 @@ describe("target predicates", () => {
 		expect(isToken(spell.objectId)).toBe(false);
 	});
 
-	test("the layer walk sees the same subject facts as a finished snapshot", () => {
+	test("the layer walk hands a static ability the canonical object", () => {
 		const state = newGame();
 		spawnPermanent(engine, state, "target-test-subject-observer", 0);
 		const attacker = spawnPermanent(engine, state, "grizzly-bears", 0, {
@@ -384,18 +375,24 @@ describe("target predicates", () => {
 		for (const id of [attacker.id, blocker.id]) {
 			// The read context evaluates characteristics lazily, so the observer only
 			// runs once this object's snapshot is demanded.
-			const fromSnapshot = effectSubjectFromSnapshot(getSnapshot(read, id));
-			const duringLayer = OBSERVED_LAYER_SUBJECTS.get(id);
-			assertDefined(duringLayer, "the layer walk never offered this object");
-			expect({ ...duringLayer, currentCharacteristics: undefined }).toEqual({
-				...fromSnapshot,
-				currentCharacteristics: undefined,
-			});
+			getSnapshot(read, id);
+			const subject = OBSERVED_LAYER_SUBJECTS.get(id);
+			assertDefined(subject, "the layer walk never offered this object");
+			const canonical = state.objects.get(id);
+			assertDefined(canonical, "the object left canonical state");
+			// The subject is the object out of canonical state, not a projection of
+			// it, so a static ability can narrow on `kind` and read exact fields.
+			expect(subject.object).toBe(canonical);
 		}
-		expect(OBSERVED_LAYER_SUBJECTS.get(attacker.id)?.attacking).toBe(true);
-		expect(OBSERVED_LAYER_SUBJECTS.get(blocker.id)?.blocking).toBe(true);
-		expect(OBSERVED_LAYER_SUBJECTS.get(attacker.id)?.token).toBe(true);
-		expect(OBSERVED_LAYER_SUBJECTS.get(blocker.id)?.token).toBe(false);
+
+		const attackerObject = OBSERVED_LAYER_SUBJECTS.get(attacker.id)?.object;
+		const blockerObject = OBSERVED_LAYER_SUBJECTS.get(blocker.id)?.object;
+		assert(attackerObject?.kind === "permanent");
+		assert(blockerObject?.kind === "permanent");
+		expect(attackerObject.attacking).toBe(true);
+		expect(blockerObject.blocking).toBe(true);
+		expect(attackerObject.representation.kind).toBe("token");
+		expect(blockerObject.representation.kind).toBe("card");
 	});
 });
 
@@ -570,9 +567,9 @@ const TEST_CARD_5 = defineCard({
 	],
 });
 
-// Records the subject view the layer walk offers for every battlefield object,
-// so a test can compare it against the view built from a finished snapshot.
-const OBSERVED_LAYER_SUBJECTS = new Map<ObjectId, EffectSubjectView>();
+// Records the subject the layer walk offers for every battlefield object, so a
+// test can check what a static ability is actually handed.
+const OBSERVED_LAYER_SUBJECTS = new Map<ObjectId, LayerSubject>();
 const TEST_CARD_6 = defineCard({
 	id: "target-test-subject-observer",
 	name: "Test subject observer",
@@ -584,7 +581,7 @@ const TEST_CARD_6 = defineCard({
 			kind: "characteristic",
 			text: "Observes each subject offered to it and changes nothing.",
 			applies: (subject) => {
-				OBSERVED_LAYER_SUBJECTS.set(subject.objectId, subject);
+				OBSERVED_LAYER_SUBJECTS.set(subject.object.id, subject);
 				return false;
 			},
 			effects: [

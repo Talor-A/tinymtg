@@ -87,11 +87,12 @@ const COMMUNAL_INSTRUCTION = defineCard({
 		{
 			kind: "characteristic",
 			text: 'Creatures you control have "{T}: Draw a card." and "When this creature enters, you gain 3 life."',
-			applies: (v, _state, source) =>
+			applies: ({ object, currentCharacteristics }, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				v.currentCharacteristics.types.includes("creature") &&
-				v.controller === source.controller,
+				currentCharacteristics.types.includes("creature") &&
+				object.kind === "permanent" &&
+				object.controller === source.controller,
 			effects: [
 				{
 					layer: "6-ability-changing",
@@ -153,10 +154,10 @@ const LAYER_ONE_SOURCE = defineCard({
 		{
 			kind: "characteristic",
 			text: "Grizzly Bears is named Layer-One Grizzly Bears.",
-			applies: (v, _state, source) =>
+			applies: ({ object }, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				v.cardId === "grizzly-bears",
+				physicalCardId(object) === "grizzly-bears",
 			effects: [
 				{
 					layer: "1a-copiable-values",
@@ -730,11 +731,12 @@ const TEST_CARD_1 = defineCard({
 		{
 			kind: "characteristic",
 			text: "Creatures you control gain those abilities.",
-			applies: (v, _state, source) =>
+			applies: ({ object, currentCharacteristics }, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				v.currentCharacteristics.types.includes("creature") &&
-				v.controller === source.controller,
+				currentCharacteristics.types.includes("creature") &&
+				object.kind === "permanent" &&
+				object.controller === source.controller,
 			effects: [
 				{
 					layer: "6-ability-changing",
@@ -1080,9 +1082,10 @@ const GRAVEYARD_ANTHEM = defineCard({
 			text: "While this is in your graveyard, creatures you control get +1/+1.",
 			functionsFrom: ["graveyard"],
 			affects: ["battlefield"],
-			applies: (v, _state, source) =>
-				v.currentCharacteristics.types.includes("creature") &&
-				v.controller === source.owner,
+			applies: ({ object, currentCharacteristics }, _state, source) =>
+				currentCharacteristics.types.includes("creature") &&
+				object.kind === "permanent" &&
+				object.controller === source.owner,
 			effects: [
 				{
 					layer: "7c-modify-power-toughness",
@@ -1107,11 +1110,12 @@ const LAYERED_LOCK_SOURCE = defineCard({
 		{
 			kind: "characteristic",
 			text: "Synthetic: your creatures lose flying and get +1/+1.",
-			applies: (v, _state, source) =>
+			applies: ({ object, currentCharacteristics }, _state, source) =>
 				source.kind === "permanent" &&
-				v.currentCharacteristics.types.includes("creature") &&
-				v.currentCharacteristics.keywords.includes("flying") &&
-				v.controller === source.controller,
+				currentCharacteristics.types.includes("creature") &&
+				currentCharacteristics.keywords.includes("flying") &&
+				object.kind === "permanent" &&
+				object.controller === source.controller,
 			effects: [
 				{
 					layer: "6-ability-changing",

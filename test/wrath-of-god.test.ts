@@ -33,12 +33,13 @@ const INDESTRUCTIBLE_CAPTAIN = defineCard({
 		{
 			kind: "characteristic",
 			text: "Other creatures you control have indestructible.",
-			applies: (view, _state, source) =>
+			applies: ({ object, currentCharacteristics }, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				view.objectId !== source.id &&
-				view.controller === source.controller &&
-				view.currentCharacteristics.types.includes("creature"),
+				object.kind === "permanent" &&
+				object.id !== source.id &&
+				object.controller === source.controller &&
+				currentCharacteristics.types.includes("creature"),
 			effects: [
 				{
 					layer: "6-ability-changing",

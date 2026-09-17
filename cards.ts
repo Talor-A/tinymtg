@@ -237,10 +237,10 @@ export const URZAS_MINE = defineCard({
 		{
 			kind: "characteristic",
 			text: "{T}: Add {C}. If you control an Urza's Power-Plant and an Urza's Tower, add {C}{C} instead.",
-			applies: (view, _state, source) =>
+			applies: ({ object }, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				view.objectId === source.id,
+				object.id === source.id,
 			effects: [
 				{
 					layer: "6-ability-changing",
@@ -302,10 +302,10 @@ export const URZAS_POWER_PLANT = defineCard({
 		{
 			kind: "characteristic",
 			text: "{T}: Add {C}. If you control an Urza's Mine and an Urza's Tower, add {C}{C} instead.",
-			applies: (view, _state, source) =>
+			applies: ({ object }, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				view.objectId === source.id,
+				object.id === source.id,
 			effects: [
 				{
 					layer: "6-ability-changing",
@@ -367,10 +367,10 @@ export const URZAS_TOWER = defineCard({
 		{
 			kind: "characteristic",
 			text: "{T}: Add {C}. If you control an Urza's Mine and an Urza's Power-Plant, add {C}{C}{C} instead.",
-			applies: (view, _state, source) =>
+			applies: ({ object }, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				view.objectId === source.id,
+				object.id === source.id,
 			effects: [
 				{
 					layer: "6-ability-changing",

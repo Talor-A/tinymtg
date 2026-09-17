@@ -26,7 +26,6 @@ import {
 	activePlayer,
 	buildPlayerView,
 	createReadContext,
-	effectSubjectFromSnapshot,
 	eligibleBlockers,
 	getSnapshot,
 	name,
@@ -947,7 +946,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 			assertDefined(read);
 			return objectMatchesPredicate(
 				input.predicate.definition,
-				effectSubjectFromSnapshot(getSnapshot(read, id)),
+				getSnapshot(read, id),
 				input.predicate.context,
 			);
 		});
@@ -1014,7 +1013,7 @@ export class ChoiceController<CanSuspend extends boolean = false> {
 				input.predicate
 					? objectMatchesPredicate(
 							input.predicate.definition,
-							effectSubjectFromSnapshot(card),
+							card,
 							input.predicate.context,
 						)
 					: true,

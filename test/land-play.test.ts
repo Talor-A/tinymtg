@@ -81,10 +81,11 @@ const TEST_CARD_2 = defineCard({
 		{
 			kind: "characteristic",
 			text: "Creatures you control have Exploration's static ability.",
-			applies: (subject, _state, source) =>
+			applies: ({ object, currentCharacteristics }, _state, source) =>
 				source.kind === "permanent" &&
-				subject.controller === source.controller &&
-				subject.currentCharacteristics.types.includes("creature"),
+				object.kind === "permanent" &&
+				object.controller === source.controller &&
+				currentCharacteristics.types.includes("creature"),
 			effects: [
 				{
 					layer: "6-ability-changing",

@@ -54,11 +54,12 @@ const INDESTRUCTIBLE_ANTHEM = defineCard({
 		{
 			kind: "characteristic",
 			text: "Creatures you control have indestructible.",
-			applies: (view, _state, source) =>
+			applies: ({ object, currentCharacteristics }, _state, source) =>
 				source.kind === "permanent" &&
 				source.zone === "battlefield" &&
-				view.currentCharacteristics.types.includes("creature") &&
-				view.controller === source.controller,
+				currentCharacteristics.types.includes("creature") &&
+				object.kind === "permanent" &&
+				object.controller === source.controller,
 			effects: [
 				{
 					layer: "6-ability-changing",

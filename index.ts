@@ -1379,7 +1379,7 @@ function buildFilteredGameView(
 					let applies: boolean;
 					if (entry.firstSlice) {
 						applies = entry.applies(
-							effectSubjectDuringLayer(subject, current),
+							{ object: subject, currentCharacteristics: current },
 							state,
 							source,
 						);
@@ -2947,15 +2947,24 @@ export function targetSelectorSatisfies(
 }
 
 /**
- * The normalized facts an object predicate or a characteristic static ability
- * reads about one object. Predicates run both against finished snapshots and
- * against objects midway through the layer walk, where only part of the
- * characteristics are evaluated, so both boundaries build this same shape.
+ * One object partway through the layer walk. The canonical `GameObject` is
+ * carried whole, so a static ability can switch on `object.kind` and read
+ * exact fields; `currentCharacteristics` are the ones evaluated so far, which
+ * is why no finished snapshot can stand in for this.
  */
-export interface EffectSubjectView {
+export interface LayerSubject {
+	readonly object: DeepReadOnly<GameObject>;
+	readonly currentCharacteristics: DeepReadOnly<CharacteristicsSnapshot>;
+}
+
+/**
+ * The facts a predicate reads about one object, and nothing else. Predicates
+ * run both against finished snapshots and against objects midway through the
+ * layer walk, so each boundary projects its own representation onto this
+ * private shape rather than sharing one type across both.
+ */
+interface PredicateFacts {
 	readonly objectId: ObjectId;
-	/** Printed identity, or null for a token or a copy with no card behind it. */
-	readonly cardId: string | null;
 	readonly owner: PlayerId;
 	/** Null where the object's zone gives it no controller (CR 109.4). */
 	readonly controller: PlayerId | null;
@@ -2966,46 +2975,31 @@ export interface EffectSubjectView {
 	readonly currentCharacteristics: DeepReadOnly<CharacteristicsSnapshot>;
 }
 
-/** The subject view for an object whose characteristics are fully evaluated. */
-export function effectSubjectFromSnapshot(
+function predicateFactsFromSnapshot(
 	snapshot: DeepReadOnly<GameObjectSnapshot>,
-): EffectSubjectView {
+): PredicateFacts {
 	const common = {
 		objectId: snapshot.objectId,
 		owner: snapshot.owner,
 		currentCharacteristics: snapshot.currentCharacteristics,
-		// Only a permanent can be in combat.
+		// Only a permanent can be in combat or tapped.
 		attacking: false,
 		blocking: false,
+		tapped: false,
 	};
 	switch (snapshot.kind) {
 		case "card":
-			return {
-				...common,
-				cardId: snapshot.cardId,
-				controller: null,
-				token: false,
-				tapped: false,
-			};
+			return { ...common, controller: null, token: false };
 		case "spell":
 			return {
 				...common,
-				cardId:
-					snapshot.representation.kind === "card"
-						? snapshot.representation.cardId
-						: null,
 				controller: snapshot.controller,
 				// A copy of a spell is not a token; only permanents can be tokens.
 				token: false,
-				tapped: false,
 			};
 		case "permanent":
 			return {
 				...common,
-				cardId:
-					snapshot.representation.kind === "card"
-						? snapshot.representation.cardId
-						: null,
 				controller: snapshot.controller,
 				token: snapshot.representation.kind === "token",
 				attacking: snapshot.attacking,
@@ -3013,15 +3007,23 @@ export function effectSubjectFromSnapshot(
 				tapped: snapshot.tapped,
 			};
 		case "nonbattlefield-token":
-			return {
-				...common,
-				cardId: null,
-				controller: null,
-				token: true,
-				tapped: false,
-			};
+			return { ...common, controller: null, token: true };
 	}
 	return assertNever(snapshot);
+}
+
+function predicateFactsFromLayerSubject(subject: LayerSubject): PredicateFacts {
+	const object = subject.object;
+	return {
+		objectId: object.id,
+		owner: object.owner,
+		controller: controllerOf(object),
+		token: isTokenObject(object),
+		attacking: object.kind === "permanent" && object.attacking,
+		blocking: object.kind === "permanent" && object.blocking,
+		tapped: object.kind === "permanent" && object.tapped,
+		currentCharacteristics: subject.currentCharacteristics,
+	};
 }
 
 /** What an object predicate reads `self`, `you`, and `opponent` relative to. */
@@ -3033,10 +3035,41 @@ export interface PredicateContext {
 /**
  * Whether one object satisfies a predicate. `context.source` is the id the
  * `self` case compares against, or null where there is no source object.
+ *
+ * The snapshot may be a departed object's last known one, which is what
+ * leaves-the-battlefield triggers and similar look-backs match against.
  */
 export function objectMatchesPredicate(
 	predicate: DeepReadOnly<ObjectPredicateDef>,
-	subject: EffectSubjectView,
+	snapshot: DeepReadOnly<GameObjectSnapshot>,
+	context: PredicateContext,
+): boolean {
+	return predicateMatchesFacts(
+		predicate,
+		predicateFactsFromSnapshot(snapshot),
+		context,
+	);
+}
+
+/**
+ * The same question asked of an object partway through the layer walk, where
+ * no finished snapshot exists yet.
+ */
+export function layerSubjectMatchesPredicate(
+	predicate: DeepReadOnly<ObjectPredicateDef>,
+	subject: LayerSubject,
+	context: PredicateContext,
+): boolean {
+	return predicateMatchesFacts(
+		predicate,
+		predicateFactsFromLayerSubject(subject),
+		context,
+	);
+}
+
+function predicateMatchesFacts(
+	predicate: DeepReadOnly<ObjectPredicateDef>,
+	subject: PredicateFacts,
 	context: PredicateContext,
 ): boolean {
 	const characteristics = subject.currentCharacteristics;
@@ -3111,14 +3144,14 @@ export function objectMatchesPredicate(
 		}
 		case "and":
 			return predicate.predicates.every((part) =>
-				objectMatchesPredicate(part, subject, context),
+				predicateMatchesFacts(part, subject, context),
 			);
 		case "or":
 			return predicate.predicates.some((part) =>
-				objectMatchesPredicate(part, subject, context),
+				predicateMatchesFacts(part, subject, context),
 			);
 		case "not":
-			return !objectMatchesPredicate(predicate.predicate, subject, context);
+			return !predicateMatchesFacts(predicate.predicate, subject, context);
 	}
 }
 
@@ -4216,7 +4249,7 @@ export interface CharacteristicStaticAbilityDefinition {
 
 	/** `source` is the concrete object granting the effect. */
 	applies(
-		subject: EffectSubjectView,
+		subject: LayerSubject,
 		state: ReadonlyGameState,
 		source: DeepReadOnly<GameObject>,
 	): boolean;
@@ -4626,30 +4659,6 @@ export function effectiveCharacteristics(
 ): DeepReadOnly<CharacteristicsSnapshot> {
 	const snapshot = getSnapshot(read, object.id);
 	return snapshot.currentCharacteristics;
-}
-
-/**
- * The subject view for an object partway through the layer walk, whose
- * characteristics are the ones evaluated so far rather than a finished
- * snapshot's.
- */
-function effectSubjectDuringLayer(
-	object: DeepReadOnly<GameObject>,
-	characteristics: DeepReadOnly<CharacteristicsSnapshot>,
-): EffectSubjectView {
-	return {
-		objectId: object.id,
-		cardId: physicalCardId(object),
-		owner: object.owner,
-		controller: controllerOf(object),
-		token:
-			object.kind === "nonbattlefield-token" ||
-			(object.kind === "permanent" && object.representation.kind === "token"),
-		attacking: object.kind === "permanent" && object.attacking,
-		blocking: object.kind === "permanent" && object.blocking,
-		tapped: object.kind === "permanent" && object.tapped,
-		currentCharacteristics: characteristics,
-	};
 }
 
 function lethalDamage(
@@ -7248,14 +7257,10 @@ function triggerSubjectsMatch(
 	// the player "you" means for a trigger that functions from there.
 	const controller = controllerOf(source) ?? source.owner;
 	return subjects.some((subject) =>
-		objectMatchesPredicate(
-			predicate,
-			effectSubjectFromSnapshot(getSnapshot(read, subject.id)),
-			{
-				controller,
-				source: source.id,
-			},
-		),
+		objectMatchesPredicate(predicate, getSnapshot(read, subject.id), {
+			controller,
+			source: source.id,
+		}),
 	);
 }
 
@@ -7402,14 +7407,10 @@ function triggerMatches(
 			)
 				return false;
 			const controller = controllerOf(source) ?? source.owner;
-			return objectMatchesPredicate(
-				condition.predicate,
-				effectSubjectFromSnapshot(sacrificed),
-				{
-					controller,
-					source: source.id,
-				},
-			);
+			return objectMatchesPredicate(condition.predicate, sacrificed, {
+				controller,
+				source: source.id,
+			});
 		}
 	}
 }
@@ -7528,14 +7529,10 @@ function leavesBattlefieldTriggerCandidates(
 			if (condition.to !== "any" && condition.to !== ev.destination.zone)
 				continue;
 			if (
-				!objectMatchesPredicate(
-					condition.predicate,
-					effectSubjectFromSnapshot(departed),
-					{
-						controller,
-						source: source.objectId,
-					},
-				)
+				!objectMatchesPredicate(condition.predicate, departed, {
+					controller,
+					source: source.objectId,
+				})
 			)
 				continue;
 
@@ -8088,14 +8085,10 @@ function resolveEffects(
 				subjects = state.battlefield.filter((id) => {
 					const object = getSnapshot(read, id);
 					assert(object.kind === "permanent");
-					return objectMatchesPredicate(
-						selector.predicate,
-						effectSubjectFromSnapshot(object),
-						{
-							controller: item.controller,
-							source: item.source,
-						},
-					);
+					return objectMatchesPredicate(selector.predicate, object, {
+						controller: item.controller,
+						source: item.source,
+					});
 				});
 			}
 			if (subjects.length > 0) {
@@ -8124,14 +8117,10 @@ function resolveEffects(
 				subjects = state.battlefield.filter((id) => {
 					const object = getSnapshot(read, id);
 					assert(object.kind === "permanent");
-					return objectMatchesPredicate(
-						selector.predicate,
-						effectSubjectFromSnapshot(object),
-						{
-							controller: item.controller,
-							source: item.source,
-						},
-					);
+					return objectMatchesPredicate(selector.predicate, object, {
+						controller: item.controller,
+						source: item.source,
+					});
 				});
 			}
 			performSimultaneousIn(
@@ -8156,14 +8145,10 @@ function resolveEffects(
 			const subjects = state.battlefield.filter((id) => {
 				const object = getSnapshot(read, id);
 				assert(object.kind === "permanent");
-				return objectMatchesPredicate(
-					effect.subjects.predicate,
-					effectSubjectFromSnapshot(object),
-					{
-						controller: item.controller,
-						source: item.source,
-					},
-				);
+				return objectMatchesPredicate(effect.subjects.predicate, object, {
+					controller: item.controller,
+					source: item.source,
+				});
 			});
 			for (const subject of subjects) {
 				addTemporaryEffect(
@@ -8195,14 +8180,10 @@ function resolveEffects(
 							const object = getSnapshot(read, id);
 							assert(object.kind === "permanent");
 							if (
-								!objectMatchesPredicate(
-									recipient.predicate,
-									effectSubjectFromSnapshot(object),
-									{
-										controller: item.controller,
-										source: item.source,
-									},
-								)
+								!objectMatchesPredicate(recipient.predicate, object, {
+									controller: item.controller,
+									source: item.source,
+								})
 							)
 								continue;
 							assert(
@@ -8370,7 +8351,7 @@ function resolveEffects(
 						if (effect.predicate === undefined) return true;
 						return objectMatchesPredicate(
 							effect.predicate,
-							effectSubjectFromSnapshot(getSnapshot(read, id)),
+							getSnapshot(read, id),
 							{ controller: item.controller, source: predicateSource },
 						);
 					}),
@@ -8515,7 +8496,7 @@ function resolveEffects(
 				const candidates = state.battlefield.filter((id) =>
 					objectMatchesPredicate(
 						predicate.definition,
-						effectSubjectFromSnapshot(getSnapshot(read, id)),
+						getSnapshot(read, id),
 						predicate.context,
 					),
 				);
@@ -9172,14 +9153,10 @@ function isLegalTarget(
 			target.id !== ctx.source &&
 			snapshot?.kind === "spell" &&
 			(definition.legal.predicate === undefined ||
-				objectMatchesPredicate(
-					definition.legal.predicate,
-					effectSubjectFromSnapshot(snapshot),
-					{
-						controller: ctx.controller,
-						source: ctx.source,
-					},
-				))
+				objectMatchesPredicate(definition.legal.predicate, snapshot, {
+					controller: ctx.controller,
+					source: ctx.source,
+				}))
 		);
 	}
 	if (target.type === "card") {
@@ -9189,14 +9166,10 @@ function isLegalTarget(
 			snapshot?.kind === "card" &&
 			snapshot.zone === definition.legal.zone &&
 			(definition.legal.predicate === undefined ||
-				objectMatchesPredicate(
-					definition.legal.predicate,
-					effectSubjectFromSnapshot(snapshot),
-					{
-						controller: ctx.controller,
-						source: ctx.source,
-					},
-				))
+				objectMatchesPredicate(definition.legal.predicate, snapshot, {
+					controller: ctx.controller,
+					source: ctx.source,
+				}))
 		);
 	}
 	if (definition.legal.kind === "player" || definition.legal.kind === "spell")
@@ -9227,14 +9200,10 @@ function isLegalTarget(
 	}
 	return (
 		definition.legal.predicate === undefined ||
-		objectMatchesPredicate(
-			definition.legal.predicate,
-			effectSubjectFromSnapshot(snapshot),
-			{
-				controller: ctx.controller,
-				source: ctx.source,
-			},
-		)
+		objectMatchesPredicate(definition.legal.predicate, snapshot, {
+			controller: ctx.controller,
+			source: ctx.source,
+		})
 	);
 }
 
@@ -9277,7 +9246,7 @@ function legalSacrifices(
 		return (
 			snapshot?.kind === "permanent" &&
 			snapshot.controller === player &&
-			objectMatchesPredicate(predicate, effectSubjectFromSnapshot(snapshot), {
+			objectMatchesPredicate(predicate, snapshot, {
 				controller: context.controller,
 				source: context.source,
 			})
