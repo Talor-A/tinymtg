@@ -1,4 +1,5 @@
 import {
+	printedEntryReplacements,
 	printedKeywordTriggers,
 	prohibitionsFromKeywords,
 } from "./abilities.ts";
@@ -3419,83 +3420,6 @@ function printedRefsFor(
 	return refs as PrintedAbilities;
 }
 
-/**
- * `entersTapped` / `entersWith` are authoring shorthand for two very ordinary
- * replacement abilities (CR 614.1c), so that is what they compile to.
- *
- * Making them real registered abilities — rather than defs synthesized at
- * collection time from whatever card the object "is" — is what makes them
- * copiable. The TEST_ENTERS_WITH_COUNTERS fixture's copiable values carry
- * `test-enters-with-counters:<n>` in `abilities.replacement`; a copy effect
- * that enters as a copy carries that same reference on the event's copy
- * snapshot, and the reference *is* the provenance. Nothing at execution time
- * has to ask which card an object was copied from.
- *
- * They function from anywhere, because the object is still in the zone it is
- * leaving when they apply, and they are self-scoped to the object entering.
- */
-function printedEntryReplacements(
-	def: CardDefBase,
-): ReplacementEffectDefinition[] {
-	const out: ReplacementEffectDefinition[] = [];
-	const entersSelf = (ev: GameEvent, ctx: EffectCtx): boolean =>
-		ev.kind === "change zone" &&
-		ev.destination.zone === "battlefield" &&
-		ctx.self !== null &&
-		ev.object === ctx.self.id;
-
-	if (def.entersTapped) {
-		out.push({
-			label: `${def.id}:enters-tapped`,
-			text: `${def.name} enters tapped.`,
-			layer: "other",
-			functionsFrom: "any",
-			applies: (ev, ctx) =>
-				entersSelf(ev, ctx) &&
-				ev.kind === "change zone" &&
-				ev.destination.zone === "battlefield" &&
-				!ev.destination.tapped,
-			replace: (ev) =>
-				ev.kind === "change zone" && ev.destination.zone === "battlefield"
-					? [{ ...ev, destination: { ...ev.destination, tapped: true } }]
-					: [ev],
-		});
-	}
-
-	const entersWith = def.entersWith;
-	if (entersWith && Object.keys(entersWith).length > 0) {
-		out.push({
-			label: `${def.id}:enters-with`,
-			text: `${def.name} enters with counters.`,
-			layer: "other",
-			functionsFrom: "any",
-			applies: (ev, ctx) =>
-				entersSelf(ev, ctx) &&
-				ev.kind === "change zone" &&
-				ev.destination.zone === "battlefield" &&
-				ev.destination.counters === undefined,
-			replace: (ev) =>
-				ev.kind === "change zone" && ev.destination.zone === "battlefield"
-					? [
-							{
-								...ev,
-								destination: {
-									...ev.destination,
-									counters: { ...entersWith },
-								},
-							},
-						]
-					: [ev],
-		});
-	}
-	return out;
-}
-
-/**
- * Normalizes the authoring shape into the engine shape. Idempotent, so an
- * already-normalized def (from the compiler, or a round trip) passes through
- * with its definition object identities intact.
- */
 export function defineCard(input: CardDefInput | CardDef): CardDef {
 	assert(
 		!input.keywords?.includes("devoid") || input.colors.length === 0,
@@ -3521,9 +3445,7 @@ export function defineCard(input: CardDefInput | CardDef): CardDef {
 		replacement: [...(replacements ?? [])],
 		prohibition: prohibitions ?? [],
 	};
-	// Author-declared indices are resolved first so that an explicit `printed`
-	// list keeps meaning what it said; the keyword and entry shorthands are
-	// appended after, and are always printed.
+
 	const printedAbilities = printedRefsFor(
 		input.id,
 		abilityDefinitions,
@@ -3550,7 +3472,6 @@ export function defineCard(input: CardDefInput | CardDef): CardDef {
 	return definition;
 }
 
-/** An immutable registry of normalized card and ability definitions. */
 export class Engine {
 	readonly #cards: ReadonlyMap<string, CardDef>;
 
@@ -3601,38 +3522,10 @@ export function createEngine(
 
 /* ------------------------------------------------------------------ *
  * Randomness
- *
- * Every random decision the rules require — currently only shuffling — is
- * driven from state that lives on `GameState`, never from `Math.random()`.
- * That is not a preference: `advanceWithReplay` re-runs a transition against a
- * clone of its checkpoint, so a shuffle reading ambient randomness would
- * produce a different library on replay and the checkpoint model would break.
- *
- * The generator is sfc32 ("Small Fast Counter", Doty-Humphrey), transcribed
- * from the reference implementation. Javascript has no seeded generator in its
- * standard library, and `crypto` is deliberately non-reproducible, so this is
- * hand-written by necessity rather than by preference.
  * ------------------------------------------------------------------ */
 
-/**
- * sfc32's four 32-bit words, held as plain int32s.
- *
- * `d` is a pure counter and the other three are the chaotic part. That split
- * is the reason to prefer sfc32 over the shorter generators: incrementing `d`
- * every round guarantees a minimum period of 2^32 no matter what the mixing
- * does, so there is no seed that falls into a short cycle and no absorbing
- * all-zero state to special-case.
- */
 type RngState = [a: number, b: number, c: number, d: number];
 
-/**
- * Advances the generator one round and returns its raw 32-bit output.
- *
- * Mutates `rng` in place. The `| 0` casts are not decoration: they force
- * Javascript's doubles back into wrapping int32 arithmetic, which is what the
- * algorithm is defined over. The final `>>> 0` is needed because Javascript's
- * bitwise operators produce *signed* int32, and callers want 0..2^32-1.
- */
 function advanceRng(rng: RngState): number {
 	let [a, b, c, d] = rng;
 	const output = (((a + b) | 0) + d) | 0;
@@ -3666,15 +3559,10 @@ function seedRng(seed: number): RngState {
 const RNG_RANGE = 0x100000000; // 2^32, the size of the generator's output space
 
 /**
- * A uniformly distributed integer in `[0, bound)`.
- *
- * Rejection sampling rather than `output % bound`: 2^32 does not divide evenly
- * by an arbitrary bound, so the modulo alone would make the first
- * `2^32 % bound` values fractionally more likely. Discarding the unbalanced
- * tail of the range costs, for any realistic deck size, far less than one
- * extra round on average.
+ * A uniformly distributed integer in `[0, bound)`, using our
+ * deterministic RNG.
  */
-function randomBelow(state: GameState, bound: number): number {
+function randInt(state: GameState, bound: number): number {
 	assert(
 		Number.isSafeInteger(bound) && bound > 0,
 		`random bound must be a positive integer, got ${bound}`,
@@ -3689,18 +3577,10 @@ function randomBelow(state: GameState, bound: number): number {
 	throw new Error("rejection sampling failed to terminate");
 }
 
-/**
- * CR 103.2. Fisher-Yates, which visits every permutation with equal
- * probability given an unbiased `randomBelow`.
- *
- * The *last* element of `library` is the top of the deck, because that is
- * where `draw` reads from; the shuffle is uniform either way, but the
- * convention matters to anything that inspects the result.
- */
 function shuffleLibrary(state: GameState, player: PlayerId): void {
 	const library = state.players[player].library;
 	for (let i = library.length - 1; i > 0; i--) {
-		const j = randomBelow(state, i + 1);
+		const j = randInt(state, i + 1);
 		const chosen = library[j];
 		const displaced = library[i];
 		assertDefined(chosen, "shuffle read past the end of the library");
@@ -3757,14 +3637,6 @@ function emptyManaPools(state: GameState): void {
 	}
 }
 
-/**
- * A fresh game.
- *
- * `seed` fixes every shuffle, so the same seed and the same choices reproduce
- * a game exactly. It defaults to a constant rather than to ambient randomness
- * on purpose: tests and the fuzzer depend on `newGame()` being reproducible.
- * Callers that want a different game each run pass their own seed.
- */
 export function newGame(seed = 0): GameState {
 	return {
 		revision: 0,
@@ -4082,12 +3954,6 @@ export function permanentsInPlay(
  * Combat eligibility
  * ------------------------------------------------------------------ */
 
-/**
- * The single source of truth for who may be declared as an attacker (CR 508.1a):
- * a creature controlled by the declaring player, untapped, currently on the
- * battlefield, without defender, and not affected by summoning sickness.
- * Battlefield order is preserved.
- */
 export function eligibleAttackers(
 	engine: Engine,
 	state: ReadonlyGameState,
@@ -4110,13 +3976,6 @@ export function eligibleAttackers(
 	});
 }
 
-/**
- * The single source of truth for who may be declared as a blocker (CR 509.1a):
- * a creature controlled by the defending player, untapped, currently on the
- * battlefield, and able to block the given attacker. A creature with flying
- * can be blocked only by a creature with flying or reach (CR 702.9b). Blocking
- * does not tap the blocker. Battlefield order is preserved.
- */
 export function eligibleBlockers(
 	engine: Engine,
 	state: ReadonlyGameState,
@@ -4159,12 +4018,8 @@ export function eligibleBlockers(
 /* ------------------------------------------------------------------ *
  * Rejected actions
  *
- * Every one of these is thrown before anything is mutated, or after the
- * attempt has been rewound: an illegal action never leaves a partial game.
  * ------------------------------------------------------------------ */
 
-/** Thrown when a "declare attackers" event fails validation. Nothing is
- * mutated: the whole event is rejected atomically. */
 export class IllegalAttackDeclarationError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -4172,8 +4027,6 @@ export class IllegalAttackDeclarationError extends Error {
 	}
 }
 
-/** Thrown when a "declare blockers" event fails validation. Nothing is
- * mutated: the whole event is rejected atomically. */
 export class IllegalBlockDeclarationError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -4214,15 +4067,12 @@ export function log(state: GameState, line: string): void {
  * Continuous effects
  * ------------------------------------------------------------------ */
 /**
- * Planned subset boundary: reject effects whose selection or calculation
- * reads properties that other effects can change in the same layer/sublayer.
- * Also exclude interactions that change another effect's text or existence
- * (CR 613.8a). Dependency ordering is deliberately deferred.
+ * Modifies the properties of an object.
  *
- * These callbacks are opaque, so this boundary is not mechanically enforced
- * yet. Supported definitions must be reviewed against it. Independent effects
- * still require timestamp order unless their operations commute (CR 613.7);
- * absence of dependencies does not make arbitrary ordering correct.
+ * Static abilities read a set of objects once, evaluated at the first
+ * layer they apply to. Modifying characteristics in later layers still
+ * applies to that same initial subset, even if characteristics changed
+ * that would have modified the subset.
  */
 export interface CharacteristicStaticEffectSliceDefinition {
 	layer: ContinuousEffectLayer;

@@ -1,6 +1,10 @@
 import type {
+	CardDef,
+	EffectCtx,
+	GameEvent,
 	Keyword,
 	ProhibitionDef,
+	ReplacementEffectDefinition,
 	TriggeredAbilityDefinition,
 } from "./index.ts";
 import { assert } from "./lib/assert";
@@ -12,6 +16,63 @@ const INDESTRUCTIBLE_PROHIBITION: ProhibitionDef = {
 	applies: (event, ctx) =>
 		event.kind === "destroy" && event.object === ctx.self?.id,
 };
+
+export function printedEntryReplacements(
+	def: Pick<CardDef, "entersTapped" | "entersWith" | "id" | "name">,
+): ReplacementEffectDefinition[] {
+	const out: ReplacementEffectDefinition[] = [];
+	const entersSelf = (ev: GameEvent, ctx: EffectCtx): boolean =>
+		ev.kind === "change zone" &&
+		ev.destination.zone === "battlefield" &&
+		ctx.self !== null &&
+		ev.object === ctx.self.id;
+
+	if (def.entersTapped) {
+		out.push({
+			label: `${def.id}:enters-tapped`,
+			text: `${def.name} enters tapped.`,
+			layer: "other",
+			functionsFrom: "any",
+			applies: (ev, ctx) =>
+				entersSelf(ev, ctx) &&
+				ev.kind === "change zone" &&
+				ev.destination.zone === "battlefield" &&
+				!ev.destination.tapped,
+			replace: (ev) =>
+				ev.kind === "change zone" && ev.destination.zone === "battlefield"
+					? [{ ...ev, destination: { ...ev.destination, tapped: true } }]
+					: [ev],
+		});
+	}
+
+	const entersWith = def.entersWith;
+	if (entersWith && Object.keys(entersWith).length > 0) {
+		out.push({
+			label: `${def.id}:enters-with`,
+			text: `${def.name} enters with counters.`,
+			layer: "other",
+			functionsFrom: "any",
+			applies: (ev, ctx) =>
+				entersSelf(ev, ctx) &&
+				ev.kind === "change zone" &&
+				ev.destination.zone === "battlefield" &&
+				ev.destination.counters === undefined,
+			replace: (ev) =>
+				ev.kind === "change zone" && ev.destination.zone === "battlefield"
+					? [
+							{
+								...ev,
+								destination: {
+									...ev.destination,
+									counters: { ...entersWith },
+								},
+							},
+						]
+					: [ev],
+		});
+	}
+	return out;
+}
 
 /** Prohibitions supplied by an object's effective keyword abilities. */
 export function prohibitionsFromKeywords(
