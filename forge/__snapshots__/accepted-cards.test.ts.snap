@@ -4664,6 +4664,7 @@ University Campus
 Unknown Shores
 Unlikely Aid
 Unlikely Alliance
+Unmarked Grave
 Unnatural Predation
 Unnatural Speed
 Unraveling Mummy
@@ -5089,4 +5090,4 @@ Zuran Orb
 Zuran Spellcaster"
 `;
 
-exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `5086`;
+exports[`the accepted-card list matches its snapshot: accepted card count 1`] = `5087`;

@@ -4477,6 +4477,33 @@ describe("lowerForgeCard: `+` selector combination and negated subtypes", () => 
 		});
 	});
 
+	test("`!` and `non` spell the same negation", () => {
+		// Unmarked Grave searches for a `Card.!Legendary`; other cards write the
+		// same restriction as `nonLegendary`. Both prefixes negate whatever
+		// restriction follows, so neither has a vocabulary of its own.
+		for (const [bang, non] of [
+			["Creature.!Legendary", "Creature.nonLegendary"],
+			["Creature.!Human", "Creature.nonHuman"],
+			["Creature.!Artifact", "Creature.nonArtifact"],
+		] as const) {
+			const lower = (target: string) => {
+				const result = importForgeCard(hostile.replaceAll("%TARGET%", target), {
+					id: "hostile-witness",
+				});
+				expect(result.ok).toBe(true);
+				return result.ok ? result.card.spell?.targets[0]?.legal : undefined;
+			};
+			expect(lower(bang)).toEqual(lower(non));
+		}
+
+		// A restriction the importer cannot read cannot be negated either.
+		const unreadable = importForgeCard(
+			hostile.replaceAll("%TARGET%", "Creature.!IsRemembered"),
+			{ id: "hostile-witness" },
+		);
+		expect(unreadable.ok).toBe(false);
+	});
+
 	test("`!attacking` and `!blocking` negate the combat modifiers", () => {
 		// Unlikely Alliance targets `Creature.!attacking+!blocking`.
 		const result = importFixture("u/unlikely_alliance");

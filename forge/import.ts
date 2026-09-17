@@ -471,26 +471,6 @@ function parseDrawnPlayer(value: string | undefined): ValidPlayer | null {
 	return null;
 }
 
-/**
- * Modifiers Forge's `!` prefix may negate, such as the `!token` of
- * `Creature.YouCtrl+!token`.
- *
- * `!` negates any restriction in Forge, and the corpus negates about a
- * hundred distinct words. Almost all of them name state the engine does not
- * model -- `!IsRemembered`, `!ManaAbility`, `!wasCastFromYourHand`,
- * `!attackedThisTurn` -- and reject on the word itself. These three are the
- * surveyed remainder: their positive form already lowers, and the negation
- * says exactly what it denies. A word whose negation would have to pick
- * between two readings is why this is a list and not a blanket rule; add to
- * it when a card needs it.
- */
-const NEGATABLE_MODIFIERS: ReadonlySet<string> = new Set([
-	"token",
-	"Token",
-	"attacking",
-	"blocking",
-]);
-
 type ManaValueComparison = Extract<
 	ObjectPredicateDef,
 	{ kind: "mana value" }
@@ -547,16 +527,18 @@ const CMC_COMPARISONS = new Map<string, ManaValueComparison>([
  * Colors, card types, supertypes, and {@link SUBTYPES} subtypes lower exactly,
  * each also in its `non`-prefixed negation. `Other` and the ownership,
  * control, combat-state, token, and mana-value restrictions lower to their
- * predicates, and `!` negates the {@link NEGATABLE_MODIFIERS} subset. Every
- * other Forge restriction -- zone, counters, and the rest of the state the
- * engine does not model -- returns null so the caller rejects the card rather
- * than approximating it.
+ * predicates, and a `!` prefix negates any of them. Every other Forge
+ * restriction -- zone, counters, and the rest of the state the engine does not
+ * model -- returns null so the caller rejects the card rather than
+ * approximating it.
  */
 function parseSelectorModifier(modifier: string): ObjectPredicateDef | null {
+	// Forge's `!` prefix negates the restriction that follows it, whatever it
+	// is: `!token` denies the token property and `!Legendary` the supertype.
+	// There is no separate vocabulary to keep in step, because a restriction
+	// this function cannot read cannot be negated either.
 	if (modifier.startsWith("!")) {
-		const inner = modifier.slice(1);
-		if (!NEGATABLE_MODIFIERS.has(inner)) return null;
-		const predicate = parseSelectorModifier(inner);
+		const predicate = parseSelectorModifier(modifier.slice(1));
 		if (!predicate) return null;
 		return { kind: "not", predicate };
 	}
