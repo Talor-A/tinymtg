@@ -847,6 +847,11 @@ function parseTarget(
  *   Forge's AI aims it at an opponent. No Oracle text depends on it, and the
  *   corpus writes plenty of unmarked harmful effects -- Rites of Reaping
  *   gives -3/-3 without it -- so it changes nothing about what a card does.
+ * - `TgtPrompt$` is the prompt shown while choosing a target, and
+ *   `ValidTgtsDesc$` the prose form of the `ValidTgts$` beside it -- "creature
+ *   you control" for `Creature.YouCtrl`. Neither restricts anything: every
+ *   `ValidTgtsDesc$` in the corpus sits on a line that also carries a real
+ *   `ValidTgts$`, so the selector is never left to the description.
  */
 const COMMON_EFFECT_PARAMS = [
 	"spelldescription",
@@ -854,6 +859,8 @@ const COMMON_EFFECT_PARAMS = [
 	"subability",
 	"cost",
 	"iscurse",
+	"tgtprompt",
+	"validtgtsdesc",
 ];
 
 interface AbilityHost {
@@ -1147,7 +1154,6 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			const badParams = claim(
 				"defined",
 				"validtgts",
-				"tgtprompt",
 				shape.amountParam.toLowerCase(),
 			);
 			if (!badParams.ok) return badParams;
@@ -1240,7 +1246,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			]);
 		}
 		case "draw": {
-			const badParams = claim("defined", "validtgts", "tgtprompt", "numcards");
+			const badParams = claim("defined", "validtgts", "numcards");
 			if (!badParams.ok) return badParams;
 			const amount = positiveInteger(getForgeParam(params, "NumCards"), 1);
 			if (!amount)
@@ -1259,13 +1265,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			return ok([{ kind: "draw", subject: who, amount }]);
 		}
 		case "discard": {
-			const badParams = claim(
-				"defined",
-				"mode",
-				"numcards",
-				"validtgts",
-				"tgtprompt",
-			);
+			const badParams = claim("defined", "mode", "numcards", "validtgts");
 			if (!badParams.ok) return badParams;
 			if (getForgeParam(params, "Mode") !== "TgtChoose")
 				return issue(
@@ -1286,13 +1286,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			]);
 		}
 		case "sacrifice": {
-			const badParams = claim(
-				"defined",
-				"validtgts",
-				"tgtprompt",
-				"sacvalid",
-				"amount",
-			);
+			const badParams = claim("defined", "validtgts", "sacvalid", "amount");
 			if (!badParams.ok) return badParams;
 			const defined = getForgeParam(params, "Defined");
 			const validTargets = getForgeParam(params, "ValidTgts");
@@ -1326,7 +1320,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			]);
 		}
 		case "dealdamage": {
-			const badParams = claim("validtgts", "tgtprompt", "defined", "numdmg");
+			const badParams = claim("validtgts", "defined", "numdmg");
 			if (!badParams.ok) return badParams;
 			const amount = positiveInteger(getForgeParam(params, "NumDmg"));
 			if (!amount)
@@ -1416,7 +1410,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			return ok([{ kind: "damage", recipients: [first, ...rest], amount }]);
 		}
 		case "destroy": {
-			const badParams = claim("validtgts", "tgtprompt", "noregen");
+			const badParams = claim("validtgts", "noregen");
 			if (!badParams.ok) return badParams;
 			const noRegen = getForgeParam(params, "NoRegen");
 			if (noRegen !== undefined && noRegen !== "True")
@@ -1461,7 +1455,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 		}
 		case "tap":
 		case "untap": {
-			const badParams = claim("validtgts", "tgtprompt");
+			const badParams = claim("validtgts");
 			if (!badParams.ok) return badParams;
 			if (api === "tap")
 				return ok([
@@ -1496,7 +1490,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			]);
 		}
 		case "counter": {
-			const badParams = claim("validtgts", "tgtprompt", "targettype");
+			const badParams = claim("validtgts", "targettype");
 			if (!badParams.ok) return badParams;
 			return ok([
 				{
@@ -1511,7 +1505,6 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				"destination",
 				"defined",
 				"validtgts",
-				"tgtprompt",
 				"tgtzone",
 				"changenum",
 				"gaincontrol",
@@ -1973,7 +1966,6 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			const badParams = claim(
 				"defined",
 				"validtgts",
-				"tgtprompt",
 				"countertype",
 				"counternum",
 			);
@@ -2030,7 +2022,6 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 				"tokenowner",
 				"tokenamount",
 				"validtgts",
-				"tgtprompt",
 			);
 			if (!badParams.ok) return badParams;
 			const scriptId = getForgeParam(params, "TokenScript");
@@ -2088,7 +2079,6 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			const badParams = claim(
 				"defined",
 				"validtgts",
-				"tgtprompt",
 				"keywords",
 				"triggers",
 				"duration",
@@ -2240,14 +2230,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			]);
 		}
 		case "pump": {
-			const badParams = claim(
-				"defined",
-				"validtgts",
-				"tgtprompt",
-				"numatt",
-				"numdef",
-				"kw",
-			);
+			const badParams = claim("defined", "validtgts", "numatt", "numdef", "kw");
 			if (!badParams.ok) return badParams;
 
 			const pumpEffect: {
