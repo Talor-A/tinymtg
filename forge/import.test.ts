@@ -3558,11 +3558,29 @@ describe("lowerForgeCard: accepted card lowering", () => {
 				),
 			],
 			["dynamic-power", definition.replace("NumAtt$ -4", "NumAtt$ X")],
-			["false-curse", definition.replace("IsCurse$ True", "IsCurse$ False")],
 		] as const) {
 			const result = importForgeCard(mutated, { id: `pump-all-${name}` });
 			expect(result.ok, name).toBe(false);
 		}
+	});
+
+	test("IsCurse$ does not change what a Pump lowers to", () => {
+		// `IsCurse$ True` tells Forge's AI the effect is bad for whoever
+		// receives it, so it aims the spell at an opponent. It carries no rules
+		// meaning: the corpus writes plenty of unmarked harmful effects, and
+		// Rites of Reaping gives -3/-3 without it. Dropping the parameter must
+		// therefore leave the lowered card identical.
+		const definition = cardText("l/languish");
+		expect(definition).toContain("IsCurse$ True");
+		const marked = importForgeCard(definition, { id: "languish" });
+		const unmarked = importForgeCard(
+			definition.replace(" | IsCurse$ True", ""),
+			{ id: "languish" },
+		);
+		expect(marked.ok).toBe(true);
+		expect(unmarked.ok).toBe(true);
+		if (!marked.ok || !unmarked.ok) return;
+		expect(marked.card.spell?.effects).toEqual(unmarked.card.spell?.effects);
 	});
 
 	test("Bull Rush lowers NumAtt$ alone as +2/+0", () => {

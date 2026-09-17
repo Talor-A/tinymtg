@@ -832,11 +832,28 @@ function parseTarget(
 /* Effects                                                                    */
 /* ------------------------------------------------------------------------- */
 
+/**
+ * Parameters every effect may carry, whatever its API.
+ *
+ * `SpellDescription$` and `Cost$` are read where they matter, and
+ * `SubAbility$` is followed by the caller that walks a continuation chain.
+ *
+ * The rest carry no rules meaning and are deliberately dropped:
+ *
+ * - `StackDescription$` is how the effect reads while it is on the stack,
+ *   which is presentation. `SpellDescription` and `None` are most of the
+ *   corpus's values.
+ * - `IsCurse$ True` marks an effect as bad for whoever receives it, so
+ *   Forge's AI aims it at an opponent. No Oracle text depends on it, and the
+ *   corpus writes plenty of unmarked harmful effects -- Rites of Reaping
+ *   gives -3/-3 without it -- so it changes nothing about what a card does.
+ */
 const COMMON_EFFECT_PARAMS = [
 	"spelldescription",
 	"stackdescription",
 	"subability",
 	"cost",
+	"iscurse",
 ];
 
 interface AbilityHost {
@@ -2157,13 +2174,7 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 			return ok(effects);
 		}
 		case "pumpall": {
-			const badParams = claim(
-				"validcards",
-				"numatt",
-				"numdef",
-				"kw",
-				"iscurse",
-			);
+			const badParams = claim("validcards", "numatt", "numdef", "kw");
 			if (!badParams.ok) return badParams;
 			const validCards = getForgeParam(params, "ValidCards");
 			const predicate = validCards ? parseSelector(validCards) : null;
@@ -2173,14 +2184,6 @@ function parseEffects<Player extends TriggerEffectPlayer>(
 					"PumpAll requires a supported ValidCards$ predicate",
 					where,
 				);
-			const isCurse = getForgeParam(params, "IsCurse");
-			if (isCurse !== undefined && isCurse !== "True")
-				return issue(
-					"UNSUPPORTED_PARAMETER",
-					"IsCurse must be True when present",
-					where,
-				);
-
 			const powerText = getForgeParam(params, "NumAtt");
 			const toughnessText = getForgeParam(params, "NumDef");
 			const rawKeywords = getForgeParam(params, "KW")
